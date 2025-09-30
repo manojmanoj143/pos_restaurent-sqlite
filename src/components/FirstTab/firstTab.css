@@ -1,0 +1,93 @@
+/* src/components/firstTab.css */
+.main {
+  background: linear-gradient(to right, #84fab0, #8fd3f4); /* Updated to a neat light color gradient for better visual appeal */
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+  position: relative;
+}
+
+.back-button {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  font-size: 2rem;
+  border-radius: 50%;
+  width: 50px;
+  height: 50px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.back-button:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.content-wrapper {
+  text-align: center;
+  color: white;
+  background: rgba(255, 255, 255, 0.1); /* Added a subtle light overlay for neatness */
+  padding: 40px;
+  border-radius: 20px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1); /* Enhanced shadow for a neat, elevated look */
+  max-width: 1200px;
+  width: 100%;
+}
+
+.title {
+  font-size: 2.5rem;
+  font-weight: bold;
+  margin-bottom: 40px;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.button-container {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 20px;
+}
+
+.main-button {
+  border: none;
+  border-radius: 15px;
+  padding: 20px;
+  width: 200px;
+  height: 150px;
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: white;
+  cursor: pointer;
+  transition: transform 0.3s, box-shadow 0.3s;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.main-button:hover {
+  transform: translateY(-10px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+.button-icon {
+  font-size: 2.5rem;
+}
+
+.takeaway { background: #ff7e5f; }
+.dinein { background: #feb47b; }
+.delivery { background: #00b4db; }
+.booking { background: #38ef7d; }
+.tripreport { background: #ffc371; }
+.posbalance { background: #f5af19; }

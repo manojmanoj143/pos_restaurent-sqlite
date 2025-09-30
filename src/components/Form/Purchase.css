@@ -1,0 +1,776 @@
+/* purchase.css (Full Updated Code) */
+@import url('https://fonts.googleapis.com/css2?family=Bitstream+Vera+Sans&display=swap');
+.purchase-container {
+  display: flex;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #e0e7ff 0%, #f3e8ff 100%);
+  font-family: 'Bitstream Vera Sans', Arial, sans-serif;
+  color: #2c3e50;
+}
+.purchase-sidebar {
+  width: 250px;
+  background: linear-gradient(to bottom, #1e2a44 0%, #2c3e50 100%);
+  padding: 20px;
+  height: 100vh;
+  position: fixed;
+  box-shadow: 3px 0 8px rgba(0, 0, 0, 0.15);
+  overflow-y: auto;
+}
+.purchase-sidebar h2 {
+  color: #e0e7ff;
+  margin-bottom: 20px;
+  font-size: 1.6rem;
+  text-align: center;
+  letter-spacing: 1px;
+}
+.purchase-tab-button {
+  padding: 12px 15px;
+  background-color: #34495e;
+  color: #e0e7ff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-bottom: 10px;
+  width: 100%;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  font-size: 1rem;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+}
+.purchase-tab-button.active {
+  background-color: #4b7bec;
+  transform: translateX(5px);
+}
+.purchase-tab-button:hover {
+  background-color: #3867d6;
+}
+.purchase-tab-button span {
+  margin-left: 12px;
+}
+.purchase-content {
+  margin-left: 250px;
+  flex: 1;
+  padding: 30px;
+  background-color: #f9f9f9;
+}
+.purchase-back-button {
+  position: absolute;
+  top: 20px;
+  left: 270px;
+  border-radius: 50%;
+  width: 45px;
+  height: 45px;
+  background-color: #4b7bec;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+.purchase-back-button:hover {
+  background-color: #3867d6;
+  transform: scale(1.1);
+}
+.purchase-main-content {
+  max-width: 1400px;
+  margin: 40px auto;
+  background-color: #fff;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+.purchase-main-content h2 {
+  text-align: center;
+  margin-bottom: 25px;
+  color: #2c3e50;
+  font-size: 2rem;
+  letter-spacing: 1px;
+}
+.purchase-loading {
+  text-align: center;
+  color: #4b7bec;
+  font-size: 1.2rem;
+  animation: pulse 1.5s infinite;
+}
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+.purchase-message {
+  padding: 12px;
+  margin-bottom: 20px;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 1.1rem;
+  font-weight: 500;
+}
+.purchase-message.success {
+  background-color: #c3e6cb;
+  color: #155724;
+  border: 1px solid #a3c7a8;
+}
+.purchase-message.error {
+  background-color: #f5c6cb;
+  color: #721c24;
+  border: 1px solid #d8a8ac;
+}
+.purchase-warning-message {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: #fff9db;
+  padding: 25px;
+  border-radius: 10px;
+  border: 1px solid #ffeeba;
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+  max-width: 450px;
+  width: 95%;
+  text-align: center;
+}
+.purchase-warning-message p {
+  color: #856404;
+  margin-bottom: 20px;
+  font-size: 1.2rem;
+}
+.purchase-warning-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+}
+.purchase-confirm-button, .purchase-cancel-button {
+  padding: 12px 25px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+}
+.purchase-confirm-button {
+  background-color: #4b7bec;
+  color: #fff;
+}
+.purchase-confirm-button:hover {
+  background-color: #3867d6;
+  transform: translateY(-2px);
+}
+.purchase-cancel-button {
+  background-color: #ff6b6b;
+  color: #fff;
+}
+.purchase-cancel-button:hover {
+  background-color: #e54b4b;
+  transform: translateY(-2px);
+}
+.purchase-section {
+  background-color: #fff;
+  padding: 25px;
+  border-radius: 10px;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 20px;
+}
+.purchase-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+.purchase-header-left {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.purchase-active-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  align-items: center;
+}
+.purchase-section h3, .purchase-section h4 {
+  color: #2c3e50;
+  margin-bottom: 15px;
+  font-size: 1.5rem;
+}
+.purchase-form {
+  margin-bottom: 25px;
+}
+.purchase-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 20px;
+  background-color: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.purchase-table th, .purchase-table td {
+  border: 1px solid #d1d9ff;
+  padding: 12px;
+  text-align: left;
+  font-size: 0.95rem;
+}
+.purchase-table th {
+  background-color: #e0e7ff;
+  color: #2c3e50;
+  font-weight: 600;
+}
+.purchase-table tbody tr:nth-child(even) {
+  background-color: #f8fafc;
+}
+.purchase-table tbody tr:hover {
+  background-color: #edf2ff;
+}
+.purchase-input, .purchase-input.select {
+  width: 100%;
+  padding: 6px;
+  border-radius: 6px;
+  border: 1px solid #d1d9ff;
+  font-size: 0.95rem;
+  background-color: #f8fafc;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.purchase-input:focus, .purchase-input.select:focus {
+  outline: none;
+  border-color: #4b7bec;
+  box-shadow: 0 0 8px rgba(75, 123, 236, 0.2);
+}
+.purchase-input.textarea {
+  height: 100px;
+  resize: vertical;
+}
+.purchase-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.95rem;
+}
+.purchase-checkbox {
+  width: 20px;
+  height: 20px;
+}
+.purchase-form-row {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 15px;
+  flex-wrap: wrap;
+}
+.purchase-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  margin-bottom: 15px;
+}
+.purchase-form-split {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+.purchase-form-left, .purchase-form-right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+.purchase-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.purchase-label {
+  font-size: 1rem;
+  color: #2c3e50;
+  font-weight: normal;
+}
+.mandatory-star {
+  color: orange;
+}
+.purchase-accordion {
+  margin-bottom: 10px;
+  border: 1px solid #d1d9ff;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.purchase-accordion-header {
+  background-color: #e0e7ff;
+  padding: 12px;
+  cursor: pointer;
+  font-weight: 600;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.purchase-accordion-content {
+  padding: 15px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 15px;
+}
+.purchase-supplier-tabs {
+  display: flex;
+  gap: 10px;
+  border-bottom: 1px solid #d1d9ff;
+}
+.purchase-supplier-tab {
+  padding: 12px 15px;
+  cursor: pointer;
+  font-weight: normal;
+  color: #077aee;
+  border-bottom: 2px solid transparent;
+  transition: border-bottom 0.3s ease;
+}
+.purchase-supplier-tab.active {
+  border-bottom: 2px solid #4b7bec;
+}
+.purchase-supplier-content {
+  padding: 15px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 15px;
+}
+.purchase-contact-block {
+  border: 1px solid #d1d9ff;
+  padding: 10px;
+  border-radius: 6px;
+  margin-bottom: 10px;
+}
+.purchase-form-buttons {
+  display: flex;
+  gap: 15px;
+  margin-top: 15px;
+  justify-content: flex-start;
+}
+.purchase-button {
+  padding: 12px 25px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: background-color 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  width: auto;
+}
+.purchase-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+.purchase-button.save {
+  background-color: #ffc107;
+  color: #212529;
+}
+.purchase-button.save:hover {
+  background-color: #e0a800;
+}
+.purchase-button.submit {
+  background-color: #28a745;
+  color: #fff;
+}
+.purchase-button.submit:hover {
+  background-color: #218838;
+}
+.purchase-button.add-row {
+  background-color: #007bff;
+  color: #fff;
+  height: fit-content;
+  font-size: 0.8rem;
+  border-radius: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-top: 28px;
+  justify-self: self-start;
+  width: auto;
+}
+.purchase-button.add-row:hover {
+  background-color: #0069d9;
+  transform: translateY(-2px);
+}
+.purchase-button.cancel {
+  background-color: #dc3545;
+  color: #fff;
+}
+.purchase-button.cancel:hover {
+  background-color: #c82333;
+}
+.purchase-button.edit {
+  background-color: #17a2b8;
+  color: #fff;
+  padding: 8px 16px;
+  margin-right: 8px;
+  border-radius: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+.purchase-button.edit:hover {
+  background-color: #138496;
+  transform: translateY(-2px);
+}
+.purchase-button.delete {
+  background-color: #6c757d;
+  color: #fff;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  border-radius: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-top: 5px;
+  justify-self: start;
+  width: auto;
+}
+.purchase-button.delete:hover {
+  background-color: #5a6268;
+  transform: translateY(-2px);
+}
+.purchase-button.delete:disabled {
+  background-color: #6c757d;
+  cursor: not-allowed;
+}
+.purchase-button.print {
+  background-color: #6f42c1;
+  color: #fff;
+  padding: 8px 16px;
+  margin-right: 8px;
+  border-radius: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+.purchase-button.print:hover {
+  background-color: #5a32a3;
+  transform: translateY(-2px);
+}
+.purchase-button.filter {
+  background-color: #4b7bec;
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+.purchase-button.filter:hover {
+  background-color: #3867d6;
+}
+.purchase-button.filter-option {
+  background-color: #e0e7ff;
+  color: #2c3e50;
+  width: 100%;
+  margin-bottom: 10px;
+}
+.purchase-button.filter-option:hover {
+  background-color: #d1d9ff;
+}
+.purchase-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+.purchase-filter-group-right {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  justify-content: flex-end;
+  align-items: center;
+  position: relative;
+}
+.purchase-filter-group-center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.purchase-filter-group-right label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.purchase-filter-group-right input, .purchase-filter-group-right select {
+  flex: 0 1 150px;
+}
+.purchase-filter-dropdown {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  background-color: #fff;
+  padding: 15px;
+  border-radius: 8px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 200px;
+}
+.purchase-filter-dropdown button {
+  width: 100%;
+  margin-bottom: 10px;
+}
+.purchase-total {
+  margin-top: 15px;
+  text-align: right;
+  font-size: 1.1rem;
+  color: #2c3e50;
+}
+.purchase-calculated {
+  text-align: right;
+  padding: 12px;
+  font-weight: 500;
+  color: #155724;
+}
+.purchase-totals {
+  text-align: right;
+  margin-top: 15px;
+  font-size: 1.1rem;
+  color: #2c3e50;
+}
+.purchase-totals div {
+  margin-bottom: 5px;
+}
+.purchase-totals strong {
+  color: #28a745;
+}
+.purchase-table-wrapper {
+  overflow-x: auto;
+  margin-bottom: 20px;
+}
+.purchase-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.purchase-modal {
+  background-color: #fff;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  max-width: 95vw;
+  width: 55vw;
+  max-height: 90%;
+  overflow: auto;
+  position: relative;
+}
+.purchase-modal-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background-color: #dc3545;
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+.purchase-modal-close:hover {
+  background-color: #c82333;
+}
+.purchase-report-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+.purchase-report-filters-left {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  align-items: center;
+  flex: 1;
+  border-radius: 8px;
+  border: 1px solid #d1d9ff;
+  padding: 10px;
+  background-color: #f8fafc;
+}
+.purchase-report-filters-right {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 1;
+  border-radius: 8px;
+  border: 1px solid #d1d9ff;
+  padding: 10px;
+  background-color: #f8fafc;
+}
+.purchase-report-filters-right label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  text-align: right;
+}
+.purchase-report-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+.purchase-report-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+.purchase-button.report {
+  padding: 10px 20px;
+  background-color: #e0e7ff;
+  color: #2c3e50;
+  border: 1px solid #d1d9ff;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+.purchase-button.report.active {
+  background-color: #4b7bec;
+  color: #fff;
+}
+.purchase-button.report:hover {
+  background-color: #d1d9ff;
+}
+.purchase-button.export {
+  background-color: #28a745;
+  color: #fff;
+  padding: 5px;
+  margin-left: 5px
+}
+.purchase-button.export:hover {
+  background-color: #218838;
+}
+.purchase-report-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+.purchase-report-filters label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.purchase-report-filters label input,
+.purchase-report-filters label select {
+  margin-left: 5px;
+}
+.purchase-item-select {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.purchase-item-select .purchase-button.edit {
+  padding: 6px 12px;
+  font-size: 0.9rem;
+}
+@media (max-width: 768px) {
+  .purchase-container {
+    flex-direction: column;
+  }
+  .purchase-sidebar {
+    width: 100%;
+    height: auto;
+    position: static;
+    padding: 15px;
+  }
+  .purchase-content {
+    margin-left: 0;
+    padding: 15px;
+  }
+  .purchase-back-button {
+    left: 15px;
+    top: 15px;
+  }
+  .purchase-form-grid, .purchase-form-split {
+    flex-direction: column;
+    gap: 10px;
+    grid-template-columns: 1fr;
+  }
+  .purchase-form-left, .purchase-form-right {
+    width: 100%;
+  }
+  .purchase-form-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .purchase-form-label {
+    text-align: left;
+  }
+  .purchase-table th, .purchase-table td {
+    font-size: 0.85rem;
+    padding: 8px;
+  }
+  .purchase-button {
+    padding: 10px 20px;
+    font-size: 0.9rem;
+  }
+  .purchase-filter-group-right {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .purchase-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .purchase-total {
+    text-align: center;
+  }
+  .purchase-filter-dropdown {
+    position: static;
+    width: 100%;
+  }
+  .purchase-report-filters-left, .purchase-report-filters-right {
+    justify-content: center;
+    flex: auto;
+  }
+}
+@media (max-width: 480px) {
+  .purchase-main-content {
+    padding: 15px;
+  }
+  .purchase-table th, .purchase-table td {
+    font-size: 0.8rem;
+    padding: 6px;
+  }
+  .purchase-input, .purchase-input.select {
+    font-size: 0.9rem;
+    padding: 8px;
+  }
+  .purchase-button {
+    padding: 8px 15px;
+    font-size: 0.85rem;
+  }
+  .purchase-warning-message {
+    padding: 15px;
+    max-width: 90%;
+  }
+  .purchase-warning-message p {
+    font-size: 1rem;
+  }
+}
+.purchase-accordion-header {
+  background-color: #e0e7ff;
+  padding: 12px;
+  cursor: pointer;
+  font-weight: 600;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.purchase-accordion-content {
+  padding: 15px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 15px;
+}
