@@ -1,4 +1,3 @@
-// electron.cjs (Full completed detailed code with restart-flask IPC)
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const { execFile } = require('child_process');
@@ -88,7 +87,7 @@ if (!gotTheLock) {
     const userUploads = path.join(app.getPath('userData'), 'Uploads');
     console.log(`Flask path: ${flaskExePath}`);
     console.log(`Pre-existing uploads: ${preExistingUploads}`);
-    console.log(`User uploads: ${userUploads}`);
+    console.log(`User uploads: {userUploads}`);
    
     if (!fsSync.existsSync(flaskExePath)) {
       console.error(`Flask executable not found at ${flaskExePath}.`);
@@ -100,7 +99,7 @@ if (!gotTheLock) {
       fsSync.mkdirSync(userUploads, { recursive: true });
       if (fsSync.existsSync(preExistingUploads)) {
         fsSync.cpSync(preExistingUploads, userUploads, { recursive: true });
-        console.log(`Copied uploads to ${userUploads}`);
+        console.log(`Copied uploads to {userUploads}`);
       }
     }
     flaskProcess = execFile(
@@ -108,17 +107,17 @@ if (!gotTheLock) {
       [],
       { env: { ...process.env, UPLOAD_FOLDER: userUploads }, windowsHide: true },
       (err, stdout, stderr) => {
-        if (err) console.error(`Flask error: ${err.message}`);
-        if (stdout) console.log(`Flask stdout: ${stdout}`);
-        if (stderr) console.error(`Flask stderr: ${stderr}`);
+        if (err) console.error(`Flask error: {err.message}`);
+        if (stdout) console.log(`Flask stdout: {stdout}`);
+        if (stderr) console.error(`Flask stderr: {stderr}`);
       }
     );
     flaskProcess.on('spawn', () => console.log('Flask spawned'));
     flaskProcess.on('error', (err) => {
-      console.error(`Flask failed: ${err.message}`);
+      console.error(`Flask failed: {err.message}`);
       app.quit();
     });
-    flaskProcess.on('exit', (code) => console.log(`Flask exited: ${code}`));
+    flaskProcess.on('exit', (code) => console.log(`Flask exited: {code}`));
   }
   // Create main window
   function createWindow() {
