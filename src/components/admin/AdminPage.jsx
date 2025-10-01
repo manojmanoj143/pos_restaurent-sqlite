@@ -34,6 +34,7 @@ function AdminPage() {
   const [importFile, setImportFile] = useState(null);
   const [message, setMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [baseUrl, setBaseUrl] = useState("");
   // Navigation handlers
   const handleGoBack = () => navigate('/');
   const handleNavigation = (path) => navigate(path);
@@ -55,6 +56,23 @@ function AdminPage() {
   };
   useEffect(() => {
     fetchCounts();
+  }, []);
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const response = await axios.get("http://localhost:8000/api/network_info");
+        const { config: appConfig } = response.data;
+        if (appConfig.mode === "client") {
+          setBaseUrl(`http://${appConfig.server_ip}:8000`);
+        } else {
+          setBaseUrl("");
+        }
+      } catch (error) {
+        console.error("Failed to fetch config:", error);
+        setBaseUrl("");
+      }
+    };
+    fetchConfig();
   }, []);
   // File import handlers
   const handleFileChange = (e) => {

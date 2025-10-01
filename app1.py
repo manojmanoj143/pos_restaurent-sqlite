@@ -1,4 +1,3 @@
-# app.py (Full completed detailed code with the fix for mode change detection)
 # -*- mode: python ; coding: utf-8 -*-
 from flask import Flask, request, jsonify, send_from_directory, Response
 from flask_cors import CORS
