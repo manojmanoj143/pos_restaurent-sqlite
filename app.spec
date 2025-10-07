@@ -1,12 +1,12 @@
 block_cipher = None
 a = Analysis(
     ['app1.py'],
-    pathex=['C:\manoj\sqlite\\pos_restaurent-sqlite'], # Adjust to your project path
+    pathex=['D:\Me\manoj\\pos_restaurent-sqlite'], # Adjust to your project path
     binaries=[],
     datas=[
-        ('C:\manoj\sqlite\\pos_restaurent-sqlite\\dist', 'dist'),
-        ('C:\manoj\sqlite\\pos_restaurent-sqlite\\static', 'static'),
-        ('C:\manoj\sqlite\\pos_restaurent-sqlite\\config.json', '.'),
+        ('D:\Me\manoj\\pos_restaurent-sqlite\\dist', 'dist'),
+        ('D:\Me\manoj\\pos_restaurent-sqlite\\static', 'static'),
+        ('D:\Me\manoj\\pos_restaurent-sqlite\\config.json', '.'),
         ('sqlite-tools-win-x64-3500400/sqlite3.exe', '.')
     ],
     hiddenimports=[

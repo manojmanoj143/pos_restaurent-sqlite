@@ -3,7 +3,7 @@
   "version": "1.0.3",
   "private": true,
   "description": "POS1 - A Point of Sale application built with Electron, React, and Flask",
-  "author": "Your Name <your.email@example.com>",
+  "author": "Kyle Solutions",
   "main": "electron.cjs",
   "scripts": {
     "dev": "vite",
@@ -59,8 +59,15 @@
     "vite": "^6.3.5"
   },
   "build": {
-    "appId": "com.yourapp.pos1",
+    "appId": "com.kyle.pos1",
     "productName": "POS1",
+    "asar": true,
+    "asarUnpack": [
+      "**/node_modules/sqlite3/**",
+      "dist/flask_server_dist/flask_server.exe",
+      "sqlite-tools-win-x64-3500400/sqlite3.exe"
+    ],
+    "compression": "maximum",
     "files": [
       "electron.cjs",
       "dist/**/*",
@@ -86,7 +93,11 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "public/kyle-logo.ico"
+      "icon": "public/kyle-logo.ico",
+      "signingHashAlgorithms": ["sha256"],
+      "publisherName": "Kyle Solutions Pvt Ltd",
+      "certificateFile": "kylesolutions.pfx",
+      "certificatePassword": "KyLe@123"
     },
     "nsis": {
       "include": "installer.nsh",
