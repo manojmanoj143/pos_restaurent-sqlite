@@ -191,6 +191,8 @@ class SQLiteCollection:
                             for part in parts[:-1]:
                                 if part.isdigit():
                                     part = int(part)
+                                if part not in current:
+                                    current[part] = {} if not part.isdigit() else []
                                 current = current[part]
                             current[parts[-1]] = current.get(parts[-1], 0) + v
                         else:
@@ -453,7 +455,8 @@ def get_system_settings():
             "allowLoginUsingMobileNumber": True,
             "allowLoginUsingUsername": True,
             "loginWithEmailLink": False,
-            "sessionExpiry": "06:00"
+            "sessionExpiry": "06:00",
+            "backup_interval_hours": 6
         }
     settings = settings_collection.find_one({"_id": "system_settings"})
     if not settings:
@@ -463,7 +466,8 @@ def get_system_settings():
             "allowLoginUsingMobileNumber": True,
             "allowLoginUsingUsername": True,
             "loginWithEmailLink": False,
-            "sessionExpiry": "06:00"
+            "sessionExpiry": "06:00",
+            "backup_interval_hours": 6
         }
         settings_collection.insert_one(default_settings)
         logger.info("Inserted default system settings")
@@ -923,16 +927,35 @@ def export_all_to_excel():
         wb = openpyxl.Workbook()
         wb.remove(wb.active)
         collections = {
+            'active_orders': activeorders_collection,
+            'combo_offers': combo_offers_collection,
             'customers': customers_collection,
+            'email_settings': email_settings_collection,
+            'email_tokens': email_tokens_collection,
+            'employees': employees_collection,
+            'item_groups': item_groups_collection,
             'items': items_collection,
-            'sales': sales_collection,
-            'tables': tables_collection,
-            'users': users_collection,
-            'picked_up_items': picked_up_collection,
-            'pos_opening_entries': opening_collection,
-            'pos_closing_entries': pos_closing_collection,
+            'kitchen_saved_orders': kitchen_saved_collection,
             'kitchens': kitchens_collection,
-            'item_groups': item_groups_collection
+            'order_counters': order_counters_collection,
+            'picked_up_items': picked_up_collection,
+            'pos_closing_entries': pos_closing_collection,
+            'pos_opening_entries': opening_collection,
+            'print_settings': print_settings_collection,
+            'purchase_invoices': purchase_invoices_collection,
+            'purchase_items': purchase_items_collection,
+            'purchase_orders': purchase_orders_collection,
+            'purchase_receipts': purchase_receipts_collection,
+            'purchase_sales': purchase_sales_collection,
+            'sales': sales_collection,
+            'suppliers': suppliers_collection,
+            'system_settings': settings_collection,
+            'tables': tables_collection,
+            'trip_reports': tripreports_collection,
+            'uoms': uoms_collection,
+            'users': users_collection,
+            'variants': variants_collection,
+            'vat': vat_collection
         }
         for collection_name, collection in collections.items():
             ws = wb.create_sheet(title=collection_name)
@@ -979,17 +1002,35 @@ def create_backup():
         wb = openpyxl.Workbook()
         wb.remove(wb.active)
         collections = {
+            'active_orders': activeorders_collection,
+            'combo_offers': combo_offers_collection,
             'customers': customers_collection,
+            'email_settings': email_settings_collection,
+            'email_tokens': email_tokens_collection,
+            'employees': employees_collection,
+            'item_groups': item_groups_collection,
             'items': items_collection,
-            'sales': sales_collection,
-            'tables': tables_collection,
-            'users': users_collection,
-            'picked_up_items': picked_up_collection,
-            'pos_opening_entries': opening_collection,
-            'pos_closing_entries': pos_closing_collection,
-            'system_settings': settings_collection,
+            'kitchen_saved_orders': kitchen_saved_collection,
             'kitchens': kitchens_collection,
-            'item_groups': item_groups_collection
+            'order_counters': order_counters_collection,
+            'picked_up_items': picked_up_collection,
+            'pos_closing_entries': pos_closing_collection,
+            'pos_opening_entries': opening_collection,
+            'print_settings': print_settings_collection,
+            'purchase_invoices': purchase_invoices_collection,
+            'purchase_items': purchase_items_collection,
+            'purchase_orders': purchase_orders_collection,
+            'purchase_receipts': purchase_receipts_collection,
+            'purchase_sales': purchase_sales_collection,
+            'sales': sales_collection,
+            'suppliers': suppliers_collection,
+            'system_settings': settings_collection,
+            'tables': tables_collection,
+            'trip_reports': tripreports_collection,
+            'uoms': uoms_collection,
+            'users': users_collection,
+            'variants': variants_collection,
+            'vat': vat_collection
         }
         for collection_name, collection in collections.items():
             ws = wb.create_sheet(title=collection_name)
@@ -1108,6 +1149,36 @@ def download_backup():
     except Exception as e:
         logger.error(f"Error downloading backup {filename}: {str(e)}")
         return jsonify({"error": f"Server error: {str(e)}"}), 500
+@app.route('/api/get-backup-interval', methods=['GET'])
+@db_required
+def get_backup_interval():
+    try:
+        settings = get_system_settings()
+        interval = settings.get('backup_interval_hours', 6)
+        return jsonify({"interval": interval}), 200
+    except Exception as e:
+        logger.error(f"Error fetching backup interval: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+@app.route('/api/set-backup-interval', methods=['POST'])
+@db_required
+def set_backup_interval():
+    try:
+        data = request.get_json()
+        interval = data.get('interval')
+        if interval is None or not isinstance(interval, int) or interval <= 0:
+            return jsonify({"error": "Invalid interval. Must be a positive integer."}), 400
+        settings = get_system_settings()
+        settings['backup_interval_hours'] = interval
+        save_system_settings(settings)
+        # Update scheduler
+        if schedule:
+            schedule.clear('backup')
+            schedule.every(interval).hours.do(create_backup).tag('backup')
+            logger.info(f"Backup interval updated to every {interval} hours")
+        return jsonify({"message": "Backup interval updated successfully"}), 200
+    except Exception as e:
+        logger.error(f"Error setting backup interval: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 @app.route('/api/shutdown', methods=['POST'])
 @db_required
 def shutdown():
@@ -2251,6 +2322,7 @@ if config.get('mode') == 'server':
                             required_kitchens.add(combo['kitchen'])
                 item['requiredKitchens'] = list(required_kitchens)
                 item['kitchenStatuses'] = item.get('kitchenStatuses', {kitchen: 'Pending' for kitchen in required_kitchens})
+                item['kitchenStatuses'] = item.get('kitchenStatuses', {kitchen: 'Pending' for kitchen in required_kitchens})
             order = {
                 'orderId': order_id,
                 'customerName': data.get('customerName', 'N/A'),
@@ -2757,10 +2829,22 @@ if config.get('mode') == 'server':
             if not kitchen:
                 return jsonify({'success': False, 'error': 'Kitchen not provided'}), 400
             for collection in [activeorders_collection, kitchen_saved_collection]:
-                collection.update_one(
-                    {'orderId': order_id, 'cartItems.id': item_id},
-                    {'$set': {f'cartItems.$.kitchenStatuses.{kitchen}': 'Prepared'}}
-                )
+                order = collection.find_one({'orderId': order_id})
+                if not order:
+                    return jsonify({'success': False, 'error': 'Order not found'}), 404
+                found = False
+                for item in order['cartItems']:
+                    if item['id'] == item_id:
+                        if 'kitchenStatuses' not in item:
+                            item['kitchenStatuses'] = {}
+                        if item['kitchenStatuses'].get(kitchen) in ['Prepared', 'PickedUp']:
+                            return jsonify({'success': False, 'error': 'Kitchen already marked as prepared or picked up'}), 400
+                        item['kitchenStatuses'][kitchen] = 'Prepared'
+                        found = True
+                        break
+                if not found:
+                    return jsonify({'success': False, 'error': 'Item not found'}), 404
+                collection.replace_one({'orderId': order_id}, order)
             logger.info(f"Marked item {item_id} in order {order_id} as Prepared for kitchen {kitchen}")
             return jsonify({'success': True, 'status': 'Prepared'}), 200
         except Exception as e:
@@ -2775,51 +2859,34 @@ if config.get('mode') == 'server':
             kitchen = data.get('kitchen')
             if not kitchen:
                 return jsonify({'success': False, 'error': 'Kitchen not provided'}), 400
-            order = activeorders_collection.find_one({'orderId': order_id})
-            if not order:
-                return jsonify({'success': False, 'error': 'Order not found'}), 404
-            item = next((item for item in order['cartItems'] if item['id'] == item_id), None)
-            if not item:
-                return jsonify({'success': False, 'error': 'Item not found'}), 404
-            # Modified check: if Pending, set to Prepared first
-            status = item.get('kitchenStatuses', {}).get(kitchen)
-            if status == 'Pending':
-                logger.warning(f"Item {item_id} in order {order_id} was Pending, setting to Prepared automatically for kitchen {kitchen}")
-                item['kitchenStatuses'][kitchen] = 'Prepared'
-                for collection in [activeorders_collection, kitchen_saved_collection]:
-                    collection.update_one(
-                        {'orderId': order_id, 'cartItems.id': item_id},
-                        {'$set': {f'cartItems.$.kitchenStatuses.{kitchen}': 'Prepared'}}
-                    )
-            elif status != 'Prepared':
-                return jsonify({'success': False, 'error': 'Item must be prepared before picking up'}), 400
-            item['kitchenStatuses'][kitchen] = 'PickedUp'
             for collection in [activeorders_collection, kitchen_saved_collection]:
-                collection.update_one(
-                    {'orderId': order_id, 'cartItems.id': item_id},
-                    {'$set': {f'cartItems.$.kitchenStatuses.{kitchen}': 'PickedUp'}}
-                )
+                order = collection.find_one({'orderId': order_id})
+                if not order:
+                    return jsonify({'success': False, 'error': 'Order not found'}), 404
+                found = False
+                for item in order['cartItems']:
+                    if item['id'] == item_id:
+                        if 'kitchenStatuses' not in item:
+                            item['kitchenStatuses'] = {}
+                        status = item['kitchenStatuses'].get(kitchen)
+                        if status == 'Pending':
+                            logger.warning(f"Item {item_id} in order {order_id} was Pending, setting to Prepared automatically for kitchen {kitchen}")
+                            item['kitchenStatuses'][kitchen] = 'Prepared'
+                        elif status != 'Prepared':
+                            return jsonify({'success': False, 'error': 'Item must be prepared before picking up'}), 400
+                        item['kitchenStatuses'][kitchen] = 'PickedUp'
+                        found = True
+                        break
+                if not found:
+                    return jsonify({'success': False, 'error': 'Item not found'}), 404
+                collection.replace_one({'orderId': order_id}, order)
+            order = activeorders_collection.find_one({'orderId': order_id})  # Reload to get updated
             picked_up_data = {
                 'customerName': order.get('customerName', 'Unknown'),
                 'tableNumber': order.get('tableNumber', 'N/A'),
-                'orderType': order.get('orderType', 'Dine In'),
+                'items': order.get('cartItems', []),
                 'pickupTime': datetime.now(timezone.utc).isoformat(),
-                'items': [{
-                    'itemName': item.get('name', 'Unknown'),
-                    'quantity': item.get('quantity', 0),
-                    'category': item.get('category', 'N/A'),
-                    'kitchen': kitchen,
-                    'addonCounts': [
-                        {'name': name, 'quantity': qty}
-                        for name, qty in item.get('addonQuantities', {}).items()
-                        if qty > 0 and item.get('addonVariants', {}).get(name, {}).get('kitchen') == kitchen
-                    ],
-                    'selectedCombos': [
-                        {'name': name, 'size': item['comboVariants'][name]['size'], 'quantity': qty}
-                        for name, qty in item.get('comboQuantities', {}).items()
-                        if qty > 0 and item.get('comboVariants', {}).get(name, {}).get('kitchen') == kitchen
-                    ]
-                }]
+                'orderType': order.get('orderType', 'Dine In')
             }
             picked_up_collection.insert_one(picked_up_data)
             logger.info(f"Marked item {item_id} in order {order_id} as PickedUp for kitchen {kitchen}")
@@ -2900,13 +2967,13 @@ if config.get('mode') == 'server':
                 kitchen_saved_collection.delete_one({'orderId': order_id})
                 logger.info(f"Deleted order {order_id} from active orders after delivery person assignment")
                 return jsonify({'success': True, 'message': 'Delivery person assigned and order moved to trip reports', 'order': convert_objectid_to_str(order_in_db)}), 200
-            result = activeorders_collection.update_one({'orderId': order_id}, {'$set': data})
-            kitchen_result = kitchen_saved_collection.update_one({'orderId': order_id}, {'$set': data})
+            result = activeorders_collection.replace_one({'orderId': order_id}, data)
+            kitchen_result = kitchen_saved_collection.replace_one({'orderId': order_id}, data)
             updated_order = activeorders_collection.find_one({'orderId': order_id})
             if result.matched_count > 0 or kitchen_result.matched_count > 0:
                 logger.info(f"Updated order: {order_id}")
                 return jsonify({'success': True, 'message': 'Order updated', 'order': convert_objectid_to_str(updated_order)}), 200
-            logger.info(f"No changes made made to order: {order_id}")
+            logger.info(f"No changes made to order: {order_id}")
             return jsonify({'success': True, 'message': 'No changes made', 'order': convert_objectid_to_str(updated_order)}), 200
         except Exception as e:
             logger.error(f"Error updating active order: {str(e)}")
@@ -3178,7 +3245,7 @@ if config.get('mode') == 'server':
     def add_purchase_order():
         try:
             data = request.json
-            required_fields = ['series', 'date', 'date', 'company', 'supplierId', 'name', 'supplierCompany', 'address', 'phone', 'email', 'country', 'currency', 'inWords', 'supplierAddress', 'items', 'taxes', 'subtotal', 'totalQuantity', 'totalTaxes', 'grandTotal', 'status']
+            required_fields = ['series', 'date', 'company', 'supplierId', 'name', 'supplierCompany', 'address', 'phone', 'email', 'currency', 'items', 'taxes', 'subtotal', 'totalQuantity', 'totalTaxes', 'grandTotal', 'status']
             if not all(key in data for key in required_fields):
                 return jsonify({'error': 'Missing required fields'}), 400
             if purchase_orders_collection.find_one({'series': data['series'] }):
@@ -3200,7 +3267,7 @@ if config.get('mode') == 'server':
                 })
             order = {
                 'series': data['series'],
-                'date': datetime.fromisoformat(data['date'].replace('Z', '+00:00')),
+                'date': datetime.fromisoformat(str(data['date']).replace('Z', '+00:00')),
                 'company': data['company'],
                 'supplierId': data['supplierId'],
                 'name': data['name'],
@@ -3209,7 +3276,7 @@ if config.get('mode') == 'server':
                 'phone': data['phone'],
                 'email': data['email'],
                 'currency': data['currency'],
-                'targetWarehouse': data['targetWarehouse'],
+                'targetWarehouse': data.get('targetWarehouse', ''),
                 'items': items,
                 'taxes': data['taxes'],
                 'subtotal': float(data['subtotal']),
@@ -3239,10 +3306,8 @@ if config.get('mode') == 'server':
             update_data = {}
             for field in ['series', 'date', 'company', 'supplierId', 'name', 'supplierCompany', 'address', 'phone', 'email', 'currency', 'targetWarehouse', 'items', 'taxes', 'subtotal', 'totalQuantity', 'totalTaxes', 'grandTotal', 'status']:
                 if field in data:
-                    if field == 'supplierId':
-                        update_data[field] = data[field]
-                    elif field == 'date':
-                        update_data[field] = datetime.fromisoformat(data[field].replace('Z', '+00:00'))
+                    if field == 'date':
+                        update_data[field] = datetime.fromisoformat(str(data[field]).replace('Z', '+00:00'))
                     elif field in ['subtotal', 'totalQuantity', 'totalTaxes', 'grandTotal']:
                         update_data[field] = float(data[field])
                     elif field == 'items':
@@ -3315,7 +3380,7 @@ if config.get('mode') == 'server':
                 })
             receipt = {
                 'series': data['series'],
-                'date': datetime.fromisoformat(data['date'].replace('Z', '+00:00')),
+                'date': datetime.fromisoformat(str(data['date']).replace('Z', '+00:00')),
                 'poId': data['poId'],
                 'company': data['company'],
                 'supplierId': data['supplierId'],
@@ -3427,10 +3492,8 @@ if config.get('mode') == 'server':
             update_fields = {}
             for field in ['date', 'poId', 'company', 'supplierId', 'name', 'supplierCompany', 'address', 'phone', 'email', 'currency', 'items', 'taxes', 'subtotal', 'totalTaxes', 'grandTotal', 'status']:
                 if field in data:
-                    if field == 'supplierId':
-                        update_fields[field] = data[field]
-                    elif field == 'date':
-                        update_fields[field] = datetime.fromisoformat(data[field].replace('Z', '+00:00'))
+                    if field == 'date':
+                        update_fields[field] = datetime.fromisoformat(str(data[field]).replace('Z', '+00:00'))
                     elif field in ['subtotal', 'totalTaxes', 'grandTotal']:
                         update_fields[field] = float(data[field])
                     elif field == 'items':
@@ -3529,7 +3592,7 @@ if config.get('mode') == 'server':
                 })
             invoice = {
                 'series': data['series'],
-                'date': datetime.fromisoformat(data['date'].replace('Z', '+00:00')),
+                'date': datetime.fromisoformat(str(data['date']).replace('Z', '+00:00')),
                 'company': data['company'],
                 'supplierId': data['supplierId'],
                 'name': data['name'],
@@ -3577,10 +3640,8 @@ if config.get('mode') == 'server':
             update_fields = {}
             for field in ['date', 'company', 'supplierId', 'name', 'supplierCompany', 'address', 'phone', 'email', 'poId', 'prId', 'currency', 'items', 'taxes', 'totalQuantity', 'subtotal', 'taxesAdded', 'grandTotal', 'status']:
                 if field in data:
-                    if field == 'supplierId':
-                        update_fields[field] = data[field]
-                    elif field == 'date':
-                        update_fields[field] = datetime.fromisoformat(data[field].replace('Z', '+00:00'))
+                    if field == 'date':
+                        update_fields[field] = datetime.fromisoformat(str(data[field]).replace('Z', '+00:00'))
                     elif field in ['totalQuantity', 'subtotal', 'taxesAdded', 'grandTotal']:
                         update_fields[field] = float(data[field])
                     elif field == 'items':
@@ -3972,7 +4033,7 @@ def manage_offers():
                     if current_time > end_time:
                         should_unset = True
                         logger.info(f"Offer expired for item {item.get('item_name')} (ID: {item_id})")
-                except (ValueError, TypeTypeError) as e:
+                except (ValueError, TypeError) as e:
                     logger.warning(f"Invalid offer_end_time for item {item_id}: {str(e)}")
                     should_unset = True
             if should_unset:
@@ -4003,7 +4064,6 @@ def manage_combo_offers():
         logger.error(f"Error in manage_combo_offers: {str(e)}")
 def schedule_tasks():
     if schedule:
-        schedule.every(6).hours.do(create_backup)
         schedule.every(1).minutes.do(manage_offers)
         schedule.every(1).minutes.do(manage_combo_offers)
         while True:
@@ -4013,6 +4073,12 @@ def start_scheduler():
     scheduler_thread = threading.Thread(target=schedule_tasks, daemon=True)
     scheduler_thread.start()
     logger.info("Automatic backup, offer, and combo offer scheduler started")
+    # Schedule backup with initial interval
+    settings = get_system_settings()
+    interval = settings.get('backup_interval_hours', 6)
+    if schedule:
+        schedule.every(interval).hours.do(create_backup).tag('backup')
+        logger.info(f"Scheduled automatic backups every {interval} hours")
 # Catch-all for React app
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')

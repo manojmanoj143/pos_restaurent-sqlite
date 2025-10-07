@@ -86,7 +86,7 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "public/kyle-logo-logo.ico"
+      "icon": "public/kyle-logo.ico"
     },
     "nsis": {
       "include": "installer.nsh",

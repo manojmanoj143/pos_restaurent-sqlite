@@ -1,3 +1,4 @@
+// Kitchen.jsx
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -58,6 +59,7 @@ function Kitchen() {
       try {
         return await fn();
       } catch (error) {
+        console.error("API call failed, retrying...", error);
         if (i === retries - 1) throw error;
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
@@ -72,6 +74,7 @@ function Kitchen() {
         const response = await retryRequest(() =>
           axios.get(`${BASE_URL}/api/activeorders`, { timeout: 8000 })
         );
+        console.log("Fetched orders from server:", response.data); // Console log for debugging
         if (Array.isArray(response.data)) {
           const ordersWithStatuses = response.data.map((order) => ({
             ...order,
@@ -84,6 +87,7 @@ function Kitchen() {
           }));
           setSavedOrders(ordersWithStatuses);
         } else {
+          console.error("Invalid orders response:", response.data);
           setSavedOrders([]);
           setErrorMessage("Invalid response from server");
         }
@@ -109,22 +113,24 @@ function Kitchen() {
       const response = await retryRequest(() =>
         axios.get(`${BASE_URL}/api/picked-up-items`, { timeout: 8000 })
       );
+      console.log("Fetched picked-up items from server:", response.data); // Console log for debugging
       if (response.data.success && Array.isArray(response.data.pickedUpItems)) {
         setPickedUpItems(response.data.pickedUpItems);
       } else {
+        console.error("Invalid picked-up items response:", response.data);
         setPickedUpItems([]);
         setErrorMessage("Invalid picked-up items response");
       }
     } catch (error) {
-      console.error("Error fetching picked-up items:", error);
-      setPickedUpItems([]);
-      setErrorMessage(
-        `Failed to fetch picked-up items: ${error.response?.data?.message || error.message}`
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
+        console.error("Error fetching picked-up items:", error);
+        setPickedUpItems([]);
+        setErrorMessage(
+          `Failed to fetch picked-up items: ${error.response?.data?.message || error.message}`
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
 
   useEffect(() => {
     fetchPickedUpItems();
@@ -144,7 +150,8 @@ function Kitchen() {
           const response = await retryRequest(() =>
             axios.get(`${BASE_URL}/api/items/${itemName}`, { timeout: 8000 })
           );
-          if (response.data.success) {
+          console.log(`Fetched details for item ${item.name}:`, response.data); // Console log for debugging
+          if (response.data) {  // Removed unnecessary 'success' check
             const fetchedData = {
               image: response.data.image || item.image || "/static/uploads/placeholder.png",
               addons: Array.isArray(response.data.addons)
@@ -214,6 +221,7 @@ function Kitchen() {
   ];
 
   useEffect(() => {
+    console.log("Available kitchens:", kitchens); // Console log for debugging
     if (kitchens.length > 0 && (!selectedKitchen || !kitchens.includes(selectedKitchen))) {
       setSelectedKitchen(kitchens[0]);
     } else if (kitchens.length === 0) {
@@ -422,11 +430,13 @@ function Kitchen() {
               : order
           )
         );
+      } else {
+        console.error("Failed to mark as prepared:", response.data);
       }
     } catch (error) {
       console.error("Error marking as prepared:", error);
       setErrorMessage(
-        `Failed to mark as prepared: ${error.response?.data?.message || error.message}`
+        `Failed to mark as prepared: ${error.response?.data?.error || error.message}`
       );
     }
   };
@@ -466,16 +476,19 @@ function Kitchen() {
             )
           );
           await fetchPickedUpItems();
+          console.log("Item marked as PickedUp, status should persist on refresh."); // Console log for debugging
         } else {
+          console.error("Failed to mark as picked up:", response.data);
           setErrorMessage("Failed to mark item as picked up: Invalid server response");
         }
       } else {
+        console.error("Item not in Prepared status");
         setErrorMessage("Item must be in Prepared status to mark as Picked Up");
       }
     } catch (error) {
       console.error("Error marking as picked up:", error);
       setErrorMessage(
-        `Failed to mark item as picked up: ${error.response?.data?.message || error.message}`
+        `Failed to mark item as picked up: ${error.response?.data?.error || error.message}`
       );
     } finally {
       setLoading(false);
@@ -501,16 +514,18 @@ function Kitchen() {
         );
 
         for (const item of itemsToPickUp) {
-          if (item.kitchenStatuses?.[selectedKitchen] === "Prepared") {
-            await handlePickUp(orderId, item.id);
+            if (item.kitchenStatuses?.[selectedKitchen] === "Prepared") {
+              await handlePickUp(orderId, item.id);
+            } else {
+              console.log(`Skipping item ${item.id} in order ${orderId} because status is ${item.kitchenStatuses?.[selectedKitchen] || 'Pending'}`); // Console log for debugging
+            }
           }
-        }
       }
       setSelectedCustomers([]);
     } catch (error) {
       console.error("Error during bulk pickup:", error);
       setErrorMessage(
-        `Failed to mark items as picked up: ${error.response?.data?.message || error.message}`
+        `Failed to mark items as picked up: ${error.response?.data?.error || error.message}`
       );
     } finally {
       setLoading(false);
@@ -583,8 +598,7 @@ function Kitchen() {
         const addon = itemDetails.addons.find((a) => a.name === addonName) || {};
         const addonImage =
           item.addonImages?.[addonName] ||
-          addon.addon_image ||
-          "/static/uploads/placeholder.png";
+          addon.addon_image || "/static/uploads/placeholder.png";
         images.push({
           src: getCorrectImageUrl(addonImage),
           label: addonName || "Addon",
@@ -602,8 +616,7 @@ function Kitchen() {
         const combo = itemDetails.combos.find((c) => c.name === comboName) || {};
         const comboImage =
           item.comboImages?.[comboName] ||
-          combo.combo_image ||
-          "/static/uploads/placeholder.png";
+          combo.combo_image || "/static/uploads/placeholder.png";
         images.push({
           src: getCorrectImageUrl(comboImage),
           label: comboName || "Combo",
@@ -1046,7 +1059,7 @@ function Kitchen() {
                           (entry.items || [entry]).map((item, itemIndex) => (
                             <tr
                               key={`${entryIndex}-${itemIndex}`}
-                              style={getHighlightStyle(entry.pickupTime, lastHourSearchDate)}
+                             style={getHighlightStyle(entry.pickupTime, lastHourSearchDate)}
                             >
                               {itemIndex === 0 && (
                                 <>

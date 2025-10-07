@@ -1,9 +1,11 @@
+// ActiveOrders.jsx
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
 import axios from "axios";
 import { FaArrowLeft, FaSyncAlt } from "react-icons/fa";
 import "./ActiveOrders.css";
+
 function ActiveOrders() {
   const [savedOrders, setSavedOrders] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -18,9 +20,11 @@ function ActiveOrders() {
   const [filterType, setFilterType] = useState("Dine In");
   const navigate = useNavigate();
   const vatRate = 0.10;
+
   const fetchData = async () => {
     try {
       const ordersResponse = await axios.get("api/activeorders");
+      console.log("Fetched orders from server in ActiveOrders:", ordersResponse.data); // Console log for debugging
       const orders = Array.isArray(ordersResponse.data) ? ordersResponse.data : [];
       const sanitizedOrders = orders.map((order) => ({
         ...order,
@@ -34,24 +38,29 @@ function ActiveOrders() {
       }));
       setSavedOrders(sanitizedOrders);
       localStorage.setItem("savedOrders", JSON.stringify(sanitizedOrders));
+
       const employeesResponse = await axios.get("/api/employees");
       const employeesData = Array.isArray(employeesResponse.data) ? employeesResponse.data : [];
       setEmployees(employeesData);
     } catch (err) {
+      console.error("Failed to fetch data in ActiveOrders:", err);
       setWarningMessage(`Failed to fetch data: ${err.message}`);
       setWarningType("warning");
     }
   };
+
   useEffect(() => {
     fetchData();
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, []);
+
   const handleRefresh = () => {
     fetchData();
     setWarningMessage("Orders refreshed!");
     setWarningType("success");
   };
+
   const handleWarningOk = () => {
     if (pendingAction) {
       pendingAction();
@@ -61,6 +70,7 @@ function ActiveOrders() {
     setWarningType("warning");
     setIsConfirmation(false);
   };
+
   const handleConfirmYes = () => {
     if (pendingAction) {
       pendingAction();
@@ -70,12 +80,14 @@ function ActiveOrders() {
     setWarningType("warning");
     setIsConfirmation(false);
   };
+
   const handleConfirmNo = () => {
     setWarningMessage("");
     setWarningType("warning");
     setPendingAction(null);
     setIsConfirmation(false);
   };
+
   const handleDeleteOrder = (orderId, tableNumber, orderNo) => {
     setWarningMessage(`Are you sure you want to delete order ${orderNo}?`);
     setWarningType("warning");
@@ -95,32 +107,40 @@ function ActiveOrders() {
         setWarningMessage(`Order ${orderNo} deleted successfully!`);
         setWarningType("success");
       } catch (err) {
+        console.error("Failed to delete order:", err);
         setWarningMessage(`Failed to delete order: ${err.message}`);
         setWarningType("warning");
       }
     });
   };
+
   const checkAllItemsPickedUp = (order) => {
     if (!order.cartItems || order.cartItems.length === 0) return false;
-    return order.cartItems.every((item) => {
+    const allPickedUp = order.cartItems.every((item) => {
       const requiredKitchens = item.requiredKitchens || [];
       if (!item.kitchenStatuses) return false;
       return requiredKitchens.every((kitchen) => item.kitchenStatuses[kitchen] === "PickedUp");
     });
+    console.log(`Check if all items picked up for order ${order.orderNo}: ${allPickedUp}`); // Console log for debugging
+    return allPickedUp;
   };
+
   const handleAssignDeliveryPerson = (orderId, deliveryPersonId) => {
     const order = savedOrders.find((o) => o.orderId === orderId);
     if (!order) {
+      console.error("Order not found.");
       setWarningMessage("Order not found.");
       setWarningType("warning");
       return;
     }
     if (order.orderType !== "Online Delivery") {
+      console.error("Delivery person can only be assigned to Online Delivery orders.");
       setWarningMessage("Delivery person can only be assigned to Online Delivery orders.");
       setWarningType("warning");
       return;
     }
     if (!checkAllItemsPickedUp(order)) {
+      console.error(`Cannot assign delivery person to order ${order.orderNo}. All items, addons, and combos must be marked as Picked Up in the Kitchen page.`);
       setWarningMessage(`Cannot assign delivery person to order ${order.orderNo}. All items, addons, and combos must be marked as Picked Up in the Kitchen page.`);
       setWarningType("warning");
       return;
@@ -129,16 +149,19 @@ function ActiveOrders() {
     setSelectedDeliveryPersonId(deliveryPersonId);
     setShowDeliveryPopup(true);
   };
+
   const confirmDeliveryAssignment = async () => {
     try {
       const order = savedOrders.find((o) => o.orderId === selectedOrderId);
       if (!order) {
+        console.error("Order not found.");
         setWarningMessage("Order not found.");
         setWarningType("warning");
         setShowDeliveryPopup(false);
         return;
       }
       if (!checkAllItemsPickedUp(order)) {
+        console.error(`Cannot assign delivery person to order ${order.orderNo}. All items, addons, and combos must be marked as Picked Up in the Kitchen page.`);
         setWarningMessage(`Cannot assign delivery person to order ${order.orderNo}. All items, addons, and combos must be marked as Picked Up in the Kitchen page.`);
         setWarningType("warning");
         setShowDeliveryPopup(false);
@@ -157,16 +180,19 @@ function ActiveOrders() {
       setSelectedOrderId(null);
       setSelectedDeliveryPersonId(null);
     } catch (err) {
+      console.error("Failed to assign delivery person:", err);
       setWarningMessage(`Failed to assign delivery person: ${err.response?.data?.error || err.message}`);
       setWarningType("warning");
       setShowDeliveryPopup(false);
     }
   };
+
   const cancelDeliveryPopup = () => {
     setShowDeliveryPopup(false);
     setSelectedOrderId(null);
     setSelectedDeliveryPersonId(null);
   };
+
   const updateOrder = async (orderId, updatedOrder) => {
     try {
       const response = await axios.put(`/api/activeorders/${orderId}`, updatedOrder);
@@ -178,10 +204,12 @@ function ActiveOrders() {
       setWarningMessage("Order updated successfully!");
       setWarningType("success");
     } catch (err) {
+      console.error("Failed to update order:", err);
       setWarningMessage(`Failed to update order: ${err.message}`);
       setWarningType("warning");
     }
   };
+
   const inferOrderType = (order) => {
     if (order.tableNumber && order.tableNumber !== "N/A") return "Dine In";
     else if (
@@ -191,8 +219,10 @@ function ActiveOrders() {
       return "Online Delivery";
     else return "Take Away";
   };
+
   const handleSelectOrder = (order) => {
     if (!order.cartItems || order.cartItems.length === 0) {
+      console.error("This order has no items.");
       setWarningMessage("This order has no items. Please select a valid order.");
       setWarningType("warning");
       setIsConfirmation(false);
@@ -249,12 +279,15 @@ function ActiveOrders() {
       });
     });
   };
+
   const handleBack = () => {
     navigate("/frontpage");
   };
+
   const toggleItems = (index) => {
     setExpandedItems((prev) => ({ ...prev, [index]: !prev[index] }));
   };
+
   const renderIngredients = (ingredients) => {
     if (!ingredients || ingredients.length === 0) return "No ingredients";
     return (
@@ -267,6 +300,7 @@ function ActiveOrders() {
       </ul>
     );
   };
+
   const renderAddons = (addonQuantities, addonVariants, addonPrices) => {
     if (!addonQuantities || Object.keys(addonQuantities).length === 0) return null;
     return (
@@ -285,6 +319,7 @@ function ActiveOrders() {
       </ul>
     );
   };
+
   const renderCombos = (comboQuantities, comboVariants, comboPrices) => {
     if (!comboQuantities || Object.keys(comboQuantities).length === 0) return null;
     return (
@@ -303,16 +338,19 @@ function ActiveOrders() {
       </ul>
     );
   };
+
   const calculateOrderTotal = (cartItems) => {
     if (!Array.isArray(cartItems)) return "0.00";
     return cartItems.reduce((sum, item) => sum + (Number(item.totalPrice) || 0), 0).toFixed(2);
   };
+
   const calculateGrandTotal = (cartItems) => {
     if (!Array.isArray(cartItems)) return "0.00";
     const subtotal = cartItems.reduce((sum, item) => sum + (Number(item.totalPrice) || 0), 0);
     const vat = subtotal * vatRate;
     return (subtotal + vat).toFixed(2);
   };
+
   const getItemStatus = (item) => {
     if (!item.kitchenStatuses) return item.status || "Pending";
     const statuses = Object.values(item.kitchenStatuses);
@@ -321,6 +359,7 @@ function ActiveOrders() {
     else if (statuses.includes("Preparing")) return "Preparing";
     else return "Pending";
   };
+
   const getStatusStyle = (status) => {
     switch (status) {
       case "Pending":
@@ -335,33 +374,40 @@ function ActiveOrders() {
         return {};
     }
   };
+
   const formatDeliveryAddress = (deliveryAddress) => {
     if (!deliveryAddress) return "Not provided";
     const { building_name, flat_villa_no, location } = deliveryAddress;
     const parts = [flat_villa_no, building_name, location].filter((part) => part != null && String(part).trim() !== "");
     return parts.length > 0 ? parts.join(", ") : "Not provided";
   };
+
   const formatChairsBooked = (chairsBooked) => {
     if (!Array.isArray(chairsBooked) || chairsBooked.length === 0) return "None";
     return chairsBooked.join(", ");
   };
+
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return "N/A";
     return new Date(timestamp).toLocaleString();
   };
+
   const getDeliveryPersonName = (deliveryPersonId) => {
     const employee = employees.find((emp) => emp.employeeId === deliveryPersonId);
     return employee ? `${employee.name} (ID: ${employee.employeeId})` : "Not assigned";
   };
+
   const orderCounts = {
     "Dine In": savedOrders.filter((order) => (order.orderType || inferOrderType(order)) === "Dine In").length,
     "Take Away": savedOrders.filter((order) => (order.orderType || inferOrderType(order)) === "Take Away").length,
     "Online Delivery": savedOrders.filter((order) => (order.orderType || inferOrderType(order)) === "Online Delivery").length,
   };
+
   const filteredOrders = savedOrders.filter((order) => {
     const orderType = order.orderType || inferOrderType(order);
     return orderType === filterType;
   });
+
   const renderOrderTable = (orders, tableTitle) => (
     <div className="active-orders-table-wrapper">
       <h2>{tableTitle}</h2>
@@ -532,6 +578,7 @@ function ActiveOrders() {
       )}
     </div>
   );
+
   return (
     <div className="active-orders-container">
       {warningMessage && (
@@ -636,4 +683,5 @@ function ActiveOrders() {
     </div>
   );
 }
+
 export default ActiveOrders;

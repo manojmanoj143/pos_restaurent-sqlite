@@ -1,4 +1,5 @@
-// BackupPage.jsx
+// BackupPage.jsx (full updated code)
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaArrowLeft, FaDownload } from 'react-icons/fa';
@@ -11,12 +12,40 @@ function BackupPage() {
   const [warningMessage, setWarningMessage] = useState('');
   const [warningType, setWarningType] = useState('warning');
   const [pendingAction, setPendingAction] = useState(null);
+  const [backupInterval, setBackupInterval] = useState(6);
+  const [newInterval, setNewInterval] = useState(6);
 
   useEffect(() => {
     fetchBackupInfo();
+    fetchBackupInterval();
     const storedMax = parseInt(localStorage.getItem('numberOfBackups')) || 5;
     setMaxBackups(storedMax);
   }, []);
+
+  const fetchBackupInterval = async () => {
+    try {
+      const response = await axios.get('http://localhost:8000/api/get-backup-interval');
+      setBackupInterval(response.data.interval);
+      setNewInterval(response.data.interval);
+    } catch (error) {
+      console.error('Error fetching backup interval:', error);
+      setWarningMessage(`Failed to fetch backup interval: ${error.message}`);
+      setWarningType('warning');
+    }
+  };
+
+  const handleSetInterval = async () => {
+    try {
+      await axios.post('http://localhost:8000/api/set-backup-interval', { interval: newInterval });
+      setBackupInterval(newInterval);
+      setWarningMessage('Backup interval updated successfully!');
+      setWarningType('success');
+    } catch (error) {
+      console.error('Error setting backup interval:', error);
+      setWarningMessage(`Failed to set backup interval: ${error.message}`);
+      setWarningType('warning');
+    }
+  };
 
   const handleWarningOk = () => {
     if (pendingAction) {
@@ -156,6 +185,26 @@ function BackupPage() {
       >
         Backup Management
       </h2>
+      <div className="row mb-4">
+        <div className="col-md-6">
+          <div className="card p-3">
+            <h5>Set Automatic Backup Interval (hours)</h5>
+            <div className="input-group mb-3">
+              <input
+                type="number"
+                className="form-control"
+                value={newInterval}
+                onChange={(e) => setNewInterval(parseInt(e.target.value) || 1)}
+                min={1}
+              />
+              <button className="btn btn-primary" onClick={handleSetInterval}>
+                Save Interval
+              </button>
+            </div>
+            <p>Current interval: every {backupInterval} hours</p>
+          </div>
+        </div>
+      </div>
       <div className="row">
         <div className="col-md-6 mb-4">
           <div className="d-flex justify-content-center">
@@ -311,4 +360,4 @@ function BackupPage() {
   );
 }
 
-export default BackupPage;
+export default BackupPage; 
