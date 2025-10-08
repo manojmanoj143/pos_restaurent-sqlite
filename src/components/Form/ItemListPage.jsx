@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Modal, Button, Card, Form, Badge, ListGroup } from "react-bootstrap";
-import { FaArrowLeft } from "react-icons/fa";
+import { FaArrowLeft, FaPlusCircle } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import 'bootstrap/dist/css/bootstrap.min.css';
@@ -216,6 +216,11 @@ const ItemListPage = () => {
   // Handle Ingredients & Nutrition button click
   const handleNutritionClick = () => {
     setShowNutritionModal(true);
+  };
+
+  // Handle Add New Item button click
+  const handleAddNewItem = () => {
+    navigate('/create-item');
   };
 
   // Initial fetch and refresh on popstate
@@ -509,6 +514,34 @@ const ItemListPage = () => {
         }}
       >
         Offer
+      </button>
+      <button
+        onClick={handleAddNewItem}
+        style={{
+          position: "fixed",
+          top: "20px",
+          right: "120px",
+          backgroundColor: "#28a745",
+          border: "none",
+          color: "white",
+          borderRadius: "5px",
+          padding: "10px 20px",
+          cursor: "pointer",
+          fontSize: "16px",
+          fontWeight: "bold",
+          transition: "all 0.3s ease",
+          zIndex: 1000,
+          display: "flex",
+          alignItems: "center",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = "#218838";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = "#28a745";
+        }}
+      >
+        <FaPlusCircle style={{ marginRight: "5px" }} /> Add New Item
       </button>
       {warningMessage && (
         <div style={warningBoxStyle}>

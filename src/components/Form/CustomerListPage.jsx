@@ -13,6 +13,8 @@ const CustomerListPage = () => {
   const [warningMessage, setWarningMessage] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [customerToDelete, setCustomerToDelete] = useState(null);
+  const [customerGroups, setCustomerGroups] = useState([]);
+  const [showEditGroupDropdown, setShowEditGroupDropdown] = useState(false);
   const navigate = useNavigate();
 
   // Fetch all customers from the backend
@@ -32,8 +34,19 @@ const CustomerListPage = () => {
     }
   };
 
+  const fetchCustomerGroups = async () => {
+    try {
+      const response = await fetch('/api/customer-groups');
+      const data = await response.json();
+      setCustomerGroups(data);
+    } catch (error) {
+      console.error('Error fetching customer groups:', error);
+    }
+  };
+
   useEffect(() => {
     handleViewCustomers();
+    fetchCustomerGroups();
   }, []);
 
   // Search functionality
@@ -85,7 +98,7 @@ const CustomerListPage = () => {
   // Edit customer functions
   const handleEditCustomer = (customer) => {
     setSelectedCustomer(customer);
-    setShowModal(true);
+    setShowModal(true); // Ensure modal shows when edit is clicked
   };
 
   const handleInputChange = (e) => {
@@ -321,6 +334,7 @@ const CustomerListPage = () => {
                     'Location',
                     'WhatsApp',
                     'Email',
+                    'Group',
                     'Actions'
                   ].map((header, index) => (
                     <th key={index} style={{
@@ -329,7 +343,7 @@ const CustomerListPage = () => {
                       textAlign: 'left',
                       borderBottom: '2px solid #e9ecef',
                       ...(index === 0 && { borderTopLeftRadius: '8px' }),
-                      ...(index === 8 && { borderTopRightRadius: '8px' })
+                      ...(index === 9 && { borderTopRightRadius: '8px' })
                     }}>
                       {header}
                     </th>
@@ -353,6 +367,9 @@ const CustomerListPage = () => {
                     <td style={{ padding: '15px', fontSize: '15px', color: '#333' }}>{customer.location || 'N/A'}</td>
                     <td style={{ padding: '15px', fontSize: '15px', color: '#333' }}>{customer.whatsapp_number || 'N/A'}</td>
                     <td style={{ padding: '15px', fontSize: '15px', color: '#333' }}>{customer.email || 'N/A'}</td>
+                    <td style={{ padding: '15px', fontSize: '15px', color: '#333' }}>
+                      {customer.customer_group ? customerGroups.find(g => g._id === customer.customer_group)?.group_name || 'N/A' : 'N/A'}
+                    </td>
                     <td style={{ padding: '15px' }}>
                       <button
                         onClick={() => handleEditCustomer(customer)}
@@ -447,6 +464,85 @@ const CustomerListPage = () => {
                 </button>
               </div>
               <div style={{ padding: '20px' }}>
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{
+                    display: 'block',
+                    fontSize: '15px',
+                    fontWeight: '500',
+                    color: '#1a3c34',
+                    marginBottom: '8px'
+                  }}>
+                    Customer Group
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <button
+                      type="button"
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        borderRadius: '8px',
+                        border: '1px solid #ced4da',
+                        backgroundColor: '#fff',
+                        textAlign: 'left',
+                        fontSize: '15px',
+                        cursor: 'pointer',
+                        transition: 'border-color 0.3s ease, box-shadow 0.3s ease'
+                      }}
+                      onClick={() => setShowEditGroupDropdown(!showEditGroupDropdown)}
+                      onFocus={(e) => {
+                        e.currentTarget.style.borderColor = '#1a73e8';
+                        e.currentTarget.style.boxShadow = '0 0 8px rgba(26, 115, 232, 0.3)';
+                      }}
+                      onBlur={(e) => {
+                        e.currentTarget.style.borderColor = '#ced4da';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }}
+                    >
+                      {selectedCustomer.customer_group 
+                        ? customerGroups.find(g => g._id === selectedCustomer.customer_group)?.group_name || 'Select Group' 
+                        : 'Select Group'} 
+                      <span style={{ float: 'right' }}>▼</span>
+                    </button>
+                    {showEditGroupDropdown && (
+                      <ul style={{
+                        position: 'absolute',
+                        zIndex: 1000,
+                        backgroundColor: '#ffffff',
+                        listStyle: 'none',
+                        padding: 0,
+                        margin: 0,
+                        border: '1px solid #ced4da',
+                        borderRadius: '8px',
+                        width: '100%',
+                        maxHeight: '200px',
+                        overflowY: 'auto',
+                        boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)'
+                      }}>
+                        <li 
+                          style={{ padding: '10px', cursor: 'pointer', borderBottom: '1px solid #e9ecef' }} 
+                          onClick={() => { setSelectedCustomer(prev => ({ ...prev, customer_group: '' })); setShowEditGroupDropdown(false); }}
+                        >
+                          All
+                        </li>
+                        <li 
+                          style={{ padding: '10px', cursor: 'pointer', borderBottom: '1px solid #e9ecef' }} 
+                          onClick={() => { setSelectedCustomer(prev => ({ ...prev, customer_group: '' })); setShowEditGroupDropdown(false); }}
+                        >
+                          None
+                        </li>
+                        {customerGroups.map((group) => (
+                          <li 
+                            key={group._id} 
+                            style={{ padding: '10px', cursor: 'pointer', borderBottom: '1px solid #e9ecef' }} 
+                            onClick={() => { setSelectedCustomer(prev => ({ ...prev, customer_group: group._id })); setShowEditGroupDropdown(false); }}
+                          >
+                            {group.group_name}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
                 {[
                   { label: "Name", name: "customer_name" },
                   { label: "Phone", name: "phone_number" },

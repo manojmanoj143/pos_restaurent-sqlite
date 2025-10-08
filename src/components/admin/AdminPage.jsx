@@ -1,9 +1,7 @@
-// AdminPage.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import {
-  FaArrowLeft,
   FaHome,
   FaMoneyBill,
   FaFileAlt,
@@ -21,8 +19,10 @@ import {
   FaShoppingCart,
   FaSearch,
   FaPrint,
-  FaGift, // New icon for Combo Offer
+  FaGift,
+  FaSignOutAlt,
 } from 'react-icons/fa';
+
 function AdminPage() {
   const navigate = useNavigate();
   const [customerCount, setCustomerCount] = useState(0);
@@ -31,22 +31,26 @@ function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isMasterOpen, setIsMasterOpen] = useState(true);
+  const [isCustomersOpen, setIsCustomersOpen] = useState(false);
+  const [isItemsOpen, setIsItemsOpen] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [message, setMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [baseUrl, setBaseUrl] = useState("");
+
   // Navigation handlers
-  const handleGoBack = () => navigate('/');
+  const handleLogout = () => navigate('/');
   const handleNavigation = (path) => navigate(path);
   const toggleMasterMenu = () => setIsMasterOpen(!isMasterOpen);
+
   // Fetch dashboard counts
   const fetchCounts = async () => {
     try {
-      const customerResponse = await axios.get('/api/customers');
+      const customerResponse = await axios.get(`${baseUrl}/api/customers`);
       setCustomerCount(customerResponse.data.length);
-      const itemResponse = await axios.get('/api/items');
+      const itemResponse = await axios.get(`${baseUrl}/api/items`);
       setItemCount(itemResponse.data.length);
-      const backupResponse = await axios.get('/api/backup-info').catch(() => ({ data: [] }));
+      const backupResponse = await axios.get(`${baseUrl}/api/backup-info`).catch(() => ({ data: [] }));
       setBackupCount(Math.min(backupResponse.data.length, 5));
     } catch (err) {
       setError(`Failed to fetch dashboard data: ${err.message}`);
@@ -54,9 +58,7 @@ function AdminPage() {
       setLoading(false);
     }
   };
-  useEffect(() => {
-    fetchCounts();
-  }, []);
+
   useEffect(() => {
     const fetchConfig = async () => {
       try {
@@ -70,10 +72,13 @@ function AdminPage() {
       } catch (error) {
         console.error("Failed to fetch config:", error);
         setBaseUrl("");
+      } finally {
+        fetchCounts();
       }
     };
     fetchConfig();
   }, []);
+
   // File import handlers
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -87,6 +92,7 @@ function AdminPage() {
       setError('Please select a valid JSON file');
     }
   };
+
   const handleImportMongoDB = async () => {
     if (!importFile) {
       setError('Please select a JSON file to import');
@@ -99,7 +105,7 @@ function AdminPage() {
       setMessage('');
       setError(null);
       console.log('Sending POST request to /api/import-mongodb with file:', importFile.name);
-      const response = await axios.post('/api/import-mongodb', formData, {
+      const response = await axios.post(`${baseUrl}/api/import-mongodb`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
           'Accept': 'application/json',
@@ -124,48 +130,85 @@ function AdminPage() {
       setLoading(false);
     }
   };
+
   // Search handler
   const handleSearchChange = (e) => {
     setSearchQuery(e.target.value);
   };
+
   // Menu items
   const masterMenuItems = [
-    { icon: <FaUsers />, text: 'View All Customers', path: '/customers' },
-    { icon: <FaBox />, text: 'View All Items', path: '/items' },
-    { icon: <FaPlusCircle />, text: 'Add New Item', path: '/create-item' },
+    {
+      icon: <FaUsers />,
+      text: 'Customers',
+      children: [
+        { icon: <FaUsers />, text: 'View All Customers', path: '/customers' },
+        { icon: <FaPlusCircle />, text: 'Create Customer', path: '/create-customer' },
+        { icon: <FaUsers />, text: 'Create Customer Group', path: '/create-customer-group' },
+      ],
+    },
+    {
+      icon: <FaBox />,
+      text: 'Items',
+      children: [
+        { icon: <FaBox />, text: 'View All Items', path: '/items' },
+        { icon: <FaPlusCircle />, text: 'Add New Item', path: '/create-item' },
+        { icon: <FaBox />, text: 'Add Item Group', path: '/add-item-group' },
+        { icon: <FaUtensils />, text: 'Add Kitchen', path: '/add-kitchen' },
+        { icon: <FaUtensils />, text: 'Add Ingredient & Nutrition', path: '/add-ingredients-nutrition' },
+        { icon: <FaLayerGroup />, text: 'Add Variant', path: '/create-variant' },
+        { icon: <FaMoneyBill />, text: 'Vat', path: '/vat' },
+      ],
+    },
     { icon: <FaTable />, text: 'Add New Table', path: '/add-table' },
-    { icon: <FaBox />, text: 'Add Item Group', path: '/add-item-group' },
-    { icon: <FaUtensils />, text: 'Add Kitchen', path: '/add-kitchen' },
-    { icon: <FaUtensils />, text: 'Add Ingredient & Nutrition', path: '/add-ingredients-nutrition' },
-    { icon: <FaLayerGroup />, text: 'Add Variant', path: '/create-variant' },
     { icon: <FaUserTie />, text: 'Employees', path: '/employees' },
     { icon: <FaEnvelope />, text: 'Email Settings', path: '/email-settings' },
     { icon: <FaShoppingCart />, text: 'Purchase Module', path: '/purchase' },
     { icon: <FaPrint />, text: 'Print Settings', path: '/print-settings' },
-    { icon: <FaGift />, text: 'Combo Offer', path: '/combo-offer' }, // New Combo Offer button
-    { icon: <FaMoneyBill />, text: 'Vat', path: '/vat' },
+    { icon: <FaGift />, text: 'Combo Offer', path: '/combo-offer' },
   ];
+
   const otherMenuItems = [
     { icon: <FaUsers />, text: 'Users', path: '/users' },
     { icon: <FaFileAlt />, text: 'Record', path: '/record' },
     { icon: <FaDatabase />, text: 'Backups', path: '/backup' },
     { icon: <FaCog />, text: 'Settings', path: '/system-settings' },
   ];
+
   // Filter menu items based on search query
-  const filteredMasterMenuItems = masterMenuItems.filter(item =>
+  const filterMenu = (items, query) => {
+    const lowerQuery = query.toLowerCase();
+    return items.reduce((acc, item) => {
+      if (item.children) {
+        const filteredChildren = item.children.filter(
+          (child) => child.text.toLowerCase().includes(lowerQuery)
+        );
+        if (item.text.toLowerCase().includes(lowerQuery) || filteredChildren.length > 0) {
+          acc.push({ ...item, children: filteredChildren });
+        }
+      } else {
+        if (item.text.toLowerCase().includes(lowerQuery)) {
+          acc.push(item);
+        }
+      }
+      return acc;
+    }, []);
+  };
+
+  const filteredMasterMenuItems = filterMenu(masterMenuItems, searchQuery);
+  const filteredOtherMenuItems = otherMenuItems.filter((item) =>
     item.text.toLowerCase().includes(searchQuery.toLowerCase())
   );
-  const filteredOtherMenuItems = otherMenuItems.filter(item =>
-    item.text.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+
   // Determine if "Master" should be shown based on search
   const showMasterMenu = searchQuery ? filteredMasterMenuItems.length > 0 : true;
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f4f6f9' }}>
       {/* Sidebar */}
       <div style={{
         width: '250px',
-        backgroundColor: '#2c3e50',
+        background: 'linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%)',
         padding: '20px',
         height: '100vh',
         position: 'fixed',
@@ -184,7 +227,7 @@ function AdminPage() {
             left: '12px',
             top: '50%',
             transform: 'translateY(-50%)',
-            color: '#ecf0f1',
+            color: '#2c3e50',
             fontSize: '1rem'
           }} />
           <input
@@ -195,26 +238,24 @@ function AdminPage() {
             style={{
               width: '100%',
               padding: '10px 10px 10px 35px',
-              backgroundColor: '#34495e',
-              color: '#ecf0f1',
-              border: '1px solid #ecf0f1',
-              borderRadius: '5px',
+              backgroundColor: '#ffffff',
+              color: '#2c3e50',
+              border: '1px solid #bdc3c7',
+              borderRadius: '15px',
               fontSize: '1rem',
               outline: 'none',
-              transition: 'background-color 0.3s, border-color 0.3s',
+              transition: 'border-color 0.3s',
             }}
             onMouseOver={(e) => {
-              e.target.style.backgroundColor = '#3d566e';
               e.target.style.borderColor = '#3498db';
             }}
             onMouseOut={(e) => {
-              e.target.style.backgroundColor = '#34495e';
-              e.target.style.borderColor = '#ecf0f1';
+              e.target.style.borderColor = '#bdc3c7';
             }}
           />
         </div>
         <h2 style={{
-          color: '#ecf0f1',
+          color: '#2c3e50',
           marginBottom: '30px',
           fontSize: '1.5rem',
           fontWeight: 'bold',
@@ -229,48 +270,133 @@ function AdminPage() {
                 onClick={toggleMasterMenu}
                 style={{
                   padding: '12px 20px',
-                  backgroundColor: isMasterOpen && filteredMasterMenuItems.length > 0 ? '#3498db' : '#34495e',
-                  color: '#ecf0f1',
+                  backgroundColor: isMasterOpen && filteredMasterMenuItems.length > 0 ? '#3498db' : '#ffffff',
+                  color: isMasterOpen && filteredMasterMenuItems.length > 0 ? '#ffffff' : '#2c3e50',
                   border: 'none',
-                  borderRadius: '5px',
+                  borderRadius: '15px',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '10px',
                   fontSize: '1rem',
-                  transition: 'background-color 0.3s',
+                  transition: 'background-color 0.3s, color 0.3s',
                   textAlign: 'left'
                 }}
-                onMouseOver={(e) => !isMasterOpen && (e.target.style.backgroundColor = '#3d566e')}
-                onMouseOut={(e) => !isMasterOpen && (e.target.style.backgroundColor = '#34495e')}
+                onMouseOver={(e) => !isMasterOpen && (e.target.style.backgroundColor = '#e6f3fa')}
+                onMouseOut={(e) => !isMasterOpen && (e.target.style.backgroundColor = '#ffffff')}
               >
                 <FaHome /> Master
               </button>
               {isMasterOpen && filteredMasterMenuItems.length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingLeft: '20px' }}>
                   {filteredMasterMenuItems.map((item, index) => (
-                    <button
-                      key={index}
-                      onClick={() => handleNavigation(item.path)}
-                      style={{
-                        padding: '12px 20px',
-                        backgroundColor: '#34495e',
-                        color: '#ecf0f1',
-                        border: 'none',
-                        borderRadius: '5px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '10px',
-                        fontSize: '1rem',
-                        transition: 'background-color 0.3s',
-                        textAlign: 'left'
-                      }}
-                      onMouseOver={(e) => (e.target.style.backgroundColor = '#3d566e')}
-                      onMouseOut={(e) => (e.target.style.backgroundColor = '#34495e')}
-                    >
-                      {item.icon} {item.text}
-                    </button>
+                    <React.Fragment key={index}>
+                      {item.children ? (
+                        <>
+                          <button
+                            onClick={() =>
+                              item.text === 'Customers'
+                                ? setIsCustomersOpen(!isCustomersOpen)
+                                : setIsItemsOpen(!isItemsOpen)
+                            }
+                            style={{
+                              padding: '12px 20px',
+                              backgroundColor:
+                                (item.text === 'Customers' ? isCustomersOpen : isItemsOpen) &&
+                                item.children.length > 0
+                                  ? '#3498db'
+                                  : '#ffffff',
+                              color:
+                                (item.text === 'Customers' ? isCustomersOpen : isItemsOpen) &&
+                                item.children.length > 0
+                                  ? '#ffffff'
+                                  : '#2c3e50',
+                              border: 'none',
+                              borderRadius: '15px',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '10px',
+                              fontSize: '1rem',
+                              transition: 'background-color 0.3s, color 0.3s',
+                              textAlign: 'left'
+                            }}
+                            onMouseOver={(e) =>
+                              !(
+                                (item.text === 'Customers' ? isCustomersOpen : isItemsOpen) &&
+                                item.children.length > 0
+                              ) && (e.target.style.backgroundColor = '#e6f3fa')
+                            }
+                            onMouseOut={(e) =>
+                              !(
+                                (item.text === 'Customers' ? isCustomersOpen : isItemsOpen) &&
+                                item.children.length > 0
+                              ) && (e.target.style.backgroundColor = '#ffffff')
+                            }
+                          >
+                            {item.icon} {item.text}
+                          </button>
+                          {(item.text === 'Customers' ? isCustomersOpen : isItemsOpen) &&
+                            item.children.length > 0 && (
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: '10px',
+                                  paddingLeft: '20px',
+                                }}
+                              >
+                                {item.children.map((subItem, subIndex) => (
+                                  <button
+                                    key={subIndex}
+                                    onClick={() => handleNavigation(subItem.path)}
+                                    style={{
+                                      padding: '12px 20px',
+                                      backgroundColor: '#ffffff',
+                                      color: '#2c3e50',
+                                      border: 'none',
+                                      borderRadius: '15px',
+                                      cursor: 'pointer',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '10px',
+                                      fontSize: '1rem',
+                                      transition: 'background-color 0.3s',
+                                      textAlign: 'left'
+                                    }}
+                                    onMouseOver={(e) => (e.target.style.backgroundColor = '#e6f3fa')}
+                                    onMouseOut={(e) => (e.target.style.backgroundColor = '#ffffff')}
+                                  >
+                                    {subItem.icon} {subItem.text}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => handleNavigation(item.path)}
+                          style={{
+                            padding: '12px 20px',
+                            backgroundColor: '#ffffff',
+                            color: '#2c3e50',
+                            border: 'none',
+                            borderRadius: '15px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px',
+                            fontSize: '1rem',
+                            transition: 'background-color 0.3s',
+                            textAlign: 'left'
+                          }}
+                          onMouseOver={(e) => (e.target.style.backgroundColor = '#e6f3fa')}
+                          onMouseOut={(e) => (e.target.style.backgroundColor = '#ffffff')}
+                        >
+                          {item.icon} {item.text}
+                        </button>
+                      )}
+                    </React.Fragment>
                   ))}
                 </div>
               )}
@@ -282,10 +408,10 @@ function AdminPage() {
               onClick={() => handleNavigation(item.path)}
               style={{
                 padding: '12px 20px',
-                backgroundColor: '#34495e',
-                color: '#ecf0f1',
+                backgroundColor: '#ffffff',
+                color: '#2c3e50',
                 border: 'none',
-                borderRadius: '5px',
+                borderRadius: '15px',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -295,8 +421,8 @@ function AdminPage() {
                 textAlign: 'left',
                 marginTop: '10px'
               }}
-              onMouseOver={(e) => (e.target.style.backgroundColor = '#3d566e')}
-              onMouseOut={(e) => (e.target.style.backgroundColor = '#34495e')}
+              onMouseOver={(e) => (e.target.style.backgroundColor = '#e6f3fa')}
+              onMouseOut={(e) => (e.target.style.backgroundColor = '#ffffff')}
             >
               {item.icon} {item.text}
             </button>
@@ -306,27 +432,27 @@ function AdminPage() {
       <div style={{ marginLeft: '250px', flex: 1, padding: '20px' }}>
         <div style={{ maxWidth: '1200px', margin: '40px auto 0' }}>
           <button
-            onClick={handleGoBack}
+            onClick={handleLogout}
             style={{
               position: 'absolute',
               top: '20px',
-              left: '270px',
-              borderRadius: '50%',
+              right: '20px',
+              borderRadius: '25px',
               width: '50px',
               height: '50px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              backgroundColor: '#ecf0f1',
+              backgroundColor: '#ffffff',
               border: '1px solid #bdc3c7',
               cursor: 'pointer',
               transition: 'background-color 0.3s',
               boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
             }}
             onMouseOver={(e) => (e.target.style.backgroundColor = '#3498db')}
-            onMouseOut={(e) => (e.target.style.backgroundColor = '#ecf0f1')}
+            onMouseOut={(e) => (e.target.style.backgroundColor = '#ffffff')}
           >
-            <FaArrowLeft style={{ fontSize: '24px', color: '#2c3e50' }} />
+            <FaSignOutAlt style={{ fontSize: '24px', color: '#2c3e50' }} />
           </button>
           <h2 style={{ textAlign: 'center', marginBottom: '40px', color: '#2c3e50', fontSize: '2rem', fontWeight: '600' }}>
             Admin Dashboard
@@ -341,7 +467,7 @@ function AdminPage() {
                 padding: '10px',
                 marginBottom: '20px',
                 color: '#c0392b',
-                borderRadius: '5px',
+                borderRadius: '15px',
                 textAlign: 'center'
               }}
             >
@@ -355,7 +481,7 @@ function AdminPage() {
                 padding: '10px',
                 marginBottom: '20px',
                 color: message.includes('success') ? '#155724' : '#c0392b',
-                borderRadius: '5px',
+                borderRadius: '15px',
                 textAlign: 'center'
               }}
             >
@@ -368,7 +494,7 @@ function AdminPage() {
                 style={{
                   padding: '20px',
                   backgroundColor: '#fff',
-                  borderRadius: '8px',
+                  borderRadius: '15px',
                   textAlign: 'center',
                   width: '200px',
                   boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
@@ -387,7 +513,7 @@ function AdminPage() {
                 style={{
                   padding: '20px',
                   backgroundColor: '#fff',
-                  borderRadius: '8px',
+                  borderRadius: '15px',
                   textAlign: 'center',
                   width: '200px',
                   boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
@@ -406,7 +532,7 @@ function AdminPage() {
                 style={{
                   padding: '20px',
                   backgroundColor: '#fff',
-                  borderRadius: '8px',
+                  borderRadius: '15px',
                   textAlign: 'center',
                   width: '200px',
                   boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
@@ -428,12 +554,12 @@ function AdminPage() {
               marginTop: '40px',
               backgroundColor: '#fff',
               padding: '20px',
-              borderRadius: '8px',
+              borderRadius: '15px',
               boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
             }}
           >
             <h3 style={{ marginBottom: '20px', color: '#2c3e50', fontSize: '1.5rem', fontWeight: '600' }}>
-              Import Data to MongoDB
+              Import Data to SQL
             </h3>
             <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
               <input
@@ -443,7 +569,7 @@ function AdminPage() {
                 style={{
                   padding: '10px',
                   border: '1px solid #bdc3c7',
-                  borderRadius: '5px',
+                  borderRadius: '15px',
                   fontSize: '1rem',
                 }}
               />
@@ -455,7 +581,7 @@ function AdminPage() {
                   backgroundColor: loading || !importFile ? '#bdc3c7' : '#3498db',
                   color: '#fff',
                   border: 'none',
-                  borderRadius: '5px',
+                  borderRadius: '15px',
                   cursor: loading || !importFile ? 'not-allowed' : 'pointer',
                   fontSize: '1rem',
                   transition: 'background-color 0.3s',
@@ -479,4 +605,5 @@ function AdminPage() {
     </div>
   );
 }
+
 export default AdminPage;

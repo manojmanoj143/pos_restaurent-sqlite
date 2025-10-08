@@ -72,6 +72,11 @@ function FrontPage() {
       icon: "🌅",
     },
   }
+  const [customerGroups, setCustomerGroups] = useState([])
+  const [selectedGroupId, setSelectedGroupId] = useState("")
+  const [showGroupModal, setShowGroupModal] = useState(false)
+  const [newGroupName, setNewGroupName] = useState("")
+
   const handleThemeChange = (theme) => {
     setCurrentTheme(theme)
     setShowThemeSelector(false)
@@ -317,6 +322,20 @@ function FrontPage() {
       }
     }
     fetchCustomers()
+  }, [])
+  // Fetch customer groups
+  useEffect(() => {
+    const fetchGroups = async () => {
+      try {
+        const response = await axios.get("/api/customer-groups")
+        setCustomerGroups(response.data)
+      } catch (error) {
+        console.error("Error fetching customer groups:", error)
+        setWarningMessage("Failed to load customer groups. Please try again.")
+        setWarningType("warning")
+      }
+    }
+    fetchGroups()
   }, [])
   // Fetch VAT rate
   useEffect(() => {
@@ -1099,12 +1118,14 @@ function FrontPage() {
         location: deliveryAddress.location || "",
         whatsapp_number: whatsappNumber || "",
         email: email || "",
+        customer_group: selectedGroupId || null,
       }
       const response = await axios.post("http://localhost:8000/api/customers", customerData)
-      setCustomers((prev) => [...prev, { ...customerData, _id: response.data.id }])
-      setFilteredCustomers((prev) => [...prev, { ...customerData, _id: response.data.id }])
+      const newCustomer = { ...customerData, _id: response.data.id }
+      setCustomers((prev) => [...prev, newCustomer])
+      setFilteredCustomers((prev) => [...prev, newCustomer])
       setShowCustomerSection(false)
-      setWarningMessage("Customer created successfully!")
+      setWarningMessage("Customer saved successfully!")
       setWarningType("success")
       setPendingAction(() => () => {
         setIsPhoneNumberSet(true)
@@ -1122,6 +1143,45 @@ function FrontPage() {
       setWarningType("warning")
     }
   }
+  const handleUpdateCustomer = async (id) => {
+    if (orderType !== "Dine In" && (!customerName.trim() || !phoneNumber)) {
+      setWarningMessage("Customer name and phone number are required for non-Dine In orders.")
+      setWarningType("warning")
+      return
+    }
+    if (orderType !== "Dine In" && phoneNumber.length !== 10) {
+      setWarningMessage("Phone number must be 10 digits for non-Dine In orders.")
+      setWarningType("warning")
+      return
+    }
+    try {
+      const customerData = {
+        customer_name: customerName.trim(),
+        phone_number: `${selectedISDCode}${phoneNumber}`,
+        building_name: deliveryAddress.building_name || "",
+        flat_villa_no: deliveryAddress.flat_villa_no || "",
+        location: deliveryAddress.location || "",
+        whatsapp_number: whatsappNumber || "",
+        email: email || "",
+        customer_group: selectedGroupId || null,
+      }
+      await axios.put(`http://localhost:8000/api/customers/${id}`, customerData)
+      const updatedCustomer = { ...customerData, _id: id }
+      setCustomers((prev) => prev.map((c) => (c._id === id ? updatedCustomer : c)))
+      setFilteredCustomers((prev) => prev.map((c) => (c._id === id ? updatedCustomer : c)))
+      setShowCustomerSection(false)
+      setWarningMessage("Customer saved successfully!")
+      setWarningType("success")
+      setPendingAction(() => () => {
+        setIsPhoneNumberSet(true)
+        phoneNumberRef.current?.scrollIntoView({ behavior: "smooth" })
+      })
+    } catch (error) {
+      console.error("Error updating customer:", error)
+      setWarningMessage(`Failed to update customer: ${error.response?.data?.error || error.message}`)
+      setWarningType("warning")
+    }
+  }
   const handleCustomerNameChange = (e) => {
     const value = e.target.value
     setCustomerName(value)
@@ -1131,6 +1191,7 @@ function FrontPage() {
       setDeliveryAddress({ building_name: "", flat_villa_no: "", location: "" })
       setWhatsappNumber("")
       setEmail("")
+      setSelectedGroupId("")
       setIsPhoneNumberSet(false)
     } else {
       const filtered = customers.filter((customer) =>
@@ -1147,6 +1208,7 @@ function FrontPage() {
       setDeliveryAddress({ building_name: "", flat_villa_no: "", location: "" })
       setWhatsappNumber("")
       setEmail("")
+      setSelectedGroupId("")
       setIsPhoneNumberSet(false)
     } else if (value.length === 10) {
       const existingCustomer = customers.find((c) => c.phone_number === `${selectedISDCode}${value}`)
@@ -1159,6 +1221,7 @@ function FrontPage() {
         })
         setWhatsappNumber(existingCustomer.whatsapp_number || "")
         setEmail(existingCustomer.email || "")
+        setSelectedGroupId(existingCustomer.customer_group || "")
         setIsPhoneNumberSet(true)
       } else {
         setIsPhoneNumberSet(false)
@@ -1182,26 +1245,64 @@ function FrontPage() {
     })
     setWhatsappNumber(customer.whatsapp_number || "")
     setEmail(customer.email || "")
+    setSelectedGroupId(customer.customer_group || "")
     setShowCustomerSection(false)
     setIsPhoneNumberSet(true)
   }
-  const handleCustomerSubmit = () => {
+  const handleCustomerSubmit = async () => {
     if (orderType === "Dine In") {
       setIsPhoneNumberSet(true)
       return
     }
     if (customerName.trim() && phoneNumber.length === 10) {
       const existingCustomer = customers.find((c) => c.phone_number === `${selectedISDCode}${phoneNumber}`)
+      const customerData = {
+        customer_name: customerName.trim(),
+        phone_number: `${selectedISDCode}${phoneNumber}`,
+        building_name: deliveryAddress.building_name || "",
+        flat_villa_no: deliveryAddress.flat_villa_no || "",
+        location: deliveryAddress.location || "",
+        whatsapp_number: whatsappNumber || "",
+        email: email || "",
+        customer_group: selectedGroupId || null,
+      }
       if (existingCustomer) {
-        handleCustomerSelect(existingCustomer)
+        const hasChanges = Object.keys(customerData).some(
+          (key) => customerData[key] !== (existingCustomer[key] || "")
+        )
+        if (hasChanges) {
+          await handleUpdateCustomer(existingCustomer._id)
+        } else {
+          handleCustomerSelect(existingCustomer)
+        }
       } else {
-        handleCreateCustomer()
+        await handleCreateCustomer()
       }
     } else if (!phoneNumber) {
       setWarningMessage("Please enter a phone number")
       setWarningType("warning")
     } else if (phoneNumber.length !== 10) {
       setWarningMessage("Phone number must be 10 digits")
+      setWarningType("warning")
+    }
+  }
+  const handleCreateGroup = async () => {
+    if (!newGroupName.trim()) {
+      setWarningMessage("Group name is required.")
+      setWarningType("warning")
+      return
+    }
+    try {
+      const response = await axios.post("/api/customer-groups", { group_name: newGroupName.trim() })
+      setCustomerGroups([response.data, ...customerGroups])
+      setSelectedGroupId(response.data._id)
+      setNewGroupName("")
+      setShowGroupModal(false)
+      setWarningMessage("Group created successfully!")
+      setWarningType("success")
+    } catch (error) {
+      console.error("Error creating group:", error)
+      setWarningMessage("Failed to create group.")
       setWarningType("warning")
     }
   }
@@ -1717,6 +1818,23 @@ function FrontPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
+                <div className="frontpage-input-group">
+                  <select
+                    className="frontpage-customer-input"
+                    value={selectedGroupId}
+                    onChange={(e) => setSelectedGroupId(e.target.value)}
+                  >
+                    <option value="">Select Customer Group</option>
+                    {customerGroups.map((group) => (
+                      <option key={group._id} value={group._id}>
+                        {group.group_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button className="frontpage-add-group-btn" onClick={() => setShowGroupModal(true)}>
+                  Add New Group
+                </button>
                 <button className="frontpage-save-customer-btn" onClick={handleCustomerSubmit}>
                   Save Customer
                 </button>
@@ -2435,6 +2553,35 @@ function FrontPage() {
             </div>
             <div className="frontpage-modal-footer">
               <button className="frontpage-modal-btn frontpage-cancel" onClick={() => setShowPaymentModal(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showGroupModal && (
+        <div className="frontpage-modal-overlay">
+          <div className="frontpage-modal-content">
+            <div className="frontpage-modal-header">
+              <h3 className="frontpage-modal-title">Add New Customer Group</h3>
+              <button className="frontpage-modal-close" onClick={() => setShowGroupModal(false)}>
+                <i className="bi bi-x"></i>
+              </button>
+            </div>
+            <div className="frontpage-modal-body">
+              <input
+                type="text"
+                className="frontpage-customer-input"
+                placeholder="Enter Group Name"
+                value={newGroupName}
+                onChange={(e) => setNewGroupName(e.target.value)}
+              />
+            </div>
+            <div className="frontpage-modal-footer">
+              <button className="frontpage-modal-btn frontpage-save" onClick={handleCreateGroup}>
+                Save
+              </button>
+              <button className="frontpage-modal-btn frontpage-cancel" onClick={() => setShowGroupModal(false)}>
                 Cancel
               </button>
             </div>

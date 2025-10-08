@@ -265,8 +265,8 @@ body {
   filter: brightness(0) invert(1);
 }
 .icon-size {
-  width: 32px;
-  height: 24px;
+  /* width: 32px; */
+  height: 41px;
 }
 .nav-item.mt-auto {
   margin-top: auto;
@@ -1329,4 +1329,27 @@ body {
   width: 40px;
   height: 40px;
   object-fit: contain;
+}
+
+/* New Styles for Add New Group Button */
+.frontpage-add-group-btn {
+  display: block;
+  margin: 12px auto; /* Centered horizontally */
+  width: 80%; /* Adjust width as needed, less than 100% for centering */
+  padding: 12px;
+  background-color: var(--success-color); /* Green background */
+  color: #ffffff;
+  border: none;
+  border-radius: 50px; /* Rounded corners for button radius */
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.3s ease, transform 0.3s ease;
+  text-align: center;
+}
+
+.frontpage-add-group-btn:hover {
+  background-color: darken(var(--success-color), 10%); /* Slightly darker green on hover */
+  transform: translateY(-2px); /* Slight lift effect */
+  opacity: 0.9;
 }

@@ -1,3 +1,4 @@
+# app.py (modified backend)
 # -*- mode: python ; coding: utf-8 -*-
 from flask import Flask, request, jsonify, send_from_directory, Response
 from flask_cors import CORS
@@ -95,7 +96,7 @@ def save_config(config_data):
 config = load_config()
 UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', os.path.join(BASE_DIR, 'static', 'uploads'))
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp','jfif'}
 ALLOWED_JSON_EXTENSIONS = {'json'}
 MAX_BACKUPS = 10
 def create_directory(directory):
@@ -301,7 +302,7 @@ class SQLiteCollection:
             return doc
         return None
 def connect_to_sqlite():
-    global conn, items_collection, customers_collection, sales_collection, tables_collection, users_collection, settings_collection, email_tokens_collection, opening_collection, pos_closing_collection, kitchens_collection, item_groups_collection, kitchen_saved_collection, picked_up_collection, variants_collection, employees_collection, activeorders_collection, order_counters_collection, tripreports_collection, email_settings_collection, purchase_items_collection, suppliers_collection, purchase_orders_collection, purchase_receipts_collection, purchase_invoices_collection, uoms_collection, purchase_sales_collection, print_settings_collection, combo_offers_collection, vat_collection
+    global conn, items_collection, customers_collection, sales_collection, tables_collection, users_collection, settings_collection, email_tokens_collection, opening_collection, pos_closing_collection, kitchens_collection, item_groups_collection, kitchen_saved_collection, picked_up_collection, variants_collection, employees_collection, activeorders_collection, order_counters_collection, tripreports_collection, email_settings_collection, purchase_items_collection, suppliers_collection, purchase_orders_collection, purchase_receipts_collection, purchase_invoices_collection, uoms_collection, purchase_sales_collection, print_settings_collection, combo_offers_collection, vat_collection, customer_groups_collection
     mode = config.get("mode", "server")
     if mode == 'server':
         db_path = os.path.join(CONFIG_DIR, 'restaurant.db')
@@ -310,7 +311,7 @@ def connect_to_sqlite():
         tables = [
             'active_orders', 'combo_offers', 'customers', 'email_settings', 'email_tokens', 'employees', 'item_groups', 'items', 'kitchen_saved_orders', 'kitchens',
             'order_counters', 'picked_up_items', 'pos_closing_entries', 'pos_opening_entries', 'print_settings', 'purchase_invoices', 'purchase_items', 'purchase_orders',
-            'purchase_receipts', 'purchase_sales', 'sales', 'suppliers', 'system_settings', 'tables', 'trip_reports', 'uoms', 'users', 'variants', 'vat'
+            'purchase_receipts', 'purchase_sales', 'sales', 'suppliers', 'system_settings', 'tables', 'trip_reports', 'uoms', 'users', 'variants', 'vat', 'customer_groups' # NEW: customer_groups
         ]
         for table in tables:
             cur.execute(f"CREATE TABLE IF NOT EXISTS {table} (id TEXT PRIMARY KEY, data TEXT)")
@@ -345,6 +346,7 @@ def connect_to_sqlite():
         print_settings_collection = SQLiteCollection(conn, 'print_settings')
         combo_offers_collection = SQLiteCollection(conn, 'combo_offers')
         vat_collection = SQLiteCollection(conn, 'vat')
+        customer_groups_collection = SQLiteCollection(conn, 'customer_groups')  # NEW: customer_groups_collection
         ensure_test_users()
         return True
     else:
@@ -770,7 +772,7 @@ def import_mongodb():
         valid_collections = [
             'users', 'tables', 'items', 'customers', 'sales',
             'picked_up_items', 'pos_opening_entries', 'pos_closing_entries',
-            'system_settings', 'kitchens', 'item_groups'
+            'system_settings', 'kitchens', 'item_groups', 'customer_groups' # NEW: customer_groups
         ]
         if collection_name not in valid_collections:
             logger.error(f"Invalid collection name: {collection_name}")
@@ -796,6 +798,7 @@ def import_mongodb():
                 {'name': record.get('name')} if collection_name in ['pos_opening_entries', 'pos_closing_entries'] else
                 {'kitchen_name': record.get('kitchen_name')} if collection_name == 'kitchens' else
                 {'group_name': record.get('group_name')} if collection_name == 'item_groups' else
+                {'group_name': record.get('group_name')} if collection_name == 'customer_groups' else # NEW: for customer_groups
                 {}
             )
             if not unique_key:
@@ -955,7 +958,8 @@ def export_all_to_excel():
             'uoms': uoms_collection,
             'users': users_collection,
             'variants': variants_collection,
-            'vat': vat_collection
+            'vat': vat_collection,
+            'customer_groups': customer_groups_collection  # NEW: customer_groups
         }
         for collection_name, collection in collections.items():
             ws = wb.create_sheet(title=collection_name)
@@ -1030,7 +1034,8 @@ def create_backup():
             'uoms': uoms_collection,
             'users': users_collection,
             'variants': variants_collection,
-            'vat': vat_collection
+            'vat': vat_collection,
+            'customer_groups': customer_groups_collection  # NEW: customer_groups
         }
         for collection_name, collection in collections.items():
             ws = wb.create_sheet(title=collection_name)
@@ -1635,6 +1640,7 @@ if config.get('mode') == 'server':
                         'building_name': customer_data.get('building_name', ''),
                         'flat_villa_no': customer_data.get('flat_villa_no', ''),
                         'location': customer_data.get('location', ''),
+                        'customer_group': customer_data.get('customer_group', ''),  # NEW: Update customer_group
                         'modified_at': datetime.now(ZoneInfo("UTC")).isoformat()
                     }}
                 )
@@ -1673,6 +1679,72 @@ if config.get('mode') == 'server':
             return jsonify({"id": new_customer_id, "message": "Customer created successfully"}), 201
         except Exception as e:
             logger.error(f"Error creating customer: {str(e)}")
+            return jsonify({"error": str(e)}), 500
+    @app.route('/api/customer-groups', methods=['GET'])
+    @db_required
+    def get_customer_groups():
+        try:
+            groups = customer_groups_collection.find()
+            groups = convert_objectid_to_str(groups)
+            logger.info(f"Fetched {len(groups)} customer groups")
+            return jsonify(groups), 200
+        except Exception as e:
+            logger.error(f"Error fetching customer groups: {str(e)}")
+            return jsonify({"error": str(e)}), 500
+    @app.route('/api/customer-groups', methods=['POST'])
+    @db_required
+    def create_customer_group():
+        try:
+            data = request.get_json()
+            if not data or 'group_name' not in data:
+                logger.error("Missing group_name in request")
+                return jsonify({"error": "Group name is required"}), 400
+            group_name = data['group_name']
+            if customer_groups_collection.find_one({"group_name": group_name}):
+                logger.warning(f"Customer group already exists: {group_name}")
+                return jsonify({"error": "Customer group name already exists"}), 400
+            new_group = {
+                "group_name": group_name,
+                "created_at": datetime.now(ZoneInfo("UTC")).isoformat()
+            }
+            result = customer_groups_collection.insert_one(new_group)
+            logger.info(f"Customer group created: {group_name}")
+            return jsonify({"message": "Customer group created successfully", "id": result.inserted_id}), 201
+        except Exception as e:
+            logger.error(f"Error creating customer group: {str(e)}")
+            return jsonify({"error": str(e)}), 500
+    @app.route('/api/customer-groups/<group_id>', methods=['PUT'])
+    @db_required
+    def update_customer_group(group_id):
+        try:
+            data = request.get_json()
+            if not data or 'group_name' not in data:
+                logger.error("Missing group_name in request")
+                return jsonify({"error": "Group name is required"}), 400
+            result = customer_groups_collection.update_one(
+                {'_id': group_id},
+                {'$set': {'group_name': data['group_name'], 'modified_at': datetime.now(ZoneInfo("UTC")).isoformat()}}
+            )
+            if result.matched_count == 0:
+                logger.warning(f"Customer group not found for update: {group_id}")
+                return jsonify({"error": "Customer group not found"}), 404
+            logger.info(f"Customer group updated: {group_id}")
+            return jsonify({"message": "Customer group updated successfully"}), 200
+        except Exception as e:
+            logger.error(f"Error updating customer group {group_id}: {str(e)}")
+            return jsonify({"error": str(e)}), 500
+    @app.route('/api/customer-groups/<group_id>', methods=['DELETE'])
+    @db_required
+    def delete_customer_group(group_id):
+        try:
+            result = customer_groups_collection.delete_one({'_id': group_id})
+            if result.deleted_count == 0:
+                logger.warning(f"Customer group not found for deletion: {group_id}")
+                return jsonify({"error": "Customer group not found"}), 404
+            logger.info(f"Customer group deleted: {group_id}")
+            return jsonify({"message": "Customer group deleted successfully"}), 200
+        except Exception as e:
+            logger.error(f"Error deleting customer group {group_id}: {str(e)}")
             return jsonify({"error": str(e)}), 500
     @app.route('/api/sales', methods=['POST'])
     @db_required
@@ -2328,7 +2400,7 @@ if config.get('mode') == 'server':
                 'customerName': data.get('customerName', 'N/A'),
                 'tableNumber': data.get('tableNumber', 'N/A'),
                 'chairsBooked': data.get('chairsBooked', []),
-                'phoneNumber': data.get('phoneNumber', ''),
+                'pickupTime': data.get('pickupTime', ''),
                 'deliveryAddress': data.get('deliveryAddress', {}),
                 'whatsappNumber': data.get('whatsappNumber', ''),
                 'email': data.get('email', ''),
@@ -2925,11 +2997,11 @@ if config.get('mode') == 'server':
                                 required_kitchens.add(item['comboVariants'][combo_name]['kitchen'])
                     item['requiredKitchens'] = list(required_kitchens)
                     item_id = item.get('id')
-                    old_item_statuses = old_statuses_map.get(item_id, {})
+                    old_item_status_statuses = old_statuses_map.get(item_id, {})
                     new_kitchen_statuses = {}
                     for kitchen in required_kitchens:
-                        if kitchen in old_item_statuses:
-                            new_kitchen_statuses[kitchen] = old_item_statuses[kitchen]
+                        if kitchen in old_item_status_statuses:
+                            new_kitchen_statuses[kitchen] = old_item_status_statuses[kitchen]
                         else:
                             new_kitchen_statuses[kitchen] = 'Pending'
                     item['kitchenStatuses'] = new_kitchen_statuses
@@ -3729,19 +3801,6 @@ if config.get('mode') == 'server':
             return jsonify({'error': f"Invalid data format: {str(e)}"}), 400
         except Exception as e:
             return jsonify({'error': f"Failed to record sale: {str(e)}"}), 500
-    @app.route('/api/print_settings', methods=['GET', 'POST', 'OPTIONS'])
-    @db_required
-    def print_settings():
-        if request.method == 'OPTIONS':
-            response = jsonify({"success": True})
-            response.headers['Access-Control-Allow-Origin'] = '*'
-            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
-            response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
-            return response, 200
-        if request.method == 'GET':
-            return get_all_print_settings()
-        if request.method == 'POST':
-            return create_print_settings()
     @app.route('/api/print_settings/active', methods=['GET'])
     @db_required
     def get_active_print_settings():
@@ -3995,7 +4054,7 @@ def create_print_settings():
         data['active'] = data.get('active', False)
         data['created_at'] = datetime.now(ZoneInfo("UTC")).isoformat()
         result = print_settings_collection.insert_one(data)
-        if data['active']:
+        if not print_settings_collection.find_one({"_id": {"$ne": result.inserted_id}, "active": True}):
             print_settings_collection.update_many({"_id": {"$ne": result.inserted_id}}, {"$set": {"active": False}})
         logger.info(f"Print settings created with ID: {result.inserted_id}")
         return jsonify({"message": "Print settings created successfully", "id": result.inserted_id}), 201

@@ -979,6 +979,7 @@ const SalesPage = () => {
                         key={sale._id}
                         onClick={() => handleInvoiceClick(sale._id, sale)}
                         className="table-row"
+                        style={{ cursor: "pointer" }} // Added cursor: pointer for hand cursor
                       >
                         {columnOrder.map((col) => (
                           <td key={col.key} style={{ textAlign: col.align }}>

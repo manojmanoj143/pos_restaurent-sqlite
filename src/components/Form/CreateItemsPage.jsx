@@ -1,4 +1,3 @@
-// createitempage.jsx (full completed detailed code with fixes)
 import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -33,6 +32,7 @@ const initialFormState = {
   item_name: "",
   item_group: "",
   price_list_rate: 0,
+  has_offer: false,
   offer_price: "",
   offer_start_time: "",
   offer_end_time: "",
@@ -287,6 +287,7 @@ const CreateItemPage = () => {
             ...itemToEdit,
             image: extractImageName(itemToEdit.image) || "",
             images: itemToEdit.images || [],
+            has_offer: !!itemToEdit.offer_price || !!itemToEdit.offer_start_time || !!itemToEdit.offer_end_time,
             offer_price: itemToEdit.offer_price || "",
             offer_start_time: itemToEdit.offer_start_time ? itemToEdit.offer_start_time.slice(0, 16) : "",
             offer_end_time: itemToEdit.offer_end_time ? itemToEdit.offer_end_time.slice(0, 16) : "",
@@ -340,6 +341,7 @@ const CreateItemPage = () => {
             ...itemToEdit,
             image: extractImageName(itemToEdit.image) || "",
             images: itemToEdit.images || [],
+            has_offer: !!itemToEdit.offer_price || !!itemToEdit.offer_start_time || !!itemToEdit.offer_end_time,
             offer_price: itemToEdit.offer_price || "",
             offer_start_time: itemToEdit.offer_start_time ? itemToEdit.offer_start_time.slice(0, 16) : "",
             offer_end_time: itemToEdit.offer_end_time ? itemToEdit.offer_end_time.slice(0, 16) : "",
@@ -419,7 +421,15 @@ const CreateItemPage = () => {
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
     const newValue = type === "checkbox" ? checked : value;
-    setFormData((prev) => ({ ...prev, [name]: newValue }));
+    setFormData((prev) => {
+      let updated = { ...prev, [name]: newValue };
+      if (name === "has_offer" && !newValue) {
+        updated.offer_price = "";
+        updated.offer_start_time = "";
+        updated.offer_end_time = "";
+      }
+      return updated;
+    });
   };
 
   const handleNumericInputFocus = (e, defaultValue = 0) => {
@@ -1802,6 +1812,7 @@ const CreateItemPage = () => {
                 step: "0.01",
                 required: true,
               },
+              { label: "Enable Promotion", name: "has_offer", type: "checkbox" },
               { label: "Promotional Price (₹)", name: "offer_price", type: "number", min: "0", step: "0.01" },
               { label: "Offer Start Time", name: "offer_start_time", type: "datetime-local" },
               { label: "Offer End Time", name: "offer_end_time", type: "datetime-local" },
@@ -1812,42 +1823,55 @@ const CreateItemPage = () => {
                 type: "select",
                 options: kitchens.map((kitchen) => kitchen.kitchen_name),
               },
-            ].map((field) => (
-              <div key={field.name} className="form-group">
-                <label>
-                  {field.label} {field.required && <span>*</span>}
-                </label>
-                {field.type === "select" ? (
-                  <select
-                    name={field.name}
-                    value={formData[field.name]}
-                    onChange={handleInputChange}
-                    className="input"
-                    required={field.required}
-                  >
-                    <option value="">Select {field.label}</option>
-                    {field.options.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    type={field.type || "text"}
-                    name={field.name}
-                    value={formData[field.name]}
-                    onChange={handleInputChange}
-                    onFocus={field.type === "number" ? (e) => handleNumericInputFocus(e) : undefined}
-                    onBlur={field.type === "number" ? (e) => handleNumericInputBlur(e, field.name) : undefined}
-                    className="input"
-                    required={field.required}
-                    min={field.min}
-                    step={field.step}
-                  />
-                )}
-              </div>
-            ))}
+            ].map((field) => {
+              if (["offer_price", "offer_start_time", "offer_end_time"].includes(field.name) && !formData.has_offer) {
+                return null;
+              }
+              return (
+                <div key={field.name} className="form-group">
+                  <label>
+                    {field.label} {field.required && <span>*</span>}
+                  </label>
+                  {field.type === "select" ? (
+                    <select
+                      name={field.name}
+                      value={formData[field.name]}
+                      onChange={handleInputChange}
+                      className="input"
+                      required={field.required}
+                    >
+                      <option value="">Select {field.label}</option>
+                      {field.options.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  ) : field.type === "checkbox" ? (
+                    <input
+                      type="checkbox"
+                      name={field.name}
+                      checked={formData[field.name]}
+                      onChange={handleInputChange}
+                      className="input"
+                    />
+                  ) : (
+                    <input
+                      type={field.type || "text"}
+                      name={field.name}
+                      value={formData[field.name]}
+                      onChange={handleInputChange}
+                      onFocus={field.type === "number" ? (e) => handleNumericInputFocus(e) : undefined}
+                      onBlur={field.type === "number" ? (e) => handleNumericInputBlur(e, field.name) : undefined}
+                      className="input"
+                      required={field.required}
+                      min={field.min}
+                      step={field.step}
+                    />
+                  )}
+                </div>
+              );
+            })}
             <div className="form-group">
               <label>Item Image</label>
               <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, "image")} className="input" />
@@ -3074,4 +3098,4 @@ const CreateItemPage = () => {
   );
 };
 
-export default CreateItemPage;
+export default CreateItemPage; 

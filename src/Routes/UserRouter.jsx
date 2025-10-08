@@ -1,3 +1,4 @@
+// src/router/UserRouter.jsx (modified)
 import React from "react";
 import { Route, Routes } from "react-router-dom";
 // Import Pages
@@ -41,6 +42,9 @@ import Purchase from "../components/Form/Purchase"; // Added import for Purchase
 import PrintSettings from "../components/Form/printsettings";
 import ComboOffer from "../components/Form/ComboOffer"; // Added import for ComboOffer component
 import VatPage from "../components/Form/Vatpage"; // Corrected import path casing for VatPage component
+import CreateCustomerPage from "../components/Form/CreateCustomerPage"; // NEW: Imported CreateCustomerPage
+import CreateCustomerGroup from "../components/Form/CreateCustomerGroup"; // NEW: Imported CreateCustomerGroup
+
 const UserRouter = () => {
   return (
     <div className="min-h-screen bg-gray-100">
@@ -91,6 +95,10 @@ const UserRouter = () => {
         <Route path="/create-variant" element={<CreateVariant />} />
         <Route path="/employees" element={<Employee />} />
         <Route path="/vat" element={<VatPage />} /> {/* Added route for VatPage */}
+        {/* NEW: Route for CreateCustomerPage */}
+        <Route path="/create-customer" element={<CreateCustomerPage />} />
+        {/* NEW: Route for CreateCustomerGroup */}
+        <Route path="/create-customer-group" element={<CreateCustomerGroup />} />
       </Routes>
     </div>
   );
