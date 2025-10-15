@@ -1,4 +1,4 @@
-// ActiveOrders.jsx
+// ActiveOrders.jsx (Updated with Enhanced Combo and Addon Price Reconstruction)
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
@@ -9,6 +9,7 @@ import "./ActiveOrders.css";
 function ActiveOrders() {
   const [savedOrders, setSavedOrders] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [tables, setTables] = useState([]);
   const [warningMessage, setWarningMessage] = useState("");
   const [warningType, setWarningType] = useState("warning");
   const [pendingAction, setPendingAction] = useState(null);
@@ -18,30 +19,35 @@ function ActiveOrders() {
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [selectedDeliveryPersonId, setSelectedDeliveryPersonId] = useState(null);
   const [filterType, setFilterType] = useState("Dine In");
+
   const navigate = useNavigate();
   const vatRate = 0.10;
 
   const fetchData = async () => {
     try {
-      const ordersResponse = await axios.get("api/activeorders");
-      console.log("Fetched orders from server in ActiveOrders:", ordersResponse.data); // Console log for debugging
+      const ordersResponse = await axios.get("/api/activeorders");
+      console.log("Fetched orders from server in ActiveOrders:", ordersResponse.data);
       const orders = Array.isArray(ordersResponse.data) ? ordersResponse.data : [];
+
       const sanitizedOrders = orders.map((order) => ({
         ...order,
         orderNo: order.orderNo || "N/A",
         chairsBooked: Array.isArray(order.chairsBooked) ? order.chairsBooked : [],
-        cartItems: Array.isArray(order.cartItems) ? order.cartItems.map(item => ({
-          ...item,
-          originalBasePrice: item.originalBasePrice || null,
-        })) : [],
+        cartItems: Array.isArray(order.cartItems)
+          ? order.cartItems.map((item) => ({
+              ...item,
+              originalBasePrice: item.originalBasePrice || null,
+              served: item.served !== undefined ? item.served : false,
+              servedQuantity: item.servedQuantity || 0,
+              servedQuantity: Math.min(item.servedQuantity || 0, item.quantity || 1),
+            }))
+          : [],
         pickedUpTime: order.pickedUpTime || null,
+        paid: order.paid || false,
       }));
+
       setSavedOrders(sanitizedOrders);
       localStorage.setItem("savedOrders", JSON.stringify(sanitizedOrders));
-
-      const employeesResponse = await axios.get("/api/employees");
-      const employeesData = Array.isArray(employeesResponse.data) ? employeesResponse.data : [];
-      setEmployees(employeesData);
     } catch (err) {
       console.error("Failed to fetch data in ActiveOrders:", err);
       setWarningMessage(`Failed to fetch data: ${err.message}`);
@@ -49,11 +55,40 @@ function ActiveOrders() {
     }
   };
 
+  const fetchEmployees = async () => {
+    try {
+      const response = await axios.get("/api/employees");
+      setEmployees(Array.isArray(response.data) ? response.data : []);
+    } catch (err) {
+      console.error("Failed to fetch employees:", err);
+      setWarningMessage(`Failed to fetch employees: ${err.message}`);
+      setWarningType("warning");
+    }
+  };
+
+  const fetchTables = async () => {
+    try {
+      const response = await axios.get("http://localhost:8000/api/tables");
+      setTables(response.data.message || []);
+    } catch (err) {
+      console.error("Failed to fetch tables:", err);
+      setWarningMessage(`Failed to fetch tables: ${err.message}`);
+      setWarningType("warning");
+    }
+  };
+
   useEffect(() => {
     fetchData();
+    fetchEmployees();
+    fetchTables();
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  const getFloor = (tableNumber) => {
+    const table = tables.find((t) => String(t.table_number) === String(tableNumber));
+    return table ? table.floor : "N/A";
+  };
 
   const handleRefresh = () => {
     fetchData();
@@ -89,39 +124,122 @@ function ActiveOrders() {
   };
 
   const handleDeleteOrder = (orderId, tableNumber, orderNo) => {
-    setWarningMessage(`Are you sure you want to delete order ${orderNo}?`);
+    setWarningMessage(`Are you sure you want to delete order ${orderNo || "N/A"}?`);
     setWarningType("warning");
     setIsConfirmation(true);
-    setPendingAction(() => async () => {
-      try {
-        await axios.delete(`/api/activeorders/${orderId}`);
-        let bookedTables = JSON.parse(localStorage.getItem("bookedTables")) || [];
-        const updatedBookedTables = bookedTables.filter((tableNum) => tableNum !== tableNumber);
-        localStorage.setItem("bookedTables", JSON.stringify(updatedBookedTables));
-        let bookedChairs = JSON.parse(localStorage.getItem("bookedChairs")) || {};
-        delete bookedChairs[tableNumber];
-        localStorage.setItem("bookedChairs", JSON.stringify(bookedChairs));
-        const updatedOrders = savedOrders.filter((order) => order.orderId !== orderId);
-        setSavedOrders(updatedOrders);
-        localStorage.setItem("savedOrders", JSON.stringify(updatedOrders));
-        setWarningMessage(`Order ${orderNo} deleted successfully!`);
-        setWarningType("success");
-      } catch (err) {
-        console.error("Failed to delete order:", err);
-        setWarningMessage(`Failed to delete order: ${err.message}`);
-        setWarningType("warning");
+    setPendingAction(() =>
+      async () => {
+        try {
+          await axios.delete(`/api/activeorders/${orderId}`);
+          let bookedTables = JSON.parse(localStorage.getItem("bookedTables")) || [];
+          const updatedBookedTables = bookedTables.filter((tableNum) => tableNum !== tableNumber);
+          localStorage.setItem("bookedTables", JSON.stringify(updatedBookedTables));
+          let bookedChairs = JSON.parse(localStorage.getItem("bookedChairs")) || {};
+          delete bookedChairs[tableNumber];
+          localStorage.setItem("bookedChairs", JSON.stringify(bookedChairs));
+          const updatedOrders = savedOrders.filter((order) => order.orderId !== orderId);
+          setSavedOrders(updatedOrders);
+          localStorage.setItem("savedOrders", JSON.stringify(updatedOrders));
+          setWarningMessage(`Order ${orderNo || "N/A"} deleted successfully!`);
+          setWarningType("success");
+        } catch (err) {
+          console.error("Failed to delete order:", err);
+          setWarningMessage(`Failed to delete order: ${err.message}`);
+          setWarningType("warning");
+        }
       }
-    });
+    );
+  };
+
+  const handleDeleteItem = async (orderId, itemId) => {
+    try {
+      await axios.delete(`/api/activeorders/${orderId}/items/${itemId}`);
+      fetchData();
+      setWarningMessage("Item deleted successfully!");
+      setWarningType("success");
+    } catch (err) {
+      console.error("Failed to delete item:", err);
+      setWarningMessage(`Failed to delete item: ${err.message}`);
+      setWarningType("warning");
+    }
+  };
+
+  const handleDeleteAllCompleted = () => {
+    setWarningMessage("Are you sure you want to delete all completed orders?");
+    setWarningType("warning");
+    setIsConfirmation(true);
+    setPendingAction(() =>
+      async () => {
+        try {
+          const filteredCompleted = completedFiltered;
+          for (const order of filteredCompleted) {
+            await axios.delete(`/api/activeorders/${order.orderId}`);
+            let bookedTables = JSON.parse(localStorage.getItem("bookedTables")) || [];
+            const updatedBookedTables = bookedTables.filter((tableNum) => tableNum !== order.tableNumber);
+            localStorage.setItem("bookedTables", JSON.stringify(updatedBookedTables));
+            let bookedChairs = JSON.parse(localStorage.getItem("bookedChairs")) || {};
+            delete bookedChairs[order.tableNumber];
+            localStorage.setItem("bookedChairs", JSON.stringify(bookedChairs));
+          }
+          fetchData();
+          setWarningMessage("All completed orders deleted successfully!");
+          setWarningType("success");
+        } catch (err) {
+          console.error("Failed to delete completed orders:", err);
+          setWarningMessage(`Failed to delete completed orders: ${err.message}`);
+          setWarningType("warning");
+        }
+      }
+    );
+  };
+
+  const handleCompleted = async (orderId) => {
+    const order = savedOrders.find((o) => o.orderId === orderId);
+    if (!order) return;
+
+    const allItemsCompleted = order.cartItems.every((item) => (item.servedQuantity || 0) >= (item.quantity || 1));
+
+    if (order.paid && allItemsCompleted) {
+      setWarningMessage("Are you sure you want to mark this order as completed and delete it?");
+      setWarningType("warning");
+      setIsConfirmation(true);
+      setPendingAction(() =>
+        async () => {
+          try {
+            await axios.delete(`/api/activeorders/${orderId}`);
+            let bookedTables = JSON.parse(localStorage.getItem("bookedTables")) || [];
+            const updatedBookedTables = bookedTables.filter((tableNum) => tableNum !== order.tableNumber);
+            localStorage.setItem("bookedTables", JSON.stringify(updatedBookedTables));
+            let bookedChairs = JSON.parse(localStorage.getItem("bookedChairs")) || {};
+            delete bookedChairs[order.tableNumber];
+            localStorage.setItem("bookedChairs", JSON.stringify(bookedChairs));
+            const updatedOrders = savedOrders.filter((o) => o.orderId !== orderId);
+            setSavedOrders(updatedOrders);
+            localStorage.setItem("savedOrders", JSON.stringify(updatedOrders));
+            setWarningMessage("Order completed and deleted successfully!");
+            setWarningType("success");
+          } catch (err) {
+            console.error("Failed to complete order:", err);
+            setWarningMessage(`Failed to complete order: ${err.message}`);
+            setWarningType("warning");
+          }
+        }
+      );
+    } else {
+      setWarningMessage("Order cannot be completed. Ensure all items are fully served and paid.");
+      setWarningType("warning");
+    }
   };
 
   const checkAllItemsPickedUp = (order) => {
     if (!order.cartItems || order.cartItems.length === 0) return false;
     const allPickedUp = order.cartItems.every((item) => {
       const requiredKitchens = item.requiredKitchens || [];
+      if (requiredKitchens.length === 0) return true;
       if (!item.kitchenStatuses) return false;
       return requiredKitchens.every((kitchen) => item.kitchenStatuses[kitchen] === "PickedUp");
     });
-    console.log(`Check if all items picked up for order ${order.orderNo}: ${allPickedUp}`); // Console log for debugging
+    console.log(`Check if all items picked up for order ${order.orderNo}: ${allPickedUp}`);
     return allPickedUp;
   };
 
@@ -133,18 +251,21 @@ function ActiveOrders() {
       setWarningType("warning");
       return;
     }
+
     if (order.orderType !== "Online Delivery") {
       console.error("Delivery person can only be assigned to Online Delivery orders.");
       setWarningMessage("Delivery person can only be assigned to Online Delivery orders.");
       setWarningType("warning");
       return;
     }
+
     if (!checkAllItemsPickedUp(order)) {
       console.error(`Cannot assign delivery person to order ${order.orderNo}. All items, addons, and combos must be marked as Picked Up in the Kitchen page.`);
       setWarningMessage(`Cannot assign delivery person to order ${order.orderNo}. All items, addons, and combos must be marked as Picked Up in the Kitchen page.`);
       setWarningType("warning");
       return;
     }
+
     setSelectedOrderId(orderId);
     setSelectedDeliveryPersonId(deliveryPersonId);
     setShowDeliveryPopup(true);
@@ -160,6 +281,7 @@ function ActiveOrders() {
         setShowDeliveryPopup(false);
         return;
       }
+
       if (!checkAllItemsPickedUp(order)) {
         console.error(`Cannot assign delivery person to order ${order.orderNo}. All items, addons, and combos must be marked as Picked Up in the Kitchen page.`);
         setWarningMessage(`Cannot assign delivery person to order ${order.orderNo}. All items, addons, and combos must be marked as Picked Up in the Kitchen page.`);
@@ -167,10 +289,12 @@ function ActiveOrders() {
         setShowDeliveryPopup(false);
         return;
       }
+
       await axios.put(`/api/activeorders/${selectedOrderId}`, {
         deliveryPersonId: selectedDeliveryPersonId,
         cartItems: order.cartItems,
       });
+
       const updatedOrders = savedOrders.filter((o) => o.orderId !== selectedOrderId);
       setSavedOrders(updatedOrders);
       localStorage.setItem("savedOrders", JSON.stringify(updatedOrders));
@@ -228,36 +352,236 @@ function ActiveOrders() {
       setIsConfirmation(false);
       return;
     }
-    const formattedCartItems = order.cartItems.map((item) => ({
-      ...item,
-      id: item.id || uuidv4(),
-      item_name: item.item_name || item.name,
-      name: item.name || item.item_name,
-      quantity: Number(item.quantity) || 1,
-      basePrice: Number(item.basePrice) || (Number(item.totalPrice) / (Number(item.quantity) || 1)) || 0,
-      originalBasePrice: item.originalBasePrice || null,
-      totalPrice: Number(item.totalPrice) || (Number(item.basePrice) * (Number(item.quantity) || 1)) || 0,
-      selectedSize: item.selectedSize || "M",
-      icePreference: item.icePreference || "without_ice",
-      icePrice: Number(item.icePrice) || 0,
-      isSpicy: item.isSpicy || false,
-      spicyPrice: Number(item.spicyPrice) || 0,
-      kitchen: item.kitchen || "Main Kitchen",
-      addonQuantities: item.addonQuantities || {},
-      addonVariants: item.addonVariants || {},
-      addonPrices: item.addonPrices || {},
-      comboQuantities: item.comboQuantities || {},
-      comboVariants: item.comboVariants || {},
-      comboPrices: item.comboPrices || {},
-      selectedCombos: item.selectedCombos || [],
-      ingredients: item.ingredients || [],
-      requiredKitchens: item.requiredKitchens || [],
-      kitchenStatuses: item.kitchenStatuses || {},
-    }));
+
+    const baseURL = "http://localhost:8000";
+    const cacheBuster = `?t=${new Date().getTime()}`;
+
+    const formattedCartItems = order.cartItems.map((item) => {
+      const formattedItem = {
+        ...item,
+        id: item.id || uuidv4(),
+        item_name: item.item_name || item.name,
+        name: item.name || item.item_name,
+        quantity: Number(item.quantity) || 1,
+        basePrice: Number(item.basePrice) || (Number(item.totalPrice) / (Number(item.quantity) || 1)) || 0,
+        originalBasePrice: item.originalBasePrice || null,
+        totalPrice: Number(item.totalPrice) || (Number(item.basePrice) * (Number(item.quantity) || 1)) || 0,
+        selectedSize: item.selectedSize || "M",
+        icePreference: item.icePreference || "without_ice",
+        isSpicy: item.isSpicy || false,
+        sugarLevel: item.sugarLevel || "medium",
+        kitchen: item.kitchen || "Main Kitchen",
+        addonQuantities: item.addonQuantities || {},
+        addonVariants: item.addonVariants || {},
+        comboQuantities: item.comboQuantities || {},
+        comboVariants: item.comboVariants || {},
+        selectedCombos: item.selectedCombos || [],
+        ingredients: item.ingredients || [],
+        requiredKitchens: item.requiredKitchens || [],
+        kitchenStatuses: item.kitchenStatuses || {},
+        served: item.served || false,
+        servedQuantity: item.servedQuantity || 0,
+      };
+
+      // Reconstruct addon details from addons array if not already objects
+      if (Array.isArray(item.addons)) {
+        const addonQuantities = {};
+        const addonVariants = {};
+        const addonPrices = {};
+        const addonSizePrices = {};
+        const addonIcePrices = {};
+        const addonSpicyPrices = {};
+        const addonImages = {};
+        const addonCustomVariantsDetails = {};
+
+        item.addons.forEach((addon) => {
+          const addonName = addon.name1;
+          addonQuantities[addonName] = addon.addon_quantity || 1;
+          addonVariants[addonName] = {
+            size: addon.size || "M",
+            cold: addon.cold || "without_ice",
+            spicy: addon.isSpicy || false,
+            sugar: addon.sugar || "medium",
+            kitchen: addon.kitchen || "Main Kitchen",
+          };
+          // ENHANCED: Robust price fallback for addons
+          let addonPrice = Number(addon.addon_price) || 0;
+          if (addonPrice === 0 && addon.addon_total_price) {
+            addonPrice = Number(addon.addon_total_price) / (addon.addon_quantity || 1);
+          } else if (addonPrice === 0 && addon.base_price) {
+            addonPrice = Number(addon.base_price);
+          } else if (addonPrice === 0) {
+            // Fallback to size price if available
+            addonPrice = Number(addon.addon_size_price) || 0;
+          }
+          addonPrices[addonName] = addonPrice;
+          const customVariantsPrice = Object.values(addon.custom_variants || {}).reduce((sum, v) => sum + (Number(v.price) || 0), 0);
+          addonSizePrices[addonName] = Number(addon.addon_size_price) || (addonPrice - (Number(addon.addon_ice_price) || 0) - (Number(addon.addon_spicy_price) || 0) - customVariantsPrice) || 0;
+          addonIcePrices[addonName] = Number(addon.addon_ice_price) || 0;
+          addonSpicyPrices[addonName] = Number(addon.addon_spicy_price) || 0;
+          addonImages[addonName] = (addon.addon_image
+            ? addon.addon_image.startsWith("http")
+              ? addon.addon_image
+              : `${baseURL}${addon.addon_image}`
+            : "/static/images/default-addon-image.jpg") + cacheBuster;
+          addonCustomVariantsDetails[addonName] = addon.custom_variants || {};
+        });
+
+        formattedItem.addonQuantities = addonQuantities;
+        formattedItem.addonVariants = addonVariants;
+        formattedItem.addonPrices = addonPrices;
+        formattedItem.addonSizePrices = addonSizePrices;
+        formattedItem.addonIcePrices = addonIcePrices;
+        formattedItem.addonSpicyPrices = addonSpicyPrices;
+        formattedItem.addonImages = addonImages;
+        formattedItem.addonCustomVariantsDetails = addonCustomVariantsDetails;
+      } else {
+        formattedItem.addonImages = formattedItem.addonImages || {};
+        Object.keys(formattedItem.addonQuantities || {}).forEach((addonName) => {
+          if (!formattedItem.addonImages[addonName]) {
+            formattedItem.addonImages[addonName] = "/static/images/default-addon-image.jpg" + cacheBuster;
+          }
+        });
+      }
+
+      // Reconstruct combo details from selectedCombos array if not already objects - ENHANCED: Robust price calculation with multiple fallbacks
+      if (Array.isArray(item.selectedCombos)) {
+        const comboQuantities = {};
+        const comboVariants = {};
+        const comboPrices = {};
+        const comboSizePrices = {};
+        const comboIcePrices = {};
+        const comboSpicyPrices = {};
+        const comboImages = {};
+        const comboCustomVariantsDetails = {};
+
+        item.selectedCombos.forEach((combo) => {
+          const comboName = combo.name1;
+          comboQuantities[comboName] = Number(combo.combo_quantity) || 1;
+          comboVariants[comboName] = {
+            size: combo.size || "M",
+            cold: combo.cold || "without_ice",
+            spicy: combo.isSpicy || false,
+            sugar: combo.sugar || "medium",
+            kitchen: combo.kitchen || "Main Kitchen",
+          };
+          // ENHANCED: Multi-level fallback for combo price
+          let comboPrice = Number(combo.combo_price) || 0;
+          if (comboPrice === 0 && combo.combo_total_price) {
+            comboPrice = Number(combo.combo_total_price) / (Number(combo.combo_quantity) || 1);
+          } else if (comboPrice === 0 && combo.base_price) {
+            comboPrice = Number(combo.base_price);
+          } else if (comboPrice === 0 && combo.combo_size_price) {
+            comboPrice = Number(combo.combo_size_price);
+          } else if (comboPrice === 0 && item.basePrice) {
+            // Fallback to main item price if combo price is missing (edge case)
+            comboPrice = Number(item.basePrice) / (item.comboQuantities ? Object.keys(item.comboQuantities).length : 1);
+          }
+          // Ensure minimum price if all fallbacks fail
+          if (comboPrice === 0) {
+            console.warn(`Warning: No valid price found for combo ${comboName}. Setting default to 0.00. Check backend data.`);
+            comboPrice = 0; // Or set a default if needed
+          }
+          comboPrices[comboName] = comboPrice;
+          const customVariantsPrice = Object.values(combo.custom_variants || {}).reduce((sum, v) => sum + (Number(v.price) || 0), 0);
+          comboSizePrices[comboName] = Number(combo.combo_size_price) || (comboPrice - (Number(combo.combo_ice_price) || 0) - (Number(combo.combo_spicy_price) || 0) - customVariantsPrice) || 0;
+          comboIcePrices[comboName] = Number(combo.combo_ice_price) || 0;
+          comboSpicyPrices[comboName] = Number(combo.combo_spicy_price) || 0;
+          comboImages[comboName] = (combo.combo_image
+            ? combo.combo_image.startsWith("http")
+              ? combo.combo_image
+              : `${baseURL}${combo.combo_image}`
+            : "/static/images/default-combo-image.jpg") + cacheBuster;
+          comboCustomVariantsDetails[comboName] = combo.custom_variants || {};
+        });
+
+        formattedItem.comboQuantities = comboQuantities;
+        formattedItem.comboVariants = comboVariants;
+        formattedItem.comboPrices = comboPrices;
+        formattedItem.comboSizePrices = comboSizePrices;
+        formattedItem.comboIcePrices = comboIcePrices;
+        formattedItem.comboSpicyPrices = comboSpicyPrices;
+        formattedItem.comboImages = comboImages;
+        formattedItem.comboCustomVariantsDetails = comboCustomVariantsDetails;
+        formattedItem.selectedCombos = item.selectedCombos;
+      } else {
+        formattedItem.comboImages = formattedItem.comboImages || {};
+        Object.keys(formattedItem.comboQuantities || {}).forEach((comboName) => {
+          if (!formattedItem.comboImages[comboName]) {
+            formattedItem.comboImages[comboName] = "/static/images/default-combo-image.jpg" + cacheBuster;
+          }
+        });
+      }
+
+      // Custom variants for main item
+      formattedItem.selectedCustomVariants = item.selectedCustomVariants || {};
+      formattedItem.customVariantsDetails = item.customVariantsDetails || {};
+      formattedItem.customVariantsQuantities = item.customVariantsQuantities || {};
+
+      // For combo offers
+      if (item.isCombo) {
+        formattedItem.isCombo = true;
+        formattedItem.comboItems = item.comboItems || [];
+      }
+
+      // Format comboItems images for combo offers
+      if (item.isCombo && Array.isArray(item.comboItems)) {
+        formattedItem.comboItems = item.comboItems.map((comboItem) => ({
+          ...comboItem,
+          image: (comboItem.image
+            ? comboItem.image.startsWith("http")
+              ? comboItem.image
+              : `${baseURL}${comboItem.image}`
+            : "/static/images/default-combo-image.jpg") + cacheBuster,
+        }));
+      }
+
+      formattedItem.image = (item.image
+        ? item.image.startsWith("http")
+          ? item.image
+          : `${baseURL}${item.image}`
+        : "/static/images/default-item.jpg") + cacheBuster;
+
+      // ENHANCED: Recalculate totalPrice for the item to ensure consistency
+      let itemSubtotal = formattedItem.basePrice * formattedItem.quantity;
+
+      // Simplified addon total calculation
+      let addonTotal = 0;
+      if (formattedItem.addonPrices && formattedItem.addonQuantities) {
+        Object.keys(formattedItem.addonPrices).forEach((key) => {
+          const price = formattedItem.addonPrices[key];
+          const qty = formattedItem.addonQuantities[key] || 0;
+          addonTotal += price * qty;
+        });
+      }
+      itemSubtotal += addonTotal;
+
+      // Simplified combo total calculation
+      let comboTotal = 0;
+      if (formattedItem.comboPrices && formattedItem.comboQuantities) {
+        Object.keys(formattedItem.comboPrices).forEach((key) => {
+          const price = formattedItem.comboPrices[key];
+          const qty = formattedItem.comboQuantities[key] || 0;
+          comboTotal += price * qty;
+        });
+      }
+      itemSubtotal += comboTotal;
+
+      formattedItem.totalPrice = itemSubtotal;
+
+      return formattedItem;
+    });
+
     const orderType = order.orderType || inferOrderType(order);
     const phoneNumber = order.phoneNumber?.replace(/^\+\d+/, "") || "";
-    setWarningMessage(`You selected order ${order.orderNo} for ${orderType === "Online Delivery" ? "Customer " + order.customerName : "Table " + (order.tableNumber || "N/A")}`);
+
+    setWarningMessage(
+      `You selected order ${order.orderNo} for ${
+        orderType === "Online Delivery" ? "Customer " + order.customerName : "Table " + (order.tableNumber || "N/A")
+      }`
+    );
     setWarningType("success");
+
     setPendingAction(() => () => {
       navigate("/frontpage", {
         state: {
@@ -331,7 +655,9 @@ function ActiveOrders() {
             const price = comboPrices?.[comboName] || 0;
             return (
               <li key={idx}>
-                + Combo: {comboName} ({combo.size || "M"}) x{qty} (₹{price.toFixed(2)}{combo.spicy ? " (Spicy)" : ""}, Kitchen: {combo.kitchen || "Unknown"})
+                <strong>+ Combo: </strong>
+                {comboName} ({combo.size || "M"}) x{qty} (₹{price.toFixed(2)}
+                {combo.spicy ? " (Spicy)" : ""}, Kitchen: {combo.kitchen || "Unknown"})
               </li>
             );
           })}
@@ -408,21 +734,88 @@ function ActiveOrders() {
     return orderType === filterType;
   });
 
-  const renderOrderTable = (orders, tableTitle) => (
-    <div className="active-orders-table-wrapper">
-      <h2>{tableTitle}</h2>
-      {orders.length > 0 ? (
-        <div className="active-orders-table-responsive">
-          <table className="active-orders-table active-orders-table-striped active-orders-table-bordered">
-            <thead>
-              <tr>
-                <th>Order No</th>
-                {filterType === "Online Delivery" ? (
-                  <>
+  const unservedFiltered = filteredOrders.filter((order) => {
+    const allItemsCompleted = order.cartItems.every((item) => (item.servedQuantity || 0) >= (item.quantity || 1));
+    return !(order.paid && allItemsCompleted);
+  });
+
+  const completedFiltered = filteredOrders.filter((order) => {
+    const allItemsCompleted = order.cartItems.every((item) => (item.servedQuantity || 0) >= (item.quantity || 1));
+    return order.paid && allItemsCompleted;
+  });
+
+  const handleServiceChange = async (orderId, itemId, isServed) => {
+    try {
+      const order = savedOrders.find((o) => o.orderId === orderId);
+      const item = order.cartItems.find((i) => i.id === itemId);
+      if (!item) return;
+
+      const currentServedQty = item.servedQuantity || 0;
+      const newServedQty = isServed ? (item.quantity || 1) : 0;
+
+      const response = await axios.post(`/api/activeorders/${orderId}/items/${itemId}/mark-served`, { servedQuantity: newServedQty });
+
+      if (response.data.success) {
+        const updatedOrders = savedOrders.map((o) =>
+          o.orderId === orderId
+            ? {
+                ...o,
+                cartItems: o.cartItems.map((i) =>
+                  i.id === itemId ? { ...i, servedQuantity: newServedQty } : i
+                ),
+              }
+            : o
+        );
+        setSavedOrders(updatedOrders);
+        localStorage.setItem("savedOrders", JSON.stringify(updatedOrders));
+        setWarningMessage("Item service status updated!");
+        setWarningType("success");
+      }
+    } catch (err) {
+      console.error("Failed to update service status:", err);
+      setWarningMessage(`Failed to update service status: ${err.message}`);
+      setWarningType("warning");
+    }
+  };
+
+  const handlePaymentChange = async (orderId, isPaid) => {
+    try {
+      const response = await axios.put(`/api/activeorders/${orderId}`, { paid: isPaid });
+      const updatedOrders = savedOrders.map((order) =>
+        order.orderId === orderId ? { ...order, paid: isPaid } : order
+      );
+      setSavedOrders(updatedOrders);
+      localStorage.setItem("savedOrders", JSON.stringify(updatedOrders));
+      setWarningMessage("Order payment status updated!");
+      setWarningType("success");
+    } catch (err) {
+      console.error("Failed to update payment status:", err);
+      setWarningMessage(`Failed to update payment status: ${err.message}`);
+      setWarningType("warning");
+    }
+  };
+
+  const renderOrderTable = (orders, tableTitle) => {
+    const isOnlineDelivery = filterType === "Online Delivery";
+    return (
+      <div className="active-orders-table-wrapper">
+        <h2>{tableTitle}</h2>
+        {tableTitle === "Completed Orders" && orders.length > 0 && (
+          <button className="active-orders-btn active-orders-btn-danger" onClick={handleDeleteAllCompleted}>
+            Clear All Completed Orders
+          </button>
+        )}
+        {orders.length > 0 ? (
+          <div className="active-orders-table-responsive">
+            <table className="active-orders-table active-orders-table-striped active-orders-table-bordered">
+              <thead>
+                {isOnlineDelivery ? (
+                  <tr>
+                    <th>Order No</th>
+                    <th>Delivery Address</th>
                     <th>Customer</th>
                     <th>Order Type</th>
                     <th>Phone</th>
-                    <th>Delivery Address</th>
                     <th>Timestamp</th>
                     <th>Total (₹)</th>
                     <th>Grand Total (₹)</th>
@@ -430,9 +823,11 @@ function ActiveOrders() {
                     <th>Picked Up Time</th>
                     <th>Items</th>
                     <th>Actions</th>
-                  </>
+                    <th>Completed</th>
+                  </tr>
                 ) : (
-                  <>
+                  <tr>
+                    <th>Order No</th>
                     <th>Table</th>
                     <th>Customer</th>
                     <th>Order Type</th>
@@ -441,143 +836,188 @@ function ActiveOrders() {
                     <th>Timestamp</th>
                     <th>Total (₹)</th>
                     <th>Grand Total (₹)</th>
+                    <th>Payment Status</th>
                     <th>Items</th>
                     <th>Actions</th>
-                  </>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {orders.map((order, index) => {
-                const isAllPickedUp = checkAllItemsPickedUp(order);
-                return (
-                  <tr key={order.orderId}>
-                    <td style={isAllPickedUp ? { color: "green", fontWeight: "bold" } : {}}>
-                      {order.orderNo || "N/A"}
-                    </td>
-                    {filterType === "Online Delivery" ? (
-                      <>
-                        <td>{order.customerName || "Guest"}</td>
-                        <td>{order.orderType || inferOrderType(order)}</td>
-                        <td>{order.phoneNumber || "Not provided"}</td>
-                        <td>{formatDeliveryAddress(order.deliveryAddress)}</td>
-                        <td>{formatTimestamp(order.timestamp)}</td>
-                        <td>{calculateOrderTotal(order.cartItems)}</td>
-                        <td>{calculateGrandTotal(order.cartItems)}</td>
-                        <td>
-                          {order.deliveryPersonId ? (
-                            <span>{getDeliveryPersonName(order.deliveryPersonId)}</span>
-                          ) : (
-                            <select
-                              className="active-orders-select"
-                              value={order.deliveryPersonId || ""}
-                              onChange={(e) => handleAssignDeliveryPerson(order.orderId, e.target.value)}
-                            >
-                              <option value="">Select Delivery Person</option>
-                              {employees
-                                .filter((emp) => emp.role.toLowerCase() === "delivery boy")
-                                .map((employee) => (
-                                  <option key={employee.employeeId} value={employee.employeeId}>
-                                    {employee.name} (ID: {employee.employeeId})
-                                  </option>
-                                ))}
-                            </select>
-                          )}
-                        </td>
-                        <td>{formatTimestamp(order.pickedUpTime)}</td>
-                      </>
-                    ) : (
-                      <>
-                        <td>{order.tableNumber || "N/A"}</td>
-                        <td>{order.customerName || "Guest"}</td>
-                        <td>{order.orderType || inferOrderType(order)}</td>
-                        <td>{order.phoneNumber || "Not provided"}</td>
-                        <td>{formatChairsBooked(order.chairsBooked)}</td>
-                        <td>{formatTimestamp(order.timestamp)}</td>
-                        <td>{calculateOrderTotal(order.cartItems)}</td>
-                        <td>{calculateGrandTotal(order.cartItems)}</td>
-                      </>
-                    )}
-                    <td>
-                      {order.cartItems && order.cartItems.length > 0 ? (
-                        <div>
-                          <div
-                            className="active-orders-item-header"
-                            onClick={() => toggleItems(`${filterType}-${index}`)}
-                          >
-                            <strong>{order.cartItems[0].name || order.cartItems[0].item_name}</strong>
-                            <span>{expandedItems[`${filterType}-${index}`] ? "▼" : "▶"}</span>
-                          </div>
-                          {expandedItems[`${filterType}-${index}`] && (
-                            <ul className="active-orders-list-group">
-                              {order.cartItems.map((item, itemIndex) => {
-                                const itemStatus = getItemStatus(item);
-                                return (
-                                  <li
-                                    key={itemIndex}
-                                    className={`active-orders-list-group-item status-${itemStatus.toLowerCase()}`}
-                                  >
-                                    <strong>{item.name || item.item_name}</strong> x{item.quantity}
-                                    <div>Price: {item.originalBasePrice ? <span style={{ textDecoration: "line-through" }}>₹{item.originalBasePrice.toFixed(2)}</span> : ""} ₹{item.basePrice.toFixed(2)}</div>
-                                    <div>Size: {item.selectedSize || "M"}</div>
-                                    <div>Ice: {item.icePreference || "without_ice"}</div>
-                                    <div>Spicy: {item.isSpicy ? "Yes" : "No"}</div>
-                                    <div>Kitchen: {item.kitchen || "Main Kitchen"}</div>
-                                    <div>Status: {itemStatus}{itemStatus === "PickedUp" ? " (All Done)" : ""}</div>
-                                    {renderAddons(item.addonQuantities, item.addonVariants, item.addonPrices)}
-                                    {renderCombos(item.comboQuantities, item.comboVariants, item.comboPrices)}
-                                    <div>
-                                      <strong>Ingredients:</strong> {renderIngredients(item.ingredients)}
-                                    </div>
-                                    {item.kitchenStatuses && (
-                                      <div>
-                                        <strong>Kitchen Statuses:</strong>
-                                        <ul className="active-orders-kitchen-statuses">
-                                          {Object.entries(item.kitchenStatuses).map(([kitchen, status], idx) => (
-                                            <li key={idx}>
-                                              {kitchen}: {status}
-                                            </li>
-                                          ))}
-                                        </ul>
-                                      </div>
-                                    )}
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                          )}
-                        </div>
-                      ) : (
-                        <div>No items</div>
-                      )}
-                    </td>
-                    <td>
-                      <button
-                        className="active-orders-btn active-orders-btn-primary active-orders-btn-sm"
-                        onClick={() => handleSelectOrder(order)}
-                      >
-                        Select
-                      </button>
-                      <button
-                        className="active-orders-btn active-orders-btn-danger active-orders-btn-sm"
-                        onClick={() => handleDeleteOrder(order.orderId, order.tableNumber, order.orderNo)}
-                      >
-                        Delete
-                      </button>
-                    </td>
+                    <th>Completed</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="active-orders-text-center">
-          <p>No {tableTitle.toLowerCase()} orders found.</p>
-        </div>
-      )}
-    </div>
-  );
+                )}
+              </thead>
+              <tbody>
+                {orders.map((order, index) => {
+                  const isAllPickedUp = checkAllItemsPickedUp(order);
+                  const isCompleted = tableTitle === "Completed Orders";
+                  const allItemsCompleted = order.cartItems.every((item) => (item.servedQuantity || 0) >= (item.quantity || 1));
+                  const canComplete = order.paid && allItemsCompleted;
+                  return (
+                    <tr key={order.orderId}>
+                      <td style={isAllPickedUp ? { color: "green", fontWeight: "bold" } : {}}>
+                        {order.orderNo || "N/A"}
+                      </td>
+                      {filterType === "Online Delivery" ? (
+                        <>
+                          <td>{formatDeliveryAddress(order.deliveryAddress)}</td>
+                          <td>{order.customerName || "Guest"}</td>
+                          <td>{order.orderType || inferOrderType(order)}</td>
+                          <td>{order.phoneNumber || "Not provided"}</td>
+                          <td>{formatTimestamp(order.timestamp)}</td>
+                          <td>{calculateOrderTotal(order.cartItems)}</td>
+                          <td>{calculateGrandTotal(order.cartItems)}</td>
+                          <td>
+                            {order.deliveryPersonId ? (
+                              <span>{getDeliveryPersonName(order.deliveryPersonId)}</span>
+                            ) : (
+                              <select
+                                className="active-orders-select"
+                                value={order.deliveryPersonId || ""}
+                                onChange={(e) => handleAssignDeliveryPerson(order.orderId, e.target.value)}
+                              >
+                                <option value="">Select Delivery Person</option>
+                                {employees
+                                  .filter((emp) => emp.role.toLowerCase() === "delivery boy")
+                                  .map((employee) => (
+                                    <option key={employee.employeeId} value={employee.employeeId}>
+                                      {employee.name} (ID: {employee.employeeId})
+                                    </option>
+                                  ))}
+                              </select>
+                            )}
+                          </td>
+                          <td>{formatTimestamp(order.pickedUpTime)}</td>
+                        </>
+                      ) : (
+                        <>
+                          <td>{order.tableNumber ? `Table ${order.tableNumber} (Floor ${getFloor(order.tableNumber)})` : "N/A"}</td>
+                          <td>{order.customerName || "Guest"}</td>
+                          <td>{order.orderType || inferOrderType(order)}</td>
+                          <td>{order.phoneNumber || "Not provided"}</td>
+                          <td>{formatChairsBooked(order.chairsBooked)}</td>
+                          <td>{formatTimestamp(order.timestamp)}</td>
+                          <td>{calculateOrderTotal(order.cartItems)}</td>
+                          <td>{calculateGrandTotal(order.cartItems)}</td>
+                          <td>
+                            <select
+                              value={order.paid ? "Paid" : "Unpaid"}
+                              onChange={(e) => handlePaymentChange(order.orderId, e.target.value === "Paid")}
+                              className="active-orders-select"
+                            >
+                              <option value="Unpaid">Unpaid</option>
+                              <option value="Paid">Paid</option>
+                            </select>
+                          </td>
+                        </>
+                      )}
+                      <td>
+                        {order.cartItems && order.cartItems.length > 0 ? (
+                          <div>
+                            <div className="active-orders-item-header" onClick={() => toggleItems(`${filterType}-${index}`)}>
+                              <strong>{order.cartItems[0].name || order.cartItems[0].item_name}</strong>
+                              <span>{expandedItems[`${filterType}-${index}`] ? "▼" : "▶"}</span>
+                            </div>
+                            {expandedItems[`${filterType}-${index}`] && (
+                              <ul className="active-orders-list-group">
+                                {order.cartItems.map((item, itemIndex) => {
+                                  const itemStatus = getItemStatus(item);
+                                  const remainingQty = (item.quantity || 1) - (item.servedQuantity || 0);
+                                  return (
+                                    <li
+                                      key={itemIndex}
+                                      className={`active-orders-list-group-item status-${itemStatus.toLowerCase()}`}
+                                    >
+                                      <strong>{item.name || item.item_name}</strong> x{item.quantity} (Served: {item.servedQuantity || 0}, Pending: {remainingQty})
+                                      <div>Price: {item.originalBasePrice ? <span style={{ textDecoration: "line-through" }}>₹{item.originalBasePrice.toFixed(2)}</span> : ""} ₹{item.basePrice.toFixed(2)}</div>
+                                      <div>Size: {item.selectedSize || "M"}</div>
+                                      <div>Ice: {item.icePreference || "without_ice"}</div>
+                                      <div>Spicy: {item.isSpicy ? "Yes" : "No"}</div>
+                                      <div>Kitchen: {item.kitchen || "Main Kitchen"}</div>
+                                      <div>Status: {itemStatus}{itemStatus === "PickedUp" ? " (All Done)" : ""}</div>
+                                      {renderAddons(item.addonQuantities, item.addonVariants, item.addonPrices)}
+                                      {renderCombos(item.comboQuantities, item.comboVariants, item.comboPrices)}
+                                      <div>
+                                        <strong>Ingredients:</strong> {renderIngredients(item.ingredients)}
+                                      </div>
+                                      {item.kitchenStatuses && (
+                                        <div>
+                                          <strong>Kitchen Statuses:</strong>
+                                          <ul className="active-orders-kitchen-statuses">
+                                            {Object.entries(item.kitchenStatuses).map(([kitchen, status], idx) => (
+                                              <li key={idx}>
+                                                {kitchen}: {status}
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      )}
+                                      {!isCompleted && (
+                                        <select
+                                          value={item.servedQuantity >= (item.quantity || 1) ? "Served" : "Unserved"}
+                                          onChange={(e) => handleServiceChange(order.orderId, item.id, e.target.value === "Served")}
+                                          className="active-orders-select"
+                                          disabled={!checkAllItemsPickedUpForItem(item)}
+                                        >
+                                          <option value="Unserved">Unserved (Pending: {remainingQty})</option>
+                                          <option value="Served">Served (All)</option>
+                                        </select>
+                                      )}
+                                      {isCompleted && (
+                                        <button
+                                          className="active-orders-btn active-orders-btn-danger active-orders-btn-sm"
+                                          onClick={() => handleDeleteItem(order.orderId, item.id)}
+                                        >
+                                          Delete Item
+                                        </button>
+                                      )}
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            )}
+                          </div>
+                        ) : (
+                          <div>No items</div>
+                        )}
+                      </td>
+                      <td>
+                        {!isCompleted && (
+                          <button className="active-orders-btn active-orders-btn-primary active-orders-btn-sm" onClick={() => handleSelectOrder(order)}>
+                            Select
+                          </button>
+                        )}
+                        <button
+                          className="active-orders-btn active-orders-btn-danger active-orders-btn-sm"
+                          onClick={() => handleDeleteOrder(order.orderId, order.tableNumber, order.orderNo)}
+                        >
+                          Delete Order
+                        </button>
+                      </td>
+                      <td>
+                        <button
+                          className={`active-orders-btn active-orders-btn-sm ${canComplete ? "active-orders-btn-success" : "active-orders-btn-secondary"}`}
+                          onClick={() => canComplete && handleCompleted(order.orderId)}
+                          disabled={!canComplete}
+                        >
+                          Completed
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="active-orders-text-center">
+            <p>No {tableTitle.toLowerCase()} orders found.</p>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  function checkAllItemsPickedUpForItem(item) {
+    if (!item.kitchenStatuses) return false;
+    return Object.values(item.kitchenStatuses).every((status) => status === "PickedUp");
+  }
 
   return (
     <div className="active-orders-container">
@@ -590,24 +1030,15 @@ function ActiveOrders() {
           {warningMessage}
           {isConfirmation ? (
             <div className="active-orders-alert-buttons">
-              <button
-                className="active-orders-btn active-orders-btn-success"
-                onClick={handleConfirmYes}
-              >
+              <button className="active-orders-btn active-orders-btn-success" onClick={handleConfirmYes}>
                 Yes
               </button>
-              <button
-                className="active-orders-btn active-orders-btn-danger"
-                onClick={handleConfirmNo}
-              >
+              <button className="active-orders-btn active-orders-btn-danger" onClick={handleConfirmNo}>
                 No
               </button>
             </div>
           ) : (
-            <button
-              className="active-orders-btn active-orders-btn-primary"
-              onClick={handleWarningOk}
-            >
+            <button className="active-orders-btn active-orders-btn-primary" onClick={handleWarningOk}>
               OK
             </button>
           )}
@@ -616,20 +1047,12 @@ function ActiveOrders() {
       {showDeliveryPopup && (
         <div className="active-orders-modal-overlay">
           <div className="active-orders-modal-content">
-            <p>
-              Assign {getDeliveryPersonName(selectedDeliveryPersonId)} to the order?
-            </p>
+            <p>Assign {getDeliveryPersonName(selectedDeliveryPersonId)} to the order?</p>
             <div>
-              <button
-                className="active-orders-btn active-orders-btn-success"
-                onClick={confirmDeliveryAssignment}
-              >
+              <button className="active-orders-btn active-orders-btn-success" onClick={confirmDeliveryAssignment}>
                 Confirm
               </button>
-              <button
-                className="active-orders-btn active-orders-btn-danger"
-                onClick={cancelDeliveryPopup}
-              >
+              <button className="active-orders-btn active-orders-btn-danger" onClick={cancelDeliveryPopup}>
                 Cancel
               </button>
             </div>
@@ -645,10 +1068,7 @@ function ActiveOrders() {
           onKeyPress={(e) => e.key === "Enter" && handleBack()}
         />
         <h1>Active Orders</h1>
-        <button
-          className="active-orders-btn active-orders-btn-primary active-orders-refresh-btn"
-          onClick={handleRefresh}
-        >
+        <button className="active-orders-btn active-orders-btn-primary active-orders-refresh-btn" onClick={handleRefresh}>
           <FaSyncAlt style={{ marginRight: "5px" }} />
           Refresh
         </button>
@@ -679,7 +1099,8 @@ function ActiveOrders() {
           Online Delivery ({orderCounts["Online Delivery"]})
         </button>
       </div>
-      {renderOrderTable(filteredOrders, filterType)}
+      {renderOrderTable(unservedFiltered, "Unserved Orders")}
+      {renderOrderTable(completedFiltered, "Completed Orders")}
     </div>
   );
 }

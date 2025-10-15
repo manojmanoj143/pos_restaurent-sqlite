@@ -21,6 +21,7 @@ import {
   FaPrint,
   FaGift,
   FaSignOutAlt,
+  FaBuilding, // Added for Company Details
 } from 'react-icons/fa';
 
 function AdminPage() {
@@ -166,6 +167,7 @@ function AdminPage() {
     { icon: <FaShoppingCart />, text: 'Purchase Module', path: '/purchase' },
     { icon: <FaPrint />, text: 'Print Settings', path: '/print-settings' },
     { icon: <FaGift />, text: 'Combo Offer', path: '/combo-offer' },
+    { icon: <FaBuilding />, text: 'Company Details', path: '/company-details' }, // Added Company Details
   ];
 
   const otherMenuItems = [
@@ -546,6 +548,25 @@ function AdminPage() {
                 <FaDatabase style={{ fontSize: '2rem', color: '#3498db', marginBottom: '10px' }} />
                 <h4 style={{ margin: '0', color: '#2c3e50' }}>Total Backups</h4>
                 <p style={{ fontSize: '1.5rem', margin: '5px 0 0', color: '#34495e' }}>{backupCount}</p>
+              </div>
+              <div
+                style={{
+                  padding: '20px',
+                  backgroundColor: '#fff',
+                  borderRadius: '15px',
+                  textAlign: 'center',
+                  width: '200px',
+                  boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
+                  cursor: 'pointer',
+                  transition: 'transform 0.2s',
+                }}
+                onClick={() => handleNavigation('/company-details')}
+                onMouseOver={(e) => (e.currentTarget.style.transform = 'scale(1.05)')}
+                onMouseOut={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+              >
+                <FaBuilding style={{ fontSize: '2rem', color: '#3498db', marginBottom: '10px' }} />
+                <h4 style={{ margin: '0', color: '#2c3e50' }}>Company Details</h4>
+                {/* <p style={{ fontSize: '1.5rem', margin: '5px 0 0', color: '#34495e' }}>Configure</p> */}
               </div>
             </div>
           )}

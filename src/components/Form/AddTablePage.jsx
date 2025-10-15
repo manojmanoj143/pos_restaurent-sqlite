@@ -1,3 +1,4 @@
+// AddTablePage.jsx (full corrected code)
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -11,7 +12,13 @@ function AddTablePage() {
   const [uniqueFloors, setUniqueFloors] = useState([]);
   const [selectedFloor, setSelectedFloor] = useState("");
   const [selectedTableNumber, setSelectedTableNumber] = useState(null);
+  const [showModal, setShowModal] = useState(false);
   const navigate = useNavigate();
+
+  // Clear selection when floor changes
+  useEffect(() => {
+    setSelectedTableNumber(null);
+  }, [selectedFloor]);
 
   // Format floor for display
   const formatFloor = (f) => {
@@ -99,7 +106,7 @@ function AddTablePage() {
         for (const t of fetchedTables) {
           if (!t.chairs || t.chairs.length !== t.number_of_chairs) {
             t.chairs = getDefaultChairPositions(t.type, t.number_of_chairs);
-            updateTableChairs(t.table_number, t.chairs).catch(err => console.error("Failed to init chairs:", err));
+            updateTableChairs(t.floor, t.table_number, t.chairs).catch(err => console.error("Failed to init chairs:", err));
           }
         }
         setTables(fetchedTables);
@@ -135,6 +142,18 @@ function AddTablePage() {
       return () => clearTimeout(timer);
     }
   }, [message]);
+
+  // Reset form fields when modal opens
+  const openModal = () => {
+    setTableNumber("");
+    setFloor("");
+    setNumberOfChairs("");
+    setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -185,6 +204,7 @@ function AddTablePage() {
       setTableNumber("");
       setFloor("");
       setNumberOfChairs("");
+      setShowModal(false);
       fetchTables(); // Refresh table list
     } catch (err) {
       setMessage(err.message);
@@ -193,8 +213,8 @@ function AddTablePage() {
     }
   };
 
-  // Delete table function
-  const handleDelete = async (tableNumber) => {
+  // Delete table function - now includes floor
+  const handleDelete = async (tableNumber, floor) => {
     try {
       const response = await fetch(`/api/tables/${tableNumber}`, {
         method: "DELETE",
@@ -202,6 +222,7 @@ function AddTablePage() {
           "Content-Type": "application/json",
           "Accept": "application/json",
         },
+        body: JSON.stringify({ floor }),  // Include floor in body for floor-specific delete
       });
       const text = await response.text();
       let data;
@@ -223,8 +244,8 @@ function AddTablePage() {
     }
   };
 
-  // Update table position
-  const updateTablePosition = async (tableNumber, x, y) => {
+  // Update table position - now includes floor
+  const updateTablePosition = async (tableNumber, floor, x, y) => {
     try {
       const response = await fetch(`/api/tables/${tableNumber}`, {
         method: "PUT",
@@ -232,13 +253,17 @@ function AddTablePage() {
           "Content-Type": "application/json",
           "Accept": "application/json",
         },
-        body: JSON.stringify({ x: Math.round(x), y: Math.round(y) }),
+        body: JSON.stringify({ floor, x: Math.round(x), y: Math.round(y) }),
       });
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.error || "Failed to update position");
       }
       // Optionally setMessage(data.message, 'success');
+      // Local update after successful backend update
+      setTables(prevTables => prevTables.map(t => 
+        t.table_number === tableNumber && t.floor === floor ? { ...t, x: Math.round(x), y: Math.round(y) } : t
+      ));
     } catch (err) {
       setMessage(err.message);
       setMessageType('error');
@@ -246,8 +271,8 @@ function AddTablePage() {
     }
   };
 
-  // Update table chairs
-  const updateTableChairs = async (tableNumber, chairs) => {
+  // Update table chairs - now includes floor
+  const updateTableChairs = async (floor, tableNumber, chairs) => {
     try {
       const response = await fetch(`/api/tables/${tableNumber}`, {
         method: "PUT",
@@ -255,7 +280,7 @@ function AddTablePage() {
           "Content-Type": "application/json",
           "Accept": "application/json",
         },
-        body: JSON.stringify({ chairs }),
+        body: JSON.stringify({ floor, chairs }),
       });
       const data = await response.json();
       if (!response.ok) {
@@ -269,14 +294,14 @@ function AddTablePage() {
     }
   };
 
-  // Update table type
-  const updateTableType = async (tableNumber, newType, currentX, currentY) => {
+  // Update table type - now includes floor
+  const updateTableType = async (tableNumber, floor, newType, currentX, currentY) => {
     try {
-      const selectedTable = tables.find((t) => t.table_number === tableNumber);
+      const selectedTable = tables.find((t) => t.table_number === tableNumber && t.floor === floor);
       if (!selectedTable) throw new Error("Table not found");
       const newChairs = getDefaultChairPositions(newType, selectedTable.number_of_chairs);
       const tableData = {
-        floor: selectedTable.floor,
+        floor,
         number_of_chairs: selectedTable.number_of_chairs,
         type: newType,
         x: Math.round(currentX),
@@ -298,6 +323,10 @@ function AddTablePage() {
       setMessage(data.message);
       setMessageType('success');
       // Do not fetchTables here to keep the local change
+      // Local update
+      setTables(prevTables => prevTables.map(t => 
+        t.table_number === tableNumber && t.floor === floor ? { ...t, type: newType, chairs: newChairs } : t
+      ));
     } catch (err) {
       setMessage(err.message);
       setMessageType('error');
@@ -360,41 +389,8 @@ function AddTablePage() {
       color: "#2c3e50",
       textShadow: "1px 1px 2px rgba(0,0,0,0.1)",
     },
-    form: {
-      maxWidth: "450px",
-      width: "100%",
-      backgroundColor: "#fff",
-      padding: "25px",
-      borderRadius: "10px",
-      boxShadow: "0 4px 6px rgba(0,0,0,0.1)",
-      display: "flex",
-      flexDirection: "column",
-      gap: "20px",
-    },
-    formGroup: {
-      display: "flex",
-      flexDirection: "column",
-    },
-    label: {
-      marginBottom: "8px",
-      fontWeight: "600",
-      color: "#34495e",
-      fontSize: "1.1rem",
-    },
-    input: {
-      padding: "12px",
-      border: "1px solid #ddd",
-      borderRadius: "6px",
-      fontSize: "1rem",
-      outline: "none",
-      transition: "border-color 0.3s ease",
-    },
-    inputFocus: {
-      borderColor: "#3498db",
-      boxShadow: "0 0 5px rgba(52, 152, 219, 0.3)",
-    },
-    button: {
-      padding: "12px",
+    addButton: {
+      padding: "12px 24px",
       backgroundColor: "#2ecc71",
       color: "white",
       border: "none",
@@ -403,8 +399,9 @@ function AddTablePage() {
       fontSize: "1.1rem",
       fontWeight: "600",
       transition: "background-color 0.3s ease",
+      marginBottom: "20px",
     },
-    buttonHover: {
+    addButtonHover: {
       backgroundColor: "#27ae60",
     },
     deleteButton: {
@@ -435,7 +432,7 @@ function AddTablePage() {
       textAlign: "center",
     },
     tableContainer: {
-      marginTop: "40px",
+      marginTop: "20px",
       maxWidth: "700px",
       width: "100%",
       backgroundColor: "#fff",
@@ -488,26 +485,33 @@ function AddTablePage() {
       position: "absolute",
       right: 0,
       top: 0,
-      width: "200px",
+      width: "150px",
       height: "100%",
       backgroundColor: "#f9f9f9",
-      padding: "20px",
+      padding: "15px",
       boxShadow: "-2px 0 5px rgba(0,0,0,0.1)",
       zIndex: 5,
       overflowY: "auto",
+    },
+    sidebarHeading: {
+      textAlign: "center",
+      marginBottom: "15px",
+      fontSize: "1.2rem",
+      color: "#2c3e50",
     },
     typeButton: {
       display: "flex",
       flexDirection: "column",
       alignItems: "center",
       justifyContent: "center",
-      width: "80px",
-      height: "60px",
-      margin: "10px",
+      width: "60px",
+      height: "50px",
+      margin: "5px 2.5px",
       border: "none",
       borderRadius: "5px",
       cursor: "pointer",
       transition: "background-color 0.3s ease",
+      fontSize: "0.8rem",
     },
     typeButtonSelected: {
       backgroundColor: "#e67e22",
@@ -518,7 +522,90 @@ function AddTablePage() {
       color: "#2c3e50",
     },
     typeIcon: {
-      marginBottom: "5px",
+      marginBottom: "3px",
+    },
+    modalOverlay: {
+      position: "fixed",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: "rgba(0, 0, 0, 0.5)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 1000,
+    },
+    modalContent: {
+      backgroundColor: "#fff",
+      padding: "30px",
+      borderRadius: "10px",
+      boxShadow: "0 4px 6px rgba(0,0,0,0.1)",
+      maxWidth: "400px",
+      width: "90%",
+      maxHeight: "80vh",
+      overflowY: "auto",
+    },
+    modalHeading: {
+      marginBottom: "20px",
+      fontSize: "1.8rem",
+      color: "#2c3e50",
+      textAlign: "center",
+    },
+    modalFormGroup: {
+      display: "flex",
+      flexDirection: "column",
+      marginBottom: "15px",
+    },
+    modalLabel: {
+      marginBottom: "8px",
+      fontWeight: "600",
+      color: "#34495e",
+      fontSize: "1rem",
+    },
+    modalInput: {
+      padding: "10px",
+      border: "1px solid #ddd",
+      borderRadius: "5px",
+      fontSize: "0.95rem",
+      outline: "none",
+      transition: "border-color 0.3s ease",
+    },
+    modalInputFocus: {
+      borderColor: "#3498db",
+      boxShadow: "0 0 5px rgba(52, 152, 219, 0.3)",
+    },
+    modalButtons: {
+      display: "flex",
+      gap: "10px",
+      justifyContent: "flex-end",
+      marginTop: "20px",
+    },
+    modalSaveButton: {
+      padding: "10px 20px",
+      backgroundColor: "#2ecc71",
+      color: "white",
+      border: "none",
+      borderRadius: "5px",
+      cursor: "pointer",
+      fontSize: "1rem",
+      transition: "background-color 0.3s ease",
+    },
+    modalSaveButtonHover: {
+      backgroundColor: "#27ae60",
+    },
+    modalCancelButton: {
+      padding: "10px 20px",
+      backgroundColor: "#95a5a6",
+      color: "white",
+      border: "none",
+      borderRadius: "5px",
+      cursor: "pointer",
+      fontSize: "1rem",
+      transition: "background-color 0.3s ease",
+    },
+    modalCancelButtonHover: {
+      backgroundColor: "#7f8c8d",
     },
   };
 
@@ -659,7 +746,7 @@ function AddTablePage() {
           const boundedX = Math.max(0, Math.min(parentRect.width - tableWidth, newX));
           const boundedY = Math.max(0, Math.min(parentRect.height - tableHeight, newY));
           setPos({ x: boundedX, y: boundedY });
-          onSavePosition(table.table_number, boundedX, boundedY);
+          onSavePosition(table.table_number, table.floor, boundedX, boundedY);  // Pass floor
         }
       };
       if (dragging) {
@@ -670,7 +757,7 @@ function AddTablePage() {
         document.removeEventListener("mousemove", handleMouseMove);
         document.removeEventListener("mouseup", handleMouseUp);
       };
-    }, [dragging, offset, table.table_number, onSavePosition]);
+    }, [dragging, offset, table.table_number, table.floor, onSavePosition]);
 
     const handleMouseDown = (e) => {
       e.preventDefault();
@@ -686,17 +773,17 @@ function AddTablePage() {
 
     const handleDoubleClick = (e) => {
       e.stopPropagation();
-      onSelect(table.table_number);
+      onSelect(table.table_number, table.floor);  // Pass floor for selection
     };
 
     const handleSaveChairPosition = (index, newPos) => {
       const newPositions = [...localChairPositions];
       newPositions[index] = newPos;
       setLocalChairPositions(newPositions);
-      updateTableChairs(table.table_number, newPositions);
+      updateTableChairs(table.floor, table.table_number, newPositions);  // Pass floor
       // Update local tables state to reflect saved chairs
       setTables(prevTables => prevTables.map(t => 
-        t.table_number === table.table_number ? { ...t, chairs: newPositions } : t
+        t.table_number === table.table_number && t.floor === table.floor ? { ...t, chairs: newPositions } : t  // Floor-specific update
       ));
     };
 
@@ -798,14 +885,14 @@ function AddTablePage() {
 
   const filteredTables = tables.filter((table) => table.floor === selectedFloor);
 
-  const selectedTable = tables.find((t) => t.table_number === selectedTableNumber);
+  const selectedTable = tables.find((t) => t.table_number === selectedTableNumber && t.floor === selectedFloor);  // Floor-specific selection
 
   const tableTypes = ["Round", "Square", "Rectangle", "Long", "Oval", "Bar"];
 
   const getTypeIcon = (type) => {
     let iconStyle = {
-      width: 30,
-      height: 30,
+      width: 25,
+      height: 25,
       border: "1px solid black",
       background: "transparent",
     };
@@ -817,23 +904,23 @@ function AddTablePage() {
         iconStyle.borderRadius = "0";
         break;
       case "Rectangle":
-        iconStyle.width = 40;
-        iconStyle.height = 20;
+        iconStyle.width = 35;
+        iconStyle.height = 18;
         iconStyle.borderRadius = "0";
         break;
       case "Long":
-        iconStyle.width = 50;
-        iconStyle.height = 15;
+        iconStyle.width = 45;
+        iconStyle.height = 13;
         iconStyle.borderRadius = "0";
         break;
       case "Oval":
-        iconStyle.width = 40;
-        iconStyle.height = 20;
+        iconStyle.width = 35;
+        iconStyle.height = 18;
         iconStyle.borderRadius = "50%";
         break;
       case "Bar":
-        iconStyle.width = 15;
-        iconStyle.height = 50;
+        iconStyle.width = 13;
+        iconStyle.height = 45;
         iconStyle.borderRadius = "0";
         break;
       default:
@@ -843,21 +930,21 @@ function AddTablePage() {
   };
 
   const handleChangeType = (newType) => {
-    if (!selectedTableNumber || !selectedTable) return;
+    if (!selectedTableNumber || !selectedTable || !selectedFloor) return;  // Ensure floor is selected
     if (newType === selectedTable.type) {
       setMessage(`The table is already of type ${newType}. No changes to update.`);
       setMessageType('error');
       return;
     }
-    // Optimistic update
+    // Optimistic update - floor-specific
     const newChairs = getDefaultChairPositions(newType, selectedTable.number_of_chairs);
     setTables(prevTables => prevTables.map(t => 
-      t.table_number === selectedTableNumber 
+      t.table_number === selectedTableNumber && t.floor === selectedFloor
         ? { ...t, type: newType, chairs: newChairs } 
         : t
     ));
-    // Call server
-    updateTableType(selectedTableNumber, newType, selectedTable.x || 0, selectedTable.y || 0);
+    // Call server with floor
+    updateTableType(selectedTableNumber, selectedFloor, newType, selectedTable.x || 0, selectedTable.y || 0);
   };
 
   return (
@@ -878,71 +965,14 @@ function AddTablePage() {
       <div style={styles.content}>
         <div style={styles.leftSection}>
           <h1 style={styles.heading}>Add New Table</h1>
-          <form onSubmit={handleSubmit} style={styles.form}>
-            <div style={styles.formGroup}>
-              <label htmlFor="floor" style={styles.label}>
-                Floor:
-              </label>
-              <input
-                list="floors"
-                type="text"
-                id="floor"
-                value={floor}
-                onChange={(e) => setFloor(e.target.value)}
-                placeholder="Enter or select floor (e.g., ground, 1, 2)"
-                style={styles.input}
-                onFocus={(e) => Object.assign(e.target.style, styles.inputFocus)}
-                onBlur={(e) => Object.assign(e.target.style, styles.input)}
-                required
-              />
-              <datalist id="floors">
-                {uniqueFloors.map((f) => (
-                  <option key={f} value={f} />
-                ))}
-              </datalist>
-            </div>
-            <div style={styles.formGroup}>
-              <label htmlFor="tableNumber" style={styles.label}>
-                Table Number:
-              </label>
-              <input
-                type="text"
-                id="tableNumber"
-                value={tableNumber}
-                onChange={(e) => setTableNumber(e.target.value.replace(/\D/g, ""))}
-                placeholder="Enter table number"
-                style={styles.input}
-                onFocus={(e) => Object.assign(e.target.style, styles.inputFocus)}
-                onBlur={(e) => Object.assign(e.target.style, styles.input)}
-                required
-              />
-            </div>
-            <div style={styles.formGroup}>
-              <label htmlFor="numberOfChairs" style={styles.label}>
-                Number of Chairs:
-              </label>
-              <input
-                type="number"
-                id="numberOfChairs"
-                value={numberOfChairs}
-                onChange={(e) => setNumberOfChairs(e.target.value)}
-                placeholder="Enter number of chairs"
-                min="0"
-                style={styles.input}
-                onFocus={(e) => Object.assign(e.target.style, styles.inputFocus)}
-                onBlur={(e) => Object.assign(e.target.style, styles.input)}
-                required
-              />
-            </div>
-            <button
-              type="submit"
-              style={styles.button}
-              onMouseOver={(e) => (e.target.style.backgroundColor = styles.buttonHover.backgroundColor)}
-              onMouseOut={(e) => (e.target.style.backgroundColor = styles.button.backgroundColor)}
-            >
-              Add Table
-            </button>
-          </form>
+          <button
+            style={styles.addButton}
+            onClick={openModal}
+            onMouseOver={(e) => (e.target.style.backgroundColor = styles.addButtonHover.backgroundColor)}
+            onMouseOut={(e) => (e.target.style.backgroundColor = styles.addButton.backgroundColor)}
+          >
+            Add Table
+          </button>
           <div style={styles.tableContainer}>
             {uniqueFloors.length > 0 && (
               <select
@@ -972,14 +1002,14 @@ function AddTablePage() {
                 </thead>
                 <tbody>
                   {filteredTables.map((table, index) => (
-                    <tr key={index}>
+                    <tr key={`${table.floor}-${table.table_number}-${index}`}>  {/* Unique key with floor */}
                       <td style={styles.td}>{formatFloor(table.floor)}</td>
                       <td style={styles.td}>{table.table_number}</td>
                       <td style={styles.td}>{table.number_of_chairs}</td>
                       <td style={styles.td}>
                         <button
                           style={styles.deleteButton}
-                          onClick={() => handleDelete(table.table_number)}
+                          onClick={() => handleDelete(table.table_number, table.floor)}  // Pass floor
                           onMouseOver={(e) =>
                             (e.target.style.backgroundColor = styles.deleteButtonHover.backgroundColor)
                           }
@@ -1006,16 +1036,16 @@ function AddTablePage() {
             .filter((table) => table.floor === selectedFloor)
             .map((table) => (
               <TableItem 
-                key={table.table_number} 
+                key={`${table.floor}-${table.table_number}`}  // Unique key with floor
                 table={table} 
                 onSavePosition={updateTablePosition} 
-                onSelect={setSelectedTableNumber} 
+                onSelect={(tn, fl) => setSelectedTableNumber(tn)}  // Set only table_number, floor is selectedFloor
               />
             ))}
           {selectedTableNumber && selectedTable && (
             <div style={styles.sidebar}>
-              <h3 style={{ textAlign: "center", marginBottom: "20px" }}>Table Types</h3>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "10px" }}>
+              <h3 style={styles.sidebarHeading}>Table Types</h3>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "5px" }}>
                 {tableTypes.map((type) => (
                   <button
                     key={type}
@@ -1034,6 +1064,91 @@ function AddTablePage() {
           )}
         </div>
       </div>
+
+      {/* Modal */}
+      {showModal && (
+        <div style={styles.modalOverlay} onClick={closeModal}>
+          <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <h2 style={styles.modalHeading}>Add New Table</h2>
+            <form onSubmit={handleSubmit}>
+              <div style={styles.modalFormGroup}>
+                <label htmlFor="floor" style={styles.modalLabel}>
+                  Floor:
+                </label>
+                <input
+                  list="floors"
+                  type="text"
+                  id="floor"
+                  value={floor}
+                  onChange={(e) => setFloor(e.target.value)}
+                  placeholder="Enter or select floor (e.g., ground, 1, 2)"
+                  style={styles.modalInput}
+                  onFocus={(e) => Object.assign(e.target.style, styles.modalInputFocus)}
+                  onBlur={(e) => Object.assign(e.target.style, styles.modalInput)}
+                  required
+                />
+                <datalist id="floors">
+                  {uniqueFloors.map((f) => (
+                    <option key={f} value={f} />
+                  ))}
+                </datalist>
+              </div>
+              <div style={styles.modalFormGroup}>
+                <label htmlFor="tableNumber" style={styles.modalLabel}>
+                  Table Number:
+                </label>
+                <input
+                  type="text"
+                  id="tableNumber"
+                  value={tableNumber}
+                  onChange={(e) => setTableNumber(e.target.value.replace(/\D/g, ""))}
+                  placeholder="Enter table number"
+                  style={styles.modalInput}
+                  onFocus={(e) => Object.assign(e.target.style, styles.modalInputFocus)}
+                  onBlur={(e) => Object.assign(e.target.style, styles.modalInput)}
+                  required
+                />
+              </div>
+              <div style={styles.modalFormGroup}>
+                <label htmlFor="numberOfChairs" style={styles.modalLabel}>
+                  Number of Chairs:
+                </label>
+                <input
+                  type="number"
+                  id="numberOfChairs"
+                  value={numberOfChairs}
+                  onChange={(e) => setNumberOfChairs(e.target.value)}
+                  placeholder="Enter number of chairs"
+                  min="0"
+                  style={styles.modalInput}
+                  onFocus={(e) => Object.assign(e.target.style, styles.modalInputFocus)}
+                  onBlur={(e) => Object.assign(e.target.style, styles.modalInput)}
+                  required
+                />
+              </div>
+              <div style={styles.modalButtons}>
+                <button
+                  type="button"
+                  style={styles.modalCancelButton}
+                  onClick={closeModal}
+                  onMouseOver={(e) => (e.target.style.backgroundColor = styles.modalCancelButtonHover.backgroundColor)}
+                  onMouseOut={(e) => (e.target.style.backgroundColor = styles.modalCancelButton.backgroundColor)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={styles.modalSaveButton}
+                  onMouseOver={(e) => (e.target.style.backgroundColor = styles.modalSaveButtonHover.backgroundColor)}
+                  onMouseOut={(e) => (e.target.style.backgroundColor = styles.modalSaveButton.backgroundColor)}
+                >
+                  Save
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

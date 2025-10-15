@@ -1,9 +1,10 @@
+// Table.jsx (full corrected code)
 import React, { useContext, useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import "./table.css";
 import UserContext from "../../Context/UserContext";
 import { v4 as uuidv4 } from "uuid";
-
+import axios from "axios";
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
   state = { hasError: false, error: null };
@@ -31,7 +32,6 @@ class ErrorBoundary extends React.Component {
     return this.props.children;
   }
 }
-
 function Table() {
   const [tables, setTables] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -39,7 +39,7 @@ function Table() {
   const [warningMessage, setWarningMessage] = useState("");
   const { setCartItems } = useContext(UserContext);
   const navigate = useNavigate();
-  const vatRate = 0.10; // Consistent with FrontPage.jsx
+  const [vatRate, setVatRate] = useState(0.10); // Initial value, will be fetched
   const [bookedTables, setBookedTables] = useState(() => {
     const saved = localStorage.getItem("bookedTables");
     return saved ? JSON.parse(saved) : [];
@@ -91,18 +91,41 @@ function Table() {
   const [selectedCustomer, setSelectedCustomer] = useState("");
   const [verifyPhoneNumber, setVerifyPhoneNumber] = useState("");
   const [bookedGroups, setBookedGroups] = useState([]);
+  const [paidGroups, setPaidGroups] = useState(() => {
+    const saved = localStorage.getItem("paidOrders");
+    return saved ? JSON.parse(saved) : [];
+  });
   const [grandTotal, setGrandTotal] = useState(0);
   const [scale, setScale] = useState(1);
   const floorPlanRef = useRef(null);
+  // New states for popup and search
+  const [showListPopup, setShowListPopup] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  useEffect(() => {
+    const fetchVat = async () => {
+      try {
+        const response = await axios.get('/api/get-vat');
+        setVatRate(response.data.vat / 100 || 0.1);
+      } catch (error) {
+        console.error('Failed to fetch VAT:', error);
+      }
+    };
+    fetchVat();
+  }, []);
   useEffect(() => {
     const savedOrders = JSON.parse(localStorage.getItem("savedOrders")) || [];
+    const paidOrders = JSON.parse(localStorage.getItem("paidOrders")) || [];
     const orderTableNumbers = [
       ...new Set(savedOrders.map((order) => order.tableNumber).filter(Boolean)),
+    ];
+    const paidTableNumbers = [
+      ...new Set(paidOrders.map((order) => order.tableNumber).filter(Boolean)),
     ];
     const currentBookedTables =
       JSON.parse(localStorage.getItem("bookedTables")) || [];
     const updatedBookedTables = currentBookedTables.filter((tableNum) =>
-      orderTableNumbers.includes(tableNum)
+      orderTableNumbers.includes(tableNum) || paidTableNumbers.includes(tableNum)
     );
     setBookedTables(updatedBookedTables);
     localStorage.setItem("bookedTables", JSON.stringify(updatedBookedTables));
@@ -119,9 +142,22 @@ function Table() {
         ];
       }
     });
+    paidOrders.forEach((order) => {
+      const tableNum = order.tableNumber;
+      const chairs = Array.isArray(order.chairsBooked) ? order.chairsBooked : [];
+      if (tableNum) {
+        if (!updatedBookedChairs[tableNum]) {
+          updatedBookedChairs[tableNum] = [];
+        }
+        updatedBookedChairs[tableNum] = [
+          ...new Set([...(updatedBookedChairs[tableNum] || []), ...chairs]),
+        ];
+      }
+    });
     setBookedChairs(updatedBookedChairs);
     localStorage.setItem("bookedChairs", JSON.stringify(updatedBookedChairs));
     setBookedGroups(savedOrders.filter(order => order.cartItems && order.cartItems.length > 0));
+    setPaidGroups(paidOrders.filter(order => order.cartItems && order.cartItems.length > 0));
   }, []);
   useEffect(() => {
     const controller = new AbortController();
@@ -184,7 +220,7 @@ function Table() {
     return () => clearInterval(interval);
   }, [reservations, verifiedReservations]);
   useEffect(() => {
-    const filteredGroups = bookedGroups.filter(order => {
+    const filteredGroups = [...bookedGroups, ...paidGroups].filter(order => {
       const table = tables.find(t => String(t.table_number) === String(order.tableNumber));
       return table && table.floor === selectedFloor;
     });
@@ -195,7 +231,7 @@ function Table() {
     const vat = total * vatRate;
     const grandValue = total + vat;
     setGrandTotal(grandValue);
-  }, [selectedFloor, tables, bookedGroups]);
+  }, [selectedFloor, tables, bookedGroups, paidGroups, vatRate]);
   useEffect(() => {
     const updateScale = () => {
       if (floorPlanRef.current && tables.length > 0) {
@@ -308,13 +344,14 @@ function Table() {
         (res) =>
           String(res.tableNumber) === String(tableNumber) &&
           Array.isArray(res.chairs) &&
-          res.chairs.includes(chairNumber) &&
-          res.date === new Date().toISOString().split("T")[0]
+          res.chairs.includes(chairNumber)
       );
       if (reservation) handleReservedChairClick(reservation);
     } else if (status === "booked") {
       const savedOrders = JSON.parse(localStorage.getItem("savedOrders")) || [];
-      const order = savedOrders.find(
+      const paidOrders = JSON.parse(localStorage.getItem("paidOrders")) || [];
+      const allOrders = [...savedOrders, ...paidOrders];
+      const order = allOrders.find(
         (order) =>
           String(order.tableNumber) === String(tableNumber) &&
           Array.isArray(order.chairsBooked) &&
@@ -375,7 +412,9 @@ function Table() {
   };
   const handleViewOrder = (tableNumber, chairsBooked) => {
     const savedOrders = JSON.parse(localStorage.getItem("savedOrders")) || [];
-    const existingOrder = savedOrders.find(
+    const paidOrders = JSON.parse(localStorage.getItem("paidOrders")) || [];
+    const allOrders = [...savedOrders, ...paidOrders];
+    const existingOrder = allOrders.find(
       (order) =>
         String(order.tableNumber) === String(tableNumber) &&
         Array.isArray(order.chairsBooked) &&
@@ -464,10 +503,11 @@ function Table() {
       whatsappNumber: "",
       deliveryAddress: { building_name: "", flat_villa_no: "", location: "" },
       orderId: uuidv4(),
+      paid: false,
     };
     savedOrders.push(newOrder);
     localStorage.setItem("savedOrders", JSON.stringify(savedOrders));
-    setBookedGroups([...bookedGroups, newOrder]);
+    setBookedGroups(savedOrders.filter(order => order.cartItems && order.cartItems.length > 0));
     setCartItems([]);
     setSelectedChairs({});
     navigate(`/frontpage`, {
@@ -481,7 +521,9 @@ function Table() {
   };
   const handleReservedChairClick = (reservation) => {
     const savedOrders = JSON.parse(localStorage.getItem("savedOrders")) || [];
-    const reservationOrders = savedOrders.filter(
+    const paidOrders = JSON.parse(localStorage.getItem("paidOrders")) || [];
+    const allOrders = [...savedOrders, ...paidOrders];
+    const reservationOrders = allOrders.filter(
       (order) =>
         String(order.tableNumber) === String(reservation.tableNumber) &&
         Array.isArray(order.chairsBooked) &&
@@ -559,33 +601,25 @@ function Table() {
   };
   // Assume this function is called after payment success from another component or event
   const handlePaymentSuccess = (tableNumber, chairsPaid) => {
-    // Remove the paid chairs from bookedChairs
-    const updatedBookedChairs = { ...bookedChairs };
-    if (updatedBookedChairs[tableNumber]) {
-      updatedBookedChairs[tableNumber] = updatedBookedChairs[tableNumber].filter(
-        (chair) => !chairsPaid.includes(chair)
-      );
-      if (updatedBookedChairs[tableNumber].length === 0) {
-        delete updatedBookedChairs[tableNumber];
-      }
-    }
-    setBookedChairs(updatedBookedChairs);
-    localStorage.setItem("bookedChairs", JSON.stringify(updatedBookedChairs));
-    // Remove from bookedTables if no chairs left
-    if (!updatedBookedChairs[tableNumber]) {
-      const updatedBookedTables = bookedTables.filter((t) => t !== tableNumber);
-      setBookedTables(updatedBookedTables);
-      localStorage.setItem("bookedTables", JSON.stringify(updatedBookedTables));
-    }
-    // Remove the order from savedOrders
     const savedOrders = JSON.parse(localStorage.getItem("savedOrders")) || [];
-    const updatedSavedOrders = savedOrders.filter(
-      (order) =>
-        order.tableNumber !== tableNumber ||
-        !order.chairsBooked.every((chair) => chairsPaid.includes(chair))
-    );
+    const updatedSavedOrders = savedOrders.map((order) => {
+      if (order.tableNumber === tableNumber && order.chairsBooked.every(chair => chairsPaid.includes(chair))) {
+        return {...order, paid: true};
+      }
+      return order;
+    });
     localStorage.setItem("savedOrders", JSON.stringify(updatedSavedOrders));
     setBookedGroups(updatedSavedOrders.filter(order => order.cartItems && order.cartItems.length > 0));
+    const paidOrders = JSON.parse(localStorage.getItem("paidOrders")) || [];
+    const paidOrder = updatedSavedOrders.find(order => order.tableNumber === tableNumber && order.paid);
+    if (paidOrder) {
+      paidOrders.push(paidOrder);
+      localStorage.setItem("paidOrders", JSON.stringify(paidOrders));
+      setPaidGroups(paidOrders);
+      const remainingSavedOrders = updatedSavedOrders.filter(order => !order.paid);
+      localStorage.setItem("savedOrders", JSON.stringify(remainingSavedOrders));
+      setBookedGroups(remainingSavedOrders.filter(order => order.cartItems && order.cartItems.length > 0));
+    }
   };
   const totalSelectedChairs = Object.values(selectedChairs).reduce(
     (sum, chairs) => sum + (Array.isArray(chairs) ? chairs.length : 0),
@@ -595,7 +629,7 @@ function Table() {
     container: {
       minHeight: "100vh",
       height: "100vh",
-      background: "linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)",
+      background: "linear-gradient(135deg, rgb(161, 196, 253) 0%, rgb(194, 233, 251) 100%)",
       fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
       display: "flex",
       flexDirection: "row",
@@ -613,6 +647,7 @@ function Table() {
       padding: "20px",
       boxSizing: "border-box",
       overflowY: "auto", // Changed to "auto" to allow scrolling if needed
+      backgroundColor: "#ffffff", // White background
     },
     backButton: {
       position: "absolute",
@@ -620,17 +655,17 @@ function Table() {
       top: "25px",
       fontSize: "1.8rem",
       cursor: "pointer",
-      color: "#2c3e50",
+      color: "#000000",
       transition: "color 0.3s ease",
       zIndex: 10,
     },
     backButtonHover: {
-      color: "#3498db",
+      color: "#000000",
     },
     heading: {
       marginBottom: "30px",
       fontSize: "2.5rem",
-      color: "#2c3e50",
+      color: "#000000",
       textShadow: "1px 1px 2px rgba(0,0,0,0.1)",
     },
     floorButtons: {
@@ -642,7 +677,7 @@ function Table() {
     floorButton: {
       padding: "10px",
       backgroundColor: "#3498db",
-      color: "white",
+      color: "#000000",
       border: "none",
       borderRadius: "6px",
       cursor: "pointer",
@@ -657,6 +692,10 @@ function Table() {
       padding: "20px",
       borderRadius: "10px",
       boxShadow: "0 4px 6px rgba(0,0,0,0.1)",
+      position: "absolute",
+      top: "20px",
+      right: "20px",
+      zIndex: 10,
     },
     bookedTablesSection: {
       backgroundColor: "#fff",
@@ -678,14 +717,14 @@ function Table() {
       fontSize: "1.5rem",
       fontWeight: "bold",
       marginTop: "20px",
-      color: "#2c3e50",
+      color: "#000000",
       textAlign: "center",
     },
     floorPlan: {
       flex: 1,
       height: "100%",
-      backgroundColor: "#ffffff",
-      borderLeft: "2px solid #ccc",
+      backgroundColor: "linear-gradient(135deg, rgb(161, 196, 253) 0%, rgb(194, 233, 251) 100%)",
+      border: "50px solid #618ebe", // Added full border around the floor-plan
       position: "relative",
       overflow: "auto", // Changed from "hidden" to "auto" to allow scrolling on small screens
       boxShadow: "0 4px 6px rgba(0,0,0,0.1)",
@@ -851,7 +890,7 @@ function Table() {
               width: "100%",
               textAlign: "center",
               fontSize: "1.2rem",
-              color: "#2c3e50",
+              color: "#000000",
             }}
           >
             Table {table.table_number}
@@ -863,7 +902,7 @@ function Table() {
   if (loading) return <div className="text-center mt-5">Loading tables...</div>;
   if (error)
     return <div className="text-center mt-5 text-danger">Error: {error}</div>;
-  const filteredGroups = bookedGroups.filter(order => {
+  const filteredGroups = [...bookedGroups, ...paidGroups].filter(order => {
     const table = tables.find(t => String(t.table_number) === String(order.tableNumber));
     return table && table.floor === selectedFloor;
   });
@@ -881,6 +920,58 @@ function Table() {
     return currentTime >= preReservationTime && currentTime <= endTime;
   });
   const filteredTables = tables.filter((table) => table.floor === selectedFloor);
+  const getMainItemTotal = (item) => {
+    const mainItemPrice = (item.basePrice || 0) + (item.icePrice || 0) + (item.spicyPrice || 0) + getCustomVariantsTotal(item);
+    return mainItemPrice * (item.quantity || 1);
+  };
+  const getCustomVariantsTotal = (item) => {
+    if (!item.customVariantsDetails || !item.customVariantsQuantities) return 0;
+    return Object.entries(item.customVariantsDetails).reduce((sum, [variantName, variant]) => {
+      const qty = item.customVariantsQuantities[variantName] || 1;
+      return sum + (variant.price || 0) * qty;
+    }, 0);
+  };
+  const getAddonsTotal = (item) => {
+    if (!item.addonQuantities || !item.addonPrices) return 0;
+    return Object.entries(item.addonQuantities).reduce((sum, [addonName, qty]) => {
+      const price = item.addonPrices[addonName] || 0;
+      return sum + price * qty;
+    }, 0);
+  };
+  const getCombosTotal = (item) => {
+    if (!item.comboQuantities || !item.comboPrices) return 0;
+    return Object.entries(item.comboQuantities).reduce((sum, [comboName, qty]) => {
+      const price = item.comboPrices[comboName] || 0;
+      return sum + price * qty;
+    }, 0);
+  };
+  // Combine booked and paid groups with floor info
+  const allGroups = [...bookedGroups, ...paidGroups].map(order => {
+    const table = tables.find(t => String(t.table_number) === String(order.tableNumber));
+    return { ...order, floor: table ? table.floor : 'Unknown' };
+  });
+  // Combine reservations with floor info
+  const allReservations = reservations.map(res => {
+    const table = tables.find(t => String(t.table_number) === String(res.tableNumber));
+    return { ...res, floor: table ? table.floor : 'Unknown' };
+  });
+  // Filter based on search query
+  const searchedGroups = allGroups.filter(order => {
+    const lowerQuery = searchQuery.toLowerCase();
+    return (
+      order.floor.toLowerCase().includes(lowerQuery) ||
+      String(order.tableNumber).includes(lowerQuery) ||
+      order.customerName.toLowerCase().includes(lowerQuery)
+    );
+  });
+  const searchedReservations = allReservations.filter(res => {
+    const lowerQuery = searchQuery.toLowerCase();
+    return (
+      res.floor.toLowerCase().includes(lowerQuery) ||
+      String(res.tableNumber).includes(lowerQuery) ||
+      res.customerName.toLowerCase().includes(lowerQuery)
+    );
+  });
   return (
     <ErrorBoundary>
       <div className="main-container" style={styles.container}>
@@ -924,6 +1015,24 @@ function Table() {
               </button>
             ))}
           </div>
+          <button
+            className="btn btn-info mt-3"
+            onClick={() => setShowListPopup(true)}
+          >
+            List
+          </button>
+          <div style={styles.grandTotal}>Grand Total: ₹{grandTotal.toFixed(2)}</div>
+        </div>
+        <div className="floor-plan" style={styles.floorPlan} ref={floorPlanRef}>
+          <div style={{ transform: `scale(${scale})`, transformOrigin: '0 0' }}>
+            {filteredTables.map((table) => (
+              <TableItem
+                key={`${table.floor}-${table.table_number}`}  // Unique key with floor
+                table={table}
+                onChairClick={handleChairClick}
+              />
+            ))}
+          </div>
           <div style={styles.legend}>
             <h6 className="fw-bold mb-2">Chair Status</h6>
             <div className="d-flex align-items-center mb-1">
@@ -942,36 +1051,6 @@ function Table() {
               <div className="color-box selected me-2"></div>
               <span className="small">Selected</span>
             </div>
-          </div>
-          <div style={styles.bookedTablesSection}>
-            <h6 className="fw-bold mb-2">Booked Tables</h6>
-            {filteredGroups.sort((a, b) => a.tableNumber - b.tableNumber).map((order, index) => (
-              <div key={index} className="mb-1">
-                Table {order.tableNumber}: Chairs {order.chairsBooked?.sort((a, b) => a - b).join(', ') || 'None'} Grand Total: ₹{calculateOrderGrandTotal(order.cartItems).toFixed(2)}
-              </div>
-            ))}
-            {filteredGroups.length === 0 && <div>No booked tables</div>}
-          </div>
-          <div style={styles.reservedTablesSection}>
-            <h6 className="fw-bold mb-2">Reserved Tables (Today)</h6>
-            {filteredReservations.sort((a, b) => a.tableNumber - b.tableNumber).map((res, index) => (
-              <div key={index} className="mb-1">
-                Table {res.tableNumber}: Chairs {res.chairs.sort((a, b) => a - b).join(', ')} from {res.startTime} to {res.endTime} - {res.customerName}
-              </div>
-            ))}
-            {filteredReservations.length === 0 && <div>No reserved tables for today</div>}
-          </div>
-          <div style={styles.grandTotal}>Grand Total: ₹{grandTotal.toFixed(2)}</div>
-        </div>
-        <div className="floor-plan" style={styles.floorPlan} ref={floorPlanRef}>
-          <div style={{ transform: `scale(${scale})`, transformOrigin: '0 0' }}>
-            {filteredTables.map((table) => (
-              <TableItem
-                key={table.table_number}
-                table={table}
-                onChairClick={handleChairClick}
-              />
-            ))}
           </div>
         </div>
         {warningMessage && (
@@ -1041,6 +1120,192 @@ function Table() {
                   >
                     Verify
                   </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        {showListPopup && (
+          <div className="modal fade show d-block" tabIndex="-1" style={{ background: "rgba(0,0,0,0.5)" }}>
+            <div className="modal-dialog modal-dialog-centered modal-xl">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">Booked and Reserved Details</h5>
+                  <button
+                    type="button"
+                    className="btn-close"
+                    onClick={() => {
+                      setShowListPopup(false);
+                      setSelectedOrder(null);
+                      setSearchQuery("");
+                    }}
+                    aria-label="Close"
+                  ></button>
+                </div>
+                <div className="modal-body">
+                  <input
+                    type="text"
+                    className="form-control mb-3"
+                    placeholder="Search by floor, table no, or customer name"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  {!selectedOrder ? (
+                    <div className="row">
+                      <div className="col-12">
+                        <h6 className="fw-bold mb-3">Booked Tables</h6>
+                        <div className="row">
+                          {searchedGroups.length > 0 ? (
+                            searchedGroups.sort((a, b) => a.tableNumber - b.tableNumber).map((order, index) => (
+                              <div key={index} className="col-md-6 col-lg-4 mb-3">
+                                <div className="card h-100 list-card cursor-pointer" onClick={() => setSelectedOrder(order)}>
+                                  <div className="card-body">
+                                    <h6 className="card-title fw-bold">Table {order.tableNumber}</h6>
+                                    <p className="card-text"><strong>Floor:</strong> {order.floor}</p>
+                                    <p className="card-text"><strong>Customer:</strong> {order.customerName || 'N/A'}</p>
+                                    <p className="card-text"><strong>Chairs:</strong> {order.chairsBooked?.sort((a, b) => a - b).join(', ') || 'None'}</p>
+                                    <p className="card-text"><strong>Grand Total:</strong> ₹{calculateOrderGrandTotal(order.cartItems).toFixed(2)} <span className={`badge ${order.paid ? 'bg-success' : 'bg-warning'}`}>{order.paid ? "(Paid)" : "(Unpaid)"}</span></p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="col-12">
+                              <div className="card">
+                                <div className="card-body text-center">
+                                  <p className="card-text">No booked tables</p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-12 mt-4">
+                        {/* <h6 className="fw-bold mb-3">Reserved Tables (Today)</h6> */}
+                        <div className="row">
+                          {searchedReservations.length > 0 ? (
+                            searchedReservations.sort((a, b) => a.tableNumber - b.tableNumber).map((res, index) => (
+                              <div key={index} className="col-md-6 col-lg-4 mb-3">
+                                <div className="card h-100 list-card cursor-pointer" onClick={() => setSelectedOrder(res)}>
+                                  <div className="card-body">
+                                    <h6 className="card-title fw-bold">Table {res.tableNumber}</h6>
+                                    <p className="card-text"><strong>Floor:</strong> {res.floor}</p>
+                                    <p className="card-text"><strong>Chairs:</strong> {res.chairs.sort((a, b) => a - b).join(', ')}</p>
+                                    <p className="card-text"><strong>Time:</strong> {res.startTime} to {res.endTime}</p>
+                                    <p className="card-text"><strong>Customer:</strong> {res.customerName}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="col-12">
+                              <div className="card">
+                                <div className="card-body text-center">
+                                  <p className="card-text">No reserved tables for today</p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <button className="btn btn-secondary mb-3" onClick={() => setSelectedOrder(null)}>Back</button>
+                      {selectedOrder.tableNumber && selectedOrder.cartItems ? ( // Check if it's a booked order
+                        <div className="card">
+                          <div className="card-header fw-bold">
+                            Order Details for Table {selectedOrder.tableNumber}
+                          </div>
+                          <div className="card-body">
+                            <p><strong>Floor:</strong> {selectedOrder.floor}</p>
+                            <p><strong>Chairs:</strong> {selectedOrder.chairsBooked?.sort((a, b) => a - b).join(', ') || 'None'}</p>
+                            <p><strong>Customer:</strong> {selectedOrder.customerName || 'N/A'}</p>
+                            <p><strong>Phone:</strong> {selectedOrder.phoneNumber || 'N/A'}</p>
+                            <hr />
+                            {selectedOrder.cartItems.map((item, i) => (
+                              <React.Fragment key={i}>
+                                <div className="mb-2">
+                                  <strong>{i + 1}. {item.item_name || item.name}</strong> - Qty: {item.quantity} - ₹{getMainItemTotal(item).toFixed(2)} - Kitchen: {item.kitchen || "Main Kitchen"}
+                                </div>
+                                {item.icePreference === "with_ice" && (
+                                  <div className="ms-4 small">&nbsp;- Ice: {item.quantity} - ₹{((item.icePrice || 0) * item.quantity).toFixed(2)}</div>
+                                )}
+                                {item.isSpicy && (
+                                  <div className="ms-4 small">&nbsp;- Spicy: {item.quantity} - ₹{((item.spicyPrice || 0) * item.quantity).toFixed(2)}</div>
+                                )}
+                                {item.customVariantsDetails && Object.entries(item.customVariantsDetails).map(([variantName, variant]) => (
+                                  <div key={variantName} className="ms-4 small">
+                                    &nbsp;- {variant.heading}: {variant.name} - Qty: {item.customVariantsQuantities?.[variantName] || 1} - ₹{((variant.price || 0) * (item.customVariantsQuantities?.[variantName] || 1)).toFixed(2)}
+                                  </div>
+                                ))}
+                                {item.addonQuantities && Object.entries(item.addonQuantities).map(([addonName, qty]) => qty > 0 && (
+                                  <React.Fragment key={addonName}>
+                                    <div className="ms-4 small">
+                                      &nbsp;- Addon: {addonName} ({item.addonVariants?.[addonName]?.size || "M"}) - Qty: {qty} - ₹{((item.addonPrices?.[addonName] || 0) * qty).toFixed(2)} - Kitchen: {item.addonVariants?.[addonName]?.kitchen || "Main Kitchen"}
+                                    </div>
+                                    {item.addonVariants?.[addonName]?.cold === 'with_ice' && (
+                                      <div className="ms-5 small">&nbsp;&nbsp;- Ice: {qty} - ₹{((item.addonIcePrices?.[addonName] || 0) * qty).toFixed(2)}</div>
+                                    )}
+                                    {item.addonVariants?.[addonName]?.spicy && (
+                                      <div className="ms-5 small">&nbsp;&nbsp;- Spicy: {qty} - ₹{((item.addonSpicyPrices?.[addonName] || 0) * qty).toFixed(2)}</div>
+                                    )}
+                                    {item.addonVariants?.[addonName]?.sugar && item.addonVariants?.[addonName]?.sugar !== "medium" && (
+                                      <div className="ms-5 small">&nbsp;&nbsp;- Sugar: {item.addonVariants?.[addonName]?.sugar.charAt(0).toUpperCase() + item.addonVariants?.[addonName]?.sugar.slice(1)} - Qty: {qty} - ₹0.00</div>
+                                    )}
+                                    {item.addonCustomVariantsDetails?.[addonName] && Object.entries(item.addonCustomVariantsDetails[addonName]).map(([variantName, variant]) => (
+                                      <div key={variantName} className="ms-5 small">
+                                        &nbsp;&nbsp;- {variant.heading}: {variant.name} - Qty: {qty} - ₹{((variant.price || 0) * qty).toFixed(2)}
+                                      </div>
+                                    ))}
+                                  </React.Fragment>
+                                ))}
+                                {item.comboQuantities && Object.entries(item.comboQuantities).map(([comboName, qty]) => qty > 0 && (
+                                  <React.Fragment key={comboName}>
+                                    <div className="ms-4 small">
+                                      &nbsp;- Combo: {comboName} ({item.comboVariants?.[comboName]?.size || "M"}) - Qty: {qty} - ₹{((item.comboPrices?.[comboName] || 0) * qty).toFixed(2)} - Kitchen: {item.comboVariants?.[comboName]?.kitchen || "Main Kitchen"}
+                                    </div>
+                                    {item.comboVariants?.[comboName]?.cold === 'with_ice' && (
+                                      <div className="ms-5 small">&nbsp;&nbsp;- Ice: {qty} - ₹{((item.comboIcePrices?.[comboName] || 0) * qty).toFixed(2)}</div>
+                                    )}
+                                    {item.comboVariants?.[comboName]?.spicy && (
+                                      <div className="ms-5 small">&nbsp;&nbsp;- Spicy: {qty} - ₹{((item.comboSpicyPrices?.[comboName] || 0) * qty).toFixed(2)}</div>
+                                    )}
+                                    {item.comboVariants?.[comboName]?.sugar && item.comboVariants?.[comboName]?.sugar !== "medium" && (
+                                      <div className="ms-5 small">&nbsp;&nbsp;- Sugar: {item.comboVariants?.[comboName]?.sugar.charAt(0).toUpperCase() + item.comboVariants?.[comboName]?.sugar.slice(1)} - Qty: {qty} - ₹0.00</div>
+                                    )}
+                                    {item.comboCustomVariantsDetails?.[comboName] && Object.entries(item.comboCustomVariantsDetails[comboName]).map(([variantName, variant]) => (
+                                      <div key={variantName} className="ms-5 small">
+                                        &nbsp;&nbsp;- {variant.heading}: {variant.name} - Qty: {qty} - ₹{((variant.price || 0) * qty).toFixed(2)}
+                                      </div>
+                                    ))}
+                                  </React.Fragment>
+                                ))}
+                              </React.Fragment>
+                            ))}
+                            <hr />
+                            <p><strong>Subtotal:</strong> ₹{calculateOrderSubtotal(selectedOrder.cartItems).toFixed(2)}</p>
+                            <p><strong>VAT ({(vatRate * 100).toFixed(0)}%):</strong> ₹{(calculateOrderSubtotal(selectedOrder.cartItems) * vatRate).toFixed(2)}</p>
+                            <p className="fw-bold"><strong>Grand Total:</strong> ₹{calculateOrderGrandTotal(selectedOrder.cartItems).toFixed(2)} <span className={`badge ${selectedOrder.paid ? 'bg-success' : 'bg-warning'}`}>{selectedOrder.paid ? "(Paid)" : "(Unpaid)"}</span></p>
+                          </div>
+                        </div>
+                      ) : ( // Reservation details
+                        <div className="card">
+                          <div className="card-header fw-bold">
+                            Reservation Details for Table {selectedOrder.tableNumber}
+                          </div>
+                          <div className="card-body">
+                            <p><strong>Floor:</strong> {selectedOrder.floor}</p>
+                            <p><strong>Chairs:</strong> {selectedOrder.chairs.sort((a, b) => a - b).join(', ')}</p>
+                            <p><strong>Time:</strong> {selectedOrder.startTime} to {selectedOrder.endTime}</p>
+                            <p><strong>Customer:</strong> {selectedOrder.customerName}</p>
+                            <p><strong>Phone:</strong> {selectedOrder.phoneNumber}</p>
+                            <p><strong>Email:</strong> {selectedOrder.email}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

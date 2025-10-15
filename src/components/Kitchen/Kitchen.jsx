@@ -1,15 +1,14 @@
-// Kitchen.jsx
-import React, { useState, useEffect } from "react";
+// kitchen.jsx
+
+import React from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 
 class ErrorBoundary extends React.Component {
   state = { hasError: false, error: null };
-
   static getDerivedStateFromError(error) {
     return { hasError: true, error };
   }
-
   render() {
     if (this.state.hasError) {
       return (
@@ -38,18 +37,17 @@ class ErrorBoundary extends React.Component {
 
 function Kitchen() {
   const navigate = useNavigate();
-  const [savedOrders, setSavedOrders] = useState([]);
-  const [selectedKitchen, setSelectedKitchen] = useState(null);
-  const [showStatusPopup, setShowStatusPopup] = useState(false);
-  const [showAllStatusPopup, setShowAllStatusPopup] = useState(false);
-  const [pickedUpItems, setPickedUpItems] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
-  const [lastHourSearchDate, setLastHourSearchDate] = useState("");
-  const [allStatusSearchDate, setAllStatusSearchDate] = useState("");
-  const [selectedCustomers, setSelectedCustomers] = useState([]);
-  const [itemDetailsCache, setItemDetailsCache] = useState({});
-
+  const [savedOrders, setSavedOrders] = React.useState([]);
+  const [selectedKitchen, setSelectedKitchen] = React.useState(null);
+  const [showStatusPopup, setShowStatusPopup] = React.useState(false);
+  const [showAllStatusPopup, setShowAllStatusPopup] = React.useState(false);
+  const [pickedUpItems, setPickedUpItems] = React.useState([]);
+  const [loading, setLoading] = React.useState(false);
+  const [errorMessage, setErrorMessage] = React.useState("");
+  const [lastHourSearchDate, setLastHourSearchDate] = React.useState("");
+  const [allStatusSearchDate, setAllStatusSearchDate] = React.useState("");
+  const [selectedCustomers, setSelectedCustomers] = React.useState([]);
+  const [itemDetailsCache, setItemDetailsCache] = React.useState({});
   const BASE_URL = "http://127.0.0.1:8000";
   const currentYear = new Date().getFullYear().toString();
 
@@ -67,7 +65,7 @@ function Kitchen() {
   };
 
   // Fetch active orders
-  useEffect(() => {
+  React.useEffect(() => {
     const fetchOrders = async () => {
       try {
         setLoading(true);
@@ -122,22 +120,21 @@ function Kitchen() {
         setErrorMessage("Invalid picked-up items response");
       }
     } catch (error) {
-        console.error("Error fetching picked-up items:", error);
-        setPickedUpItems([]);
-        setErrorMessage(
-          `Failed to fetch picked-up items: ${error.response?.data?.message || error.message}`
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
-
-  useEffect(() => {
+      console.error("Error fetching picked-up items:", error);
+      setPickedUpItems([]);
+      setErrorMessage(
+        `Failed to fetch picked-up items: ${error.response?.data?.message || error.message}`
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+  React.useEffect(() => {
     fetchPickedUpItems();
   }, []);
 
   // Fetch item details
-  useEffect(() => {
+  React.useEffect(() => {
     const fetchItemDetails = async () => {
       const itemsToFetch = savedOrders
         .filter((order) => Array.isArray(order.cartItems))
@@ -151,19 +148,19 @@ function Kitchen() {
             axios.get(`${BASE_URL}/api/items/${itemName}`, { timeout: 8000 })
           );
           console.log(`Fetched details for item ${item.name}:`, response.data); // Console log for debugging
-          if (response.data) {  // Removed unnecessary 'success' check
+          if (response.data) { // Removed unnecessary 'success' check
             const fetchedData = {
               image: response.data.image || item.image || "/static/uploads/placeholder.png",
               addons: Array.isArray(response.data.addons)
                 ? response.data.addons.map((addon) => ({
-                    name: addon.name || "Unknown",
+                    name1: addon.name1 || "Unknown",
                     addon_image: addon.addon_image || "/static/uploads/placeholder.png",
                     kitchen: addon.kitchen || "Unknown",
                   }))
                 : [],
               combos: Array.isArray(response.data.combos)
                 ? response.data.combos.map((combo) => ({
-                    name: combo.name || "Unknown",
+                    name1: combo.name1 || "Unknown",
                     combo_image: combo.combo_image || "/static/uploads/placeholder.png",
                     kitchen: combo.kitchen || "Unknown",
                     size: combo.size || "M",
@@ -189,7 +186,6 @@ function Kitchen() {
         }
       }
     };
-
     if (savedOrders.length > 0) {
       fetchItemDetails();
     }
@@ -220,7 +216,7 @@ function Kitchen() {
     ),
   ];
 
-  useEffect(() => {
+  React.useEffect(() => {
     console.log("Available kitchens:", kitchens); // Console log for debugging
     if (kitchens.length > 0 && (!selectedKitchen || !kitchens.includes(selectedKitchen))) {
       setSelectedKitchen(kitchens[0]);
@@ -300,7 +296,6 @@ function Kitchen() {
     }
     return variants.length > 0 ? `(${variants.join(", ")})` : "";
   };
-
   const formatCustomVariants = (customVariantsDetails) => {
     if (!customVariantsDetails) return "";
     const custom = Object.values(customVariantsDetails)
@@ -308,7 +303,6 @@ function Kitchen() {
       .join(", ");
     return custom ? `Custom: ${custom}` : "";
   };
-
   const formatAddonVariants = (addonVariants) => {
     const variants = [];
     if (addonVariants?.size && addonVariants.size !== "M") {
@@ -324,7 +318,6 @@ function Kitchen() {
     }
     return variants.length > 0 ? `(${variants.join(", ")})` : "";
   };
-
   const formatAddonCustomVariants = (addonCustomVariantsDetails) => {
     if (!addonCustomVariantsDetails) return "";
     const custom = Object.values(addonCustomVariantsDetails)
@@ -332,7 +325,6 @@ function Kitchen() {
       .join(", ");
     return custom ? `Custom: ${custom}` : "";
   };
-
   const formatComboVariants = (comboVariants) => {
     const variants = [];
     if (comboVariants?.size && comboVariants.size !== "M") {
@@ -348,7 +340,6 @@ function Kitchen() {
     }
     return variants.length > 0 ? `(${variants.join(", ")})` : "";
   };
-
   const formatComboCustomVariants = (comboCustomVariantsDetails) => {
     if (!comboCustomVariantsDetails) return "";
     const custom = Object.values(comboCustomVariantsDetails)
@@ -364,7 +355,6 @@ function Kitchen() {
       const pickupTime = new Date(entry.pickupTime);
       return pickupTime >= oneHourAgo;
     });
-
     if (lastHourSearchDate) {
       const fullSearchDate = `${currentYear}-${lastHourSearchDate}`;
       const matchingItems = filteredItems.filter((entry) =>
@@ -501,25 +491,23 @@ function Kitchen() {
       for (const orderId of selectedCustomers) {
         const order = savedOrders.find((o) => o.orderId === orderId);
         if (!order) continue;
-
         const itemsToPickUp = order.cartItems.filter(
           (item) =>
             item.kitchen === selectedKitchen ||
             Object.values(item.addonVariants || {}).some(
-              (addon) => addon.kitchen === selectedKitchen && item.addonQuantities?.[addon.name]
+              (addon) => addon.kitchen === selectedKitchen && item.addonQuantities?.[addon.name1]
             ) ||
             Object.values(item.comboVariants || {}).some(
-              (combo) => combo.kitchen === selectedKitchen && item.comboQuantities?.[combo.name]
+              (combo) => combo.kitchen === selectedKitchen && item.comboQuantities?.[combo.name1]
             )
         );
-
         for (const item of itemsToPickUp) {
-            if (item.kitchenStatuses?.[selectedKitchen] === "Prepared") {
-              await handlePickUp(orderId, item.id);
-            } else {
-              console.log(`Skipping item ${item.id} in order ${orderId} because status is ${item.kitchenStatuses?.[selectedKitchen] || 'Pending'}`); // Console log for debugging
-            }
+          if (item.kitchenStatuses?.[selectedKitchen] === "Prepared") {
+            await handlePickUp(orderId, item.id);
+          } else {
+            console.log(`Skipping item ${item.id} in order ${orderId} because status is ${item.kitchenStatuses?.[selectedKitchen] || 'Pending'}`); // Console log for debugging
           }
+        }
       }
       setSelectedCustomers([]);
     } catch (error) {
@@ -567,9 +555,9 @@ function Kitchen() {
   // Function to correctly format image URLs
   const getCorrectImageUrl = (imagePath) => {
     if (!imagePath) return `${BASE_URL}/api/images/placeholder.png`;
-    if (imagePath.startsWith('/api/images/')) return imagePath;
-    const filename = imagePath.split('/').pop();
-    return `${BASE_URL}/api/images/${filename}`;
+    if (imagePath.startsWith('http')) return imagePath;
+    if (imagePath.startsWith('/')) return BASE_URL + imagePath;
+    return `${BASE_URL}/api/images/${imagePath}`;
   };
 
   const getAddonComboImages = (item) => {
@@ -579,7 +567,6 @@ function Kitchen() {
       addons: [],
       combos: [],
     };
-
     if (item.kitchen === selectedKitchen) {
       images.push({
         src: getCorrectImageUrl(item.image || itemDetails.image),
@@ -588,14 +575,13 @@ function Kitchen() {
         status: item.kitchenStatuses?.[selectedKitchen] || "Pending",
       });
     }
-
     Object.entries(item.addonQuantities || {})
       .filter(
         ([addonName, qty]) =>
           qty > 0 && item.addonVariants?.[addonName]?.kitchen === selectedKitchen
       )
       .forEach(([addonName]) => {
-        const addon = itemDetails.addons.find((a) => a.name === addonName) || {};
+        const addon = itemDetails.addons.find((a) => a.name1 === addonName) || {};
         const addonImage =
           item.addonImages?.[addonName] ||
           addon.addon_image || "/static/uploads/placeholder.png";
@@ -606,14 +592,13 @@ function Kitchen() {
           status: item.kitchenStatuses?.[selectedKitchen] || "Pending",
         });
       });
-
     Object.entries(item.comboQuantities || {})
       .filter(
         ([comboName, qty]) =>
           qty > 0 && item.comboVariants?.[comboName]?.kitchen === selectedKitchen
       )
       .forEach(([comboName]) => {
-        const combo = itemDetails.combos.find((c) => c.name === comboName) || {};
+        const combo = itemDetails.combos.find((c) => c.name1 === comboName) || {};
         const comboImage =
           item.comboImages?.[comboName] ||
           combo.combo_image || "/static/uploads/placeholder.png";
@@ -624,7 +609,6 @@ function Kitchen() {
           status: item.kitchenStatuses?.[selectedKitchen] || "Pending",
         });
       });
-
     return images;
   };
 
@@ -718,7 +702,6 @@ function Kitchen() {
             </button>
           </div>
         </div>
-
         <div style={{ display: "flex", marginBottom: "16px", gap: "12px" }}>
           {kitchens.length > 0 ? (
             kitchens.map((kitchen) => (
@@ -742,7 +725,6 @@ function Kitchen() {
             <p style={{ fontSize: "16px" }}>No active kitchens</p>
           )}
         </div>
-
         <h5 style={{ marginBottom: "16px" }}>
           Current Orders - {selectedKitchen || "Select a Kitchen"}
         </h5>
@@ -962,7 +944,6 @@ function Kitchen() {
             </table>
           </div>
         )}
-
         {showStatusPopup && (
           <div
             style={{
@@ -1059,7 +1040,7 @@ function Kitchen() {
                           (entry.items || [entry]).map((item, itemIndex) => (
                             <tr
                               key={`${entryIndex}-${itemIndex}`}
-                             style={getHighlightStyle(entry.pickupTime, lastHourSearchDate)}
+                              style={getHighlightStyle(entry.pickupTime, lastHourSearchDate)}
                             >
                               {itemIndex === 0 && (
                                 <>
@@ -1177,7 +1158,6 @@ function Kitchen() {
             </div>
           </div>
         )}
-
         {showAllStatusPopup && (
           <div
             style={{

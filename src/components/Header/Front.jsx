@@ -1,3 +1,4 @@
+// frontpage.jsx
 "use client"
 import React, { useEffect, useState, useRef } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
@@ -7,7 +8,6 @@ import { v4 as uuidv4 } from "uuid"
 import axios from "axios"
 import { Card, Button } from 'react-bootstrap';
 import "./front.css"
-
 function FrontPage() {
   const [menuItems, setMenuItems] = useState([])
   const [comboList, setComboList] = useState([])
@@ -52,6 +52,7 @@ function FrontPage() {
     return localStorage.getItem("selectedTheme") || "light"
   })
   const [showThemeSelector, setShowThemeSelector] = useState(false)
+  const [isConfirmation, setIsConfirmation] = useState(false)
   const phoneNumberRef = useRef(null)
   const customerSectionRef = useRef(null)
   const themes = {
@@ -76,7 +77,6 @@ function FrontPage() {
   const [selectedGroupId, setSelectedGroupId] = useState("")
   const [showGroupModal, setShowGroupModal] = useState(false)
   const [newGroupName, setNewGroupName] = useState("")
-
   const handleThemeChange = (theme) => {
     setCurrentTheme(theme)
     setShowThemeSelector(false)
@@ -209,14 +209,14 @@ function FrontPage() {
             category: item.item_group ? item.item_group.toLowerCase() : "uncategorized",
             image: item.image ? `http://localhost:8000${item.image}` : "/static/images/default-item.jpg",
             basePrice: Number(item.price_list_rate) || 0,
-            offer_price: Number(item.offer_price),
+            offer_price: Number(item.offer_price) || 0,
             offer_start_time: item.offer_start_time,
             offer_end_time: item.offer_end_time,
             size: item.size || {
               enabled: true,
-              small_price: Number(item.price_list_rate) - 10,
-              medium_price: Number(item.price_list_rate),
-              large_price: Number(item.price_list_rate) + 10,
+              small_price: Number(item.price_list_rate) - 10 || 0,
+              medium_price: Number(item.price_list_rate) || 0,
+              large_price: Number(item.price_list_rate) + 10 || 0,
             },
             cold: item.cold || { enabled: false, ice_preference: "without_ice", ice_price: 10 },
             spicy: item.spicy || { enabled: false, is_spicy: false, spicy_price: 20 },
@@ -229,9 +229,9 @@ function FrontPage() {
                 price: Number(addon.addon_price) || 0,
                 size: addon.size || {
                   enabled: true,
-                  small_price: Number(addon.addon_price) - 10,
-                  medium_price: Number(addon.addon_price),
-                  large_price: Number(addon.addon_price) + 10,
+                  small_price: Number(addon.addon_price) - 10 || 0,
+                  medium_price: Number(addon.addon_price) || 0,
+                  large_price: Number(addon.addon_price) + 10 || 0,
                 },
                 cold: addon.cold || { enabled: false, ice_price: 10 },
                 spicy: addon.spicy || { enabled: false, is_spicy: false, spicy_price: 20 },
@@ -246,9 +246,9 @@ function FrontPage() {
                 price: Number(combo.combo_price) || 0,
                 size: combo.size || {
                   enabled: true,
-                  small_price: Number(combo.combo_price) - 10,
-                  medium_price: Number(combo.combo_price),
-                  large_price: Number(combo.combo_price) + 10,
+                  small_price: Number(combo.combo_price) - 10 || 0,
+                  medium_price: Number(combo.combo_price) || 0,
+                  large_price: Number(combo.combo_price) + 10 || 0,
                 },
                 cold: combo.cold || { enabled: false, ice_price: 10 },
                 spicy: combo.spicy || { enabled: false, is_spicy: false, spicy_price: 30 },
@@ -279,7 +279,7 @@ function FrontPage() {
             category: "combos offer",
             image: combo.items[0]?.data.image ? `http://localhost:8000${combo.items[0].data.image}` : "/static/images/default-combo.jpg",
             basePrice: Number(combo.total_price) || 0,
-            offer_price: Number(combo.offer_price),
+            offer_price: Number(combo.offer_price) || 0,
             offer_start_time: combo.offer_start_time,
             offer_end_time: combo.offer_end_time,
             isCombo: true,
@@ -342,7 +342,7 @@ function FrontPage() {
     const fetchVat = async () => {
       try {
         const response = await axios.get('/api/get-vat');
-        setVatRate(response.data.vat / 100);
+        setVatRate(response.data.vat / 100 || 0.1);
       } catch (error) {
         console.error('Failed to fetch VAT:', error);
       }
@@ -380,11 +380,9 @@ function FrontPage() {
     setSelectedCartItem(existingCartItem || null)
   }
   const handleCartItemClick = (cartItem) => {
-    const menuItem = menuItems.find((item) => item.name === cartItem.item_name || item.name === cartItem.name)
-    if (menuItem) {
-      setSelectedCartItem(cartItem)
-      setSelectedItem(menuItem)
-    }
+    const menuItem = menuItems.find((item) => item.name === cartItem.item_name);
+    setSelectedItem(menuItem || null);
+    setSelectedCartItem(cartItem);
   }
   const hasActiveOffer = (item) => {
     if (item.offer_price === undefined || !item.offer_start_time || !item.offer_end_time) {
@@ -411,7 +409,7 @@ function FrontPage() {
   const handleItemUpdate = (updatedItem) => {
     if (updatedItem.isCombo) {
       const hasOffer = hasActiveOffer(updatedItem);
-      const finalPrice = hasOffer ? updatedItem.offer_price : updatedItem.basePrice;
+      const finalPrice = hasOffer ? updatedItem.offer_price || 0 : updatedItem.basePrice || 0;
       const existingItemIndex = cartItems.findIndex(
         (cartItem) => cartItem.item_name === updatedItem.name && cartItem.isCombo
       );
@@ -420,13 +418,14 @@ function FrontPage() {
         name: updatedItem.name,
         item_name: updatedItem.name,
         quantity: updatedItem.quantity || 1,
-        originalBasePrice: hasOffer ? updatedItem.basePrice : null,
+        originalBasePrice: hasOffer ? updatedItem.basePrice || 0 : null,
         basePrice: finalPrice,
         totalPrice: finalPrice * (updatedItem.quantity || 1),
         isCombo: true,
         comboItems: updatedItem.comboItems,
         kitchen: updatedItem.kitchen || "Main Kitchen",
         status: "Pending",
+        served: false, // Add served false
         image: updatedItem.image,
       };
       if (existingItemIndex !== -1) {
@@ -457,12 +456,12 @@ function FrontPage() {
         (hasSizeVariant ? cartItem.selectedSize === updatedSelectedSize : cartItem.selectedSize === null),
     )
     const hasOffer = hasActiveOffer(menuItem);
-    let originalBasePrice = menuItem.basePrice;
-    let finalBasePrice = hasOffer ? menuItem.offer_price : menuItem.basePrice;
+    let originalBasePrice = menuItem.basePrice || 0;
+    let finalBasePrice = hasOffer ? menuItem.offer_price || 0 : menuItem.basePrice || 0;
     if (hasSizeVariant) {
       const size = updatedSelectedSize || "M";
-      originalBasePrice = size === "S" ? menuItem.size.small_price : size === "L" ? menuItem.size.large_price : menuItem.size.medium_price;
-      finalBasePrice = hasOffer ? calculateOfferSizePrice(menuItem.offer_price, size) : originalBasePrice;
+      originalBasePrice = size === "S" ? menuItem.size.small_price || 0 : size === "L" ? menuItem.size.large_price || 0 : menuItem.size.medium_price || 0;
+      finalBasePrice = hasOffer ? calculateOfferSizePrice(menuItem.offer_price || 0, size) : originalBasePrice;
     }
     const addonVariants = {}
     const addonImages = {}
@@ -480,11 +479,11 @@ function FrontPage() {
       const addonSpicy = variants.spicy || false
       const addonSizePrice = addon?.size?.enabled
         ? addonSize === "S"
-          ? addon.size.small_price || addonBasePrice - 10
+          ? addon.size.small_price || addonBasePrice - 10 || 0
           : addonSize === "L"
-            ? addon.size.large_price || addonBasePrice + 10
-            : addon.size.medium_price || addonBasePrice
-        : addonBasePrice
+            ? addon.size.large_price || addonBasePrice + 10 || 0
+            : addon.size.medium_price || addonBasePrice || 0
+        : addonBasePrice || 0
       const addonIcePrice = addon?.cold?.enabled && addonCold === 'with_ice' ? addon.cold.ice_price || 0 : 0
       const addonSpicyPrice = addon?.spicy?.enabled && addonSpicy ? addon.spicy.spicy_price || 30 : 0
       const customVariantsPrice = addonCustomVariantsDetails[addonName]
@@ -521,11 +520,11 @@ function FrontPage() {
       const comboSpicy = variants.spicy || false
       const comboSizePrice = combo?.size?.enabled
         ? comboSize === "S"
-          ? combo.size.small_price || comboBasePrice - 10
+          ? combo.size.small_price || comboBasePrice - 10 || 0
           : comboSize === "L"
-            ? combo.size.large_price || comboBasePrice + 10
-            : combo.size.medium_price || comboBasePrice
-        : comboBasePrice
+            ? combo.size.large_price || comboBasePrice + 10 || 0
+            : combo.size.medium_price || comboBasePrice || 0
+        : comboBasePrice || 0
       const comboIcePrice = combo?.cold?.enabled && comboCold === 'with_ice' ? combo.cold.ice_price || 0 : 0
       const comboSpicyPrice = combo?.spicy?.enabled && comboSpicy ? combo.spicy.spicy_price || 30 : 0
       const customVariantsPrice = comboCustomVariantsDetails[comboName]
@@ -572,7 +571,7 @@ function FrontPage() {
       basePrice: finalBasePrice,
       icePrice: updatedItem.icePrice || 0,
       spicyPrice: updatedItem.spicyPrice || 0,
-      totalPrice: updatedItem.totalPrice,
+      totalPrice: updatedItem.totalPrice || 0,
       addonQuantities: updatedItem.addonQuantities || {},
       addonVariants,
       addonPrices,
@@ -580,7 +579,6 @@ function FrontPage() {
       addonIcePrices,
       addonSpicyPrices,
       addonImages,
-      addonCustomVariantsDetails,
       comboQuantities: updatedItem.comboQuantities || {},
       comboVariants,
       comboPrices,
@@ -588,7 +586,6 @@ function FrontPage() {
       comboIcePrices,
       comboSpicyPrices,
       comboImages,
-      comboCustomVariantsDetails,
       selectedCombos: updatedItem.selectedCombos || [],
       selectedSize: updatedSelectedSize,
       icePreference: updatedItem.variants?.cold?.icePreference || "without_ice",
@@ -600,6 +597,7 @@ function FrontPage() {
       customVariantsDetails,
       customVariantsQuantities,
       status: "Pending",
+      served: false, // Add served false
       image: menuItem?.image || "/static/images/default-item.jpg",
     }
     if (existingItemIndex !== -1) {
@@ -630,7 +628,7 @@ function FrontPage() {
             updatedItem = {
               ...updatedItem,
               quantity: newQty,
-              totalPrice: updatedItem.basePrice * newQty,
+              totalPrice: (updatedItem.basePrice || 0) * newQty,
             }
             return updatedItem;
           }
@@ -644,7 +642,7 @@ function FrontPage() {
               ...updatedItem,
               quantity: newQty,
               totalPrice:
-                (updatedItem.basePrice + updatedItem.icePrice + updatedItem.spicyPrice + customVariantsTotalPrice) *
+                ((updatedItem.basePrice || 0) + (updatedItem.icePrice || 0) + (updatedItem.spicyPrice || 0) + customVariantsTotalPrice) *
                 newQty,
             }
           } else if (type === "addon" && name) {
@@ -669,7 +667,7 @@ function FrontPage() {
               ...updatedItem,
               customVariantsQuantities: { ...updatedItem.customVariantsQuantities, [name]: newQty },
               totalPrice:
-                (updatedItem.basePrice + updatedItem.icePrice + updatedItem.spicyPrice + customVariantsTotalPrice) *
+                ((updatedItem.basePrice || 0) + (updatedItem.icePrice || 0) + (updatedItem.spicyPrice || 0) + customVariantsTotalPrice) *
                 updatedItem.quantity,
             }
           }
@@ -703,15 +701,15 @@ function FrontPage() {
   }
   const getMainItemTotal = (item) => {
     if (item.isCombo) {
-      return item.basePrice * item.quantity
+      return (item.basePrice || 0) * (item.quantity || 1)
     }
-    const mainItemPrice = item.basePrice + item.icePrice + item.spicyPrice + getCustomVariantsTotal(item)
-    return mainItemPrice * item.quantity
+    const mainItemPrice = (item.basePrice || 0) + (item.icePrice || 0) + (item.spicyPrice || 0) + getCustomVariantsTotal(item)
+    return mainItemPrice * (item.quantity || 1)
   }
   const getOriginalMainItemTotal = (item) => {
     if (item.originalBasePrice) {
-      const mainItemPrice = item.originalBasePrice + item.icePrice + item.spicyPrice + getCustomVariantsTotal(item)
-      return mainItemPrice * item.quantity
+      const mainItemPrice = (item.originalBasePrice || 0) + (item.icePrice || 0) + (item.spicyPrice || 0) + getCustomVariantsTotal(item)
+      return mainItemPrice * (item.quantity || 1)
     }
     return getMainItemTotal(item)
   }
@@ -788,8 +786,8 @@ function FrontPage() {
             customVariantsDetails: remainingCustomVariantsDetails,
             customVariantsQuantities: remainingCustomVariantsQuantities,
             totalPrice:
-              (cartItem.basePrice + cartItem.icePrice + cartItem.spicyPrice + customVariantsTotalPrice) *
-              cartItem.quantity,
+              ((cartItem.basePrice || 0) + (cartItem.icePrice || 0) + (cartItem.spicyPrice || 0) + customVariantsTotalPrice) *
+              (cartItem.quantity || 1),
           }
         }
         return cartItem
@@ -805,13 +803,25 @@ function FrontPage() {
     setWarningMessage("")
     setWarningType("warning")
   }
+  const handleConfirmYes = () => {
+    setShowPaymentModal(true)
+    setIsConfirmation(false)
+  }
+  const handleConfirmNo = () => {
+    setCartItems([])
+    setBillCartItems([])
+    if (orderType === "Dine In") {
+      navigate("/table")
+    }
+    setIsConfirmation(false)
+  }
   const calculateSubtotal = (items) => {
     return items.reduce((sum, item) => {
       if (item.isCombo) {
-        return sum + item.totalPrice
+        return sum + (item.totalPrice || 0)
       }
-      const mainItemPrice = item.basePrice + item.icePrice + item.spicyPrice + getCustomVariantsTotal(item)
-      const mainItemTotal = mainItemPrice * item.quantity
+      const mainItemPrice = (item.basePrice || 0) + (item.icePrice || 0) + (item.spicyPrice || 0) + getCustomVariantsTotal(item)
+      const mainItemTotal = mainItemPrice * (item.quantity || 1)
       const addonsTotal = getAddonsTotal(item)
       const combosTotal = getCombosTotal(item)
       return sum + mainItemTotal + addonsTotal + combosTotal
@@ -819,11 +829,11 @@ function FrontPage() {
   }
   const calculateOriginalSubtotal = (items) => {
     return items.reduce((sum, item) => {
-      let mainItemPrice = item.basePrice + item.icePrice + item.spicyPrice + getCustomVariantsTotal(item)
+      let mainItemPrice = (item.basePrice || 0) + (item.icePrice || 0) + (item.spicyPrice || 0) + getCustomVariantsTotal(item)
       if (item.originalBasePrice) {
-        mainItemPrice = item.originalBasePrice + item.icePrice + item.spicyPrice + getCustomVariantsTotal(item)
+        mainItemPrice = (item.originalBasePrice || 0) + (item.icePrice || 0) + (item.spicyPrice || 0) + getCustomVariantsTotal(item)
       }
-      const mainItemTotal = mainItemPrice * item.quantity
+      const mainItemTotal = mainItemPrice * (item.quantity || 1)
       const addonsTotal = getAddonsTotal(item)
       const combosTotal = getCombosTotal(item)
       return sum + mainItemTotal + addonsTotal + combosTotal
@@ -841,13 +851,18 @@ function FrontPage() {
       return
     }
     const subtotal = calculateSubtotal(billCartItems)
+    if (isNaN(subtotal) || subtotal === 0) {
+      setWarningMessage("Invalid total amount. Please check your cart items.")
+      setWarningType("warning")
+      return
+    }
     const paymentDetails = {
       mode_of_payment: method,
       amount: Number(subtotal.toFixed(2)),
     }
     const { chairsBooked } = location.state || {}
     const billDetails = {
-      customerName: customerName || "N/A",
+      customer: customerName.trim() || "N/A",
       phoneNumber: phoneNumber ? `${selectedISDCode}${phoneNumber}` : "N/A",
       tableNumber: tableNumber || "N/A",
       chairsBooked: chairsBooked,
@@ -856,19 +871,21 @@ function FrontPage() {
       email: email || "N/A",
       items: billCartItems.map((item) => ({
         item_name: item.item_name || item.name,
-        basePrice: item.basePrice,
+        basePrice: item.basePrice || 0,
         originalBasePrice: item.originalBasePrice || null,
         icePreference: item.icePreference,
-        ice_price: item.icePrice,
+        ice_price: item.icePrice || 0,
         isSpicy: item.isSpicy,
-        spicy_price: item.spicyPrice,
-        sugarLevel: item.sugarLevel,
-        quantity: item.quantity,
-        amount: item.totalPrice.toFixed(2),
+        spicy_price: item.spicyPrice || 0,
+        quantity: item.quantity || 1,
+        amount: (item.totalPrice || 0).toFixed(2),
         addons: Object.entries(item.addonQuantities || {}).map(([addonName, qty]) => ({
           name1: addonName,
-          addon_image: item.addonImages[addonName] || "/static/images/default-addon-image.jpg",
-          addon_price: Number(item.addonPrices?.[addonName] || item.addonVariants[addonName]?.price || 0),
+          addon_image: item.addonImages?.[addonName] || "/static/images/default-addon-image.jpg",
+          addon_size_price: Number(item.addonSizePrices?.[addonName] || 0),
+          addon_ice_price: Number(item.addonIcePrices?.[addonName] || 0),
+          addon_spicy_price: Number(item.addonSpicyPrices?.[addonName] || 0),
+          addon_price: Number(item.addonPrices?.[addonName] || item.addonVariants?.[addonName]?.price || 0),
           addon_quantity: qty,
           size: item.addonVariants?.[addonName]?.size || "M",
           cold: item.addonVariants?.[addonName]?.cold || "without_ice",
@@ -879,8 +896,11 @@ function FrontPage() {
         })),
         selectedCombos: Object.entries(item.comboQuantities || {}).map(([comboName, qty]) => ({
           name1: comboName,
-          combo_image: item.comboImages[comboName] || "/static/images/default-combo-image.jpg",
-          combo_price: Number(item.comboPrices?.[comboName] || item.comboVariants[comboName]?.price || 0),
+          combo_image: item.comboImages?.[comboName] || "/static/images/default-combo-image.jpg",
+          combo_size_price: Number(item.comboSizePrices?.[comboName] || 0),
+          combo_ice_price: Number(item.comboIcePrices?.[comboName] || 0),
+          combo_spicy_price: Number(item.comboSpicyPrices?.[comboName] || 0),
+          combo_price: Number(item.comboPrices?.[comboName] || item.comboVariants?.[comboName]?.price || 0),
           size: item.comboVariants?.[comboName]?.size || "M",
           cold: item.comboVariants?.[comboName]?.cold || "without_ice",
           isSpicy: item.comboVariants?.[comboName]?.spicy || false,
@@ -908,17 +928,13 @@ function FrontPage() {
       if (savedSale) {
         billDetails.invoice_no = savedSale.invoice_no
       }
-      // Check if orderId exists before attempting to delete
+      // Check if orderId exists before attempting to update
       if (orderId) {
         try {
-          await axios.delete(`http://localhost:8000/api/activeorders/${orderId}`)
-          console.log("Order deleted successfully from activeorders")
+          await axios.put(`http://localhost:8000/api/activeorders/${orderId}`, { paid: true });
+          console.log("Order updated with paid status");
         } catch (error) {
-          if (error.response?.status === 404) {
-            console.warn(`Order ${orderId} not found in activeorders, proceeding with payment.`)
-          } else {
-            throw error
-          }
+          console.error("Error updating order paid status:", error);
         }
       }
       if (orderType === "Takeaway") {
@@ -963,42 +979,19 @@ function FrontPage() {
     }
   }
   const handlePaymentCompletion = (tableNumber, chairsBooked) => {
-    const updatedOrders = savedOrders.filter(
-      (order) =>
-        !(order.tableNumber === tableNumber && order.chairsBooked.some((chair) => chairsBooked.includes(chair))),
-    )
-    setSavedOrders(updatedOrders)
-    localStorage.setItem("savedOrders", JSON.stringify(updatedOrders))
-    const updatedChairs = { ...bookedChairs }
-    if (updatedChairs[tableNumber]) {
-      updatedChairs[tableNumber] = updatedChairs[tableNumber].filter((chair) => !chairsBooked.includes(chair))
-      if (updatedChairs[tableNumber].length === 0) {
-        delete updatedChairs[tableNumber]
-        const updatedBookedTables = bookedTables.filter((table) => table !== tableNumber)
-        setBookedTables(updatedBookedTables)
-        localStorage.setItem("bookedTables", JSON.stringify(updatedBookedTables))
-      }
+    const savedOrders = JSON.parse(localStorage.getItem("savedOrders")) || [];
+    const order = savedOrders.find(o => o.tableNumber === tableNumber && o.chairsBooked.some(c => chairsBooked.includes(c)));
+    if (order) {
+      order.paid = true;
+      localStorage.setItem("savedOrders", JSON.stringify(savedOrders));
+      setCartItems([]);
+      setBillCartItems([]);
+      setWarningMessage(
+        `Payment for Table ${tableNumber}, Chairs ${chairsBooked.join(", ")} completed.`
+      );
+      setWarningType("success");
+      setPendingAction(() => () => navigate("/table"));
     }
-    setBookedChairs(updatedChairs)
-    localStorage.setItem("bookedChairs", JSON.stringify(updatedChairs))
-    const reservations = JSON.parse(localStorage.getItem("reservations")) || []
-    const verifiedReservations = JSON.parse(localStorage.getItem("verifiedReservations")) || []
-    const updatedReservations = reservations.filter(
-      (res) => !(res.tableNumber === tableNumber && res.chairs.some((chair) => chairsBooked.includes(chair))),
-    )
-    const updatedVerifiedReservations = verifiedReservations.filter((vr) => {
-      const res = reservations.find((r) => r.id === vr.reservationId)
-      return res && updatedReservations.includes(res)
-    })
-    localStorage.setItem("reservations", JSON.stringify(updatedReservations))
-    localStorage.setItem("verifiedReservations", JSON.stringify(updatedVerifiedReservations))
-    setCartItems([])
-    setBillCartItems([])
-    setWarningMessage(
-      `Payment for Table ${tableNumber}, Chairs ${chairsBooked.join(", ")} completed. Chairs are now available.`,
-    )
-    setWarningType("success")
-    setPendingAction(() => () => navigate("/table"))
   }
   const handleSaveToBackend = async (paymentDetails) => {
     if (billCartItems.length === 0) {
@@ -1018,7 +1011,6 @@ function FrontPage() {
       throw new Error("Invalid item quantities")
     }
     const subtotal = calculateSubtotal(billCartItems)
-    const { chairsBooked } = location.state || {}
     const payload = {
       customer: customerName.trim() || "N/A",
       phoneNumber: phoneNumber ? `${selectedISDCode}${phoneNumber}` : "N/A",
@@ -1028,20 +1020,22 @@ function FrontPage() {
       whatsappNumber: whatsappNumber || "N/A",
       email: email || "N/A",
       items: validItems.map((item) => ({
-        item_name: item.item_name || item.name,
-        basePrice: Number(item.basePrice),
+        item_name: item.item_name || item.name || "Unnamed Item",
+        basePrice: Number(item.basePrice) || 0,
         originalBasePrice: item.originalBasePrice || null,
         icePreference: item.icePreference,
-        ice_price: Number(item.icePrice),
+        ice_price: Number(item.icePrice) || 0,
         isSpicy: item.isSpicy,
-        spicy_price: Number(item.spicyPrice),
-        sugarLevel: item.sugarLevel,
+        spicy_price: Number(item.spicyPrice) || 0,
         quantity: Number(item.quantity) || 1,
-        amount: Number(item.totalPrice.toFixed(2)),
+        amount: Number(item.totalPrice.toFixed(2)) || 0,
         addons: Object.entries(item.addonQuantities || {}).map(([addonName, qty]) => ({
           name1: addonName,
-          addon_image: item.addonImages[addonName] || "/static/images/default-addon-image.jpg",
-          addon_price: Number(item.addonPrices?.[addonName] || item.addonVariants[addonName]?.price || 0),
+          addon_image: item.addonImages?.[addonName] || "/static/images/default-addon-image.jpg",
+          addon_size_price: Number(item.addonSizePrices?.[addonName] || 0),
+          addon_ice_price: Number(item.addonIcePrices?.[addonName] || 0),
+          addon_spicy_price: Number(item.addonSpicyPrices?.[addonName] || 0),
+          addon_price: Number(item.addonPrices?.[addonName] || item.addonVariants?.[addonName]?.price || 0),
           addon_quantity: qty,
           size: item.addonVariants?.[addonName]?.size || "M",
           cold: item.addonVariants?.[addonName]?.cold || "without_ice",
@@ -1052,8 +1046,11 @@ function FrontPage() {
         })),
         selectedCombos: Object.entries(item.comboQuantities || {}).map(([comboName, qty]) => ({
           name1: comboName,
-          combo_image: item.comboImages[comboName] || "/static/images/default-combo-image.jpg",
-          combo_price: Number(item.comboPrices?.[comboName] || item.comboVariants[comboName]?.price || 0),
+          combo_image: item.comboImages?.[comboName] || "/static/images/default-combo-image.jpg",
+          combo_size_price: Number(item.comboSizePrices?.[comboName] || 0),
+          combo_ice_price: Number(item.comboIcePrices?.[comboName] || 0),
+          combo_spicy_price: Number(item.comboSpicyPrices?.[comboName] || 0),
+          combo_price: Number(item.comboPrices?.[comboName] || item.comboVariants?.[comboName]?.price || 0),
           size: item.comboVariants?.[comboName]?.size || "M",
           cold: item.comboVariants?.[comboName]?.cold || "without_ice",
           isSpicy: item.comboVariants?.[comboName]?.spicy || false,
@@ -1062,7 +1059,7 @@ function FrontPage() {
           combo_quantity: qty,
           custom_variants: item.comboCustomVariantsDetails?.[comboName] || {},
         })),
-        kitchen: item.kitchen || "Main Kitchen",
+        kitchen: item.kitchen,
         selectedSize: item.selectedSize || null,
         ingredients: item.ingredients || [],
         selectedCustomVariants: item.selectedCustomVariants || {},
@@ -1278,12 +1275,6 @@ function FrontPage() {
       } else {
         await handleCreateCustomer()
       }
-    } else if (!phoneNumber) {
-      setWarningMessage("Please enter a phone number")
-      setWarningType("warning")
-    } else if (phoneNumber.length !== 10) {
-      setWarningMessage("Phone number must be 10 digits")
-      setWarningType("warning")
     }
   }
   const handleCreateGroup = async () => {
@@ -1336,12 +1327,7 @@ function FrontPage() {
         quantity: Number(item.quantity) || 1,
         basePrice: Number(item.basePrice) || 0,
         originalBasePrice: item.originalBasePrice || null,
-        icePreference: item.icePreference || "without_ice",
-        icePrice: Number(item.icePrice) || 0,
-        isSpicy: item.isSpicy || false,
-        spicyPrice: Number(item.spicyPrice) || 0,
-        sugarLevel: item.sugarLevel || "medium",
-        totalPrice: Number(item.totalPrice) || item.basePrice * (item.quantity || 1),
+        totalPrice: Number(item.totalPrice) || (Number(item.basePrice) * (Number(item.quantity) || 1)) || 0,
         addonQuantities: item.addonQuantities || {},
         addonVariants: item.addonVariants || {},
         addonPrices: item.addonPrices || {},
@@ -1360,16 +1346,22 @@ function FrontPage() {
         selectedSize: item.selectedSize || null,
         kitchen: item.kitchen || "Main Kitchen",
         ingredients: item.ingredients || [],
-        selectedCustomVariants: item.selectedCustomVariants || {},
+        requiredKitchens: item.requiredKitchens || [],
+        kitchenStatuses: item.kitchenStatuses || {},
+        served: item.served || false, // Ensure served
+        addonCustomVariantsDetails: item.addonCustomVariantsDetails || {},
+        comboCustomVariantsDetails: item.comboCustomVariantsDetails || {},
         customVariantsDetails: item.customVariantsDetails || {},
         customVariantsQuantities: item.customVariantsQuantities || {},
-        status: item.status || "Pending",
-        isCombo: item.isCombo || false,
-        comboItems: item.comboItems || [],
+        selectedCustomVariants: item.selectedCustomVariants || {},
+        icePreference: item.icePreference || "without_ice",
+        isSpicy: item.isSpicy || false,
+        sugarLevel: item.sugarLevel || "medium",
       })),
       timestamp: new Date().toISOString(),
       orderType: orderType || "Dine In",
       status: "Pending",
+      paid: false,
     }
     try {
       // Send order to kitchen
@@ -1378,42 +1370,17 @@ function FrontPage() {
         throw new Error(kitchenResponse.data.error || "Failed to notify kitchen")
       }
       console.log("Order sent to kitchen:", kitchenResponse.data.order_id)
+      let message = "Order saved successfully!";
       if (orderId) {
-        // Verify if order exists before updating
-        try {
-          const response = await axios.get(`http://localhost:8000/api/activeorders/${orderId}`)
-          if (response.status === 200) {
-            const updateResponse = await axios.put(`http://localhost:8000/api/activeorders/${orderId}`, newOrder)
-            if (updateResponse.status === 200) {
-              console.log("Order updated successfully")
-              setWarningMessage("Order updated successfully!")
-              setWarningType("success")
-            }
-          }
-        } catch (error) {
-          if (error.response?.status === 404) {
-            // If order not found, create a new one
-            console.warn(`Order ${orderId} not found, creating new order`)
-            const createResponse = await axios.post("http://localhost:8000/api/activeorders", newOrder)
-            if (createResponse.status === 201) {
-              console.log("New order created successfully")
-              setWarningMessage("Order created successfully!")
-              setWarningType("success")
-              setOrderId(createResponse.data.orderId)
-              currentOrderId = createResponse.data.orderId
-            } else {
-              throw new Error("Failed to create new order")
-            }
-          } else {
-            throw error
-          }
+        const updateResponse = await axios.put(`http://localhost:8000/api/activeorders/${orderId}`, newOrder)
+        if (updateResponse.status === 200) {
+          console.log("Order updated successfully")
+          message = "Order updated successfully!";
         }
       } else {
         const response = await axios.post("http://localhost:8000/api/activeorders", newOrder)
         if (response.status === 201) {
           console.log("Order saved successfully")
-          setWarningMessage("Order saved successfully!")
-          setWarningType("success")
           setOrderId(response.data.orderId)
           currentOrderId = response.data.orderId
         } else {
@@ -1438,6 +1405,10 @@ function FrontPage() {
         setBookedChairs(updatedBookedChairs)
         localStorage.setItem("bookedChairs", JSON.stringify(updatedBookedChairs))
       }
+      setWarningMessage(`${message} Do you want to pay now?`)
+      setWarningType("success")
+      setIsConfirmation(true)
+      setPendingAction(() => handleConfirmYes)
       setPendingAction(() => () => {
         setCartItems([])
         setBillCartItems([])
@@ -1677,7 +1648,7 @@ function FrontPage() {
                       </p>
                     )}
                     <div className="addon-row">
-                      {item.comboItems.map((comboItem, index) => (
+                      {item.comboItems?.map((comboItem, index) => (
                         <div className="bubble addon" key={index}>
                           <div className="circle">
                             <img className="offerImageStyle" src={comboItem.image} alt={comboItem.name} />
@@ -1686,7 +1657,7 @@ function FrontPage() {
                           <br />
                           {comboItem.name}
                         </div>
-                      ))}
+                      )) || <div>No combo items</div>}
                     </div>
                     <p className="offerPriceStylePoster">
                       Total:
@@ -1970,7 +1941,7 @@ function FrontPage() {
                           </div>
                         </td>
                         <td>{item.quantity}</td>
-                        <td>₹{(comboItem.price * item.quantity).toFixed(2)}</td>
+                        <td>₹{((comboItem.price || 0) * item.quantity).toFixed(2)}</td>
                         {showKitchenColumn && <td>{comboItem.kitchen || "Main Kitchen"}</td>}
                         <td></td>
                       </tr>
@@ -1990,7 +1961,7 @@ function FrontPage() {
                             min="1"
                           />
                         </td>
-                        <td>₹{(item.icePrice * item.quantity).toFixed(2)}</td>
+                        <td>₹{((item.icePrice || 0) * item.quantity).toFixed(2)}</td>
                         {showKitchenColumn && <td></td>}
                         <td>
                           <button
@@ -2017,7 +1988,7 @@ function FrontPage() {
                             min="1"
                           />
                         </td>
-                        <td>₹{(item.spicyPrice * item.quantity).toFixed(2)}</td>
+                        <td>₹{((item.spicyPrice || 0) * item.quantity).toFixed(2)}</td>
                         {showKitchenColumn && <td></td>}
                         <td>
                           <button
@@ -2049,7 +2020,7 @@ function FrontPage() {
                               min="1"
                             />
                           </td>
-                          <td>₹{(variant.price * (item.customVariantsQuantities?.[variantName] || 1)).toFixed(2)}</td>
+                          <td>₹{((variant.price || 0) * (item.customVariantsQuantities?.[variantName] || 1)).toFixed(2)}</td>
                           {showKitchenColumn && <td></td>}
                           <td>
                             <button
@@ -2071,13 +2042,13 @@ function FrontPage() {
                                 <td>
                                   <div className="frontpage-cart-item-details">
                                     <img
-                                      src={item.addonImages[addonName] || "/static/images/default-addon-image.jpg"}
+                                      src={item.addonImages ? item.addonImages[addonName] || "/static/images/default-addon-image.jpg" : "/static/images/default-addon-image.jpg"}
                                       alt={addonName}
                                       className="frontpage-cart-item-image"
                                       onError={(e) => (e.target.src = "/static/images/default-addon-image.jpg")}
                                     />
                                     <span className="frontpage-cart-item-addon">
-                                      {addonName} ({item.addonVariants[addonName]?.size || "M"})
+                                      {addonName} ({item.addonVariants ? item.addonVariants[addonName]?.size || "M" : "M"})
                                     </span>
                                   </div>
                                 </td>
@@ -2090,9 +2061,9 @@ function FrontPage() {
                                     min="1"
                                   />
                                 </td>
-                                <td>₹{(item.addonSizePrices[addonName] * qty).toFixed(2)}</td>
+                                <td>₹{((item.addonPrices ? item.addonPrices[addonName] : 0) * qty).toFixed(2)}</td>
                                 {showKitchenColumn && (
-                                  <td>{item.addonVariants[addonName]?.kitchen || "Main Kitchen"}</td>
+                                  <td>{item.addonVariants ? item.addonVariants[addonName]?.kitchen || "Main Kitchen" : "Main Kitchen"}</td>
                                 )}
                                 <td>
                                   <button
@@ -2103,7 +2074,7 @@ function FrontPage() {
                                   </button>
                                 </td>
                               </tr>
-                              {item.addonVariants[addonName]?.cold === 'with_ice' && (
+                              {item.addonVariants && item.addonVariants[addonName] && item.addonVariants[addonName].cold === 'with_ice' && (
                                 <tr>
                                   <td></td>
                                   <td>
@@ -2120,7 +2091,7 @@ function FrontPage() {
                                       min="1"
                                     />
                                   </td>
-                                  <td>₹{(item.addonIcePrices[addonName] * qty).toFixed(2)}</td>
+                                  <td>₹{((item.addonIcePrices ? item.addonIcePrices[addonName] : 0) * qty).toFixed(2)}</td>
                                   {showKitchenColumn && <td></td>}
                                   <td>
                                     <button
@@ -2142,7 +2113,7 @@ function FrontPage() {
                                   </td>
                                 </tr>
                               )}
-                              {item.addonVariants[addonName]?.spicy && (
+                              {item.addonVariants && item.addonVariants[addonName] && item.addonVariants[addonName].spicy && (
                                 <tr>
                                   <td></td>
                                   <td>
@@ -2159,7 +2130,7 @@ function FrontPage() {
                                       min="1"
                                     />
                                   </td>
-                                  <td>₹{(item.addonSpicyPrices[addonName] * qty).toFixed(2)}</td>
+                                  <td>₹{((item.addonSpicyPrices ? item.addonSpicyPrices[addonName] : 0) * qty).toFixed(2)}</td>
                                   {showKitchenColumn && <td></td>}
                                   <td>
                                     <button
@@ -2181,7 +2152,7 @@ function FrontPage() {
                                   </td>
                                 </tr>
                               )}
-                              {item.addonVariants[addonName]?.sugar &&
+                              {item.addonVariants && item.addonVariants[addonName] && item.addonVariants[addonName].sugar &&
                                 item.addonVariants[addonName].sugar !== "medium" && (
                                   <tr>
                                     <td></td>
@@ -2246,7 +2217,7 @@ function FrontPage() {
                                           min="1"
                                         />
                                       </td>
-                                      <td>₹{(variant.price * qty).toFixed(2)}</td>
+                                      <td>₹{((variant.price || 0) * qty).toFixed(2)}</td>
                                       {showKitchenColumn && <td></td>}
                                       <td>
                                         <button
@@ -2279,13 +2250,13 @@ function FrontPage() {
                                 <td>
                                   <div className="frontpage-cart-item-details">
                                     <img
-                                      src={item.comboImages[comboName] || "/static/images/default-combo-image.jpg"}
+                                      src={item.comboImages ? item.comboImages[comboName] || "/static/images/default-combo-image.jpg" : "/static/images/default-combo-image.jpg"}
                                       alt={comboName}
                                       className="frontpage-cart-item-image"
                                       onError={(e) => (e.target.src = "/static/images/default-combo-image.jpg")}
                                     />
                                     <span className="frontpage-cart-item-addon">
-                                      {comboName} ({item.comboVariants[comboName]?.size || "M"})
+                                      {comboName} ({item.comboVariants ? item.comboVariants[comboName]?.size || "M" : "M"})
                                     </span>
                                   </div>
                                 </td>
@@ -2298,9 +2269,9 @@ function FrontPage() {
                                     min="1"
                                   />
                                 </td>
-                                <td>₹{(item.comboSizePrices[comboName] * qty).toFixed(2)}</td>
+                                <td>₹{((item.comboPrices ? item.comboPrices[comboName] : 0) * qty).toFixed(2)}</td>
                                 {showKitchenColumn && (
-                                  <td>{item.comboVariants[comboName]?.kitchen || "Main Kitchen"}</td>
+                                  <td>{item.comboVariants ? item.comboVariants[comboName]?.kitchen || "Main Kitchen" : "Main Kitchen"}</td>
                                 )}
                                 <td>
                                   <button
@@ -2311,7 +2282,7 @@ function FrontPage() {
                                   </button>
                                 </td>
                               </tr>
-                              {item.comboVariants[comboName]?.cold === 'with_ice' && (
+                              {item.comboVariants && item.comboVariants[comboName] && item.comboVariants[comboName].cold === 'with_ice' && (
                                 <tr>
                                   <td></td>
                                   <td>
@@ -2328,7 +2299,7 @@ function FrontPage() {
                                       min="1"
                                     />
                                   </td>
-                                  <td>₹{(item.comboIcePrices[comboName] * qty).toFixed(2)}</td>
+                                  <td>₹{((item.comboIcePrices ? item.comboIcePrices[comboName] : 0) * qty).toFixed(2)}</td>
                                   {showKitchenColumn && <td></td>}
                                   <td>
                                     <button
@@ -2350,7 +2321,7 @@ function FrontPage() {
                                   </td>
                                 </tr>
                               )}
-                              {item.comboVariants[comboName]?.spicy && (
+                              {item.comboVariants && item.comboVariants[comboName] && item.comboVariants[comboName].spicy && (
                                 <tr>
                                   <td></td>
                                   <td>
@@ -2367,7 +2338,7 @@ function FrontPage() {
                                       min="1"
                                     />
                                   </td>
-                                  <td>₹{(item.comboSpicyPrices[comboName] * qty).toFixed(2)}</td>
+                                  <td>₹{((item.comboSpicyPrices ? item.comboSpicyPrices[comboName] : 0) * qty).toFixed(2)}</td>
                                   {showKitchenColumn && <td></td>}
                                   <td>
                                     <button
@@ -2389,7 +2360,7 @@ function FrontPage() {
                                   </td>
                                 </tr>
                               )}
-                              {item.comboVariants[comboName]?.sugar &&
+                              {item.comboVariants && item.comboVariants[comboName] && item.comboVariants[comboName].sugar &&
                                 item.comboVariants[comboName].sugar !== "medium" && (
                                   <tr>
                                     <td></td>
@@ -2454,7 +2425,7 @@ function FrontPage() {
                                           min="1"
                                         />
                                       </td>
-                                      <td>₹{(variant.price * qty).toFixed(2)}</td>
+                                      <td>₹{((variant.price || 0) * qty).toFixed(2)}</td>
                                       {showKitchenColumn && <td></td>}
                                       <td>
                                         <button
@@ -2524,9 +2495,20 @@ function FrontPage() {
       {warningMessage && (
         <div className={`frontpage-alert frontpage-alert-${warningType}`}>
           <span>{warningMessage}</span>
-          <button className="frontpage-alert-button" onClick={handleWarningOk}>
-            OK
-          </button>
+          {isConfirmation ? (
+            <div>
+              <button className="frontpage-alert-button" onClick={handleConfirmYes}>
+                Pay
+              </button>
+              <button className="frontpage-alert-button" onClick={handleConfirmNo}>
+                Pay Later
+              </button>
+            </div>
+          ) : (
+            <button className="frontpage-alert-button" onClick={handleWarningOk}>
+              OK
+            </button>
+          )}
         </div>
       )}
       {showPaymentModal && (

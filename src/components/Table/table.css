@@ -7,7 +7,6 @@
   background-color: #f0f0f0;
   margin-bottom: 20px;
 }
-
 /* Table Container and Shape */
 .table-container {
   position: relative;
@@ -16,18 +15,15 @@
   margin: 0 auto;
   transition: transform 0.2s ease-in-out;
 }
-
 .table-container:hover {
   transform: scale(1.05);
 }
-
 .table-shape {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
 }
-
 /* Chair Styling */
 .chair {
   position: absolute;
@@ -36,36 +32,29 @@
   cursor: pointer;
   transition: filter 0.3s, transform 0.2s;
 }
-
 .chair:hover {
   transform: scale(1.1);
 }
-
 .chair.booked {
   filter: invert(21%) sepia(98%) saturate(7500%) hue-rotate(339deg) brightness(92%) contrast(94%); /* Matches #dc3545 */
 }
-
 .chair.reserved {
   filter: invert(65%) sepia(91%) saturate(1352%) hue-rotate(296deg) brightness(101%) contrast(101%); /* Matches #ff69b4 */
 }
-
 .chair.available {
   filter: invert(44%) sepia(91%) saturate(438%) hue-rotate(81deg) brightness(97%) contrast(92%); /* Matches #28a745 */
 }
-
 .chair.selected {
   filter: invert(26%) sepia(98%) saturate(3500%) hue-rotate(195deg) brightness(92%) contrast(90%); /* Matches #007bff */
   border: 2px solid #007bff;
   border-radius: 50%;
   padding: 2px;
 }
-
 /* Back Arrow */
 .back-arrow {
   font-size: 1.5rem;
   cursor: pointer;
 }
-
 /* Color Legend */
 .color-box {
   width: 20px;
@@ -73,23 +62,18 @@
   border-radius: 3px;
   border: 1px solid #333;
 }
-
 .color-box.booked {
   background-color: #dc3545;
 }
-
 .color-box.reserved {
   background-color: #ff69b4;
 }
-
 .color-box.available {
   background-color: #28a745;
 }
-
 .color-box.selected {
   background-color: #007bff;
 }
-
 /* Go to Order Button */
 .go-to-order-btn {
   font-size: 1.2rem;
@@ -98,7 +82,35 @@
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
   transition: transform 0.2s ease-in-out;
 }
-
 .go-to-order-btn:hover {
   transform: scale(1.05);
+}
+/* Popup Item Styling */
+.cursor-pointer {
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+.cursor-pointer:hover {
+  background-color: #f8f9fa;
+}
+/* List Cards Styling */
+.list-card {
+  transition: box-shadow 0.3s ease, transform 0.2s ease;
+  border: 1px solid #dee2e6;
+}
+.list-card:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+.list-card .card-title {
+  color: #000000;
+  margin-bottom: 0.5rem;
+}
+.list-card .card-text {
+  font-size: 0.9rem;
+  color: #000000;
+  margin-bottom: 0.25rem;
+}
+.list-card .badge {
+  font-size: 0.8rem;
 }

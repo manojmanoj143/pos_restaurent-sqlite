@@ -302,7 +302,7 @@ class SQLiteCollection:
             return doc
         return None
 def connect_to_sqlite():
-    global conn, items_collection, customers_collection, sales_collection, tables_collection, users_collection, settings_collection, email_tokens_collection, opening_collection, pos_closing_collection, kitchens_collection, item_groups_collection, kitchen_saved_collection, picked_up_collection, variants_collection, employees_collection, activeorders_collection, order_counters_collection, tripreports_collection, email_settings_collection, purchase_items_collection, suppliers_collection, purchase_orders_collection, purchase_receipts_collection, purchase_invoices_collection, uoms_collection, purchase_sales_collection, print_settings_collection, combo_offers_collection, vat_collection, customer_groups_collection
+    global conn, items_collection, customers_collection, sales_collection, tables_collection, users_collection, settings_collection, email_tokens_collection, opening_collection, pos_closing_collection, kitchens_collection, item_groups_collection, kitchen_saved_collection, picked_up_collection, variants_collection, employees_collection, activeorders_collection, order_counters_collection, tripreports_collection, email_settings_collection, purchase_items_collection, suppliers_collection, purchase_orders_collection, purchase_receipts_collection, purchase_invoices_collection, uoms_collection, purchase_sales_collection, print_settings_collection, combo_offers_collection, vat_collection, customer_groups_collection, company_details_collection
     mode = config.get("mode", "server")
     if mode == 'server':
         db_path = os.path.join(CONFIG_DIR, 'restaurant.db')
@@ -311,7 +311,7 @@ def connect_to_sqlite():
         tables = [
             'active_orders', 'combo_offers', 'customers', 'email_settings', 'email_tokens', 'employees', 'item_groups', 'items', 'kitchen_saved_orders', 'kitchens',
             'order_counters', 'picked_up_items', 'pos_closing_entries', 'pos_opening_entries', 'print_settings', 'purchase_invoices', 'purchase_items', 'purchase_orders',
-            'purchase_receipts', 'purchase_sales', 'sales', 'suppliers', 'system_settings', 'tables', 'trip_reports', 'uoms', 'users', 'variants', 'vat', 'customer_groups' # NEW: customer_groups
+            'purchase_receipts', 'purchase_sales', 'sales', 'suppliers', 'system_settings', 'tables', 'trip_reports', 'uoms', 'users', 'variants', 'vat', 'customer_groups', 'company_details' # NEW: customer_groups
         ]
         for table in tables:
             cur.execute(f"CREATE TABLE IF NOT EXISTS {table} (id TEXT PRIMARY KEY, data TEXT)")
@@ -347,6 +347,7 @@ def connect_to_sqlite():
         combo_offers_collection = SQLiteCollection(conn, 'combo_offers')
         vat_collection = SQLiteCollection(conn, 'vat')
         customer_groups_collection = SQLiteCollection(conn, 'customer_groups')  # NEW: customer_groups_collection
+        company_details_collection = SQLiteCollection(conn, 'company_details')
         ensure_test_users()
         return True
     else:
@@ -1899,21 +1900,22 @@ if config.get('mode') == 'server':
             if floor:
                 floor = floor.strip()
             number_of_chairs = data.get("number_of_chairs")
-            type = data.get("type", "Round")
+            type_ = data.get("type", "Round")
             chairs = data.get("chairs", [])
             x = data.get("x", 0)
             y = data.get("y", 0)
             if not table_number or not floor or not number_of_chairs:
                 logger.error("Missing table_number, floor, or number_of_chairs")
                 return jsonify({"error": "Table number, floor, and number of chairs are required"}), 400
-            if tables_collection.find_one({"table_number": table_number}):
-                logger.warning(f"Table number already exists: {table_number}")
-                return jsonify({"error": "Table number already exists"}), 400
+            # Check for duplicate table_number on the same floor only
+            if tables_collection.find_one({"table_number": table_number, "floor": floor}):
+                logger.warning(f"Table number {table_number} already exists on floor {floor}")
+                return jsonify({"error": f"Table number {table_number} already exists on floor {floor}"}), 400
             new_table = {
                 "table_number": table_number,
                 "floor": floor,
                 "number_of_chairs": int(number_of_chairs),
-                "type": type,
+                "type": type_,
                 "chairs": chairs,
                 "x": x,
                 "y": y,
@@ -1930,13 +1932,14 @@ if config.get('mode') == 'server':
     def update_table(table_number):
         try:
             data = request.get_json()
+            floor = data.get("floor")
+            if not floor:
+                logger.error("Floor is required for table update")
+                return jsonify({"error": "Floor is required"}), 400
+            floor = floor.strip()
             update_data = {}
             if "number_of_chairs" in data:
                 update_data["number_of_chairs"] = int(data["number_of_chairs"])
-            if "floor" in data:
-                floor = data["floor"].strip() if data["floor"] else None
-                if floor:
-                    update_data["floor"] = floor
             if "type" in data:
                 update_data["type"] = data["type"]
             if "chairs" in data:
@@ -1945,17 +1948,20 @@ if config.get('mode') == 'server':
                 update_data["x"] = data["x"]
             if "y" in data:
                 update_data["y"] = data["y"]
+            if "floor" in data:
+                update_data["floor"] = data["floor"].strip()
             if not update_data:
                 return jsonify({"error": "No data provided to update"}), 400
             update_data["modified_at"] = datetime.now(ZoneInfo("UTC")).isoformat()
+            # Match by both table_number and floor to ensure floor-specific update
             result = tables_collection.update_one(
-                {"table_number": table_number},
+                {"table_number": table_number, "floor": floor},
                 {"$set": update_data}
             )
             if result.matched_count == 0:
-                logger.warning(f"Table not found for update: {table_number}")
+                logger.warning(f"Table not found for update: {table_number} on floor {floor}")
                 return jsonify({"error": "Table not found"}), 404
-            logger.info(f"Table updated: {table_number}")
+            logger.info(f"Table updated: {table_number} on floor {floor}")
             return jsonify({"message": "Table updated successfully"}), 200
         except Exception as e:
             logger.error(f"Error updating table {table_number}: {str(e)}")
@@ -1964,11 +1970,18 @@ if config.get('mode') == 'server':
     @db_required
     def delete_table(table_number):
         try:
-            result = tables_collection.delete_one({"table_number": table_number})
+            data = request.get_json() or {}
+            floor = data.get("floor")
+            if not floor:
+                logger.error("Floor is required for table deletion")
+                return jsonify({"error": "Floor is required"}), 400
+            floor = floor.strip()
+            # Delete by both table_number and floor to ensure floor-specific deletion
+            result = tables_collection.delete_one({"table_number": table_number, "floor": floor})
             if result.deleted_count == 0:
-                logger.warning(f"Table not found: {table_number}")
+                logger.warning(f"Table not found: {table_number} on floor {floor}")
                 return jsonify({"error": "Table not found"}), 404
-            logger.info(f"Table deleted: {table_number}")
+            logger.info(f"Table deleted: {table_number} on floor {floor}")
             return jsonify({"message": "Table deleted successfully"}), 200
         except Exception as e:
             logger.error(f"Error deleting table {table_number}: {str(e)}")
@@ -2818,254 +2831,248 @@ if config.get('mode') == 'server':
             return_document=True
         )
         return f"{order_type}-{counter_doc['count']:04d}"
-    @app.route('/api/activeorders/<order_id>', methods=['GET'])
-    @db_required
-    def get_active_order(order_id):
-        try:
-            order = activeorders_collection.find_one({'orderId': order_id})
-            if order:
-                logger.info(f"Fetched order: {order_id}")
-                return jsonify(convert_objectid_to_str(order)), 200
-            else:
-                logger.warning(f"Order not found: {order_id}")
-                return jsonify({'error': 'Order not found'}), 404
-        except Exception as e:
-            logger.error("Error fetching order: {str(e)}")
-            logger.error(traceback.format_exc())
-            return jsonify({'error': str(e)}), 500
-    @app.route('/api/activeorders', methods=['POST'])
-    @db_required
-    def save_active_order():
-        try:
-            data = request.get_json()
-            order_type = data.get('orderType', 'Dine In')
-            order_no = generate_order_number(order_type)
-            cart_items = data.get('cartItems', [])
-            for item in cart_items:
-                required_kitchens = set()
-                if item.get('kitchen'):
-                    required_kitchens.add(item['kitchen'])
-                for addon_name, qty in item.get('addonQuantities', {}).items():
-                    if qty > 0 and 'addonVariants' in item and addon_name in item['addonVariants']:
-                        if item['addonVariants'][addon_name].get('kitchen'):
-                            required_kitchens.add(item['addonVariants'][addon_name]['kitchen'])
-                for combo_name, qty in item.get('comboQuantities', {}).items():
-                    if qty > 0 and 'comboVariants' in item and combo_name in item['comboVariants']:
-                        if item['comboVariants'][combo_name].get('kitchen'):
-                            required_kitchens.add(item['comboVariants'][combo_name]['kitchen'])
-                item['requiredKitchens'] = list(required_kitchens)
-                item['kitchenStatuses'] = {kitchen: 'Pending' for kitchen in required_kitchens}
-            active_order = {
-                'orderId': str(uuid.uuid4()),
-                'orderNo': order_no,
-                'customerName': data.get('customerName', 'N/A'),
-                'tableNumber': data.get('tableNumber', 'N/A'),
-                'chairsBooked': data.get('chairsBooked', []),
-                'phoneNumber': data.get('phoneNumber', ''),
-                'deliveryAddress': data.get('deliveryAddress', {}),
-                'whatsappNumber': data.get('whatsappNumber', ''),
-                'email': data.get('email', ''),
-                'cartItems': cart_items,
-                'timestamp': data.get('timestamp', datetime.now(timezone.utc).isoformat()),
-                'orderType': order_type,
-                'status': data.get('status', 'Pending'),
-                'created_at': datetime.now(timezone.utc),
-                'deliveryPersonId': data.get('deliveryPersonId', ''),
-                'deliveryPersonName': data.get('deliveryPersonName', ''),
-                'pickedUpTime': None
-            }
-            activeorders_collection.insert_one(active_order)
-            kitchen_saved_collection.insert_one(active_order.copy())
-            logger.info(f"Created order: {active_order['orderId']} with order number: {order_no}")
-            return jsonify({'success': True, 'orderId': active_order['orderId'], 'orderNo': order_no}), 201
-        except Exception as e:
-            logger.error(f"Error saving active order: {str(e)}")
-            logger.error(traceback.format_exc())
-            return jsonify({'error': str(e)}), 500
-    @app.route('/api/activeorders', methods=['GET'])
-    @db_required
-    def get_active_orders():
-        try:
-            orders = activeorders_collection.find()
-            return jsonify(convert_objectid_to_str(orders)), 200
-        except Exception as e:
-            logger.error(f"Error fetching active orders: {str(e)}")
-            logger.error(traceback.format_exc())
-            return jsonify({'error': str(e)}), 500
-    @app.route('/api/activeorders/<order_id>/items/<item_id>/mark-prepared', methods=['POST'])
-    @db_required
-    def mark_item_prepared_active(order_id, item_id):
-        try:
-            data = request.get_json()
-            kitchen = data.get('kitchen')
-            if not kitchen:
-                return jsonify({'success': False, 'error': 'Kitchen not provided'}), 400
-            for collection in [activeorders_collection, kitchen_saved_collection]:
-                order = collection.find_one({'orderId': order_id})
-                if not order:
-                    return jsonify({'success': False, 'error': 'Order not found'}), 404
-                found = False
-                for item in order['cartItems']:
-                    if item['id'] == item_id:
-                        if 'kitchenStatuses' not in item:
-                            item['kitchenStatuses'] = {}
-                        if item['kitchenStatuses'].get(kitchen) in ['Prepared', 'PickedUp']:
-                            return jsonify({'success': False, 'error': 'Kitchen already marked as prepared or picked up'}), 400
-                        item['kitchenStatuses'][kitchen] = 'Prepared'
-                        found = True
-                        break
-                if not found:
-                    return jsonify({'success': False, 'error': 'Item not found'}), 404
-                collection.replace_one({'orderId': order_id}, order)
-            logger.info(f"Marked item {item_id} in order {order_id} as Prepared for kitchen {kitchen}")
-            return jsonify({'success': True, 'status': 'Prepared'}), 200
-        except Exception as e:
-            logger.error(f"Error in mark-prepared: {str(e)}")
-            logger.error(traceback.format_exc())
-            return jsonify({'success': False, 'error': str(e)}), 500
-    @app.route('/api/activeorders/<order_id>/items/<item_id>/mark-pickedup', methods=['POST'])
-    @db_required
-    def mark_item_pickedup_active(order_id, item_id):
-        try:
-            data = request.get_json()
-            kitchen = data.get('kitchen')
-            if not kitchen:
-                return jsonify({'success': False, 'error': 'Kitchen not provided'}), 400
-            for collection in [activeorders_collection, kitchen_saved_collection]:
-                order = collection.find_one({'orderId': order_id})
-                if not order:
-                    return jsonify({'success': False, 'error': 'Order not found'}), 404
-                found = False
-                for item in order['cartItems']:
-                    if item['id'] == item_id:
-                        if 'kitchenStatuses' not in item:
-                            item['kitchenStatuses'] = {}
-                        status = item['kitchenStatuses'].get(kitchen)
-                        if status == 'Pending':
-                            logger.warning(f"Item {item_id} in order {order_id} was Pending, setting to Prepared automatically for kitchen {kitchen}")
-                            item['kitchenStatuses'][kitchen] = 'Prepared'
-                        elif status != 'Prepared':
-                            return jsonify({'success': False, 'error': 'Item must be prepared before picking up'}), 400
-                        item['kitchenStatuses'][kitchen] = 'PickedUp'
-                        found = True
-                        break
-                if not found:
-                    return jsonify({'success': False, 'error': 'Item not found'}), 404
-                collection.replace_one({'orderId': order_id}, order)
-            order = activeorders_collection.find_one({'orderId': order_id})  # Reload to get updated
-            picked_up_data = {
-                'customerName': order.get('customerName', 'Unknown'),
-                'tableNumber': order.get('tableNumber', 'N/A'),
-                'items': order.get('cartItems', []),
-                'pickupTime': datetime.now(timezone.utc).isoformat(),
-                'orderType': order.get('orderType', 'Dine In')
-            }
-            picked_up_collection.insert_one(picked_up_data)
-            logger.info(f"Marked item {item_id} in order {order_id} as PickedUp for kitchen {kitchen}")
-            return jsonify({'success': True, 'status': 'PickedUp'}), 200
-        except Exception as e:
-            logger.error(f"Error in mark-pickedup: {str(e)}")
-            logger.error(traceback.format_exc())
-            return jsonify({'success': False, 'error': str(e)}), 500
-    @app.route('/api/activeorders/<order_id>', methods=['PUT'])
-    @db_required
-    def update_active_order(order_id):
-        try:
-            data = request.get_json()
-            if '_id' in data:
-                del data['_id']
-            order_in_db = activeorders_collection.find_one({'orderId': order_id})
-            if not order_in_db:
-                logger.warning(f"Order not found for update: {order_id}")
-                return jsonify({'error': 'Order not found'}), 404
-            old_statuses_map = {
-                item['id']: item.get('kitchenStatuses', {})
-                for item in order_in_db.get('cartItems', []) if 'id' in item
-            }
-            if 'cartItems' in data:
-                for item in data['cartItems']:
-                    required_kitchens = set()
-                    if item.get('kitchen'):
-                        required_kitchens.add(item['kitchen'])
-                    for addon_name, qty in item.get('addonQuantities', {}).items():
-                        if qty > 0 and 'addonVariants' in item and addon_name in item['addonVariants']:
-                            if item['addonVariants'][addon_name].get('kitchen'):
-                                required_kitchens.add(item['addonVariants'][addon_name]['kitchen'])
-                    for combo_name, qty in item.get('comboQuantities', {}).items():
-                        if qty > 0 and 'comboVariants' in item and combo_name in item['comboVariants']:
-                            if item['comboVariants'][combo_name].get('kitchen'):
-                                required_kitchens.add(item['comboVariants'][combo_name]['kitchen'])
-                    item['requiredKitchens'] = list(required_kitchens)
-                    item_id = item.get('id')
-                    old_item_status_statuses = old_statuses_map.get(item_id, {})
-                    new_kitchen_statuses = {}
-                    for kitchen in required_kitchens:
-                        if kitchen in old_item_status_statuses:
-                            new_kitchen_statuses[kitchen] = old_item_status_statuses[kitchen]
-                        else:
-                            new_kitchen_statuses[kitchen] = 'Pending'
-                    item['kitchenStatuses'] = new_kitchen_statuses
-            if 'deliveryPersonId' in data and data['deliveryPersonId']:
-                employee = employees_collection.find_one({'employeeId': data['deliveryPersonId']})
-                if not employee:
-                    logger.warning(f"Delivery person not found: {data['deliveryPersonId']}")
-                    return jsonify({'error': 'Delivery person not found'}), 404
-                trip_report = {
-                    'tripId': str(uuid.uuid4()),
-                    'orderId': order_in_db['orderId'],
-                    'orderNo': order_in_db['orderNo'],
-                    'customerName': order_in_db.get('customerName', 'N/A'),
-                    'tableNumber': order_in_db.get('tableNumber', 'N/A'),
-                    'chairsBooked': order_in_db.get('chairsBooked', []),
-                    'phoneNumber': order_in_db.get('phoneNumber', ''),
-                    'deliveryAddress': order_in_db.get('deliveryAddress', {}),
-                    'whatsappNumber': order_in_db.get('whatsappNumber', ''),
-                    'email': order_in_db.get('email', ''),
-                    'cartItems': order_in_db.get('cartItems', []),
-                    'timestamp': order_in_db.get('timestamp', datetime.now(timezone.utc).isoformat()),
-                    'orderType': order_in_db.get('orderType', 'Dine In'),
-                    'status': order_in_db.get('status', 'Pending'),
-                    'deliveryPersonId': data['deliveryPersonId'],
-                    'deliveryPersonName': data.get('deliveryPersonName', employee.get('name', 'N/A')),
-                    'pickedUpTime': order_in_db.get('pickedUpTime', None),
-                    'paymentMethods': order_in_db.get('paymentMethods', []),
-                    'cardDetails': order_in_db.get('cardDetails', ''),
-                    'upiDetails': order_in_db.get('upiDetails', ''),
-                    'created_at': datetime.now(timezone.utc)
-                }
-                tripreports_collection.insert_one(trip_report)
-                logger.info(f"Saved trip report for order {order_id} with delivery person {data['deliveryPersonId']}")
-                activeorders_collection.delete_one({'orderId': order_id})
-                kitchen_saved_collection.delete_one({'orderId': order_id})
-                logger.info(f"Deleted order {order_id} from active orders after delivery person assignment")
-                return jsonify({'success': True, 'message': 'Delivery person assigned and order moved to trip reports', 'order': convert_objectid_to_str(order_in_db)}), 200
-            result = activeorders_collection.replace_one({'orderId': order_id}, data)
-            kitchen_result = kitchen_saved_collection.replace_one({'orderId': order_id}, data)
-            updated_order = activeorders_collection.find_one({'orderId': order_id})
-            if result.matched_count > 0 or kitchen_result.matched_count > 0:
-                logger.info(f"Updated order: {order_id}")
-                return jsonify({'success': True, 'message': 'Order updated', 'order': convert_objectid_to_str(updated_order)}), 200
-            logger.info(f"No changes made to order: {order_id}")
-            return jsonify({'success': True, 'message': 'No changes made', 'order': convert_objectid_to_str(updated_order)}), 200
-        except Exception as e:
-            logger.error(f"Error updating active order: {str(e)}")
-            logger.error(traceback.format_exc())
-            return jsonify({'error': str(e)}), 500
-    @app.route('/api/activeorders/<order_id>', methods=['DELETE'])
-    @db_required
-    def delete_order(order_id):
-        try:
-            result = activeorders_collection.delete_one({'orderId': order_id})
-            kitchen_result = kitchen_saved_collection.delete_one({'orderId': order_id})
-            if result.deleted_count > 0 or kitchen_result.deleted_count > 0:
-                logger.info(f"Deleted order: {order_id}")
-                return jsonify({'success': True}), 200
-            logger.warning(f"Order not found for deletion: {order_id}")
-            return jsonify({'error': 'Order not found'}), 404
-        except Exception as e:
-            logger.error(f"Error deleting order: {str(e)}")
-            logger.error(traceback.format_exc())
-            return jsonify({'error': str(e)}), 500
+    # @app.route('/api/activeorders', methods=['POST'])
+    # @db_required
+    # def save_active_order():
+    #     try:
+    #         data = request.get_json()
+    #         order_type = data.get('orderType', 'Dine In')
+    #         order_no = generate_order_number(order_type)
+    #         cart_items = data.get('cartItems', [])
+    #         for item in cart_items:
+    #             required_kitchens = set()
+    #             if item.get('kitchen'):
+    #                 required_kitchens.add(item['kitchen'])
+    #             for addon_name, qty in item.get('addonQuantities', {}).items():
+    #                 if qty > 0 and 'addonVariants' in item and addon_name in item['addonVariants']:
+    #                     if item['addonVariants'][addon_name].get('kitchen'):
+    #                         required_kitchens.add(item['addonVariants'][addon_name]['kitchen'])
+    #             for combo_name, qty in item.get('comboQuantities', {}).items():
+    #                 if qty > 0 and 'comboVariants' in item and combo_name in item['comboVariants']:
+    #                     if item['comboVariants'][combo_name].get('kitchen'):
+    #                         required_kitchens.add(item['comboVariants'][combo_name]['kitchen'])
+    #             item['requiredKitchens'] = list(required_kitchens)
+    #             item['kitchenStatuses'] = {kitchen: 'Pending' for kitchen in required_kitchens}
+    #         active_order = {
+    #             'orderId': str(uuid.uuid4()),
+    #             'orderNo': order_no,
+    #             'customerName': data.get('customerName', 'N/A'),
+    #             'tableNumber': data.get('tableNumber', 'N/A'),
+    #             'chairsBooked': data.get('chairsBooked', []),
+    #             'phoneNumber': data.get('phoneNumber', ''),
+    #             'deliveryAddress': data.get('deliveryAddress', {}),
+    #             'whatsappNumber': data.get('whatsappNumber', ''),
+    #             'email': data.get('email', ''),
+    #             'cartItems': cart_items,
+    #             'timestamp': data.get('timestamp', datetime.now(timezone.utc).isoformat()),
+    #             'orderType': order_type,
+    #             'status': data.get('status', 'Pending'),
+    #             'created_at': datetime.now(timezone.utc),
+    #             'deliveryPersonId': data.get('deliveryPersonId', ''),
+    #             'deliveryPersonName': data.get('deliveryPersonName', ''),
+    #             'pickedUpTime': data.get('pickedUpTime', None),
+    #             'served': False
+    #         }
+    #         activeorders_collection.insert_one(active_order)
+    #         kitchen_saved_collection.insert_one(active_order.copy())
+    #         logger.info(f"Created order: {active_order['orderId']} with order number: {order_no}")
+    #         return jsonify({'success': True, 'orderId': active_order['orderId'], 'orderNo': order_no}), 201
+    #     except Exception as e:
+    #         logger.error(f"Error saving active order: {str(e)}")
+    #         logger.error(traceback.format_exc())
+    #         return jsonify({'error': str(e)}), 500
+    # @app.route('/api/activeorders', methods=['GET'])
+    # @db_required
+    # def get_active_orders():
+    #     try:
+    #         orders = activeorders_collection.find()
+    #         return jsonify(convert_objectid_to_str(orders)), 200
+    #     except Exception as e:
+    #         logger.error(f"Error fetching active orders: {str(e)}")
+    #         logger.error(traceback.format_exc())
+    #         return jsonify({'error': str(e)}), 500
+    # @app.route('/api/activeorders/<order_id>/items/<item_id>/mark-prepared', methods=['POST'])
+    # @db_required
+    # def mark_item_prepared_active(order_id, item_id):
+    #     try:
+    #         data = request.get_json()
+    #         kitchen = data.get('kitchen')
+    #         if not kitchen:
+    #             return jsonify({'success': False, 'error': 'Kitchen not provided'}), 400
+    #         for collection in [activeorders_collection, kitchen_saved_collection]:
+    #             order = collection.find_one({'orderId': order_id})
+    #             if not order:
+    #                 return jsonify({'success': False, 'error': 'Order not found'}), 404
+    #             found = False
+    #             for item in order['cartItems']:
+    #                 if item['id'] == item_id:
+    #                     if 'kitchenStatuses' not in item:
+    #                         item['kitchenStatuses'] = {}
+    #                     if item['kitchenStatuses'].get(kitchen) in ['Prepared', 'PickedUp']:
+    #                         return jsonify({'success': False, 'error': 'Kitchen already marked as prepared or picked up'}), 400
+    #                     item['kitchenStatuses'][kitchen] = 'Prepared'
+    #                     found = True
+    #                     break
+    #             if not found:
+    #                 return jsonify({'success': False, 'error': 'Item not found'}), 404
+    #             collection.replace_one({'orderId': order_id}, order)
+    #         logger.info(f"Marked item {item_id} in order {order_id} as Prepared for kitchen {kitchen}")
+    #         return jsonify({'success': True, 'status': 'Prepared'}), 200
+    #     except Exception as e:
+    #         logger.error(f"Error in mark-prepared: {str(e)}")
+    #         logger.error(traceback.format_exc())
+    #         return jsonify({'success': False, 'error': str(e)}), 500
+    # @app.route('/api/activeorders/<order_id>/items/<item_id>/mark-pickedup', methods=['POST'])
+    # @db_required
+    # def mark_item_pickedup_active(order_id, item_id):
+    #     try:
+    #         data = request.get_json()
+    #         kitchen = data.get('kitchen')
+    #         if not kitchen:
+    #             return jsonify({'success': False, 'error': 'Kitchen not provided'}), 400
+    #         for collection in [activeorders_collection, kitchen_saved_collection]:
+    #             order = collection.find_one({'orderId': order_id})
+    #             if not order:
+    #                 return jsonify({'success': False, 'error': 'Order not found'}), 404
+    #             found = False
+    #             for item in order['cartItems']:
+    #                 if item['id'] == item_id:
+    #                     if 'kitchenStatuses' not in item:
+    #                         item['kitchenStatuses'] = {}
+    #                     status = item['kitchenStatuses'].get(kitchen)
+    #                     if status == 'Pending':
+    #                         logger.warning(f"Item {item_id} in order {order_id} was Pending, setting to Prepared automatically for kitchen {kitchen}")
+    #                         item['kitchenStatuses'][kitchen] = 'Prepared'
+    #                     elif status != 'Prepared':
+    #                         return jsonify({'success': False, 'error': 'Item must be prepared before picking up'}), 400
+    #                     item['kitchenStatuses'][kitchen] = 'PickedUp'
+    #                     found = True
+    #                     break
+    #             if not found:
+    #                 return jsonify({'success': False, 'error': 'Item not found'}), 404
+    #             collection.replace_one({'orderId': order_id}, order)
+    #         order = activeorders_collection.find_one({'orderId': order_id})  # Reload to get updated
+    #         picked_up_data = {
+    #             'customerName': order.get('customerName', 'Unknown'),
+    #             'tableNumber': order.get('tableNumber', 'N/A'),
+    #             'items': order.get('cartItems', []),
+    #             'pickupTime': datetime.now(timezone.utc).isoformat(),
+    #             'orderType': order.get('orderType', 'Dine In')
+    #         }
+    #         picked_up_collection.insert_one(picked_up_data)
+    #         logger.info(f"Marked item {item_id} in order {order_id} as PickedUp for kitchen {kitchen}")
+    #         return jsonify({'success': True, 'status': 'PickedUp'}), 200
+    #     except Exception as e:
+    #         logger.error(f"Error in mark-pickedup: {str(e)}")
+    #         logger.error(traceback.format_exc())
+    #         return jsonify({'success': False, 'error': str(e)}), 500
+    # @app.route('/api/activeorders/<order_id>', methods=['PUT'])
+    # @db_required
+    # def update_active_order(order_id):
+    #     try:
+    #         data = request.get_json()
+    #         if '_id' in data:
+    #             del data['_id']
+    #         order_in_db = activeorders_collection.find_one({'orderId': order_id})
+    #         if not order_in_db:
+    #             logger.warning(f"Order not found for update: {order_id}")
+    #             return jsonify({'error': 'Order not found'}), 404
+    #         old_statuses_map = {
+    #             item['id']: item.get('kitchenStatuses', {})
+    #             for item in order_in_db.get('cartItems', []) if 'id' in item
+    #         }
+    #         if 'cartItems' in data:
+    #             for item in data['cartItems']:
+    #                 required_kitchens = set()
+    #                 if item.get('kitchen'):
+    #                     required_kitchens.add(item['kitchen'])
+    #                 for addon_name, qty in item.get('addonQuantities', {}).items():
+    #                     if qty > 0 and 'addonVariants' in item and addon_name in item['addonVariants']:
+    #                         if item['addonVariants'][addon_name].get('kitchen'):
+    #                             required_kitchens.add(item['addonVariants'][addon_name]['kitchen'])
+    #                 for combo_name, qty in item.get('comboQuantities', {}).items():
+    #                     if qty > 0 and 'comboVariants' in item and combo_name in item['comboVariants']:
+    #                         if item['comboVariants'][combo_name].get('kitchen'):
+    #                             required_kitchens.add(item['comboVariants'][combo_name]['kitchen'])
+    #                 item['requiredKitchens'] = list(required_kitchens)
+    #                 item_id = item.get('id')
+    #                 old_item_status_statuses = old_statuses_map.get(item_id, {})
+    #                 new_kitchen_statuses = {}
+    #                 for kitchen in required_kitchens:
+    #                     if kitchen in old_item_status_statuses:
+    #                         new_kitchen_statuses[kitchen] = old_item_status_statuses[kitchen]
+    #                     else:
+    #                         new_kitchen_statuses[kitchen] = 'Pending'
+    #                 item['kitchenStatuses'] = new_kitchen_statuses
+    #         updated_order = {**order_in_db, **data}
+    #         if 'cartItems' in data:
+    #             updated_order['cartItems'] = data['cartItems']
+    #         if 'deliveryPersonId' in updated_order and updated_order['deliveryPersonId']:
+    #             employee = employees_collection.find_one({'employeeId': updated_order['deliveryPersonId']})
+    #             if not employee:
+    #                 logger.warning(f"Delivery person not found: {updated_order['deliveryPersonId']}")
+    #                 return jsonify({'error': 'Delivery person not found'}), 404
+    #             trip_report = {
+    #                 'tripId': str(uuid.uuid4()),
+    #                 'orderId': updated_order['orderId'],
+    #                 'orderNo': updated_order['orderNo'],
+    #                 'customerName': updated_order.get('customerName', 'N/A'),
+    #                 'tableNumber': updated_order.get('tableNumber', 'N/A'),
+    #                 'chairsBooked': updated_order.get('chairsBooked', []),
+    #                 'phoneNumber': updated_order.get('phoneNumber', ''),
+    #                 'deliveryAddress': updated_order.get('deliveryAddress', {}),
+    #                 'whatsappNumber': updated_order.get('whatsappNumber', ''),
+    #                 'email': updated_order.get('email', ''),
+    #                 'cartItems': updated_order.get('cartItems', []),
+    #                 'timestamp': updated_order.get('timestamp', datetime.now(timezone.utc).isoformat()),
+    #                 'orderType': updated_order.get('orderType', 'Dine In'),
+    #                 'status': updated_order.get('status', 'Pending'),
+    #                 'deliveryPersonId': updated_order['deliveryPersonId'],
+    #                 'deliveryPersonName': updated_order.get('deliveryPersonName', employee.get('name', 'N/A')),
+    #                 'pickedUpTime': updated_order.get('pickedUpTime', None),
+    #                 'paymentMethods': updated_order.get('paymentMethods', []),
+    #                 'cardDetails': updated_order.get('cardDetails', ''),
+    #                 'upiDetails': updated_order.get('upiDetails', ''),
+    #                 'created_at': datetime.now(timezone.utc)
+    #             }
+    #             tripreports_collection.insert_one(trip_report)
+    #             logger.info(f"Saved trip report for order {order_id} with delivery person {updated_order['deliveryPersonId']}")
+    #             activeorders_collection.delete_one({'orderId': order_id})
+    #             kitchen_saved_collection.delete_one({'orderId': order_id})
+    #             logger.info(f"Deleted order {order_id} from active orders after delivery person assignment")
+    #             return jsonify({'success': True, 'message': 'Delivery person assigned and order moved to trip reports', 'order': convert_objectid_to_str(updated_order)}), 200
+    #         if updated_order.get('paid', False) and updated_order.get('served', False) and updated_order.get('orderType') != 'Online Delivery':
+    #             activeorders_collection.delete_one({'orderId': order_id})
+    #             kitchen_saved_collection.delete_one({'orderId': order_id})
+    #             logger.info(f"Deleted served and paid order {order_id} from active orders")
+    #             return jsonify({'success': True, 'message': 'Order updated and deleted as served and paid', 'order': convert_objectid_to_str(updated_order)}), 200
+    #         result = activeorders_collection.replace_one({'orderId': order_id}, updated_order)
+    #         kitchen_result = kitchen_saved_collection.replace_one({'orderId': order_id}, updated_order)
+    #         updated_order = activeorders_collection.find_one({'orderId': order_id})
+    #         if result.matched_count > 0 or kitchen_result.matched_count > 0:
+    #             logger.info(f"Updated order: {order_id}")
+    #             return jsonify({'success': True, 'message': 'Order updated', 'order': convert_objectid_to_str(updated_order)}), 200
+    #         logger.info(f"No changes made to order: {order_id}")
+    #         return jsonify({'success': True, 'message': 'No changes made', 'order': convert_objectid_to_str(updated_order)}), 200
+    #     except Exception as e:
+    #         logger.error(f"Error updating active order: {str(e)}")
+    #         logger.error(traceback.format_exc())
+    #         return jsonify({'error': str(e)}), 500
+    # @app.route('/api/activeorders/<order_id>', methods=['DELETE'])
+    # @db_required
+    # def delete_order(order_id):
+    #     try:
+    #         result = activeorders_collection.delete_one({'orderId': order_id})
+    #         kitchen_result = kitchen_saved_collection.delete_one({'orderId': order_id})
+    #         if result.deleted_count > 0 or kitchen_result.deleted_count > 0:
+    #             logger.info(f"Deleted order: {order_id}")
+    #             return jsonify({'success': True}), 200
+    #         logger.warning(f"Order not found for deletion: {order_id}")
+    #         return jsonify({'error': 'Order not found'}), 404
+    #     except Exception as e:
+    #         logger.error(f"Error deleting order: {str(e)}")
+    #         logger.error(traceback.format_exc())
+    #         return jsonify({'error': str(e)}), 500
     @app.route('/api/tripreports/<employee_id>', methods=['GET'])
     @db_required
     def get_trip_reports(employee_id):
@@ -4138,6 +4145,365 @@ def start_scheduler():
     if schedule:
         schedule.every(interval).hours.do(create_backup).tag('backup')
         logger.info(f"Scheduled automatic backups every {interval} hours")
+
+@app.route('/api/company-details', methods=['POST', 'GET', 'OPTIONS'])
+@db_required
+def manage_company_details():
+    if request.method == 'OPTIONS':
+        response = jsonify({"success": True})
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response, 200
+    
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            if not data:
+                logger.error("No data provided in POST request")
+                return jsonify({"error": "No data provided"}), 400
+            company_data = {
+                '_id': str(uuid.uuid4()),
+                'restaurantName': data.get('restaurantName', ''),
+                'ownerName': data.get('ownerName', ''),
+                'businessType': data.get('businessType', ''),
+                'otherBusinessType': data.get('otherBusinessType', ''),
+                'gstNumber': data.get('gstNumber', ''),
+                'fssaiNumber': data.get('fssaiNumber', ''),
+                'panNumber': data.get('panNumber', ''),
+                'addresses': data.get('addresses', [{'addressLine1': '', 'addressLine2': '', 'city': '', 'state': '', 'pincode': '', 'country': ''}]),
+                'contacts': data.get('contacts', [{'phoneNumber': '', 'whatsappNumber': '', 'emailAddress': '', 'website': ''}]),
+                'bankName': data.get('bankName', ''),
+                'accountHolderName': data.get('accountHolderName', ''),
+                'accountNumber': data.get('accountNumber', ''),
+                'ifscCode': data.get('ifscCode', ''),
+                'upiId': data.get('upiId', ''),
+                'currencyType': data.get('currencyType', ''),
+                'created_at': datetime.now(ZoneInfo("Asia/Kolkata")).isoformat()
+            }
+            logger.info(f"Saving company details: {company_data}")
+            result = company_details_collection.insert_one(company_data)
+            logger.info(f"Company details saved with ID: {result.inserted_id}")
+            # Return the full saved data
+            return jsonify({
+                "message": "Company details saved successfully",
+                "id": result.inserted_id,
+                "companyDetails": company_data
+            }), 201
+        except Exception as e:
+            logger.error(f"Error saving company details: {str(e)}")
+            return jsonify({"error": f"Failed to save company details: {str(e)}"}), 500
+    
+    if request.method == 'GET':
+        try:
+            details = list(company_details_collection.find())
+            # Convert MongoDB documents to JSON-serializable format
+            serialized_details = []
+            for detail in details:
+                detail['_id'] = str(detail['_id'])
+                serialized_details.append(detail)
+            logger.info(f"Retrieved company details: {serialized_details}")
+            return jsonify({"companyDetails": serialized_details}), 200
+        except Exception as e:
+            logger.error(f"Error retrieving company details: {str(e)}")
+            return jsonify({"error": f"Failed to retrieve company details: {str(e)}"}), 500
+@app.route('/api/activeorders', methods=['POST'])
+@db_required
+def save_active_order():
+    try:
+        data = request.get_json()
+        order_type = data.get('orderType', 'Dine In')
+        order_no = generate_order_number(order_type)
+        cart_items = data.get('cartItems', [])
+        for item in cart_items:
+            required_kitchens = set()
+            if item.get('kitchen'):
+                required_kitchens.add(item['kitchen'])
+            for addon_name, qty in item.get('addonQuantities', {}).items():
+                if qty > 0 and 'addonVariants' in item and addon_name in item['addonVariants']:
+                    if item['addonVariants'][addon_name].get('kitchen'):
+                        required_kitchens.add(item['addonVariants'][addon_name]['kitchen'])
+            for combo_name, qty in item.get('comboQuantities', {}).items():
+                if qty > 0 and 'comboVariants' in item and combo_name in item['comboVariants']:
+                    if item['comboVariants'][combo_name].get('kitchen'):
+                        required_kitchens.add(item['comboVariants'][combo_name]['kitchen'])
+            item['requiredKitchens'] = list(required_kitchens)
+            item['kitchenStatuses'] = {kitchen: 'Pending' for kitchen in required_kitchens}
+            item['served'] = False  # Add served false per item
+        active_order = {
+            'orderId': str(uuid.uuid4()),
+            'orderNo': order_no,
+            'customerName': data.get('customerName', 'N/A'),
+            'tableNumber': data.get('tableNumber', 'N/A'),
+            'chairsBooked': data.get('chairsBooked', []),
+            'phoneNumber': data.get('phoneNumber', ''),
+            'deliveryAddress': data.get('deliveryAddress', {}),
+            'whatsappNumber': data.get('whatsappNumber', ''),
+            'email': data.get('email', ''),
+            'cartItems': cart_items,
+            'timestamp': data.get('timestamp', datetime.now(timezone.utc).isoformat()),
+            'orderType': order_type,
+            'status': 'Pending',
+            'paid': False,  # Add paid false
+            'created_at': datetime.now(timezone.utc),
+            'deliveryPersonId': data.get('deliveryPersonId', ''),
+            'deliveryPersonName': data.get('deliveryPersonName', ''),
+            'pickedUpTime': data.get('pickedUpTime', None),
+        }
+        activeorders_collection.insert_one(active_order)
+        kitchen_saved_collection.insert_one(active_order.copy())
+        logger.info(f"Created order: {active_order['orderId']} with order number: {order_no}")
+        return jsonify({'success': True, 'orderId': active_order['orderId'], 'orderNo': order_no}), 201
+    except Exception as e:
+        logger.error(f"Error saving active order: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/activeorders', methods=['GET'])
+@db_required
+def get_active_orders():
+    try:
+        orders = activeorders_collection.find()
+        return jsonify(convert_objectid_to_str(list(orders))), 200
+    except Exception as e:
+        logger.error(f"Error fetching active orders: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/activeorders/<order_id>/items/<item_id>/mark-prepared', methods=['POST'])
+@db_required
+def mark_item_prepared_active(order_id, item_id):
+    try:
+        data = request.get_json()
+        kitchen = data.get('kitchen')
+        if not kitchen:
+            return jsonify({'success': False, 'error': 'Kitchen not provided'}), 400
+        for collection in [activeorders_collection, kitchen_saved_collection]:
+            order = collection.find_one({'orderId': order_id})
+            if not order:
+                return jsonify({'success': False, 'error': 'Order not found'}), 404
+            found = False
+            for item in order['cartItems']:
+                if item['id'] == item_id:
+                    if 'kitchenStatuses' not in item:
+                        item['kitchenStatuses'] = {}
+                    if item['kitchenStatuses'].get(kitchen) in ['Prepared', 'PickedUp']:
+                        return jsonify({'success': False, 'error': 'Kitchen already marked as prepared or picked up'}), 400
+                    item['kitchenStatuses'][kitchen] = 'Prepared'
+                    found = True
+                    break
+            if not found:
+                return jsonify({'success': False, 'error': 'Item not found'}), 404
+            collection.replace_one({'orderId': order_id}, order)
+        logger.info(f"Marked item {item_id} in order {order_id} as Prepared for kitchen {kitchen}")
+        return jsonify({'success': True, 'status': 'Prepared'}), 200
+    except Exception as e:
+        logger.error(f"Error in mark-prepared: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(e)}), 500
+        
+@app.route('/api/activeorders/<order_id>/items/<item_id>/mark-pickedup', methods=['POST'])
+@db_required
+def mark_item_pickedup_active(order_id, item_id):
+    try:
+        data = request.get_json()
+        kitchen = data.get('kitchen')
+        if not kitchen:
+            return jsonify({'success': False, 'error': 'Kitchen not provided'}), 400
+        for collection in [activeorders_collection, kitchen_saved_collection]:
+            order = collection.find_one({'orderId': order_id})
+            if not order:
+                return jsonify({'success': False, 'error': 'Order not found'}), 404
+            found = False
+            for item in order['cartItems']:
+                if item['id'] == item_id:
+                    if 'kitchenStatuses' not in item:
+                        item['kitchenStatuses'] = {}
+                    status = item['kitchenStatuses'].get(kitchen)
+                    if status == 'Pending':
+                        logger.warning(f"Item {item_id} in order {order_id} was Pending, setting to Prepared automatically for kitchen {kitchen}")
+                        item['kitchenStatuses'][kitchen] = 'Prepared'
+                    elif status != 'Prepared':
+                        return jsonify({'success': False, 'error': 'Item must be prepared before picking up'}), 400
+                    item['kitchenStatuses'][kitchen] = 'PickedUp'
+                    found = True
+                    break
+            if not found:
+                return jsonify({'success': False, 'error': 'Item not found'}), 404
+            collection.replace_one({'orderId': order_id}, order)
+        order = activeorders_collection.find_one({'orderId': order_id})  # Reload to get updated
+        picked_up_data = {
+            'customerName': order.get('customerName', 'Unknown'),
+            'tableNumber': order.get('tableNumber', 'N/A'),
+            'items': order.get('cartItems', []),
+            'pickupTime': datetime.now(timezone.utc).isoformat(),
+            'orderType': order.get('orderType', 'Dine In')
+        }
+        picked_up_collection.insert_one(picked_up_data)
+        logger.info(f"Marked item {item_id} in order {order_id} as PickedUp for kitchen {kitchen}")
+        return jsonify({'success': True, 'status': 'PickedUp'}), 200
+    except Exception as e:
+        logger.error(f"Error in mark-pickedup: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/activeorders/<order_id>/items/<item_id>/mark-served', methods=['POST'])
+@db_required
+def mark_item_served(order_id, item_id):
+    try:
+        data = request.get_json()
+        served = data.get('served', True)
+        if served is None:
+            return jsonify({'success': False, 'error': 'Served status not provided'}), 400
+        for collection in [activeorders_collection, kitchen_saved_collection]:
+            order = collection.find_one({'orderId': order_id})
+            if not order:
+                return jsonify({'success': False, 'error': 'Order not found'}), 404
+            found = False
+            for item in order['cartItems']:
+                if item['id'] == item_id:
+                    if not all(s == 'PickedUp' for s in item['kitchenStatuses'].values()):
+                        return jsonify({'success': False, 'error': 'Item must be picked up before serving'}), 400
+                    item['served'] = bool(served)
+                    found = True
+                    break
+            if not found:
+                return jsonify({'success': False, 'error': 'Item not found'}), 404
+            collection.replace_one({'orderId': order_id}, order)
+        logger.info(f"Marked item {item_id} in order {order_id} as {'Served' if served else 'Unserved'}")
+        return jsonify({'success': True, 'served': served}), 200
+    except Exception as e:
+        logger.error(f"Error in mark-served: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/activeorders/<order_id>/items/<item_id>', methods=['DELETE'])
+@db_required
+def delete_order_item(order_id, item_id):
+    try:
+        for collection in [activeorders_collection, kitchen_saved_collection]:
+            order = collection.find_one({'orderId': order_id})
+            if not order:
+                return jsonify({'success': False, 'error': 'Order not found'}), 404
+            order['cartItems'] = [i for i in order['cartItems'] if i['id'] != item_id]
+            if not order['cartItems']:
+                collection.delete_one({'orderId': order_id})
+            else:
+                collection.replace_one({'orderId': order_id}, order)
+        logger.info(f"Deleted item {item_id} from order {order_id}")
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        logger.error(f"Error deleting item: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/activeorders/<order_id>', methods=['PUT'])
+@db_required
+def update_active_order(order_id):
+    try:
+        data = request.get_json()
+        if '_id' in data:
+            del data['_id']
+        order_in_db = activeorders_collection.find_one({'orderId': order_id})
+        if not order_in_db:
+            logger.warning(f"Order not found for update: {order_id}")
+            return jsonify({'error': 'Order not found'}), 404
+        old_statuses_map = {
+            item['id']: item.get('kitchenStatuses', {})
+            for item in order_in_db.get('cartItems', []) if 'id' in item
+        }
+        if 'cartItems' in data:
+            for item in data['cartItems']:
+                required_kitchens = set()
+                if item.get('kitchen'):
+                    required_kitchens.add(item['kitchen'])
+                for addon_name, qty in item.get('addonQuantities', {}).items():
+                    if qty > 0 and 'addonVariants' in item and addon_name in item['addonVariants']:
+                        if item['addonVariants'][addon_name].get('kitchen'):
+                            required_kitchens.add(item['addonVariants'][addon_name]['kitchen'])
+                for combo_name, qty in item.get('comboQuantities', {}).items():
+                    if qty > 0 and 'comboVariants' in item and combo_name in item['comboVariants']:
+                        if item['comboVariants'][combo_name].get('kitchen'):
+                            required_kitchens.add(item['comboVariants'][combo_name]['kitchen'])
+                item['requiredKitchens'] = list(required_kitchens)
+                item_id = item.get('id')
+                old_item_statuses = old_statuses_map.get(item_id, {})
+                new_kitchen_statuses = {}
+                for kitchen in required_kitchens:
+                    if kitchen in old_item_statuses:
+                        new_kitchen_statuses[kitchen] = old_item_statuses[kitchen]
+                    else:
+                        new_kitchen_statuses[kitchen] = 'Pending'
+                item['kitchenStatuses'] = new_kitchen_statuses
+                item['served'] = item.get('served', False)  # Ensure served
+        updated_order = {**order_in_db, **data}
+        if 'cartItems' in data:
+            updated_order['cartItems'] = data['cartItems']
+        if 'deliveryPersonId' in updated_order and updated_order['deliveryPersonId']:
+            employee = employees_collection.find_one({'employeeId': updated_order['deliveryPersonId']})
+            if not employee:
+                logger.warning(f"Delivery person not found: {updated_order['deliveryPersonId']}")
+                return jsonify({'error': 'Delivery person not found'}), 404
+            trip_report = {
+                'tripId': str(uuid.uuid4()),
+                'orderId': updated_order['orderId'],
+                'orderNo': updated_order['orderNo'],
+                'customerName': updated_order.get('customerName', 'N/A'),
+                'tableNumber': updated_order.get('tableNumber', 'N/A'),
+                'chairsBooked': updated_order.get('chairsBooked', []),
+                'phoneNumber': updated_order.get('phoneNumber', ''),
+                'deliveryAddress': updated_order.get('deliveryAddress', {}),
+                'whatsappNumber': updated_order.get('whatsappNumber', ''),
+                'email': updated_order.get('email', ''),
+                'cartItems': updated_order.get('cartItems', []),
+                'timestamp': updated_order.get('timestamp', datetime.now(timezone.utc).isoformat()),
+                'orderType': updated_order.get('orderType', 'Dine In'),
+                'status': updated_order.get('status', 'Pending'),
+                'deliveryPersonId': updated_order['deliveryPersonId'],
+                'deliveryPersonName': updated_order.get('deliveryPersonName', employee.get('name', 'N/A')),
+                'pickedUpTime': updated_order.get('pickedUpTime', None),
+                'paymentMethods': updated_order.get('paymentMethods', []),
+                'cardDetails': updated_order.get('cardDetails', ''),
+                'upiDetails': updated_order.get('upiDetails', ''),
+                'created_at': datetime.now(timezone.utc)
+            }
+            tripreports_collection.insert_one(trip_report)
+            logger.info(f"Saved trip report for order {order_id} with delivery person {updated_order['deliveryPersonId']}")
+            activeorders_collection.delete_one({'orderId': order_id})
+            kitchen_saved_collection.delete_one({'orderId': order_id})
+            logger.info(f"Deleted order {order_id} from active orders after delivery person assignment")
+            return jsonify({'success': True, 'message': 'Delivery person assigned and order moved to trip reports', 'order': convert_objectid_to_str(updated_order)}), 200
+        if updated_order.get('paid', False) and all(item.get('served', False) for item in updated_order.get('cartItems', [])) and updated_order.get('orderType') != 'Online Delivery':
+            updated_order['status'] = 'Completed'
+        result = activeorders_collection.replace_one({'orderId': order_id}, updated_order)
+        kitchen_result = kitchen_saved_collection.replace_one({'orderId': order_id}, updated_order)
+        updated_order = activeorders_collection.find_one({'orderId': order_id})
+        if result.matched_count > 0 or kitchen_result.matched_count > 0:
+            logger.info(f"Updated order: {order_id}")
+            return jsonify({'success': True, 'message': 'Order updated', 'order': convert_objectid_to_str(updated_order)}), 200
+        logger.info(f"No changes made to order: {order_id}")
+        return jsonify({'success': True, 'message': 'No changes made', 'order': convert_objectid_to_str(updated_order)}), 200
+    except Exception as e:
+        logger.error(f"Error updating active order: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/activeorders/<order_id>', methods=['DELETE'])
+@db_required
+def delete_order(order_id):
+    try:
+        result = activeorders_collection.delete_one({'orderId': order_id})
+        kitchen_result = kitchen_saved_collection.delete_one({'orderId': order_id})
+        if result.deleted_count > 0 or kitchen_result.deleted_count > 0:
+            logger.info(f"Deleted order: {order_id}")
+            return jsonify({'success': True}), 200
+        logger.warning(f"Order not found for deletion: {order_id}")
+        return jsonify({'error': 'Order not found'}), 404
+    except Exception as e:
+        logger.error(f"Error deleting order: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
 # Catch-all for React app
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')

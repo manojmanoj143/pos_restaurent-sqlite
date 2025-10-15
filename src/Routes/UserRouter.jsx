@@ -1,4 +1,3 @@
-// src/router/UserRouter.jsx (modified)
 import React from "react";
 import { Route, Routes } from "react-router-dom";
 // Import Pages
@@ -38,12 +37,13 @@ import Employee from "../components/Form/Employee";
 import TripReport from "../components/Header/TripReport";
 import PosBalance from "../components/Header/PosBalance";
 import EmailSettings from "../components/Form/EmailSettings";
-import Purchase from "../components/Form/Purchase"; // Added import for Purchase component
-import PrintSettings from "../components/Form/printsettings";
-import ComboOffer from "../components/Form/ComboOffer"; // Added import for ComboOffer component
-import VatPage from "../components/Form/Vatpage"; // Corrected import path casing for VatPage component
-import CreateCustomerPage from "../components/Form/CreateCustomerPage"; // NEW: Imported CreateCustomerPage
-import CreateCustomerGroup from "../components/Form/CreateCustomerGroup"; // NEW: Imported CreateCustomerGroup
+import Purchase from "../components/Form/Purchase";
+import PrintSettings from "../components/Form/PrintSettings";
+import ComboOffer from "../components/Form/ComboOffer";
+import VatPage from "../components/Form/VatPage";
+import CreateCustomerPage from "../components/Form/CreateCustomerPage";
+import CreateCustomerGroup from "../components/Form/CreateCustomerGroup";
+import CompanyDetails from "../components/Form/companydetails"; // Corrected import with proper capitalization
 
 const UserRouter = () => {
   return (
@@ -72,8 +72,9 @@ const UserRouter = () => {
         <Route path="/record" element={<RecordPage />} />
         <Route path="/opening-entry" element={<OpeningEntry />} />
         <Route path="/closing-entry" element={<ClosingEntry />} />
-        <Route path="/purchase" element={<Purchase />} /> {/* Added route for Purchase module */}
-        <Route path="/combo-offer" element={<ComboOffer />} /> {/* Added route for Combo Offer */}
+        <Route path="/purchase" element={<Purchase />} />
+        <Route path="/combo-offer" element={<ComboOffer />} />
+        <Route path="/company-details" element={<CompanyDetails />} /> {/* Route for CompanyDetails */}
         {/* System Configuration Routes */}
         <Route path="/backup" element={<BackupPage />} />
         <Route path="/system-settings" element={<SystemSettings />} />
@@ -94,13 +95,12 @@ const UserRouter = () => {
         <Route path="/booking" element={<Booking />} />
         <Route path="/create-variant" element={<CreateVariant />} />
         <Route path="/employees" element={<Employee />} />
-        <Route path="/vat" element={<VatPage />} /> {/* Added route for VatPage */}
-        {/* NEW: Route for CreateCustomerPage */}
+        <Route path="/vat" element={<VatPage />} />
         <Route path="/create-customer" element={<CreateCustomerPage />} />
-        {/* NEW: Route for CreateCustomerGroup */}
         <Route path="/create-customer-group" element={<CreateCustomerGroup />} />
       </Routes>
     </div>
   );
 };
+
 export default UserRouter;
