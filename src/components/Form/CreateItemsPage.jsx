@@ -105,6 +105,11 @@ const CreateItemPage = () => {
   });
   const [addonListModalOpen, setAddonListModalOpen] = useState(false);
   const [comboListModalOpen, setComboListModalOpen] = useState(false);
+  // New modals for creating kitchen and item group
+  const [showNewKitchenModal, setShowNewKitchenModal] = useState(false);
+  const [newKitchenName, setNewKitchenName] = useState("");
+  const [showNewItemGroupModal, setShowNewItemGroupModal] = useState(false);
+  const [newItemGroupName, setNewItemGroupName] = useState("");
   const [imagePreviews, setImagePreviews] = useState({
     item: "",
     spicy: "",
@@ -142,19 +147,72 @@ const CreateItemPage = () => {
     fetchConfig();
   }, []);
 
+  // Function to refresh kitchens
+  const refreshKitchens = async () => {
+    try {
+      const response = await axios.get(`${baseUrl}/api/kitchens`);
+      setKitchens(response.data);
+    } catch (error) {
+      console.error("Failed to refresh kitchens:", error);
+    }
+  };
+
+  // Function to refresh item groups
+  const refreshItemGroups = async () => {
+    try {
+      const response = await axios.get(`${baseUrl}/api/item-groups`);
+      setItemGroups(response.data);
+    } catch (error) {
+      console.error("Failed to refresh item groups:", error);
+    }
+  };
+
+  // Handle create new kitchen
+  const handleCreateNewKitchen = async () => {
+    if (!newKitchenName.trim()) {
+      setWarningMessage("Kitchen name is required");
+      return;
+    }
+    try {
+      await axios.post(`${baseUrl}/api/kitchens`, { kitchen_name: newKitchenName });
+      setWarningMessage("New kitchen created successfully!");
+      setFormData(prev => ({ ...prev, kitchen: newKitchenName }));
+      await refreshKitchens();
+      setNewKitchenName("");
+      setShowNewKitchenModal(false);
+    } catch (error) {
+      setWarningMessage(`Failed to create kitchen: ${error.response?.data?.error || error.message}`);
+    }
+  };
+
+  // Handle create new item group
+  const handleCreateNewItemGroup = async () => {
+    if (!newItemGroupName.trim()) {
+      setWarningMessage("Item group name is required");
+      return;
+    }
+    try {
+      await axios.post(`${baseUrl}/api/item-groups`, { group_name: newItemGroupName });
+      setWarningMessage("New item group created successfully!");
+      setFormData(prev => ({ ...prev, item_group: newItemGroupName }));
+      await refreshItemGroups();
+      setNewItemGroupName("");
+      setShowNewItemGroupModal(false);
+    } catch (error) {
+      setWarningMessage(`Failed to create item group: ${error.response?.data?.error || error.message}`);
+    }
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
         const kitchensResponse = await axios.get(`${baseUrl}/api/kitchens`);
         setKitchens(kitchensResponse.data);
-
         const groupsResponse = await axios.get(`${baseUrl}/api/item-groups`);
         setItemGroups(groupsResponse.data);
-
         const itemsResponse = await axios.get(`${baseUrl}/api/items`);
         setAllItems(itemsResponse.data);
-
         const variantsResponse = await axios.get(`${baseUrl}/api/variants`);
         setCustomVariants(variantsResponse.data);
       } catch (error) {
@@ -178,7 +236,6 @@ const CreateItemPage = () => {
             `${baseUrl}/api/items/nutrition/${encodeURIComponent(itemToEdit.item_name)}?type=item&item_id=${itemToEdit._id}`
           );
           const fetchedIngredients = nutritionResponse.data?.ingredients || [];
-
           const formattedIngredients =
             fetchedIngredients.length > 0
               ? fetchedIngredients.map((ing) => ({
@@ -195,7 +252,6 @@ const CreateItemPage = () => {
                     : [],
                 }))
               : initialFormState.ingredients;
-
           const updatedAddons = await Promise.all(
             (itemToEdit.addons || []).map(async (addon, index) => {
               try {
@@ -238,7 +294,6 @@ const CreateItemPage = () => {
               }
             })
           );
-
           const updatedCombos = await Promise.all(
             (itemToEdit.combos || []).map(async (combo, index) => {
               try {
@@ -281,7 +336,6 @@ const CreateItemPage = () => {
               }
             })
           );
-
           const updatedFormData = {
             ...initialFormState,
             ...itemToEdit,
@@ -519,14 +573,11 @@ const CreateItemPage = () => {
   const handleImageUpload = async (e, field, subField = null, variantId = null, subheading = null) => {
     const file = e.target.files[0];
     if (!file) return;
-
     const formDataUpload = new FormData();
     formDataUpload.append("files", file);
-
     try {
       const response = await axios.post(`${baseUrl}/api/upload-image`, formDataUpload);
       const imagePath = response.data.urls[0]; // "/api/images/uuid.ext"
-
       if (subField === "customVariantImage") {
         setFormData((prev) => ({
           ...prev,
@@ -681,7 +732,6 @@ const CreateItemPage = () => {
       const variantData = response.data;
       setSelectedCustomVariantDetails(variantData);
       setSelectedCustomVariantId(variantId);
-
       const existingVariant = formData.custom_variants.find((v) => v._id === variantId);
       if (!existingVariant) {
         setFormData((prev) => ({
@@ -734,9 +784,7 @@ const CreateItemPage = () => {
 
   const renderVariantFields = (variant) => {
     if (!variant || !variant.subheadings) return null;
-
     const activeSection = variant.activeSection;
-
     if (activeSection === "dropdown") {
       return (
         <div className="field-container">
@@ -821,13 +869,12 @@ const CreateItemPage = () => {
     try {
       const response = await axios.get(`${baseUrl}/api/variants/${variantId}`);
       const variantData = response.data;
-      
+     
       setModalState(prev => ({
         ...prev,
         modalCustomSelectedVariantId: variantId,
         modalCustomSelectedVariantDetails: variantData
       }));
-
       const existingVariant = modalState.data.custom_variants.find(v => v._id === variantId);
       if (!existingVariant) {
         setModalState(prev => ({
@@ -862,13 +909,13 @@ const CreateItemPage = () => {
       ...prev,
       data: {
         ...prev.data,
-        custom_variants: prev.data.custom_variants.map(variant => 
+        custom_variants: prev.data.custom_variants.map(variant =>
           variant._id === variantId ? {
             ...variant,
-            subheadings: variant.subheadings.map(sub => 
-              sub.name === subheading ? { 
-                ...sub, 
-                [field]: field === "price" ? Number(value) || null : value 
+            subheadings: variant.subheadings.map(sub =>
+              sub.name === subheading ? {
+                ...sub,
+                [field]: field === "price" ? Number(value) || null : value
               } : sub
             )
           } : variant
@@ -889,10 +936,8 @@ const CreateItemPage = () => {
   const handleModalCustomVariantImageUpload = async (e, variantId, subheading) => {
     const file = e.target.files[0];
     if (!file) return;
-
     const formDataUpload = new FormData();
     formDataUpload.append("files", file);
-
     try {
       const response = await axios.post(`${baseUrl}/api/upload-image`, formDataUpload);
       const imagePath = response.data.urls[0];
@@ -900,10 +945,10 @@ const CreateItemPage = () => {
         ...prev,
         data: {
           ...prev.data,
-          custom_variants: prev.data.custom_variants.map(variant => 
+          custom_variants: prev.data.custom_variants.map(variant =>
             variant._id === variantId ? {
               ...variant,
-              subheadings: variant.subheadings.map(sub => 
+              subheadings: variant.subheadings.map(sub =>
                 sub.name === subheading ? { ...sub, image: extractImageName(imagePath) } : sub
               )
             } : variant
@@ -919,17 +964,16 @@ const CreateItemPage = () => {
     const variant = modalState.data.custom_variants.find(v => v._id === variantId);
     const sub = variant?.subheadings.find(s => s.name === subheading);
     if (!sub || !sub.image) return;
-
     try {
       await axios.delete(`${baseUrl}/api/delete-image/${sub.image}`);
       setModalState(prev => ({
         ...prev,
         data: {
           ...prev.data,
-          custom_variants: prev.data.custom_variants.map(v => 
+          custom_variants: prev.data.custom_variants.map(v =>
             v._id === variantId ? {
               ...v,
-              subheadings: v.subheadings.map(s => 
+              subheadings: v.subheadings.map(s =>
                 s.name === subheading ? { ...s, image: null } : s
               )
             } : v
@@ -943,7 +987,7 @@ const CreateItemPage = () => {
 
   const renderModalCustomVariantFields = (variant) => {
     if (!variant) return null;
-    
+   
     return (
       <div className="variant-section">
         <div className="variant-toggle">
@@ -956,7 +1000,7 @@ const CreateItemPage = () => {
                 ...prev,
                 data: {
                   ...prev.data,
-                  custom_variants: prev.data.custom_variants.map(v => 
+                  custom_variants: prev.data.custom_variants.map(v =>
                     v._id === variant._id ? { ...v, enabled: e.target.checked } : v
                   )
                 }
@@ -964,7 +1008,7 @@ const CreateItemPage = () => {
             }}
           />
         </div>
-        
+       
         {variant.enabled && (
           <>
             <h6>{variant.heading} Options</h6>
@@ -980,7 +1024,7 @@ const CreateItemPage = () => {
                   min="0"
                   step="0.01"
                 />
-                
+               
                 <label className="field-label">{`${sub.name} Image`}</label>
                 <input
                   type="file"
@@ -988,7 +1032,7 @@ const CreateItemPage = () => {
                   onChange={e => handleModalCustomVariantImageUpload(e, variant._id, sub.name)}
                   className="field-input"
                 />
-                
+               
                 {sub.image && (
                   <div className="image-container">
                     <img
@@ -1022,7 +1066,6 @@ const CreateItemPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     const filteredIngredients = formData.ingredients
       .filter((ingredient) => ingredient.ingredients_name || ingredient.nutrition.length > 0)
       .map((ingredient) => ({
@@ -1036,7 +1079,6 @@ const CreateItemPage = () => {
           nutrition_value: Number(nut.nutrition_value) || 0,
         })),
       }));
-
     const filteredAddons = formData.addons.map((addon) => ({
       ...addon,
       custom_variants: addon.custom_variants.map((variant) => ({
@@ -1065,7 +1107,6 @@ const CreateItemPage = () => {
           })),
         })),
     }));
-
     const filteredCombos = formData.combos.map((combo) => ({
       ...combo,
       custom_variants: combo.custom_variants.map((variant) => ({
@@ -1094,7 +1135,6 @@ const CreateItemPage = () => {
           })),
         })),
     }));
-
     const updatedData = {
       item_code: formData.item_code,
       item_name: formData.item_name,
@@ -1134,12 +1174,10 @@ const CreateItemPage = () => {
       combos: filteredCombos,
       ingredients: filteredIngredients,
     };
-
     try {
       const url = isEditing ? `${baseUrl}/api/items/${itemToEdit._id}` : `${baseUrl}/api/items`;
       const method = isEditing ? "put" : "post";
       await axios[method](url, updatedData);
-
       setWarningMessage(`Item ${isEditing ? "updated" : "created"} successfully!`);
       navigate("/admin", { replace: true });
     } catch (error) {
@@ -1486,14 +1524,11 @@ const CreateItemPage = () => {
   const handleModalImageUpload = async (e, variant, subField = null) => {
     const file = e.target.files[0];
     if (!file) return;
-
     const formDataUpload = new FormData();
     formDataUpload.append("files", file);
-
     try {
       const response = await axios.post(`${baseUrl}/api/upload-image`, formDataUpload);
       const imagePath = response.data.urls[0];
-
       if (subField) {
         setModalState((prev) => ({
           ...prev,
@@ -1526,7 +1561,6 @@ const CreateItemPage = () => {
   const handleModalImageDelete = async (variant, subField = null) => {
     const filename = subField ? modalState.data.variants[variant][subField] : modalState.data.image;
     if (!filename) return;
-
     try {
       await axios.delete(`${baseUrl}/api/delete-image/${filename}`);
       if (subField) {
@@ -1622,7 +1656,6 @@ const CreateItemPage = () => {
         ingredients: modalState.data.ingredients,
       };
     }
-
     setFormData((prev) => {
       const updatedField = [...prev[modalState.type]];
       if (modalState.index !== null && modalState.index < updatedField.length) {
@@ -1632,7 +1665,6 @@ const CreateItemPage = () => {
       }
       return { ...prev, [modalState.type]: updatedField };
     });
-
     setModalState({
       isOpen: false,
       type: "",
@@ -1669,13 +1701,11 @@ const CreateItemPage = () => {
 
   const handleDeleteEntry = () => {
     if (modalState.index === null) return;
-
     setFormData((prev) => {
       const updatedField = [...prev[modalState.type]];
       updatedField.splice(modalState.index, 1);
       return { ...prev, [modalState.type]: updatedField };
     });
-
     setModalState({
       isOpen: false,
       type: "",
@@ -1764,7 +1794,6 @@ const CreateItemPage = () => {
         </button>
         <h2 className="page-title">{isEditing ? "Edit Item" : "Create New Item"}</h2>
       </div>
-
       {warningMessage && (
         <div className="warning-box">
           <p className="warning-text">{warningMessage}</p>
@@ -1773,9 +1802,7 @@ const CreateItemPage = () => {
           </button>
         </div>
       )}
-
       {loading && <div className="loading">Loading...</div>}
-
       <div className="form-container">
         <div className="top-section">
           <div className="top-button-container">
@@ -1790,7 +1817,6 @@ const CreateItemPage = () => {
             </button>
           </div>
         </div>
-
         <div className="row">
           <div className="column">
             <h5 className="section-title">Item Details</h5>
@@ -1833,20 +1859,42 @@ const CreateItemPage = () => {
                     {field.label} {field.required && <span>*</span>}
                   </label>
                   {field.type === "select" ? (
-                    <select
-                      name={field.name}
-                      value={formData[field.name]}
-                      onChange={handleInputChange}
-                      className="input"
-                      required={field.required}
-                    >
-                      <option value="">Select {field.label}</option>
-                      {field.options.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <select
+                        name={field.name}
+                        value={formData[field.name]}
+                        onChange={handleInputChange}
+                        className="input"
+                        required={field.required}
+                      >
+                        <option value="">Select {field.label}</option>
+                        {field.options.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                      {field.name === "kitchen" && (
+                        <button
+                          type="button"
+                          className="add-button"
+                          onClick={() => setShowNewKitchenModal(true)}
+                          style={{ padding: "5px 10px", fontSize: "12px" }}
+                        >
+                          Create New
+                        </button>
+                      )}
+                      {field.name === "item_group" && (
+                        <button
+                          type="button"
+                          className="add-button"
+                          onClick={() => setShowNewItemGroupModal(true)}
+                          style={{ padding: "5px 10px", fontSize: "12px" }}
+                        >
+                          Create New
+                        </button>
+                      )}
+                    </div>
                   ) : field.type === "checkbox" ? (
                     <input
                       type="checkbox"
@@ -1932,7 +1980,6 @@ const CreateItemPage = () => {
               </button>
             </div>
           </div>
-
           <div className="column">
             <h5 className="section-title">Variants</h5>
             <div className="nested-section">
@@ -1944,7 +1991,6 @@ const CreateItemPage = () => {
                 <option value="spicy">Spicy</option>
                 <option value="sugar">Sugar</option>
               </select>
-
               {formData.selectedVariant && (
                 <div className="variant-toggle">
                   <label>Enable {formData.selectedVariant} Variant</label>
@@ -1966,7 +2012,6 @@ const CreateItemPage = () => {
                   />
                 </div>
               )}
-
               {formData.selectedVariant === "size" && formData.variants.size.enabled && (
                 <div className="variant-section">
                   <label>Small Price (₹)</label>
@@ -2007,7 +2052,6 @@ const CreateItemPage = () => {
                   </button>
                 </div>
               )}
-
               {formData.selectedVariant === "cold" && formData.variants.cold.enabled && (
                 <div className="variant-section">
                   <label>Ice Preference</label>
@@ -2039,7 +2083,6 @@ const CreateItemPage = () => {
                   </button>
                 </div>
               )}
-
               {formData.selectedVariant === "spicy" && formData.variants.spicy.enabled && (
                 <div className="variant-section">
                   <label>Spicy Price (₹)</label>
@@ -2115,7 +2158,6 @@ const CreateItemPage = () => {
                   </button>
                 </div>
               )}
-
               {formData.selectedVariant === "sugar" && formData.variants.sugar.enabled && (
                 <div className="variant-section">
                   <label>Sugar Level</label>
@@ -2133,7 +2175,6 @@ const CreateItemPage = () => {
                   </button>
                 </div>
               )}
-
               <div className="variant-section">
                 {formData.variants.size.enabled && formData.selectedVariant !== "size" && (
                   <div className="nested-section">
@@ -2245,7 +2286,6 @@ const CreateItemPage = () => {
                   </div>
                 )}
               </div>
-
               <div className="nested-section">
                 <h5 className="section-title">Custom Variants</h5>
                 <label>Select Custom Variant</label>
@@ -2261,7 +2301,6 @@ const CreateItemPage = () => {
                     </option>
                   ))}
                 </select>
-
                 {selectedCustomVariantDetails && (
                   <div className="variant-section">
                     <div className="variant-toggle">
@@ -2298,7 +2337,6 @@ const CreateItemPage = () => {
                     )}
                   </div>
                 )}
-
                 {formData.custom_variants.filter((v) => v.enabled && v._id !== selectedCustomVariantId).length > 0 && (
                   <div className="variant-section">
                     <h6>Saved Custom Variants</h6>
@@ -2342,7 +2380,6 @@ const CreateItemPage = () => {
               </div>
             </div>
           </div>
-
           <div className="column">
             <h5 className="section-title">Ingredients</h5>
             <div className="nested-section">
@@ -2406,13 +2443,46 @@ const CreateItemPage = () => {
             </div>
           </div>
         </div>
-
         <div className="submit-section">
           <button type="button" className="submit-button" onClick={handleSubmit} disabled={loading}>
             {isEditing ? "Update Item" : "Create Item"}
           </button>
         </div>
       </div>
+
+      {/* New Kitchen Modal */}
+      <Modal isOpen={showNewKitchenModal} onClose={() => setShowNewKitchenModal(false)} title="Create New Kitchen">
+        <div className="field-container">
+          <label>Kitchen Name</label>
+          <input
+            type="text"
+            value={newKitchenName}
+            onChange={(e) => setNewKitchenName(e.target.value)}
+            className="field-input"
+            placeholder="Enter new kitchen name"
+          />
+          <button type="button" className="save-button" onClick={handleCreateNewKitchen}>
+            Create Kitchen
+          </button>
+        </div>
+      </Modal>
+
+      {/* New Item Group Modal */}
+      <Modal isOpen={showNewItemGroupModal} onClose={() => setShowNewItemGroupModal(false)} title="Create New Item Group">
+        <div className="field-container">
+          <label>Item Group Name</label>
+          <input
+            type="text"
+            value={newItemGroupName}
+            onChange={(e) => setNewItemGroupName(e.target.value)}
+            className="field-input"
+            placeholder="Enter new item group name"
+          />
+          <button type="button" className="save-button" onClick={handleCreateNewItemGroup}>
+            Create Item Group
+          </button>
+        </div>
+      </Modal>
 
       <Modal
         isOpen={addonListModalOpen}
@@ -2469,7 +2539,6 @@ const CreateItemPage = () => {
           )}
         </div>
       </Modal>
-
       <Modal
         isOpen={comboListModalOpen}
         onClose={() => setComboListModalOpen(false)}
@@ -2525,7 +2594,6 @@ const CreateItemPage = () => {
           )}
         </div>
       </Modal>
-
       <Modal
         isOpen={modalState.isOpen}
         onClose={() =>
@@ -2575,7 +2643,6 @@ const CreateItemPage = () => {
               <option value="existing">Select Existing Item</option>
               <option value="new">Create New {modalState.type === "addons" ? "Addon" : "Combo"}</option>
             </select>
-
             {modalState.addonType === "existing" && (
               <>
                 <label>Select {modalState.type === "addons" ? "Addon" : "Combo"}</label>
@@ -2594,7 +2661,6 @@ const CreateItemPage = () => {
                 </select>
               </>
             )}
-
             {modalState.addonType === "new" && (
               <>
                 <label>{modalState.type === "addons" ? "New Addon Name" : "New Combo Name"}</label>
@@ -2607,7 +2673,6 @@ const CreateItemPage = () => {
                 />
               </>
             )}
-
             <label>Price (₹)</label>
             <input
               type="number"
@@ -2620,7 +2685,6 @@ const CreateItemPage = () => {
               min="0"
               step="0.01"
             />
-
             <label>Kitchen</label>
             <select name="kitchen" value={modalState.data.kitchen} onChange={handleModalInputChange} className="input">
               <option value="">Select Kitchen</option>
@@ -2630,7 +2694,6 @@ const CreateItemPage = () => {
                 </option>
               ))}
             </select>
-
             <label>Image</label>
             <input type="file" accept="image/*" onChange={(e) => handleModalImageUpload(e)} className="input" />
             {modalState.data.imagePreview && (
@@ -2641,7 +2704,6 @@ const CreateItemPage = () => {
                 </button>
               </div>
             )}
-
             <h6 className="alent-title">Variants</h6>
             <div className="nested-section">
               <label>Select Variant</label>
@@ -2657,7 +2719,6 @@ const CreateItemPage = () => {
                 <option value="spicy">Spicy</option>
                 <option value="sugar">Sugar</option>
               </select>
-
               {modalState.selectedVariant === "size" && (
                 <div>
                   <div className="variant-toggle">
@@ -2711,7 +2772,6 @@ const CreateItemPage = () => {
                   )}
                 </div>
               )}
-
               {modalState.selectedVariant === "cold" && (
                 <div>
                   <div className="variant-toggle">
@@ -2755,7 +2815,6 @@ const CreateItemPage = () => {
                   )}
                 </div>
               )}
-
               {modalState.selectedVariant === "spicy" && (
                 <div>
                   <div className="variant-toggle">
@@ -2843,7 +2902,6 @@ const CreateItemPage = () => {
                   )}
                 </div>
               )}
-
               {modalState.selectedVariant === "sugar" && (
                 <div>
                   <div className="variant-toggle">
@@ -2872,7 +2930,6 @@ const CreateItemPage = () => {
                   )}
                 </div>
               )}
-
               <div className="variant-section">
                 {modalState.data.variants.size.enabled && modalState.selectedVariant !== "size" && (
                   <div className="nested-section">
@@ -2992,7 +3049,6 @@ const CreateItemPage = () => {
                 )}
               </div>
             </div>
-
             <div className="nested-section">
               <h5 className="section-title">Custom Variants</h5>
               <label>Select Custom Variant</label>
@@ -3008,7 +3064,6 @@ const CreateItemPage = () => {
                   </option>
                 ))}
               </select>
-
               {modalState.modalCustomSelectedVariantDetails && (
                 <div className="variant-section">
                   {renderModalCustomVariantFields(
@@ -3018,7 +3073,6 @@ const CreateItemPage = () => {
                   )}
                 </div>
               )}
-
               {modalState.data.custom_variants
                 .filter(v => v.enabled && v._id !== modalState.modalCustomSelectedVariantId)
                 .map(variant => (
@@ -3055,7 +3109,6 @@ const CreateItemPage = () => {
                   </div>
                 ))}
             </div>
-
             <div className="form-group">
               <button
                 type="button"
@@ -3080,7 +3133,7 @@ const CreateItemPage = () => {
                 Manage Ingredients and Nutrition
               </button>
             </div>
-     
+    
             <div className="modal-actions">
               <button type="button" className="save-button" onClick={handleModalSave}>
                 Save
@@ -3098,4 +3151,4 @@ const CreateItemPage = () => {
   );
 };
 
-export default CreateItemPage; 
+export default CreateItemPage;

@@ -8,6 +8,7 @@
   overflow-x: auto;
   display: block;
 }
+
 .nutrition-table th,
 .nutrition-table td {
   padding: 10px;
@@ -15,33 +16,42 @@
   border: 1px solid #e0e0e0;
   white-space: nowrap;
 }
+
 .nutrition-table th {
   /* background-color: #4a4a4a; */
   /* color: #ffffff; */
   font-weight: 600;
 }
+
 .nutrition-table tr:nth-child(even) {
   background-color: #f9f9f9;
 }
+
 .nutrition-table tr:hover {
   background-color: #e6f7ff;
 }
+
 .nutrition-table .total-column {
   font-weight: bold;
   background-color: #e9f7ef;
 }
+
 .nutrition-table .size-column {
   background-color: #f0f0f0;
 }
+
 .nutrition-table .main-ingredient {
   background-color: #e3f2fd;
 }
+
 .nutrition-table .addon-ingredient {
   background-color: #fff3e0;
 }
+
 .nutrition-table .combo-ingredient {
   background-color: #f3e5f5;
 }
+
 /* Size Filter Buttons */
 .size-filter-buttons .btn {
   padding: 8px 16px;
@@ -49,43 +59,52 @@
   border-radius: 20px;
   transition: all 0.3s ease;
 }
+
 .size-filter-buttons .btn-outline-primary {
   border-color: #007bff;
   color: #007bff;
 }
+
 .size-filter-buttons .btn-outline-primary:hover {
   background-color: #007bff;
   color: white;
 }
+
 .size-filter-buttons .btn-outline-primary.active {
   background-color: #007bff;
   color: white;
   border-color: #007bff;
 }
+
 .size-filter-buttons .btn-outline-secondary {
   border-color: #6c757d;
   color: #6c757d;
 }
+
 .size-filter-buttons .btn-outline-secondary:hover {
   background-color: #6c757d;
   color: white;
 }
+
 .size-filter-buttons .btn-outline-secondary.active {
   background-color: #6c757d;
   color: white;
   border-color: #6c757d;
 }
+
 /* Add-ons List */
 .addons-list {
   list-style: none;
   padding: 0;
   margin: 0;
 }
+
 /* Main Item Image Container */
 .image-i {
   position: relative;
   display: inline-block;
 }
+
 /* Info Icon Styling */
 .info-icon {
   position: absolute;
@@ -100,9 +119,11 @@
   cursor: pointer;
   transition: transform 0.2s ease;
 }
+
 .info-icon:hover {
   transform: scale(1.1);
 }
+
 /* Close Button Styling */
 .close-btn {
   position: absolute;
@@ -120,9 +141,11 @@
   justify-content: center;
   transition: 0.3s;
 }
+
 .close-btn:hover {
   background-color: #f0f0f0;
 }
+
 /* Add-on Item Styling */
 .addon-item {
   display: flex;
@@ -136,56 +159,68 @@
   border-radius: 8px;
   color: black;
 }
+
 .addon-item:hover {
   background-color: #f0f0f0;
 }
+
 .addon-item.selected {
   border: 2px solid #007bff;
   background-color: #e7f1ff;
 }
+
 .addon-item img {
   width: 100px;
   height: 100px;
   margin-bottom: 5px;
   border-radius: 4px;
 }
+
 .addon-item span {
   font-size: 14px;
   text-align: center;
 }
+
 /* Combo Item Styling */
 .combo-item {
   transition: all 0.3s ease;
 }
+
 .combo-item:hover {
   background-color: #f0f0f0;
 }
+
 .combo-item.selected {
   border: 2px solid #007bff;
   background-color: #e7f1ff;
   border-radius: 8px;
 }
+
 .combo-option {
   padding: 10px;
   cursor: pointer;
 }
+
 .combo-option img {
   width: 100px;
   height: 70px;
   margin-bottom: 5px;
   border-radius: 4px;
 }
+
 .combo-option p {
   margin: 0;
   font-size: 14px;
   text-align: center;
 }
+
 /* Main Item Image */
 .image-i img {
   width: 150px;
   height: 150px;
   border-radius: 8px;
 }
+
 /* Image Navigation Buttons */
 .image-nav-btn {
   background-color: rgba(0, 0, 0, 0.5);
@@ -203,23 +238,29 @@
   z-index: 10;
   margin: 0 10px;
 }
+
 .image-nav-btn:hover {
   background-color: rgba(0, 0, 0, 0.7);
   transform: scale(1.1);
 }
+
 .image-nav-btn:disabled {
   background-color: rgba(0, 0, 0, 0.2);
   cursor: not-allowed;
 }
+
 .image-nav-btn.left-arrow {
   margin-right: 10px;
 }
+
 .image-nav-btn.right-arrow {
   margin-left: 10px;
 }
+
 .image-nav-btn i {
   font-size: 16px;
 }
+
 /* No Images Message */
 .no-images-message {
   font-size: 14px;
@@ -228,6 +269,7 @@
   margin: 5px 0 0 0;
   padding: 0;
 }
+
 /* Quantity Controls */
 .quantity-container {
   display: flex;
@@ -236,6 +278,7 @@
   gap: 10px;
   margin-top: 10px;
 }
+
 .quantity-btn {
   width: 35px;
   height: 35px;
@@ -248,25 +291,31 @@
   cursor: pointer;
   transition: background-color 0.3s ease, transform 0.2s ease;
 }
+
 .quantity-btn:hover {
   background-color: #326dac;
   transform: scale(1.1);
 }
+
 .quantity-btn:active {
   transform: scale(0.9);
 }
+
 .quantity-btn.minus {
   background-color: #bd4f5a;
 }
+
 .quantity-btn.minus:hover {
   background-color: #b02a37;
 }
+
 .quantity-value {
   font-size: 20px;
   font-weight: bold;
   min-width: 30px;
   text-align: center;
 }
+
 /* Updated Side Modal */
 .modal-side-content {
   position: fixed;
@@ -284,17 +333,20 @@
   border: 1px solid #e0e0e0;
   z-index: 1060;
 }
+
 .modal-side-header {
   position: relative;
   border-bottom: 2px solid #f0f0f0;
   padding-bottom: 10px;
   margin-bottom: 15px;
 }
+
 .modal-side-title {
   color: #333;
   font-weight: 600;
   margin: 0;
 }
+
 .close-icon {
   position: absolute;
   top: 5px;
@@ -305,13 +357,16 @@
   padding: 5px;
   transition: color 0.3s ease, transform 0.2s ease;
 }
+
 .close-icon:hover {
   color: #333;
   transform: scale(1.1);
 }
+
 .modal-side-body {
   padding: 0 5px;
 }
+
 /* Regular Modal Overlay (for size popups) */
 .modal-overlay {
   position: fixed;
@@ -325,33 +380,50 @@
   align-items: center;
   z-index: 1000;
 }
+
+/* Custom Modal Content - Overriding Bootstrap with higher specificity */
+.modal .modal-dialog .modal-content,
 .modal-content {
-  background: white;
-  padding: 20px;
-  border-radius: 8px;
-  position: relative;
-  max-height: 80vh;
-  overflow-y: auto;
-  max-width: 700px;
+  position: relative !important;
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  max-width: 600px !important;
+  color: #212529 !important;
+  pointer-events: auto !important;
+  background-color: #fff !important;
+  background-clip: padding-box !important;
+  border: 1px solid rgba(0, 0, 0, 0.2) !important;
+  border-radius: 8px !important;
+  outline: 0 !important;
+  padding: 20px !important;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3) !important;
+  max-height: 80vh !important;
+  overflow-y: auto !important;
 }
+
 .variant-option {
   padding: 10px;
   border: 2px solid #ddd;
   border-radius: 5px;
   transition: border-color 0.3s;
 }
+
 .variant-option:hover {
   border-color: #007bff;
 }
+
 .variant-option.selected {
   border-color: #28a745;
   background-color: #e9f7ef;
 }
+
 .variant-option h6 {
   margin-bottom: 10px;
   font-size: 16px;
   font-weight: bold;
 }
+
 .btn {
   padding: 6px 12px;
   font-size: 14px;
@@ -359,42 +431,52 @@
   cursor: pointer;
   transition: all 0.3s ease;
 }
+
 .btn-primary {
   background-color: #007bff;
   color: white;
   border: none;
 }
+
 .btn-primary:hover {
   background-color: #0056b3;
 }
+
 .btn-outline-secondary {
   background-color: transparent;
   color: #6c757d;
   border: 1px solid #6c757d;
 }
+
 .btn-outline-secondary:hover {
   background-color: #f8f9fa;
   color: #343a40;
 }
+
 .btn-secondary {
   background-color: #6c757d;
   color: white;
   border: none;
 }
+
 .btn-secondary:hover {
   background-color: #5a6268;
 }
+
 .btn-sm {
   padding: 4px 8px;
   font-size: 12px;
 }
+
 /* Price and Offer Info */
 .price-info {
   margin: 10px 0;
 }
+
 .offer-end {
   font-size: 14px;
 }
+
 /* Transition for Center Image */
 .transition-image {
   transition: opacity 0.3s ease;

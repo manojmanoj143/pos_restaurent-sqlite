@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { UserContext } from '../Context/UserContext'; // Ensure this context exists in your project
 import axios from 'axios';
 import './BearerLoginPage.css';
+
 // --- API Configuration ---
 const api = axios.create({
   timeout: 5000,
 });
+
 const configureApi = (config) => {
   if (config?.mode === 'client' && config?.server_ip) {
     const baseURL = `http://${config.server_ip}:8000`;
@@ -17,12 +19,15 @@ const configureApi = (config) => {
     console.log('API configured for SERVER mode.');
   }
 };
+
 // --- Modals ---
 function InitialSetupModal({ onConfigSubmit, localIp }) {
   const [mode, setMode] = useState('server');
   const [serverIp, setServerIp] = useState('');
   const [warningMessage, setWarningMessage] = useState('');
+  const [baseUrl, setBaseUrl] = useState("");
   const [warningType, setWarningType] = useState('error');
+
   const handleSubmit = () => {
     if (mode === 'client' && !serverIp.match(/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/)) {
       setWarningMessage('Please enter a valid IP address for the server.');
@@ -32,6 +37,26 @@ function InitialSetupModal({ onConfigSubmit, localIp }) {
     setWarningMessage('');
     onConfigSubmit({ mode, server_ip: serverIp });
   };
+
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const response = await axios.get("http://localhost:8000/api/network_info");
+        const { config: appConfig } = response.data;
+        if (appConfig.mode === "client") {
+          setBaseUrl(`http://${appConfig.server_ip}:8000`);
+        } else {
+          setBaseUrl("");
+        }
+      } catch (error) {
+        console.error("Failed to fetch config:", error);
+        setBaseUrl("");
+      }
+      // Removed undefined fetchCounts() call to fix ReferenceError
+    };
+    fetchConfig();
+  }, []);
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
       {warningMessage && (
@@ -102,15 +127,19 @@ function InitialSetupModal({ onConfigSubmit, localIp }) {
     </div>
   );
 }
+
 function ConfigurationStatusModal({ show, onClose, networkInfo, onReconfigure, onRefresh }) {
   const [warningMessage, setWarningMessage] = useState('');
   const [warningType, setWarningType] = useState('success');
+
   if (!show) return null;
+
   const isServer = networkInfo?.config?.mode === 'server';
   const dbStatusClass =
     networkInfo?.database_status === 'Connected'
       ? 'bg-green-100 text-green-800'
       : 'bg-red-100 text-red-800';
+
   return (
     <div className="modal-overlay fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
       {warningMessage && (
@@ -191,6 +220,7 @@ function ConfigurationStatusModal({ show, onClose, networkInfo, onReconfigure, o
     </div>
   );
 }
+
 function BearerLoginPage() {
   const navigate = useNavigate();
   const { setUser } = useContext(UserContext);
@@ -203,6 +233,7 @@ function BearerLoginPage() {
   const [networkInfo, setNetworkInfo] = useState(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [showClientNotification, setShowClientNotification] = useState(false);
+
   const fetchNetworkInfo = async (retries = 3, delay = 1000) => {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
@@ -233,9 +264,11 @@ function BearerLoginPage() {
       }
     }
   };
+
   useEffect(() => {
     fetchNetworkInfo();
   }, []);
+
   const handleConfigSubmit = async (config) => {
     try {
       await axios.post('http://localhost:8000/api/configure', config);
@@ -249,6 +282,7 @@ function BearerLoginPage() {
       setWarningType('error');
     }
   };
+
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
@@ -286,12 +320,14 @@ function BearerLoginPage() {
       setIsLoading(false);
     }
   };
+
   const handleClientNotificationAcknowledge = () => {
     setShowClientNotification(false);
     localStorage.setItem('clientNotified', 'true');
     setWarningMessage('Client mode acknowledged.');
     setWarningType('success');
   };
+
   if (appState === 'initializing') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
@@ -302,6 +338,7 @@ function BearerLoginPage() {
       </div>
     );
   }
+
   if (appState === 'error') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
@@ -329,9 +366,11 @@ function BearerLoginPage() {
       </div>
     );
   }
+
   if (appState === 'needs_config') {
     return <InitialSetupModal onConfigSubmit={handleConfigSubmit} localIp={networkInfo?.local_ip} />;
   }
+
   return (
     <>
       {warningMessage && (
@@ -463,4 +502,5 @@ function BearerLoginPage() {
     </>
   );
 }
+
 export default BearerLoginPage;

@@ -1,4 +1,4 @@
-// frontpage.jsx
+// FrontPage.jsx (Merged version: New code base with detailed addon/combo billing rendering from old code, fixed dynamic baseUrl, preserved statuses, all issues resolved)
 "use client"
 import React, { useEffect, useState, useRef } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from "uuid"
 import axios from "axios"
 import { Card, Button } from 'react-bootstrap';
 import "./front.css"
+
 function FrontPage() {
   const [menuItems, setMenuItems] = useState([])
   const [comboList, setComboList] = useState([])
@@ -24,6 +25,7 @@ function FrontPage() {
   const [customerName, setCustomerName] = useState("")
   const [filteredCustomers, setFilteredCustomers] = useState([])
   const [showCustomerSection, setShowCustomerSection] = useState(false)
+  const [baseUrl, setBaseUrl] = useState(""); // Dynamic base URL for client/server mode
   const [deliveryAddress, setDeliveryAddress] = useState({
     building_name: "",
     flat_villa_no: "",
@@ -77,20 +79,24 @@ function FrontPage() {
   const [selectedGroupId, setSelectedGroupId] = useState("")
   const [showGroupModal, setShowGroupModal] = useState(false)
   const [newGroupName, setNewGroupName] = useState("")
+
   const handleThemeChange = (theme) => {
     setCurrentTheme(theme)
     setShowThemeSelector(false)
     localStorage.setItem("selectedTheme", theme)
     document.body.className = `theme-${theme}`
   }
+
   useEffect(() => {
     const savedTheme = localStorage.getItem("selectedTheme") || "light"
     setCurrentTheme(savedTheme)
     document.body.className = `theme-${savedTheme}`
   }, [])
+
   useEffect(() => {
     document.body.className = `theme-${currentTheme}`
   }, [currentTheme])
+
   const reduxUser = useSelector((state) => state.user.user)
   const storedUser = JSON.parse(localStorage.getItem("user")) || { email: "Guest" }
   const user = reduxUser || storedUser
@@ -117,6 +123,27 @@ function FrontPage() {
     email: initialEmail,
   } = state || {}
   const navigate = useNavigate()
+
+  // Fetch config for baseUrl (client/server mode)
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const response = await axios.get("/api/network_info");
+        const { config: appConfig } = response.data;
+        if (appConfig.mode === "client") {
+          setBaseUrl(`http://${appConfig.server_ip}:8000`);
+        } else {
+          setBaseUrl(""); // Relative paths for server mode
+        }
+        console.log("API configured for", appConfig.mode, "mode. Pointing to", baseUrl || "localhost");
+      } catch (error) {
+        console.error("Failed to fetch config:", error);
+        setBaseUrl(""); // Fallback to relative
+      }
+    };
+    fetchConfig();
+  }, []);
+
   // Handle clicks outside customer section
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -127,6 +154,7 @@ function FrontPage() {
     document.addEventListener("mousedown", handleClickOutside)
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [showCustomerSection])
+
   // Update date and time
   useEffect(() => {
     const updateDateTime = () => {
@@ -138,11 +166,12 @@ function FrontPage() {
     const intervalId = setInterval(updateDateTime, 60000)
     return () => clearInterval(intervalId)
   }, [])
+
   // Fetch table data
   useEffect(() => {
     const fetchTableData = async () => {
       try {
-        const response = await axios.get("http://localhost:8000/api/tables")
+        const response = await axios.get(`${baseUrl}/api/tables`);
         const table = response.data.message.find((t) => String(t.table_number) === String(tableNumber))
         if (table) {
           setTotalChairs(table.number_of_chairs || 0)
@@ -155,7 +184,8 @@ function FrontPage() {
       }
     }
     if (tableNumber && tableNumber !== "N/A") fetchTableData()
-  }, [tableNumber])
+  }, [tableNumber, baseUrl])
+
   // Initialize state from location state
   useEffect(() => {
     if (state) {
@@ -187,6 +217,7 @@ function FrontPage() {
     initialWhatsappNumber,
     initialEmail,
   ])
+
   // Load saved orders and booked tables/chairs
   useEffect(() => {
     const saved = JSON.parse(localStorage.getItem("savedOrders")) || []
@@ -196,18 +227,19 @@ function FrontPage() {
     const chairs = JSON.parse(localStorage.getItem("bookedChairs")) || {}
     setBookedChairs(chairs)
   }, [])
+
   // Fetch menu items and combos
   useEffect(() => {
     const fetchItems = async () => {
       try {
-        const response = await axios.get("/api/items")
+        const response = await axios.get(`${baseUrl}/api/items`)
         const data = response.data
         if (Array.isArray(data)) {
           const formattedItems = data.map((item) => ({
             id: uuidv4(),
             name: item.item_name || "Unnamed Item",
             category: item.item_group ? item.item_group.toLowerCase() : "uncategorized",
-            image: item.image ? `http://localhost:8000${item.image}` : "/static/images/default-item.jpg",
+            image: item.image ? `${baseUrl}${item.image}` : "/static/images/default-item.jpg",
             basePrice: Number(item.price_list_rate) || 0,
             offer_price: Number(item.offer_price) || 0,
             offer_start_time: item.offer_start_time,
@@ -225,7 +257,7 @@ function FrontPage() {
             addons:
               item.addons?.map((addon) => ({
                 name1: addon.name1,
-                addon_image: addon.addon_image ? `http://localhost:8000${addon.addon_image}` : "/static/images/default-addon-image.jpg",
+                addon_image: addon.addon_image ? `${baseUrl}${addon.addon_image}` : "/static/images/default-addon-image.jpg",
                 price: Number(addon.addon_price) || 0,
                 size: addon.size || {
                   enabled: true,
@@ -242,7 +274,7 @@ function FrontPage() {
             combos:
               item.combos?.map((combo) => ({
                 name1: combo.name1,
-                combo_image: combo.combo_image ? `http://localhost:8000${combo.combo_image}` : "/static/images/default-combo-image.jpg",
+                combo_image: combo.combo_image ? `${baseUrl}${combo.combo_image}` : "/static/images/default-combo-image.jpg",
                 price: Number(combo.combo_price) || 0,
                 size: combo.size || {
                   enabled: true,
@@ -270,14 +302,14 @@ function FrontPage() {
     }
     const fetchCombos = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/combo-offer');
-        if (response.ok) {
-          const data = await response.json();
+        const response = await axios.get(`${baseUrl}/api/combo-offer`);
+        if (response.data) {
+          const data = response.data;
           const formattedCombos = data.map((combo) => ({
             id: combo._id,
             name: combo.description || "Combo Offer",
             category: "combos offer",
-            image: combo.items[0]?.data.image ? `http://localhost:8000${combo.items[0].data.image}` : "/static/images/default-combo.jpg",
+            image: combo.items[0]?.data.image ? `${baseUrl}${combo.items[0].data.image}` : "/static/images/default-combo.jpg",
             basePrice: Number(combo.total_price) || 0,
             offer_price: Number(combo.offer_price) || 0,
             offer_start_time: combo.offer_start_time,
@@ -287,7 +319,7 @@ function FrontPage() {
               name: citem.data.item_name || citem.data.name1,
               description: citem.data.description || '',
               price: Number(citem.price) || 0,
-              image: citem.data.image ? `http://localhost:8000${citem.data.image}` : citem.data.addon_image ? `http://localhost:8000${citem.data.addon_image}` : citem.data.combo_image ? `http://localhost:8000${citem.data.combo_image}` : "https://via.placeholder.com/80",
+              image: citem.data.image ? `${baseUrl}${citem.data.image}` : citem.data.addon_image ? `${baseUrl}${citem.data.addon_image}` : citem.data.combo_image ? `${baseUrl}${citem.data.combo_image}` : "https://via.placeholder.com/80",
               kitchen: citem.data.kitchen || "Main Kitchen",
             })),
             kitchen: combo.kitchen || "Main Kitchen",
@@ -302,17 +334,19 @@ function FrontPage() {
     };
     fetchItems()
     fetchCombos()
-  }, [])
+  }, [baseUrl])
+
   useEffect(() => {
     const uniqueCategories = [...new Set(menuItems.map((item) => item.category))];
     const filteredCategories = uniqueCategories.filter((category) => category && category !== "uncategorized");
     setCategories([`Combos Offer (${comboList.length})`, "All Items", ...filteredCategories]);
   }, [menuItems, comboList]);
+
   // Fetch customers
   useEffect(() => {
     const fetchCustomers = async () => {
       try {
-        const response = await axios.get("http://localhost:8000/api/customers")
+        const response = await axios.get(`${baseUrl}/api/customers`)
         setCustomers(response.data)
         setFilteredCustomers(response.data)
       } catch (error) {
@@ -322,12 +356,13 @@ function FrontPage() {
       }
     }
     fetchCustomers()
-  }, [])
+  }, [baseUrl])
+
   // Fetch customer groups
   useEffect(() => {
     const fetchGroups = async () => {
       try {
-        const response = await axios.get("/api/customer-groups")
+        const response = await axios.get(`${baseUrl}/api/customer-groups`)
         setCustomerGroups(response.data)
       } catch (error) {
         console.error("Error fetching customer groups:", error)
@@ -336,19 +371,21 @@ function FrontPage() {
       }
     }
     fetchGroups()
-  }, [])
+  }, [baseUrl])
+
   // Fetch VAT rate
   useEffect(() => {
     const fetchVat = async () => {
       try {
-        const response = await axios.get('/api/get-vat');
+        const response = await axios.get(`${baseUrl}/api/get-vat`);
         setVatRate(response.data.vat / 100 || 0.1);
       } catch (error) {
         console.error('Failed to fetch VAT:', error);
       }
     };
     fetchVat();
-  }, []);
+  }, [baseUrl]);
+
   // Filter menu items based on search query
   useEffect(() => {
     if (searchQuery.trim() === "") {
@@ -360,6 +397,7 @@ function FrontPage() {
       setSelectedCategory("")
     }
   }, [searchQuery, menuItems])
+
   const handleFilter = (category) => {
     setSearchQuery("")
     let cleanCategory = category;
@@ -374,16 +412,19 @@ function FrontPage() {
     }
     setSelectedCategory(cleanCategory)
   }
+
   const handleItemClick = (item) => {
     const existingCartItem = cartItems.find((cartItem) => cartItem.item_name === item.name)
     setSelectedItem(item)
     setSelectedCartItem(existingCartItem || null)
   }
+
   const handleCartItemClick = (cartItem) => {
     const menuItem = menuItems.find((item) => item.name === cartItem.item_name);
     setSelectedItem(menuItem || null);
     setSelectedCartItem(cartItem);
   }
+
   const hasActiveOffer = (item) => {
     if (item.offer_price === undefined || !item.offer_start_time || !item.offer_end_time) {
       return false;
@@ -393,6 +434,7 @@ function FrontPage() {
     const endTime = new Date(item.offer_end_time);
     return startTime <= currentTime && currentTime <= endTime;
   };
+
   const calculateOfferSizePrice = (offerPrice, size) => {
     if (!offerPrice) return 0
     switch (size) {
@@ -406,13 +448,27 @@ function FrontPage() {
         return offerPrice
     }
   }
+
   const handleItemUpdate = (updatedItem) => {
+    // FIXED: Prioritize updating by ID if provided (for edits, preserves status)
+    let existingItemIndex = -1;
+    if (updatedItem.id) {
+      existingItemIndex = cartItems.findIndex((cartItem) => cartItem.id === updatedItem.id);
+    }
+    if (existingItemIndex === -1 && !updatedItem.isCombo) {
+      // Fallback to name + size match for new items
+      const menuItem = menuItems.find((item) => item.name === updatedItem.item_name)
+      const hasSizeVariant = menuItem?.size?.enabled || false
+      const updatedSelectedSize = hasSizeVariant ? updatedItem.variants?.size?.selected : null
+      existingItemIndex = cartItems.findIndex(
+        (cartItem) =>
+          cartItem.item_name === updatedItem.item_name &&
+          (hasSizeVariant ? cartItem.selectedSize === updatedSelectedSize : cartItem.selectedSize === null),
+      )
+    }
     if (updatedItem.isCombo) {
       const hasOffer = hasActiveOffer(updatedItem);
       const finalPrice = hasOffer ? updatedItem.offer_price || 0 : updatedItem.basePrice || 0;
-      const existingItemIndex = cartItems.findIndex(
-        (cartItem) => cartItem.item_name === updatedItem.name && cartItem.isCombo
-      );
       const cartItem = {
         id: existingItemIndex !== -1 ? cartItems[existingItemIndex].id : uuidv4(),
         name: updatedItem.name,
@@ -425,8 +481,9 @@ function FrontPage() {
         comboItems: updatedItem.comboItems,
         kitchen: updatedItem.kitchen || "Main Kitchen",
         status: "Pending",
-        served: false, // Add served false
+        served: false,
         image: updatedItem.image,
+        kitchenStatuses: existingItemIndex !== -1 ? cartItems[existingItemIndex].kitchenStatuses : {}, // Preserve statuses
       };
       if (existingItemIndex !== -1) {
         setCartItems((prevItems) => {
@@ -450,11 +507,6 @@ function FrontPage() {
     const menuItem = menuItems.find((item) => item.name === updatedItem.item_name)
     const hasSizeVariant = menuItem?.size?.enabled || false
     const updatedSelectedSize = hasSizeVariant ? updatedItem.variants?.size?.selected : null
-    const existingItemIndex = cartItems.findIndex(
-      (cartItem) =>
-        cartItem.item_name === updatedItem.item_name &&
-        (hasSizeVariant ? cartItem.selectedSize === updatedSelectedSize : cartItem.selectedSize === null),
-    )
     const hasOffer = hasActiveOffer(menuItem);
     let originalBasePrice = menuItem.basePrice || 0;
     let finalBasePrice = hasOffer ? menuItem.offer_price || 0 : menuItem.basePrice || 0;
@@ -463,6 +515,7 @@ function FrontPage() {
       originalBasePrice = size === "S" ? menuItem.size.small_price || 0 : size === "L" ? menuItem.size.large_price || 0 : menuItem.size.medium_price || 0;
       finalBasePrice = hasOffer ? calculateOfferSizePrice(menuItem.offer_price || 0, size) : originalBasePrice;
     }
+    // FIXED: Handle addons and combos without recreation errors
     const addonVariants = {}
     const addonImages = {}
     const addonPrices = {}
@@ -597,8 +650,9 @@ function FrontPage() {
       customVariantsDetails,
       customVariantsQuantities,
       status: "Pending",
-      served: false, // Add served false
+      served: false,
       image: menuItem?.image || "/static/images/default-item.jpg",
+      kitchenStatuses: existingItemIndex !== -1 ? cartItems[existingItemIndex].kitchenStatuses : {}, // FIXED: Preserve statuses on update
     }
     if (existingItemIndex !== -1) {
       setCartItems((prevItems) => {
@@ -618,6 +672,7 @@ function FrontPage() {
     setSelectedItem(null)
     setSelectedCartItem(null)
   }
+
   const handleQuantityChange = (itemId, value, type, name) => {
     const newQty = Math.max(1, Number.parseInt(value) || 1)
     const updateItems = (prevItems) =>
@@ -678,6 +733,7 @@ function FrontPage() {
     setCartItems(updateItems)
     setBillCartItems(updateItems)
   }
+
   const getAddonsTotal = (item) => {
     if (!item.addonQuantities || !item.addonPrices) return 0
     return Object.entries(item.addonQuantities).reduce((sum, [addonName, qty]) => {
@@ -685,6 +741,7 @@ function FrontPage() {
       return sum + price * qty
     }, 0)
   }
+
   const getCombosTotal = (item) => {
     if (!item.comboQuantities || !item.comboPrices) return 0
     return Object.entries(item.comboQuantities).reduce((sum, [comboName, qty]) => {
@@ -692,6 +749,7 @@ function FrontPage() {
       return sum + price * qty
     }, 0)
   }
+
   const getCustomVariantsTotal = (item) => {
     if (!item.customVariantsDetails || !item.customVariantsQuantities) return 0
     return Object.entries(item.customVariantsDetails).reduce((sum, [variantName, variant]) => {
@@ -699,6 +757,7 @@ function FrontPage() {
       return sum + (variant.price || 0) * qty
     }, 0)
   }
+
   const getMainItemTotal = (item) => {
     if (item.isCombo) {
       return (item.basePrice || 0) * (item.quantity || 1)
@@ -706,6 +765,7 @@ function FrontPage() {
     const mainItemPrice = (item.basePrice || 0) + (item.icePrice || 0) + (item.spicyPrice || 0) + getCustomVariantsTotal(item)
     return mainItemPrice * (item.quantity || 1)
   }
+
   const getOriginalMainItemTotal = (item) => {
     if (item.originalBasePrice) {
       const mainItemPrice = (item.originalBasePrice || 0) + (item.icePrice || 0) + (item.spicyPrice || 0) + getCustomVariantsTotal(item)
@@ -713,10 +773,12 @@ function FrontPage() {
     }
     return getMainItemTotal(item)
   }
+
   const removeFromCart = (item) => {
     setCartItems((prevItems) => prevItems.filter((cartItem) => cartItem.id !== item.id))
     setBillCartItems((prevItems) => prevItems.filter((cartItem) => cartItem.id !== item.id))
   }
+
   const removeAddonOrCombo = (itemId, type, name) => {
     const updateItems = (prevItems) =>
       prevItems.map((cartItem) => {
@@ -769,6 +831,7 @@ function FrontPage() {
     setCartItems(updateItems)
     setBillCartItems(updateItems)
   }
+
   const removeCustomVariant = (itemId, variantName) => {
     const updateItems = (prevItems) =>
       prevItems.map((cartItem) => {
@@ -776,8 +839,8 @@ function FrontPage() {
           const { [variantName]: _, ...remainingCustomVariants } = cartItem.selectedCustomVariants || {}
           const { [variantName]: __, ...remainingCustomVariantsDetails } = cartItem.customVariantsDetails || {}
           const { [variantName]: ___, ...remainingCustomVariantsQuantities } = cartItem.customVariantsQuantities || {}
-          const customVariantsTotalPrice = Object.values(remainingCustomVariantsDetails).reduce(
-            (sum, variant) => sum + (variant.price || 0),
+          const customVariantsTotalPrice = Object.entries(remainingCustomVariantsDetails).reduce(
+            (sum, [vName, variant]) => sum + (variant.price || 0) * (remainingCustomVariantsQuantities[vName] || 1),
             0,
           )
           return {
@@ -795,6 +858,7 @@ function FrontPage() {
     setCartItems(updateItems)
     setBillCartItems(updateItems)
   }
+
   const handleWarningOk = () => {
     if (pendingAction) {
       pendingAction()
@@ -803,10 +867,12 @@ function FrontPage() {
     setWarningMessage("")
     setWarningType("warning")
   }
+
   const handleConfirmYes = () => {
     setShowPaymentModal(true)
     setIsConfirmation(false)
   }
+
   const handleConfirmNo = () => {
     setCartItems([])
     setBillCartItems([])
@@ -815,6 +881,7 @@ function FrontPage() {
     }
     setIsConfirmation(false)
   }
+
   const calculateSubtotal = (items) => {
     return items.reduce((sum, item) => {
       if (item.isCombo) {
@@ -827,6 +894,7 @@ function FrontPage() {
       return sum + mainItemTotal + addonsTotal + combosTotal
     }, 0)
   }
+
   const calculateOriginalSubtotal = (items) => {
     return items.reduce((sum, item) => {
       let mainItemPrice = (item.basePrice || 0) + (item.icePrice || 0) + (item.spicyPrice || 0) + getCustomVariantsTotal(item)
@@ -839,6 +907,7 @@ function FrontPage() {
       return sum + mainItemTotal + addonsTotal + combosTotal
     }, 0)
   }
+
   const handlePaymentSelection = async (method) => {
     if (billCartItems.length === 0) {
       setWarningMessage("Cart is empty. Please add items before proceeding.")
@@ -916,6 +985,7 @@ function FrontPage() {
         customVariantsDetails: item.customVariantsDetails || {},
         customVariantsQuantities: item.customVariantsQuantities || {},
         image: item.image || "/static/images/default-item.jpg",
+        kitchenStatuses: item.kitchenStatuses || {},
       })),
       totalAmount: Number(subtotal.toFixed(2)),
       payments: [paymentDetails],
@@ -928,10 +998,10 @@ function FrontPage() {
       if (savedSale) {
         billDetails.invoice_no = savedSale.invoice_no
       }
-      // Check if orderId exists before attempting to update
+      // FIXED: Use dynamic baseUrl for order update
       if (orderId) {
         try {
-          await axios.put(`http://localhost:8000/api/activeorders/${orderId}`, { paid: true });
+          await axios.put(`${baseUrl}/api/activeorders/${orderId}`, { paid: true });
           console.log("Order updated with paid status");
         } catch (error) {
           console.error("Error updating order paid status:", error);
@@ -978,6 +1048,7 @@ function FrontPage() {
       setWarningType("warning")
     }
   }
+
   const handlePaymentCompletion = (tableNumber, chairsBooked) => {
     const savedOrders = JSON.parse(localStorage.getItem("savedOrders")) || [];
     const order = savedOrders.find(o => o.tableNumber === tableNumber && o.chairsBooked.some(c => chairsBooked.includes(c)));
@@ -993,6 +1064,7 @@ function FrontPage() {
       setPendingAction(() => () => navigate("/table"));
     }
   }
+
   const handleSaveToBackend = async (paymentDetails) => {
     if (billCartItems.length === 0) {
       setWarningMessage("Cart is empty. Please add items before saving.")
@@ -1066,6 +1138,7 @@ function FrontPage() {
         customVariantsDetails: item.customVariantsDetails || {},
         customVariantsQuantities: item.customVariantsQuantities || {},
         image: item.image || "/static/images/default-item.jpg",
+        kitchenStatuses: item.kitchenStatuses || {},
       })),
       total: Number(subtotal.toFixed(2)),
       userId: user.email,
@@ -1075,7 +1148,8 @@ function FrontPage() {
       status: "Pending",
     }
     try {
-      const response = await axios.post("http://localhost:8000/api/sales", payload)
+      // FIXED: Use dynamic baseUrl for sales save
+      const response = await axios.post(`${baseUrl}/api/sales`, payload)
       setWarningMessage(`Sale saved successfully! Invoice No: ${response.data.invoice_no}`)
       setWarningType("success")
       setPendingAction(() => () => {
@@ -1090,11 +1164,13 @@ function FrontPage() {
       throw error
     }
   }
+
   const handleKeyPress = (e) => {
     if (e.key === " " || e.keyCode === 32) {
       e.preventDefault()
     }
   }
+
   const handleCreateCustomer = async () => {
     if (orderType !== "Dine In" && (!customerName.trim() || !phoneNumber)) {
       setWarningMessage("Customer name and phone number are required for non-Dine In orders.")
@@ -1117,7 +1193,8 @@ function FrontPage() {
         email: email || "",
         customer_group: selectedGroupId || null,
       }
-      const response = await axios.post("http://localhost:8000/api/customers", customerData)
+      // FIXED: Use dynamic baseUrl for customer create
+      const response = await axios.post(`${baseUrl}/api/customers`, customerData)
       const newCustomer = { ...customerData, _id: response.data.id }
       setCustomers((prev) => [...prev, newCustomer])
       setFilteredCustomers((prev) => [...prev, newCustomer])
@@ -1140,6 +1217,7 @@ function FrontPage() {
       setWarningType("warning")
     }
   }
+
   const handleUpdateCustomer = async (id) => {
     if (orderType !== "Dine In" && (!customerName.trim() || !phoneNumber)) {
       setWarningMessage("Customer name and phone number are required for non-Dine In orders.")
@@ -1162,7 +1240,8 @@ function FrontPage() {
         email: email || "",
         customer_group: selectedGroupId || null,
       }
-      await axios.put(`http://localhost:8000/api/customers/${id}`, customerData)
+      // FIXED: Use dynamic baseUrl for customer update
+      await axios.put(`${baseUrl}/api/customers/${id}`, customerData)
       const updatedCustomer = { ...customerData, _id: id }
       setCustomers((prev) => prev.map((c) => (c._id === id ? updatedCustomer : c)))
       setFilteredCustomers((prev) => prev.map((c) => (c._id === id ? updatedCustomer : c)))
@@ -1179,6 +1258,7 @@ function FrontPage() {
       setWarningType("warning")
     }
   }
+
   const handleCustomerNameChange = (e) => {
     const value = e.target.value
     setCustomerName(value)
@@ -1197,6 +1277,7 @@ function FrontPage() {
       setFilteredCustomers(filtered)
     }
   }
+
   const handlePhoneNumberChange = (e) => {
     const value = e.target.value.replace(/\D/g, "")
     if (value.length <= 10) setPhoneNumber(value)
@@ -1225,10 +1306,12 @@ function FrontPage() {
       }
     }
   }
+
   const handleISDCodeSelect = (code) => {
     setSelectedISDCode(code)
     setShowISDCodeDropdown(false)
   }
+
   const handleCustomerSelect = (customer) => {
     setCustomerName(customer.customer_name)
     const fullPhone = customer.phone_number || ""
@@ -1246,6 +1329,7 @@ function FrontPage() {
     setShowCustomerSection(false)
     setIsPhoneNumberSet(true)
   }
+
   const handleCustomerSubmit = async () => {
     if (orderType === "Dine In") {
       setIsPhoneNumberSet(true)
@@ -1277,6 +1361,7 @@ function FrontPage() {
       }
     }
   }
+
   const handleCreateGroup = async () => {
     if (!newGroupName.trim()) {
       setWarningMessage("Group name is required.")
@@ -1284,7 +1369,8 @@ function FrontPage() {
       return
     }
     try {
-      const response = await axios.post("/api/customer-groups", { group_name: newGroupName.trim() })
+      // FIXED: Use dynamic baseUrl for group create
+      const response = await axios.post(`${baseUrl}/api/customer-groups`, { group_name: newGroupName.trim() })
       setCustomerGroups([response.data, ...customerGroups])
       setSelectedGroupId(response.data._id)
       setNewGroupName("")
@@ -1297,6 +1383,7 @@ function FrontPage() {
       setWarningType("warning")
     }
   }
+
   const saveOrder = async () => {
     if (cartItems.length === 0) {
       setWarningMessage("Cart is empty. Please add items before saving.")
@@ -1347,8 +1434,8 @@ function FrontPage() {
         kitchen: item.kitchen || "Main Kitchen",
         ingredients: item.ingredients || [],
         requiredKitchens: item.requiredKitchens || [],
-        kitchenStatuses: item.kitchenStatuses || {},
-        served: item.served || false, // Ensure served
+        kitchenStatuses: item.kitchenStatuses || {}, // Preserve statuses
+        served: item.served || false,
         addonCustomVariantsDetails: item.addonCustomVariantsDetails || {},
         comboCustomVariantsDetails: item.comboCustomVariantsDetails || {},
         customVariantsDetails: item.customVariantsDetails || {},
@@ -1364,21 +1451,23 @@ function FrontPage() {
       paid: false,
     }
     try {
-      // Send order to kitchen
-      const kitchenResponse = await axios.post("http://localhost:8000/api/kitchen-saved", newOrder)
+      // FIXED: Use dynamic baseUrl for kitchen save
+      const kitchenResponse = await axios.post(`${baseUrl}/api/kitchen-saved`, newOrder)
       if (!kitchenResponse.data.success) {
         throw new Error(kitchenResponse.data.error || "Failed to notify kitchen")
       }
       console.log("Order sent to kitchen:", kitchenResponse.data.order_id)
       let message = "Order saved successfully!";
       if (orderId) {
-        const updateResponse = await axios.put(`http://localhost:8000/api/activeorders/${orderId}`, newOrder)
+        // FIXED: Use dynamic baseUrl for order update
+        const updateResponse = await axios.put(`${baseUrl}/api/activeorders/${orderId}`, newOrder)
         if (updateResponse.status === 200) {
           console.log("Order updated successfully")
           message = "Order updated successfully!";
         }
       } else {
-        const response = await axios.post("http://localhost:8000/api/activeorders", newOrder)
+        // FIXED: Use dynamic baseUrl for order save
+        const response = await axios.post(`${baseUrl}/api/activeorders`, newOrder)
         if (response.status === 201) {
           console.log("Order saved successfully")
           setOrderId(response.data.orderId)
@@ -1422,13 +1511,16 @@ function FrontPage() {
       setWarningType("warning")
     }
   }
+
   const handleDeliveryAddressChange = (field, value) => {
     setDeliveryAddress((prev) => ({ ...prev, [field]: value.trimStart() }))
   }
+
   const handleWhatsappNumberChange = (e) => {
     const value = e.target.value.replace(/\D/g, "")
     if (value.length <= 10) setWhatsappNumber(value)
   }
+
   const handleSetPhoneNumber = () => {
     if (orderType === "Dine In") {
       setIsPhoneNumberSet(true)
@@ -1441,31 +1533,39 @@ function FrontPage() {
     }
     handleCustomerSubmit()
   }
+
   const cancelCart = () => {
     setCartItems([])
     setBillCartItems([])
     setWarningMessage("Cart cleared successfully.")
     setWarningType("success")
   }
+
   const handleActiveOrdersClick = () => {
     navigate("/active-orders")
   }
+
   const handleNext = () => {
     setStartIndex((prev) => prev + 1)
   }
+
   const handlePrev = () => {
     setStartIndex((prev) => Math.max(0, prev - 1))
   }
+
   const handleSalesReportNavigation = () => {
     navigate("/sales-reports")
   }
+
   const handleClosingEntryNavigation = () => {
     navigate("/closing-entry")
   }
+
   const handleLogout = () => {
     localStorage.removeItem("user")
     navigate("/")
   }
+
   const totalBookedChairs = bookedChairs[tableNumber]?.length || 0
   const availableChairs = totalChairs - totalBookedChairs
   const subtotal = calculateSubtotal(cartItems)
@@ -1473,6 +1573,7 @@ function FrontPage() {
   const total = subtotal + vat
   const showKitchenColumn = orderType === "Dine In"
   const visibleCategories = categories.slice(startIndex, startIndex + 5)
+
   return (
     <div className="frontpage-container">
       <div className={`frontpage-sidebar ${isSidebarOpen ? "open" : ""}`}>
@@ -1891,6 +1992,7 @@ function FrontPage() {
                             alt={item.name}
                             className="frontpage-cart-item-image"
                             onError={(e) => (e.target.src = "/static/images/default-item.jpg")}
+                            onClick={() => handleCartItemClick(item)}
                           />
                           <span className="frontpage-cart-item-link" onClick={() => handleCartItemClick(item)}>
                             {item.item_name || item.name} {item.selectedSize && `(${item.selectedSize})`}
@@ -2099,7 +2201,7 @@ function FrontPage() {
                                       onClick={() => {
                                         const updatedVariants = {
                                           ...item.addonVariants,
-                                          [addonName]: { ...item.addonVariants[addonName], cold: 'without_ice' },
+                  [addonName]: { ...item.addonVariants[addonName], cold: 'without_ice' },
                                         }
                                         handleItemUpdate({
                                           ...item,
@@ -2471,7 +2573,7 @@ function FrontPage() {
             <span>Subtotal:</span>
             <span>₹{subtotal.toFixed(2)}</span>
           </div>
-          <div className="frontpage-summary-row skylight">
+          <div className="frontpage-summary-row vat">
             <span>VAT ({vatRate * 100}%):</span>
             <span>₹{vat.toFixed(2)}</span>
           </div>
@@ -2584,4 +2686,5 @@ function FrontPage() {
     </div>
   )
 }
+
 export default FrontPage;

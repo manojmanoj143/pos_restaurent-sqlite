@@ -1,9 +1,8 @@
-// ActiveOrders.jsx (Updated with Enhanced Combo and Addon Price Reconstruction)
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
 import axios from "axios";
-import { FaArrowLeft, FaSyncAlt } from "react-icons/fa";
+import { FaArrowLeft, FaSyncAlt, FaCheck } from "react-icons/fa";
 import "./ActiveOrders.css";
 
 function ActiveOrders() {
@@ -19,13 +18,34 @@ function ActiveOrders() {
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [selectedDeliveryPersonId, setSelectedDeliveryPersonId] = useState(null);
   const [filterType, setFilterType] = useState("Dine In");
+  const [baseUrl, setBaseUrl] = useState(""); // Dynamic base URL for client/server mode
 
   const navigate = useNavigate();
   const vatRate = 0.10;
 
+  // Fetch config for baseUrl (client/server mode)
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const response = await axios.get("/api/network_info");
+        const { config: appConfig } = response.data;
+        if (appConfig.mode === "client") {
+          setBaseUrl(`http://${appConfig.server_ip}:8000`);
+        } else {
+          setBaseUrl(""); // Relative paths for server mode
+        }
+        console.log("API configured for", appConfig.mode, "mode. Pointing to", baseUrl || "localhost");
+      } catch (error) {
+        console.error("Failed to fetch config:", error);
+        setBaseUrl(""); // Fallback to relative
+      }
+    };
+    fetchConfig();
+  }, []);
+
   const fetchData = async () => {
     try {
-      const ordersResponse = await axios.get("/api/activeorders");
+      const ordersResponse = await axios.get(`${baseUrl}/api/activeorders`);
       console.log("Fetched orders from server in ActiveOrders:", ordersResponse.data);
       const orders = Array.isArray(ordersResponse.data) ? ordersResponse.data : [];
 
@@ -38,8 +58,7 @@ function ActiveOrders() {
               ...item,
               originalBasePrice: item.originalBasePrice || null,
               served: item.served !== undefined ? item.served : false,
-              servedQuantity: item.servedQuantity || 0,
-              servedQuantity: Math.min(item.servedQuantity || 0, item.quantity || 1),
+              servedQuantity: item.servedQuantity || (item.served ? (item.quantity || 1) : 0),
             }))
           : [],
         pickedUpTime: order.pickedUpTime || null,
@@ -48,32 +67,30 @@ function ActiveOrders() {
 
       setSavedOrders(sanitizedOrders);
       localStorage.setItem("savedOrders", JSON.stringify(sanitizedOrders));
+      // Suppressed UI warning message as per request
     } catch (err) {
       console.error("Failed to fetch data in ActiveOrders:", err);
-      setWarningMessage(`Failed to fetch data: ${err.message}`);
-      setWarningType("warning");
+      // Suppressed UI warning message as per request - do not setWarningMessage
     }
   };
 
   const fetchEmployees = async () => {
     try {
-      const response = await axios.get("/api/employees");
+      const response = await axios.get(`${baseUrl}/api/employees`);
       setEmployees(Array.isArray(response.data) ? response.data : []);
     } catch (err) {
       console.error("Failed to fetch employees:", err);
-      setWarningMessage(`Failed to fetch employees: ${err.message}`);
-      setWarningType("warning");
+      // Suppressed UI warning message as per request
     }
   };
 
   const fetchTables = async () => {
     try {
-      const response = await axios.get("http://localhost:8000/api/tables");
+      const response = await axios.get(`${baseUrl}/api/tables`);
       setTables(response.data.message || []);
     } catch (err) {
       console.error("Failed to fetch tables:", err);
-      setWarningMessage(`Failed to fetch tables: ${err.message}`);
-      setWarningType("warning");
+      // Suppressed UI warning message as per request
     }
   };
 
@@ -83,7 +100,7 @@ function ActiveOrders() {
     fetchTables();
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [baseUrl]); // Re-fetch after baseUrl is set
 
   const getFloor = (tableNumber) => {
     const table = tables.find((t) => String(t.table_number) === String(tableNumber));
@@ -92,8 +109,9 @@ function ActiveOrders() {
 
   const handleRefresh = () => {
     fetchData();
-    setWarningMessage("Orders refreshed!");
-    setWarningType("success");
+    // Suppressed UI warning message as per request
+    // setWarningMessage("Orders refreshed!");
+    // setWarningType("success");
   };
 
   const handleWarningOk = () => {
@@ -130,7 +148,7 @@ function ActiveOrders() {
     setPendingAction(() =>
       async () => {
         try {
-          await axios.delete(`/api/activeorders/${orderId}`);
+          await axios.delete(`${baseUrl}/api/activeorders/${orderId}`);
           let bookedTables = JSON.parse(localStorage.getItem("bookedTables")) || [];
           const updatedBookedTables = bookedTables.filter((tableNum) => tableNum !== tableNumber);
           localStorage.setItem("bookedTables", JSON.stringify(updatedBookedTables));
@@ -140,12 +158,12 @@ function ActiveOrders() {
           const updatedOrders = savedOrders.filter((order) => order.orderId !== orderId);
           setSavedOrders(updatedOrders);
           localStorage.setItem("savedOrders", JSON.stringify(updatedOrders));
-          setWarningMessage(`Order ${orderNo || "N/A"} deleted successfully!`);
-          setWarningType("success");
+          // Suppressed UI warning message as per request
+          // setWarningMessage(`Order ${orderNo || "N/A"} deleted successfully!`);
+          // setWarningType("success");
         } catch (err) {
           console.error("Failed to delete order:", err);
-          setWarningMessage(`Failed to delete order: ${err.message}`);
-          setWarningType("warning");
+          // Suppressed UI warning message as per request
         }
       }
     );
@@ -153,14 +171,12 @@ function ActiveOrders() {
 
   const handleDeleteItem = async (orderId, itemId) => {
     try {
-      await axios.delete(`/api/activeorders/${orderId}/items/${itemId}`);
+      await axios.delete(`${baseUrl}/api/activeorders/${orderId}/items/${itemId}`);
       fetchData();
-      setWarningMessage("Item deleted successfully!");
-      setWarningType("success");
+      // Suppressed UI warning message as per request
     } catch (err) {
       console.error("Failed to delete item:", err);
-      setWarningMessage(`Failed to delete item: ${err.message}`);
-      setWarningType("warning");
+      // Suppressed UI warning message as per request
     }
   };
 
@@ -173,7 +189,7 @@ function ActiveOrders() {
         try {
           const filteredCompleted = completedFiltered;
           for (const order of filteredCompleted) {
-            await axios.delete(`/api/activeorders/${order.orderId}`);
+            await axios.delete(`${baseUrl}/api/activeorders/${order.orderId}`);
             let bookedTables = JSON.parse(localStorage.getItem("bookedTables")) || [];
             const updatedBookedTables = bookedTables.filter((tableNum) => tableNum !== order.tableNumber);
             localStorage.setItem("bookedTables", JSON.stringify(updatedBookedTables));
@@ -182,12 +198,10 @@ function ActiveOrders() {
             localStorage.setItem("bookedChairs", JSON.stringify(bookedChairs));
           }
           fetchData();
-          setWarningMessage("All completed orders deleted successfully!");
-          setWarningType("success");
+          // Suppressed UI warning message as per request
         } catch (err) {
           console.error("Failed to delete completed orders:", err);
-          setWarningMessage(`Failed to delete completed orders: ${err.message}`);
-          setWarningType("warning");
+          // Suppressed UI warning message as per request
         }
       }
     );
@@ -206,7 +220,7 @@ function ActiveOrders() {
       setPendingAction(() =>
         async () => {
           try {
-            await axios.delete(`/api/activeorders/${orderId}`);
+            await axios.delete(`${baseUrl}/api/activeorders/${orderId}`);
             let bookedTables = JSON.parse(localStorage.getItem("bookedTables")) || [];
             const updatedBookedTables = bookedTables.filter((tableNum) => tableNum !== order.tableNumber);
             localStorage.setItem("bookedTables", JSON.stringify(updatedBookedTables));
@@ -216,18 +230,15 @@ function ActiveOrders() {
             const updatedOrders = savedOrders.filter((o) => o.orderId !== orderId);
             setSavedOrders(updatedOrders);
             localStorage.setItem("savedOrders", JSON.stringify(updatedOrders));
-            setWarningMessage("Order completed and deleted successfully!");
-            setWarningType("success");
+            // Suppressed UI warning message as per request
           } catch (err) {
             console.error("Failed to complete order:", err);
-            setWarningMessage(`Failed to complete order: ${err.message}`);
-            setWarningType("warning");
+            // Suppressed UI warning message as per request
           }
         }
       );
     } else {
-      setWarningMessage("Order cannot be completed. Ensure all items are fully served and paid.");
-      setWarningType("warning");
+      // Suppressed UI warning message as per request
     }
   };
 
@@ -247,22 +258,19 @@ function ActiveOrders() {
     const order = savedOrders.find((o) => o.orderId === orderId);
     if (!order) {
       console.error("Order not found.");
-      setWarningMessage("Order not found.");
-      setWarningType("warning");
+      // Suppressed UI warning message as per request
       return;
     }
 
     if (order.orderType !== "Online Delivery") {
       console.error("Delivery person can only be assigned to Online Delivery orders.");
-      setWarningMessage("Delivery person can only be assigned to Online Delivery orders.");
-      setWarningType("warning");
+      // Suppressed UI warning message as per request
       return;
     }
 
     if (!checkAllItemsPickedUp(order)) {
       console.error(`Cannot assign delivery person to order ${order.orderNo}. All items, addons, and combos must be marked as Picked Up in the Kitchen page.`);
-      setWarningMessage(`Cannot assign delivery person to order ${order.orderNo}. All items, addons, and combos must be marked as Picked Up in the Kitchen page.`);
-      setWarningType("warning");
+      // Suppressed UI warning message as per request
       return;
     }
 
@@ -276,21 +284,19 @@ function ActiveOrders() {
       const order = savedOrders.find((o) => o.orderId === selectedOrderId);
       if (!order) {
         console.error("Order not found.");
-        setWarningMessage("Order not found.");
-        setWarningType("warning");
+        // Suppressed UI warning message as per request
         setShowDeliveryPopup(false);
         return;
       }
 
       if (!checkAllItemsPickedUp(order)) {
         console.error(`Cannot assign delivery person to order ${order.orderNo}. All items, addons, and combos must be marked as Picked Up in the Kitchen page.`);
-        setWarningMessage(`Cannot assign delivery person to order ${order.orderNo}. All items, addons, and combos must be marked as Picked Up in the Kitchen page.`);
-        setWarningType("warning");
+        // Suppressed UI warning message as per request
         setShowDeliveryPopup(false);
         return;
       }
 
-      await axios.put(`/api/activeorders/${selectedOrderId}`, {
+      await axios.put(`${baseUrl}/api/activeorders/${selectedOrderId}`, {
         deliveryPersonId: selectedDeliveryPersonId,
         cartItems: order.cartItems,
       });
@@ -298,15 +304,13 @@ function ActiveOrders() {
       const updatedOrders = savedOrders.filter((o) => o.orderId !== selectedOrderId);
       setSavedOrders(updatedOrders);
       localStorage.setItem("savedOrders", JSON.stringify(updatedOrders));
-      setWarningMessage("Delivery person assigned and order removed successfully!");
-      setWarningType("success");
+      // Suppressed UI warning message as per request
       setShowDeliveryPopup(false);
       setSelectedOrderId(null);
       setSelectedDeliveryPersonId(null);
     } catch (err) {
       console.error("Failed to assign delivery person:", err);
-      setWarningMessage(`Failed to assign delivery person: ${err.response?.data?.error || err.message}`);
-      setWarningType("warning");
+      // Suppressed UI warning message as per request
       setShowDeliveryPopup(false);
     }
   };
@@ -319,18 +323,16 @@ function ActiveOrders() {
 
   const updateOrder = async (orderId, updatedOrder) => {
     try {
-      const response = await axios.put(`/api/activeorders/${orderId}`, updatedOrder);
+      const response = await axios.put(`${baseUrl}/api/activeorders/${orderId}`, updatedOrder);
       const updatedOrders = savedOrders.map((order) =>
         order.orderId === orderId ? { ...order, ...response.data.order } : order
       );
       setSavedOrders(updatedOrders);
       localStorage.setItem("savedOrders", JSON.stringify(updatedOrders));
-      setWarningMessage("Order updated successfully!");
-      setWarningType("success");
+      // Suppressed UI warning message as per request
     } catch (err) {
       console.error("Failed to update order:", err);
-      setWarningMessage(`Failed to update order: ${err.message}`);
-      setWarningType("warning");
+      // Suppressed UI warning message as per request
     }
   };
 
@@ -347,13 +349,12 @@ function ActiveOrders() {
   const handleSelectOrder = (order) => {
     if (!order.cartItems || order.cartItems.length === 0) {
       console.error("This order has no items.");
-      setWarningMessage("This order has no items. Please select a valid order.");
-      setWarningType("warning");
+      // Suppressed UI warning message as per request
       setIsConfirmation(false);
       return;
     }
 
-    const baseURL = "http://localhost:8000";
+    const baseURL = baseUrl || "http://localhost:8000";
     const cacheBuster = `?t=${new Date().getTime()}`;
 
     const formattedCartItems = order.cartItems.map((item) => {
@@ -404,14 +405,12 @@ function ActiveOrders() {
             sugar: addon.sugar || "medium",
             kitchen: addon.kitchen || "Main Kitchen",
           };
-          // ENHANCED: Robust price fallback for addons
           let addonPrice = Number(addon.addon_price) || 0;
           if (addonPrice === 0 && addon.addon_total_price) {
             addonPrice = Number(addon.addon_total_price) / (addon.addon_quantity || 1);
           } else if (addonPrice === 0 && addon.base_price) {
             addonPrice = Number(addon.base_price);
           } else if (addonPrice === 0) {
-            // Fallback to size price if available
             addonPrice = Number(addon.addon_size_price) || 0;
           }
           addonPrices[addonName] = addonPrice;
@@ -444,7 +443,7 @@ function ActiveOrders() {
         });
       }
 
-      // Reconstruct combo details from selectedCombos array if not already objects - ENHANCED: Robust price calculation with multiple fallbacks
+      // Reconstruct combo details from selectedCombos array if not already objects
       if (Array.isArray(item.selectedCombos)) {
         const comboQuantities = {};
         const comboVariants = {};
@@ -465,7 +464,6 @@ function ActiveOrders() {
             sugar: combo.sugar || "medium",
             kitchen: combo.kitchen || "Main Kitchen",
           };
-          // ENHANCED: Multi-level fallback for combo price
           let comboPrice = Number(combo.combo_price) || 0;
           if (comboPrice === 0 && combo.combo_total_price) {
             comboPrice = Number(combo.combo_total_price) / (Number(combo.combo_quantity) || 1);
@@ -474,13 +472,11 @@ function ActiveOrders() {
           } else if (comboPrice === 0 && combo.combo_size_price) {
             comboPrice = Number(combo.combo_size_price);
           } else if (comboPrice === 0 && item.basePrice) {
-            // Fallback to main item price if combo price is missing (edge case)
             comboPrice = Number(item.basePrice) / (item.comboQuantities ? Object.keys(item.comboQuantities).length : 1);
           }
-          // Ensure minimum price if all fallbacks fail
           if (comboPrice === 0) {
             console.warn(`Warning: No valid price found for combo ${comboName}. Setting default to 0.00. Check backend data.`);
-            comboPrice = 0; // Or set a default if needed
+            comboPrice = 0;
           }
           comboPrices[comboName] = comboPrice;
           const customVariantsPrice = Object.values(combo.custom_variants || {}).reduce((sum, v) => sum + (Number(v.price) || 0), 0);
@@ -542,10 +538,8 @@ function ActiveOrders() {
           : `${baseURL}${item.image}`
         : "/static/images/default-item.jpg") + cacheBuster;
 
-      // ENHANCED: Recalculate totalPrice for the item to ensure consistency
+      // Recalculate totalPrice for consistency
       let itemSubtotal = formattedItem.basePrice * formattedItem.quantity;
-
-      // Simplified addon total calculation
       let addonTotal = 0;
       if (formattedItem.addonPrices && formattedItem.addonQuantities) {
         Object.keys(formattedItem.addonPrices).forEach((key) => {
@@ -555,8 +549,6 @@ function ActiveOrders() {
         });
       }
       itemSubtotal += addonTotal;
-
-      // Simplified combo total calculation
       let comboTotal = 0;
       if (formattedItem.comboPrices && formattedItem.comboQuantities) {
         Object.keys(formattedItem.comboPrices).forEach((key) => {
@@ -566,7 +558,6 @@ function ActiveOrders() {
         });
       }
       itemSubtotal += comboTotal;
-
       formattedItem.totalPrice = itemSubtotal;
 
       return formattedItem;
@@ -575,32 +566,32 @@ function ActiveOrders() {
     const orderType = order.orderType || inferOrderType(order);
     const phoneNumber = order.phoneNumber?.replace(/^\+\d+/, "") || "";
 
-    setWarningMessage(
-      `You selected order ${order.orderNo} for ${
-        orderType === "Online Delivery" ? "Customer " + order.customerName : "Table " + (order.tableNumber || "N/A")
-      }`
-    );
-    setWarningType("success");
+    // Suppressed UI warning message as per request
+    // setWarningMessage(
+    //   `You selected order ${order.orderNo} for ${
+    //     orderType === "Online Delivery" ? "Customer " + order.customerName : "Table " + (order.tableNumber || "N/A")
+    //   }`
+    // );
+    // setWarningType("success");
 
-    setPendingAction(() => () => {
-      navigate("/frontpage", {
-        state: {
-          tableNumber: order.tableNumber || "N/A",
-          phoneNumber: phoneNumber,
-          customerName: order.customerName || "",
-          existingOrder: { ...order, cartItems: formattedCartItems },
-          cartItems: formattedCartItems,
-          deliveryAddress: order.deliveryAddress || { building_name: "", flat_villa_no: "", location: "" },
-          whatsappNumber: "",
-          email: "",
-          orderType: orderType,
-          chairsBooked: Array.isArray(order.chairsBooked) ? order.chairsBooked : [],
-          deliveryPersonId: order.deliveryPersonId || "",
-          pickedUpTime: order.pickedUpTime || null,
-          orderId: order.orderId,
-          orderNo: order.orderNo,
-        },
-      });
+    // Directly navigate since warning is suppressed
+    navigate("/frontpage", {
+      state: {
+        tableNumber: order.tableNumber || "N/A",
+        phoneNumber: phoneNumber,
+        customerName: order.customerName || "",
+        existingOrder: { ...order, cartItems: formattedCartItems },
+        cartItems: formattedCartItems,
+        deliveryAddress: order.deliveryAddress || { building_name: "", flat_villa_no: "", location: "" },
+        whatsappNumber: "",
+        email: "",
+        orderType: orderType,
+        chairsBooked: Array.isArray(order.chairsBooked) ? order.chairsBooked : [],
+        deliveryPersonId: order.deliveryPersonId || "",
+        pickedUpTime: order.pickedUpTime || null,
+        orderId: order.orderId,
+        orderNo: order.orderNo,
+      },
     });
   };
 
@@ -625,7 +616,12 @@ function ActiveOrders() {
     );
   };
 
-  const renderAddons = (addonQuantities, addonVariants, addonPrices) => {
+  const getPickedUpTick = (item, kitchen) => {
+    if (!item.kitchenStatuses || !kitchen) return null;
+    return item.kitchenStatuses[kitchen] === "PickedUp" ? <FaCheck style={{ color: 'green', marginLeft: '5px' }} /> : null;
+  };
+
+  const renderAddons = (addonQuantities, addonVariants, addonPrices, item) => {
     if (!addonQuantities || Object.keys(addonQuantities).length === 0) return null;
     return (
       <ul className="active-orders-addons-list">
@@ -634,9 +630,12 @@ function ActiveOrders() {
           .map(([addonName, qty], idx) => {
             const addon = addonVariants?.[addonName] || {};
             const price = addonPrices?.[addonName] || 0;
+            const kitchen = addon.kitchen || "Unknown";
+            const tick = getPickedUpTick(item, kitchen);
             return (
               <li key={idx}>
-                + Addon: {addonName} x{qty} (₹{price.toFixed(2)}, Kitchen: {addon.kitchen || "Unknown"})
+                + Addon: {addonName} x{qty} (₹{price.toFixed(2)}, Kitchen: {kitchen})
+                {tick}
               </li>
             );
           })}
@@ -644,7 +643,7 @@ function ActiveOrders() {
     );
   };
 
-  const renderCombos = (comboQuantities, comboVariants, comboPrices) => {
+  const renderCombos = (comboQuantities, comboVariants, comboPrices, item) => {
     if (!comboQuantities || Object.keys(comboQuantities).length === 0) return null;
     return (
       <ul className="active-orders-combos-list">
@@ -653,11 +652,14 @@ function ActiveOrders() {
           .map(([comboName, qty], idx) => {
             const combo = comboVariants?.[comboName] || {};
             const price = comboPrices?.[comboName] || 0;
+            const kitchen = combo.kitchen || "Unknown";
+            const tick = getPickedUpTick(item, kitchen);
             return (
               <li key={idx}>
                 <strong>+ Combo: </strong>
                 {comboName} ({combo.size || "M"}) x{qty} (₹{price.toFixed(2)}
-                {combo.spicy ? " (Spicy)" : ""}, Kitchen: {combo.kitchen || "Unknown"})
+                {combo.spicy ? " (Spicy)" : ""}, Kitchen: {kitchen})
+                {tick}
               </li>
             );
           })}
@@ -750,10 +752,10 @@ function ActiveOrders() {
       const item = order.cartItems.find((i) => i.id === itemId);
       if (!item) return;
 
-      const currentServedQty = item.servedQuantity || 0;
       const newServedQty = isServed ? (item.quantity || 1) : 0;
+      console.log(`Updating servedQuantity for item ${itemId}: ${newServedQty} (isServed: ${isServed})`);
 
-      const response = await axios.post(`/api/activeorders/${orderId}/items/${itemId}/mark-served`, { servedQuantity: newServedQty });
+      const response = await axios.post(`${baseUrl}/api/activeorders/${orderId}/items/${itemId}/mark-served`, { servedQuantity: newServedQty });
 
       if (response.data.success) {
         const updatedOrders = savedOrders.map((o) =>
@@ -761,37 +763,33 @@ function ActiveOrders() {
             ? {
                 ...o,
                 cartItems: o.cartItems.map((i) =>
-                  i.id === itemId ? { ...i, servedQuantity: newServedQty } : i
+                  i.id === itemId ? { ...i, servedQuantity: newServedQty, served: isServed } : i
                 ),
               }
             : o
         );
         setSavedOrders(updatedOrders);
         localStorage.setItem("savedOrders", JSON.stringify(updatedOrders));
-        setWarningMessage("Item service status updated!");
-        setWarningType("success");
+        // Suppressed UI warning message as per request
       }
     } catch (err) {
       console.error("Failed to update service status:", err);
-      setWarningMessage(`Failed to update service status: ${err.message}`);
-      setWarningType("warning");
+      // Suppressed UI warning message as per request
     }
   };
 
   const handlePaymentChange = async (orderId, isPaid) => {
     try {
-      const response = await axios.put(`/api/activeorders/${orderId}`, { paid: isPaid });
+      const response = await axios.put(`${baseUrl}/api/activeorders/${orderId}`, { paid: isPaid });
       const updatedOrders = savedOrders.map((order) =>
         order.orderId === orderId ? { ...order, paid: isPaid } : order
       );
       setSavedOrders(updatedOrders);
       localStorage.setItem("savedOrders", JSON.stringify(updatedOrders));
-      setWarningMessage("Order payment status updated!");
-      setWarningType("success");
+      // Suppressed UI warning message as per request
     } catch (err) {
       console.error("Failed to update payment status:", err);
-      setWarningMessage(`Failed to update payment status: ${err.message}`);
-      setWarningType("warning");
+      // Suppressed UI warning message as per request
     }
   };
 
@@ -819,6 +817,7 @@ function ActiveOrders() {
                     <th>Timestamp</th>
                     <th>Total (₹)</th>
                     <th>Grand Total (₹)</th>
+                    <th>Payment Status</th>
                     <th>Delivery Person</th>
                     <th>Picked Up Time</th>
                     <th>Items</th>
@@ -854,7 +853,7 @@ function ActiveOrders() {
                       <td style={isAllPickedUp ? { color: "green", fontWeight: "bold" } : {}}>
                         {order.orderNo || "N/A"}
                       </td>
-                      {filterType === "Online Delivery" ? (
+                      {isOnlineDelivery ? (
                         <>
                           <td>{formatDeliveryAddress(order.deliveryAddress)}</td>
                           <td>{order.customerName || "Guest"}</td>
@@ -863,6 +862,16 @@ function ActiveOrders() {
                           <td>{formatTimestamp(order.timestamp)}</td>
                           <td>{calculateOrderTotal(order.cartItems)}</td>
                           <td>{calculateGrandTotal(order.cartItems)}</td>
+                          <td>
+                            <select
+                              value={order.paid ? "Paid" : "Unpaid"}
+                              onChange={(e) => handlePaymentChange(order.orderId, e.target.value === "Paid")}
+                              className="active-orders-select"
+                            >
+                              <option value="Unpaid">Unpaid</option>
+                              <option value="Paid">Paid</option>
+                            </select>
+                          </td>
                           <td>
                             {order.deliveryPersonId ? (
                               <span>{getDeliveryPersonName(order.deliveryPersonId)}</span>
@@ -918,21 +927,24 @@ function ActiveOrders() {
                               <ul className="active-orders-list-group">
                                 {order.cartItems.map((item, itemIndex) => {
                                   const itemStatus = getItemStatus(item);
-                                  const remainingQty = (item.quantity || 1) - (item.servedQuantity || 0);
+                                  const remainingQty = Math.max(0, (item.quantity || 1) - (item.servedQuantity || 0));
+                                  const mainKitchen = item.kitchen || "Main Kitchen";
+                                  const mainTick = getPickedUpTick(item, mainKitchen);
                                   return (
                                     <li
                                       key={itemIndex}
                                       className={`active-orders-list-group-item status-${itemStatus.toLowerCase()}`}
                                     >
                                       <strong>{item.name || item.item_name}</strong> x{item.quantity} (Served: {item.servedQuantity || 0}, Pending: {remainingQty})
+                                      {mainTick}
                                       <div>Price: {item.originalBasePrice ? <span style={{ textDecoration: "line-through" }}>₹{item.originalBasePrice.toFixed(2)}</span> : ""} ₹{item.basePrice.toFixed(2)}</div>
                                       <div>Size: {item.selectedSize || "M"}</div>
                                       <div>Ice: {item.icePreference || "without_ice"}</div>
                                       <div>Spicy: {item.isSpicy ? "Yes" : "No"}</div>
                                       <div>Kitchen: {item.kitchen || "Main Kitchen"}</div>
                                       <div>Status: {itemStatus}{itemStatus === "PickedUp" ? " (All Done)" : ""}</div>
-                                      {renderAddons(item.addonQuantities, item.addonVariants, item.addonPrices)}
-                                      {renderCombos(item.comboQuantities, item.comboVariants, item.comboPrices)}
+                                      {renderAddons(item.addonQuantities, item.addonVariants, item.addonPrices, item)}
+                                      {renderCombos(item.comboQuantities, item.comboVariants, item.comboPrices, item)}
                                       <div>
                                         <strong>Ingredients:</strong> {renderIngredients(item.ingredients)}
                                       </div>
@@ -943,6 +955,7 @@ function ActiveOrders() {
                                             {Object.entries(item.kitchenStatuses).map(([kitchen, status], idx) => (
                                               <li key={idx}>
                                                 {kitchen}: {status}
+                                                {status === "PickedUp" && <FaCheck style={{ color: 'green', marginLeft: '5px' }} />}
                                               </li>
                                             ))}
                                           </ul>
@@ -978,11 +991,9 @@ function ActiveOrders() {
                         )}
                       </td>
                       <td>
-                        {!isCompleted && (
-                          <button className="active-orders-btn active-orders-btn-primary active-orders-btn-sm" onClick={() => handleSelectOrder(order)}>
-                            Select
-                          </button>
-                        )}
+                        <button className="active-orders-btn active-orders-btn-primary active-orders-btn-sm" onClick={() => handleSelectOrder(order)}>
+                          Select
+                        </button>
                         <button
                           className="active-orders-btn active-orders-btn-danger active-orders-btn-sm"
                           onClick={() => handleDeleteOrder(order.orderId, order.tableNumber, order.orderNo)}
