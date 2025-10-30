@@ -129,6 +129,11 @@ const CreateItemPage = () => {
   const itemToEdit = location.state?.item;
   const isEditing = Boolean(itemToEdit);
 
+  // Helper function to prevent scroll on number inputs
+  const disableNumberInputScroll = (e) => {
+    e.target.blur();
+  };
+
   useEffect(() => {
     const fetchConfig = async () => {
       try {
@@ -806,6 +811,7 @@ const CreateItemPage = () => {
             type="number"
             value={sub.price || ""}
             onChange={(e) => handleCustomVariantFieldChange(variant._id, sub.name, "price", e.target.value)}
+            onWheel={disableNumberInputScroll} // Disable scroll
             className="field-input"
             placeholder="Enter price"
             min="0"
@@ -821,6 +827,7 @@ const CreateItemPage = () => {
             type="number"
             value={sub.price || ""}
             onChange={(e) => handleCustomVariantFieldChange(variant._id, sub.name, "price", e.target.value)}
+            onWheel={disableNumberInputScroll} // Disable scroll
             className="field-input"
             placeholder="Enter price"
             min="0"
@@ -869,7 +876,7 @@ const CreateItemPage = () => {
     try {
       const response = await axios.get(`${baseUrl}/api/variants/${variantId}`);
       const variantData = response.data;
-     
+      
       setModalState(prev => ({
         ...prev,
         modalCustomSelectedVariantId: variantId,
@@ -987,7 +994,7 @@ const CreateItemPage = () => {
 
   const renderModalCustomVariantFields = (variant) => {
     if (!variant) return null;
-   
+    
     return (
       <div className="variant-section">
         <div className="variant-toggle">
@@ -1008,7 +1015,7 @@ const CreateItemPage = () => {
             }}
           />
         </div>
-       
+        
         {variant.enabled && (
           <>
             <h6>{variant.heading} Options</h6>
@@ -1019,12 +1026,13 @@ const CreateItemPage = () => {
                   type="number"
                   value={sub.price || ""}
                   onChange={e => handleModalCustomVariantFieldChange(variant._id, sub.name, "price", e.target.value)}
+                  onWheel={disableNumberInputScroll} // Disable scroll
                   className="field-input"
                   placeholder="Enter price"
                   min="0"
                   step="0.01"
                 />
-               
+                
                 <label className="field-label">{`${sub.name} Image`}</label>
                 <input
                   type="file"
@@ -1032,7 +1040,7 @@ const CreateItemPage = () => {
                   onChange={e => handleModalCustomVariantImageUpload(e, variant._id, sub.name)}
                   className="field-input"
                 />
-               
+                
                 {sub.image && (
                   <div className="image-container">
                     <img
@@ -1911,6 +1919,7 @@ const CreateItemPage = () => {
                       onChange={handleInputChange}
                       onFocus={field.type === "number" ? (e) => handleNumericInputFocus(e) : undefined}
                       onBlur={field.type === "number" ? (e) => handleNumericInputBlur(e, field.name) : undefined}
+                      onWheel={field.type === "number" ? disableNumberInputScroll : undefined} // Disable scroll
                       className="input"
                       required={field.required}
                       min={field.min}
@@ -1925,7 +1934,7 @@ const CreateItemPage = () => {
               <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, "image")} className="input" />
               {imagePreviews.item ? (
                 <div className="image-container">
-                  <img src={`${baseUrl}${imagePreviews.item}`} alt="Preview" className="image-preview" />
+                  <img src={imagePreviews.item} alt="Preview" className="image-preview" />
                   <button type="button" className="delete-button" onClick={() => handleImageDelete("image")}>
                     Delete Image
                   </button>
@@ -1945,7 +1954,7 @@ const CreateItemPage = () => {
                 <div className="image-gallery">
                   {imagePreviews.multiple.map((img, index) => (
                     <div key={index} className="image-container">
-                      <img src={`${baseUrl}${img}`} alt={`Multiple ${index}`} className="image-preview" />
+                      <img src={img} alt={`Multiple ${index}`} className="image-preview" />
                       <button
                         type="button"
                         className="delete-button"
@@ -2021,6 +2030,7 @@ const CreateItemPage = () => {
                     onChange={(e) => handleVariantFieldChange("size", "small_price", e.target.value)}
                     onFocus={(e) => handleVariantNumericFieldFocus(e, "size", "small_price")}
                     onBlur={(e) => handleVariantNumericFieldBlur(e, "size", "small_price")}
+                    onWheel={disableNumberInputScroll} // Disable scroll
                     className="input"
                     min="0"
                     step="0.01"
@@ -2032,6 +2042,7 @@ const CreateItemPage = () => {
                     onChange={(e) => handleVariantFieldChange("size", "medium_price", e.target.value)}
                     onFocus={(e) => handleVariantNumericFieldFocus(e, "size", "medium_price")}
                     onBlur={(e) => handleVariantNumericFieldBlur(e, "size", "medium_price")}
+                    onWheel={disableNumberInputScroll} // Disable scroll
                     className="input"
                     min="0"
                     step="0.01"
@@ -2043,6 +2054,7 @@ const CreateItemPage = () => {
                     onChange={(e) => handleVariantFieldChange("size", "large_price", e.target.value)}
                     onFocus={(e) => handleVariantNumericFieldFocus(e, "size", "large_price")}
                     onBlur={(e) => handleVariantNumericFieldBlur(e, "size", "large_price")}
+                    onWheel={disableNumberInputScroll} // Disable scroll
                     className="input"
                     min="0"
                     step="0.01"
@@ -2072,6 +2084,7 @@ const CreateItemPage = () => {
                         onChange={(e) => handleVariantFieldChange("cold", "ice_price", e.target.value)}
                         onFocus={(e) => handleVariantNumericFieldFocus(e, "cold", "ice_price")}
                         onBlur={(e) => handleVariantNumericFieldBlur(e, "cold", "ice_price")}
+                        onWheel={disableNumberInputScroll} // Disable scroll
                         className="input"
                         min="0"
                         step="0.01"
@@ -2092,6 +2105,7 @@ const CreateItemPage = () => {
                     onChange={(e) => handleVariantFieldChange("spicy", "spicy_price", e.target.value)}
                     onFocus={(e) => handleVariantNumericFieldFocus(e, "spicy", "spicy_price")}
                     onBlur={(e) => handleVariantNumericFieldBlur(e, "spicy", "spicy_price")}
+                    onWheel={disableNumberInputScroll} // Disable scroll
                     className="input"
                     min="0"
                     step="0.01"
@@ -2126,6 +2140,7 @@ const CreateItemPage = () => {
                     onChange={(e) => handleVariantFieldChange("spicy", "non_spicy_price", e.target.value)}
                     onFocus={(e) => handleVariantNumericFieldFocus(e, "spicy", "non_spicy_price")}
                     onBlur={(e) => handleVariantNumericFieldBlur(e, "spicy", "non_spicy_price")}
+                    onWheel={disableNumberInputScroll} // Disable scroll
                     className="input"
                     min="0"
                     step="0.01"
@@ -2681,6 +2696,7 @@ const CreateItemPage = () => {
               onChange={handleModalInputChange}
               onFocus={handleModalNumericFocus}
               onBlur={(e) => handleModalNumericBlur(e, "price")}
+              onWheel={disableNumberInputScroll} // Disable scroll
               className="input"
               min="0"
               step="0.01"
@@ -2740,6 +2756,7 @@ const CreateItemPage = () => {
                         onChange={handleModalInputChange}
                         onFocus={(e) => handleModalVariantNumericFocus(e, "size", "small_price")}
                         onBlur={(e) => handleModalVariantNumericBlur(e, "size", "small_price")}
+                        onWheel={disableNumberInputScroll} // Disable scroll
                         className="input"
                         min="0"
                         step="0.01"
@@ -2752,6 +2769,7 @@ const CreateItemPage = () => {
                         onChange={handleModalInputChange}
                         onFocus={(e) => handleModalVariantNumericFocus(e, "size", "medium_price")}
                         onBlur={(e) => handleModalVariantNumericBlur(e, "size", "medium_price")}
+                        onWheel={disableNumberInputScroll} // Disable scroll
                         className="input"
                         min="0"
                         step="0.01"
@@ -2764,6 +2782,7 @@ const CreateItemPage = () => {
                         onChange={handleModalInputChange}
                         onFocus={(e) => handleModalVariantNumericFocus(e, "size", "large_price")}
                         onBlur={(e) => handleModalVariantNumericBlur(e, "size", "large_price")}
+                        onWheel={disableNumberInputScroll} // Disable scroll
                         className="input"
                         min="0"
                         step="0.01"
@@ -2805,6 +2824,7 @@ const CreateItemPage = () => {
                             onChange={handleModalInputChange}
                             onFocus={(e) => handleModalVariantNumericFocus(e, "cold", "ice_price")}
                             onBlur={(e) => handleModalVariantNumericBlur(e, "cold", "ice_price")}
+                            onWheel={disableNumberInputScroll} // Disable scroll
                             className="input"
                             min="0"
                             step="0.01"
@@ -2836,6 +2856,7 @@ const CreateItemPage = () => {
                         onChange={handleModalInputChange}
                         onFocus={(e) => handleModalVariantNumericFocus(e, "spicy", "spicy_price")}
                         onBlur={(e) => handleModalVariantNumericBlur(e, "spicy", "spicy_price")}
+                        onWheel={disableNumberInputScroll} // Disable scroll
                         className="input"
                         min="0"
                         step="0.01"
@@ -2871,6 +2892,7 @@ const CreateItemPage = () => {
                         onChange={handleModalInputChange}
                         onFocus={(e) => handleModalVariantNumericFocus(e, "spicy", "non_spicy_price")}
                         onBlur={(e) => handleModalVariantNumericBlur(e, "spicy", "non_spicy_price")}
+                        onWheel={disableNumberInputScroll} // Disable scroll
                         className="input"
                         min="0"
                         step="0.01"
@@ -3133,7 +3155,7 @@ const CreateItemPage = () => {
                 Manage Ingredients and Nutrition
               </button>
             </div>
-    
+        
             <div className="modal-actions">
               <button type="button" className="save-button" onClick={handleModalSave}>
                 Save

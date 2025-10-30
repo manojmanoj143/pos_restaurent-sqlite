@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import axios from 'axios';
 
 const PrintSettingsPage = () => {
   const [formData, setFormData] = useState({
@@ -19,7 +20,21 @@ const PrintSettingsPage = () => {
   const [editId, setEditId] = useState(null);
   const [showForm, setShowForm] = useState(true);
   const [selectedId, setSelectedId] = useState(null);
+  const [logoUrl, setLogoUrl] = useState(null);
   const API_URL = 'http://localhost:8000';
+
+  // Fetch logo for preview
+  const fetchLogo = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/api/logo`);
+      if (response.data.logo) {
+        setLogoUrl(API_URL + response.data.logo);
+      }
+    } catch (err) {
+      console.error("Failed to fetch logo for preview:", err);
+    }
+  };
+
   // Fetch all print settings
   const fetchAllSettings = async () => {
     setLoading(true);
@@ -42,6 +57,7 @@ const PrintSettingsPage = () => {
       setLoading(false);
     }
   };
+
   // Fetch a single setting for editing
   const fetchSetting = async (id) => {
     setLoading(true);
@@ -61,6 +77,7 @@ const PrintSettingsPage = () => {
       setLoading(false);
     }
   };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prevData) => ({
@@ -68,6 +85,7 @@ const PrintSettingsPage = () => {
       [name]: value,
     }));
   };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -101,6 +119,7 @@ const PrintSettingsPage = () => {
       setLoading(false);
     }
   };
+
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this setting?")) return;
     setLoading(true);
@@ -121,6 +140,7 @@ const PrintSettingsPage = () => {
       setLoading(false);
     }
   };
+
   const handleUse = async () => {
     setLoading(true);
     setMessage(null);
@@ -157,6 +177,7 @@ const PrintSettingsPage = () => {
       setLoading(false);
     }
   };
+
   const resetForm = () => {
     setFormData({
       restaurantName: "",
@@ -170,16 +191,19 @@ const PrintSettingsPage = () => {
     });
     setEditId(null);
   };
+
   const toggleToList = () => {
     fetchAllSettings();
     setShowList(true);
     setShowForm(false);
   };
+
   const toggleToForm = () => {
     resetForm();
     setShowList(false);
     setShowForm(true);
   };
+
   const handleBack = () => {
     if (showList) {
       toggleToForm();
@@ -187,12 +211,18 @@ const PrintSettingsPage = () => {
       window.history.back();
     }
   };
+
+  useEffect(() => {
+    fetchLogo();
+  }, []);
+
   if (loading) {
     return <div style={{ textAlign: 'center', padding: '24px' }}>Loading...</div>;
   }
   if (error) {
     return <div style={{ textAlign: 'center', padding: '24px', color: 'red' }}>Error: {error}</div>;
   }
+
   return (
     <div style={{ width: '100%', minHeight: '100vh', padding: '24px', background: 'linear-gradient(135deg, #ffffff 0%, #3498db 100%)', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)', borderRadius: '8px' }}>
       <div style={{ marginBottom: '16px', textAlign: 'left' }}>
@@ -471,7 +501,7 @@ const PrintSettingsPage = () => {
             </form>
           </div>
           <div style={{
-            width: '300px',
+            width: '400px',
             padding: '16px',
             backgroundColor: '#ffffff',
             borderRadius: '8px',
@@ -479,17 +509,38 @@ const PrintSettingsPage = () => {
             minHeight: '400px',
             display: 'flex',
             flexDirection: 'column',
-            justifyContent: 'space-between'
+            justifyContent: 'space-between',
+            border: '1px solid #3498db'
           }}>
             <div>
               <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '12px', textAlign: 'center' }}>Print Preview</h2>
-              <div style={{ fontFamily: 'Arial, sans-serif', fontSize: '16px' }}>
-                <div style={{ textAlign: 'center', fontWeight: 'bold' }}>{formData.restaurantName || 'Restaurant Name'}</div>
-                <div style={{ textAlign: 'center' }}>
-                  {formData.street ? `${formData.street}, ` : ''}{formData.city || ''}{formData.pincode ? `, ${formData.pincode}` : ''}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                {/* Logo on the left */}
+                {logoUrl && (
+                  <div style={{ flex: '0 0 auto' }}>
+                    <img
+                      src={logoUrl}
+                      alt="Logo"
+                      style={{
+                        width: '80px',
+                        height: '80px',
+                        objectFit: 'contain',
+                        borderRadius: '5px'
+                      }}
+                    />
+                  </div>
+                )}
+                {/* Restaurant details on the right */}
+                <div style={{ fontFamily: 'Arial, sans-serif', fontSize: '16px', textAlign: 'right' }}>
+                  <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>{formData.restaurantName || 'Restaurant Name'}</div>
+                  <div>
+                    {formData.street && formData.city
+                      ? `${formData.street}, ${formData.city} ${formData.pincode ? `, ${formData.pincode}` : ''}`
+                      : `${formData.street || ''} ${formData.city || ''} ${formData.pincode ? `, ${formData.pincode}` : ''}`}
+                  </div>
+                  <div style={{ margin: '4px 0' }}>Phone: {formData.phone || 'Phone Number'}</div>
+                  <div>GSTIN: {formData.gstin || 'GSTIN Number'}</div>
                 </div>
-                <div style={{ textAlign: 'center' }}>Phone: {formData.phone || 'Phone Number'}</div>
-                <div style={{ textAlign: 'center' }}>GSTIN: {formData.gstin || 'GSTIN Number'}</div>
               </div>
             </div>
             <div>
@@ -614,4 +665,5 @@ const PrintSettingsPage = () => {
     </div>
   );
 };
+
 export default PrintSettingsPage;

@@ -1,3 +1,4 @@
+// Navbar.jsx (full updated code with system settings integration)
 import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -18,23 +19,105 @@ function Navbar() {
   const [warningType, setWarningType] = useState("success");
   const [pendingAction, setPendingAction] = useState(null);
 
-  // Update time every second and keep date dynamic
+  // System settings state with defaults
+  const [settings, setSettings] = useState({
+    country: 'Japan',
+    language: 'English',
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    currency: 'JPY',
+    dateFormat: 'dd-mm-yyyy',
+    timeFormat: 'hh:mm a',
+    numberFormat: '#,##,###.##',
+    useNumberFormatFromCurrency: false,
+    firstDayOfWeek: 'Monday',
+    floatPrecision: 3,
+    currencyPrecision: 4,
+  });
+
+  // Update time every second
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Dynamic date and time formatting
-  const formattedDate = currentTime.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
-  const formattedTime = currentTime.toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
+  // Load system settings on mount with fallback
+  useEffect(() => {
+    const storedSettings = JSON.parse(localStorage.getItem('systemSettings'));
+    if (storedSettings) {
+      setSettings((prev) => ({ ...prev, ...storedSettings }));
+    }
+  }, []);
+
+  // Dynamic date formatting based on system settings
+  const getFormattedDate = (date, dateFormat) => {
+    if (!dateFormat) {
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+    }
+
+    const numericFormatter = new Intl.DateTimeFormat('en', { year: 'numeric', month: '2-digit', day: 'numeric' });
+    const parts = numericFormatter.formatToParts(date);
+    const year = parts.find((p) => p.type === 'year')?.value || '';
+    const month = parts.find((p) => p.type === 'month')?.value || '';
+    const day = parts.find((p) => p.type === 'day')?.value || '';
+
+    switch (dateFormat) {
+      case 'dd-mm-yyyy':
+        return `${day.padStart(2, '0')}-${month}-${year}`;
+      case 'mm-dd-yyyy':
+        return `${month}-${day.padStart(2, '0')}-${year}`;
+      case 'yyyy-mm-dd':
+        return `${year}-${month}-${day.padStart(2, '0')}`;
+      case 'dd/mm/yyyy':
+        return `${day.padStart(2, '0')}/${month}/${year}`;
+      case 'mm/dd/yyyy':
+        return `${month}/${day.padStart(2, '0')}/${year}`;
+      case 'yyyy/mm/dd':
+        return `${year}/${month}/${day.padStart(2, '0')}`;
+      case 'yyyy-long-mm-dd':
+        return date.toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        });
+      case 'dd-MMM-yy':
+        const monthShort = date.toLocaleDateString('en-US', { month: 'short' });
+        const dayStr = date.getDate().toString().padStart(2, '0');
+        const yearShort = date.getFullYear().toString().slice(-2);
+        return `${dayStr}-${monthShort}-${yearShort}`;
+      default:
+        return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    }
+  };
+
+  // Dynamic time formatting based on system settings
+  const getFormattedTime = (date, timeFormat) => {
+    if (!timeFormat) {
+      return date.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
+    }
+
+    const hasSeconds = timeFormat.includes(':ss') || timeFormat.includes('ss');
+    const is12Hour = timeFormat.includes(' a') || timeFormat.startsWith('hh');
+
+    const options = {
+      hour: '2-digit',
+      minute: '2-digit',
+      ...(hasSeconds && { second: '2-digit' }),
+      hour12: is12Hour,
+    };
+
+    return date.toLocaleTimeString('en-US', options);
+  };
+
+  const formattedDate = getFormattedDate(currentTime, settings.dateFormat);
+  const formattedTime = getFormattedTime(currentTime, settings.timeFormat);
 
   // Handle OK button click for warning messages
   const handleWarningOk = () => {

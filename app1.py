@@ -302,7 +302,7 @@ class SQLiteCollection:
             return doc
         return None
 def connect_to_sqlite():
-    global conn, items_collection, customers_collection, sales_collection, tables_collection, users_collection, settings_collection, email_tokens_collection, opening_collection, pos_closing_collection, kitchens_collection, item_groups_collection, kitchen_saved_collection, picked_up_collection, variants_collection, employees_collection, activeorders_collection, order_counters_collection, tripreports_collection, email_settings_collection, purchase_items_collection, suppliers_collection, purchase_orders_collection, purchase_receipts_collection, purchase_invoices_collection, uoms_collection, purchase_sales_collection, print_settings_collection, combo_offers_collection, vat_collection, customer_groups_collection, company_details_collection
+    global conn, items_collection, customers_collection, sales_collection, tables_collection, users_collection, settings_collection, email_tokens_collection, opening_collection, pos_closing_collection, kitchens_collection, item_groups_collection, kitchen_saved_collection, picked_up_collection, variants_collection, employees_collection, activeorders_collection, order_counters_collection, tripreports_collection, email_settings_collection, purchase_items_collection, suppliers_collection, purchase_orders_collection, purchase_receipts_collection, purchase_invoices_collection, uoms_collection, purchase_sales_collection, print_settings_collection, combo_offers_collection, vat_collection, customer_groups_collection, company_details_collection, logo_details_collection, supplier_group_collection
     mode = config.get("mode", "server")
     if mode == 'server':
         db_path = os.path.join(CONFIG_DIR, 'restaurant.db')
@@ -311,7 +311,7 @@ def connect_to_sqlite():
         tables = [
             'active_orders', 'combo_offers', 'customers', 'email_settings', 'email_tokens', 'employees', 'item_groups', 'items', 'kitchen_saved_orders', 'kitchens',
             'order_counters', 'picked_up_items', 'pos_closing_entries', 'pos_opening_entries', 'print_settings', 'purchase_invoices', 'purchase_items', 'purchase_orders',
-            'purchase_receipts', 'purchase_sales', 'sales', 'suppliers', 'system_settings', 'tables', 'trip_reports', 'uoms', 'users', 'variants', 'vat', 'customer_groups', 'company_details' # NEW: customer_groups
+            'purchase_receipts', 'purchase_sales', 'sales', 'suppliers', 'system_settings', 'tables', 'trip_reports', 'uoms', 'users', 'variants', 'vat', 'customer_groups', 'company_details', 'logo_details', 'supplier_groups' # NEW: customer_groups
         ]
         for table in tables:
             cur.execute(f"CREATE TABLE IF NOT EXISTS {table} (id TEXT PRIMARY KEY, data TEXT)")
@@ -348,6 +348,8 @@ def connect_to_sqlite():
         vat_collection = SQLiteCollection(conn, 'vat')
         customer_groups_collection = SQLiteCollection(conn, 'customer_groups')  # NEW: customer_groups_collection
         company_details_collection = SQLiteCollection(conn, 'company_details')
+        logo_details_collection = SQLiteCollection(conn, 'logo_details')
+        supplier_group_collection = SQLiteCollection(conn, 'supplier_groups')
         ensure_test_users()
         return True
     else:
@@ -449,6 +451,57 @@ def convert_objectid_to_str(item):
     if isinstance(item, datetime):
         return item.isoformat()
     return item
+def get_system_settings():
+    if settings_collection is None:
+        logger.warning("Settings collection not available, returning default settings")
+        return {
+            "_id": "system_settings",
+            "disableUserPassLogin": False,
+            "allowLoginUsingMobileNumber": True,
+            "allowLoginUsingUsername": True,
+            "loginWithEmailLink": False,
+            "sessionExpiry": "06:00",
+            "backup_interval_hours": 6,
+            "country": 'United Arab Emirates',
+            "language": 'English',
+            "timeZone": 'Asia/Dubai',
+            "currency": '',
+            "dateFormat": 'dd-mm-yyyy',
+            "timeFormat": 'HH:mm:ss',
+            "numberFormat": '#,##,###.##',
+            "useNumberFormatFromCurrency": false,
+            "firstDayOfWeek": 'Monday',
+            "floatPrecision": 3,
+            "currencyPrecision": '',
+            "roundingMethod": '',
+        }
+    settings = settings_collection.find_one({"_id": "system_settings"})
+    if not settings:
+        default_settings = {
+            "_id": "system_settings",
+            "disableUserPassLogin": False,
+            "allowLoginUsingMobileNumber": True,
+            "allowLoginUsingUsername": True,
+            "loginWithEmailLink": False,
+            "sessionExpiry": "06:00",
+            "backup_interval_hours": 6,
+            "country": 'United Arab Emirates',
+            "language": 'English',
+            "timeZone": 'Asia/Dubai',
+            "currency": '',
+            "dateFormat": 'dd-mm-yyyy',
+            "timeFormat": 'HH:mm:ss',
+            "numberFormat": '#,##,###.##',
+            "useNumberFormatFromCurrency": false,
+            "firstDayOfWeek": 'Monday',
+            "floatPrecision": 3,
+            "currencyPrecision": '',
+            "roundingMethod": '',
+        }
+        settings_collection.insert_one(default_settings)
+        logger.info("Inserted default system settings")
+        return default_settings
+    return settings
 def get_system_settings():
     if settings_collection is None:
         logger.warning("Settings collection not available, returning default settings")
@@ -592,6 +645,81 @@ def configure_app():
     except Exception as e:
         logger.error(f"Configuration error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": f"An internal server error occurred during configuration: {str(e)}"}), 500
+# NEW: Logo upload route - Updated to use logo_details_collection
+@app.route('/api/upload-logo', methods=['POST', 'OPTIONS'])
+@db_required
+def upload_logo():
+    if request.method == 'OPTIONS':
+        response = jsonify({"success": True})
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response, 200
+    try:
+        if 'logo' not in request.files:
+            return jsonify({"error": "No logo file provided"}), 400
+        file = request.files['logo']
+        if file.filename == '':
+            return jsonify({"error": "No file selected"}), 400
+        if not allowed_file(file.filename, ALLOWED_IMAGE_EXTENSIONS):
+            return jsonify({"error": "Invalid file type. Only images allowed"}), 400
+        filename = handle_image_upload(file)
+        if not filename:
+            return jsonify({"error": "Failed to upload logo"}), 500
+        # Delete old logo if exists
+        old_logo_data = logo_details_collection.find_one({"_id": "logo_settings"})
+        old_logo = old_logo_data.get('logo') if old_logo_data else None
+        if old_logo:
+            old_path = os.path.join(app.config['UPLOAD_FOLDER'], old_logo)
+            if os.path.exists(old_path):
+                os.remove(old_path)
+                logger.info(f"Deleted old logo: {old_logo}")
+        # Update logo_details
+        logo_settings = {"_id": "logo_settings", "logo": filename, "uploaded_at": datetime.now(ZoneInfo("UTC")).isoformat()}
+        logo_details_collection.replace_one({"_id": "logo_settings"}, logo_settings, upsert=True)
+        logger.info(f"Logo uploaded and saved: {filename}")
+        return jsonify({"message": "Logo uploaded successfully", "logo": f"/api/images/{filename}"}), 200
+    except Exception as e:
+        logger.error(f"Error uploading logo: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+# NEW: Get logo route - Updated to use logo_details_collection
+@app.route('/api/logo', methods=['GET'])
+@db_required
+def get_logo():
+    try:
+        logo_data = logo_details_collection.find_one({"_id": "logo_settings"})
+        logo_filename = logo_data.get('logo') if logo_data else None
+        if not logo_filename:
+            return jsonify({"logo": None}), 200
+        return jsonify({"logo": f"/api/images/{logo_filename}"}), 200
+    except Exception as e:
+        logger.error(f"Error fetching logo: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+# NEW: Delete logo route - Updated to use logo_details_collection
+@app.route('/api/delete-logo', methods=['DELETE', 'OPTIONS'])
+@db_required
+def delete_logo():
+    if request.method == 'OPTIONS':
+        response = jsonify({"success": True})
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response, 200
+    try:
+        logo_data = logo_details_collection.find_one({"_id": "logo_settings"})
+        logo_filename = logo_data.get('logo') if logo_data else None
+        if logo_filename:
+            logo_path = os.path.join(app.config['UPLOAD_FOLDER'], logo_filename)
+            if os.path.exists(logo_path):
+                os.remove(logo_path)
+                logger.info(f"Deleted logo file: {logo_filename}")
+            logo_details_collection.replace_one({"_id": "logo_settings"}, {"_id": "logo_settings", "logo": None}, upsert=True)
+            logger.info("Logo deleted successfully")
+            return jsonify({"message": "Logo deleted successfully"}), 200
+        return jsonify({"message": "No logo to delete"}), 200
+    except Exception as e:
+        logger.error(f"Error deleting logo: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 @app.route('/api/upload-image', methods=['POST', 'OPTIONS'])
 def upload_image():
     if request.method == 'OPTIONS':
@@ -1773,6 +1901,10 @@ if config.get('mode') == 'server':
             sales_data['grand_total'] = round(grand_total, 2)
             sales_data['invoice_no'] = sales_data.get('invoice_no', f"INV-{int(datetime.now().timestamp())}")
             sales_data['status'] = sales_data.get('status', 'Draft')
+            # NEW: Store current currency and precision in sales_data for historical display
+            current_settings = get_system_settings()
+            sales_data['invoice_currency'] = current_settings.get('currency', 'INR')
+            sales_data['invoice_currency_precision'] = int(current_settings.get('currencyPrecision', 2))
             processed_items = []
             for item in sales_data.get('items', []):
                 if not all(key in item for key in ['item_name', 'basePrice', 'quantity']):
@@ -3445,6 +3577,59 @@ if config.get('mode') == 'server':
             return jsonify({'error': f"Invalid data format: {str(e)}"}), 400
         except Exception as e:
             return jsonify({'error': f"Failed to record sale: {str(e)}"}), 500
+        
+    @app.route('/api/supplier_groups', methods=['GET'])
+    @db_required
+    def get_supplier_groups():
+        try:
+            groups = supplier_group_collection.find()
+            return jsonify(convert_objectid_to_str(groups)), 200
+        except Exception as e:
+            return jsonify({'error': f"Failed to fetch supplier groups: {str(e)}"}), 500
+    @app.route('/api/supplier_groups', methods=['POST'])
+    @db_required
+    def add_supplier_group():
+        try:
+            data = request.json
+            if not data or 'group_name' not in data or not data['group_name'].strip():
+                return jsonify({'error': 'Invalid group name'}), 400
+            if supplier_group_collection.find_one({'group_name': data['group_name']}):
+                return jsonify({'error': 'Group already exists'}), 400
+            group = {
+                'group_name': data['group_name'].strip(),
+                'created_at': datetime.now(timezone.utc).isoformat()
+            }
+            result = supplier_group_collection.insert_one(group)
+            inserted_group = supplier_group_collection.find_one({'_id': result.inserted_id})
+            return jsonify(convert_objectid_to_str(inserted_group)), 201
+        except Exception as e:
+            return jsonify({'error': f"Failed to add supplier group: {str(e)}"}), 500
+    @app.route('/api/supplier_groups/<id>', methods=['PUT'])
+    @db_required
+    def update_supplier_group(id):
+        try:
+            data = request.json
+            if not data or 'group_name' not in data or not data['group_name'].strip():
+                return jsonify({'error': 'Invalid group name'}), 400
+            existing = supplier_group_collection.find_one({'group_name': data['group_name'], '_id': {'$ne': id}})
+            if existing:
+                return jsonify({'error': 'Group name already exists'}), 400
+            result = supplier_group_collection.update_one({'_id': id}, {'$set': {'group_name': data['group_name'].strip()}})
+            if result.matched_count == 0:
+                return jsonify({'error': 'Group not found or no changes'}), 404
+            return jsonify({'message': 'Supplier group updated successfully'}), 200
+        except Exception as e:
+            return jsonify({'error': f"Failed to update supplier group: {str(e)}"}), 500
+    @app.route('/api/supplier_groups/<id>', methods=['DELETE'])
+    @db_required
+    def delete_supplier_group(id):
+        try:
+            result = supplier_group_collection.delete_one({'_id': id})
+            if result.deleted_count == 0:
+                return jsonify({'error': 'Group not found'}), 404
+            return jsonify({'message': 'Supplier group deleted successfully'}), 200
+        except Exception as e:
+            return jsonify({'error': f"Failed to delete supplier group: {str(e)}"}), 500
     @app.route('/api/print_settings/active', methods=['GET'])
     @db_required
     def get_active_print_settings():
@@ -3465,6 +3650,32 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error deactivating print settings: {str(e)}")
             return jsonify({"error": "Internal server error"}), 500
+    @app.route('/api/print_settings', methods=['GET'])
+    @db_required
+    def get_all_print_settings():
+        try:
+            settings = print_settings_collection.find()
+            return jsonify(convert_objectid_to_str(settings)), 200
+        except Exception as e:
+            logger.error(f"Error fetching print settings: {str(e)}")
+            return jsonify({"error": str(e)}), 500
+    @app.route('/api/print_settings', methods=['POST'])
+    @db_required
+    def create_print_settings():
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({"error": "No data provided"}), 400
+            data['active'] = data.get('active', False)
+            data['created_at'] = datetime.now(ZoneInfo("UTC")).isoformat()
+            result = print_settings_collection.insert_one(data)
+            if not print_settings_collection.find_one({"_id": {"$ne": result.inserted_id}, "active": True}):
+                print_settings_collection.update_many({"_id": {"$ne": result.inserted_id}}, {"$set": {"active": False}})
+            logger.info(f"Print settings created with ID: {result.inserted_id}")
+            return jsonify({"message": "Print settings created successfully", "id": result.inserted_id}), 201
+        except Exception as e:
+            logger.error(f"Error creating print settings: {str(e)}")
+            return jsonify({"error": str(e)}), 500
     @app.route('/api/print_settings/<id>', methods=['GET', 'PUT', 'DELETE', 'OPTIONS'])
     @db_required
     def print_setting(id):
@@ -3805,7 +4016,9 @@ def manage_company_details():
                 'ownerName': data.get('ownerName', ''),
                 'businessType': data.get('businessType', ''),
                 'otherBusinessType': data.get('otherBusinessType', ''),
-                'gstNumber': data.get('gstNumber', ''),
+                'taxType': data.get('taxType', ''),
+                'taxPercentage': data.get('taxPercentage', ''),
+                'taxNumber': data.get('taxNumber', ''),
                 'fssaiNumber': data.get('fssaiNumber', ''),
                 'panNumber': data.get('panNumber', ''),
                 'addresses': data.get('addresses', [{'addressLine1': '', 'addressLine2': '', 'city': '', 'state': '', 'pincode': '', 'country': ''}]),
@@ -4294,4 +4507,4 @@ if __name__ == '__main__':
         import waitress
         waitress.serve(app, host='0.0.0.0', port=8000, threads=8)
     else:
-        app.run(host='0.0.0.0', port=8000, debug=True)
+        app.run(host='0.0.0.0', port=8000, debug=True) 

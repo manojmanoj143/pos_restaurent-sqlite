@@ -34,6 +34,7 @@ function Purchase() {
   const [activeTab, setActiveTab] = useState('item');
   const [items, setItems] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
+  const [supplierGroups, setSupplierGroups] = useState([]); // NEW: Supplier Groups
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [purchaseReceipts, setPurchaseReceipts] = useState([]);
   const [purchaseInvoices, setPurchaseInvoices] = useState([]);
@@ -65,6 +66,9 @@ function Purchase() {
   const [reportSearch, setReportSearch] = useState('');
   const [activeSection, setActiveSection] = useState('details');
   const [showSupplierModal, setShowSupplierModal] = useState(false);
+  const [showSupplierGroupModal, setShowSupplierGroupModal] = useState(false); // NEW: Supplier Group Modal
+  const [editingSupplierGroup, setEditingSupplierGroup] = useState(null); // NEW: Editing Supplier Group
+  const [newSupplierGroupName, setNewSupplierGroupName] = useState(''); // NEW: New Group Name
   const [itemFormRows, setItemFormRows] = useState([
     { company: '', name: '', boxToMaster: '', masterUnit: '', masterToOuter: '', outerUnit: '', outerToNos: '', nosUnit: 'Nos', grams: '', suppliers: [], isCompanyDropdownOpen: false }
   ]);
@@ -73,7 +77,7 @@ function Purchase() {
     company: '',
     code: '',
     supplier_names: [],
-    group: '',
+    group: '', // This will now be populated from supplierGroups
     country: '',
     currency: '',
     taxId: '',
@@ -212,6 +216,7 @@ function Purchase() {
   useEffect(() => {
     fetchItems();
     fetchSuppliers();
+    fetchSupplierGroups(); // NEW: Fetch Supplier Groups
     fetchPurchaseOrders();
     fetchPurchaseReceipts();
     fetchPurchaseInvoices();
@@ -334,6 +339,20 @@ function Purchase() {
       }
     } catch (err) {
       setError('Failed to fetch UOMs');
+    }
+  };
+  // NEW: Fetch Supplier Groups
+  const fetchSupplierGroups = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/supplier_groups`);
+      if (response.ok) {
+        const groups = await response.json();
+        setSupplierGroups(groups);
+      } else {
+        setError('Failed to fetch supplier groups');
+      }
+    } catch (err) {
+      setError('Failed to fetch supplier groups');
     }
   };
   const getNextSeries = () => {
@@ -683,6 +702,59 @@ function Purchase() {
         setWarningAction(null);
     });
 };
+  // NEW: Handle Create/Update Supplier Group
+  const handleSupplierGroupSubmit = async (e) => {
+    e.preventDefault();
+    if (!newSupplierGroupName.trim()) {
+      setError('Group name is required');
+      return;
+    }
+    setLoading(true);
+    try {
+      const method = editingSupplierGroup ? 'PUT' : 'POST';
+      const url = editingSupplierGroup ? `${API_URL}/api/supplier_groups/${editingSupplierGroup._id}` : `${API_URL}/api/supplier_groups`;
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ group_name: newSupplierGroupName.trim() })
+      });
+      if (response.ok) {
+        await fetchSupplierGroups();
+        setMessage(editingSupplierGroup ? 'Supplier group updated successfully' : 'Supplier group created successfully');
+        setNewSupplierGroupName('');
+        setEditingSupplierGroup(null);
+        setShowSupplierGroupModal(false);
+      } else {
+        const errData = await response.json();
+        setError(errData.error || 'Failed to save supplier group');
+      }
+    } catch (err) {
+      setError('Failed to save supplier group');
+    }
+    setLoading(false);
+  };
+  // NEW: Delete Supplier Group
+  const deleteSupplierGroup = (id) => {
+    setShowWarning('Are you sure you want to delete this supplier group?');
+    setWarningAction(() => async () => {
+      setLoading(true);
+      try {
+        const response = await fetch(`${API_URL}/api/supplier_groups/${id}`, { method: 'DELETE' });
+        if (response.ok) {
+          await fetchSupplierGroups();
+          setMessage('Supplier group deleted successfully');
+        } else {
+          const errData = await response.json();
+          setError(errData.error || 'Failed to delete supplier group');
+        }
+      } catch (err) {
+        setError('Failed to delete supplier group');
+      }
+      setLoading(false);
+      setShowWarning(null);
+      setWarningAction(null);
+    });
+  };
   const addContact = () => {
     setSupplierForm({ ...supplierForm, contacts: [...supplierForm.contacts, { contactPerson: '', whatsapp: '', phone: '', email: '', address: '' }] });
   };
@@ -2427,6 +2499,30 @@ function Purchase() {
               </div>
             </div>
           )}
+          {/* NEW: Supplier Group Modal */}
+          {showSupplierGroupModal && (
+            <div className="purchase-modal-overlay" onClick={() => { setShowSupplierGroupModal(false); setNewSupplierGroupName(''); setEditingSupplierGroup(null); }}>
+              <div className="purchase-modal" onClick={(e) => e.stopPropagation()}>
+                <button className="purchase-modal-close" onClick={() => { setShowSupplierGroupModal(false); setNewSupplierGroupName(''); setEditingSupplierGroup(null); }}>
+                    <FaTimes />
+                </button>
+                <h3>{editingSupplierGroup ? 'Edit Supplier Group' : 'Create New Supplier Group'}</h3>
+                <input
+                    type="text"
+                    value={newSupplierGroupName}
+                    onChange={(e) => setNewSupplierGroupName(e.target.value)}
+                    placeholder="Enter supplier group name"
+                    className="purchase-input"
+                />
+                <div className="purchase-form-buttons">
+                    <button onClick={handleSupplierGroupSubmit} className="purchase-button submit">
+                        {editingSupplierGroup ? 'Update' : 'Create'}
+                    </button>
+                    <button onClick={() => { setShowSupplierGroupModal(false); setNewSupplierGroupName(''); setEditingSupplierGroup(null); }} className="purchase-button cancel">Cancel</button>
+                </div>
+              </div>
+            </div>
+          )}
           {activeTab === 'item' && (
             <div className="purchase-section">
               <div className="purchase-header">
@@ -2627,6 +2723,9 @@ function Purchase() {
                         />
                     </div>
                     <div className="purchase-filter-group-right">
+                        <button onClick={() => setShowSupplierGroupModal(true)} className="purchase-button filter"> {/* NEW: Create Supplier Group Button */}
+                            Create Supplier Group
+                        </button>
                         <button onClick={() => setShowSupplierModal(true)} className="purchase-button filter">
                             View Suppliers List
                         </button>
@@ -2662,7 +2761,20 @@ function Purchase() {
                                 ))}
                                 <button type="button" onClick={addSupplierName} className="purchase-button add-row"><FaPlus /> Add Supplier Name</button>
                             </div>
-                            <div className="purchase-form-field"><label className="purchase-label">Supplier group/Category</label><input type="text" value={supplierForm.group} onChange={(e) => setSupplierForm({ ...supplierForm, group: e.target.value })} className="purchase-input"/></div>
+                            {/* NEW: Supplier Group Dropdown */}
+                            <div className="purchase-form-field">
+                                <label className="purchase-label">Supplier group/Category</label>
+                                <select 
+                                    value={supplierForm.group} 
+                                    onChange={(e) => setSupplierForm({ ...supplierForm, group: e.target.value })}
+                                    className="purchase-input select"
+                                >
+                                    <option value="">Select Group</option>
+                                    {supplierGroups.map(group => (
+                                        <option key={group._id} value={group.group_name}>{group.group_name}</option>
+                                    ))}
+                                </select>
+                            </div>
                             <div className="purchase-form-field"><label className="purchase-label">Country</label><input type="text" value={supplierForm.country} onChange={(e) => setSupplierForm({ ...supplierForm, country: e.target.value })} className="purchase-input"/></div>
                             <div className="purchase-form-field">
                                 <label className="purchase-label">Default Currency</label>
@@ -2776,6 +2888,35 @@ function Purchase() {
                             </div>
                         </div>
                     </div>
+                 )}
+                 {/* NEW: Supplier Groups List Modal */}
+                 {activeTab === 'supplier' && (
+                   <div className="purchase-supplier-groups-list">
+                     <h4>Supplier Groups</h4>
+                     <table className="purchase-table">
+                       <thead>
+                         <tr>
+                           <th>Group Name</th>
+                           <th>Actions</th>
+                         </tr>
+                       </thead>
+                       <tbody>
+                         {supplierGroups.map(group => (
+                           <tr key={group._id}>
+                             <td>{group.group_name}</td>
+                             <td>
+                               <button onClick={() => { setEditingSupplierGroup(group); setNewSupplierGroupName(group.group_name); }} className="purchase-button edit">
+                                 <FaEdit /> Edit
+                               </button>
+                               <button onClick={() => deleteSupplierGroup(group._id)} className="purchase-button delete">
+                                 <FaTrash /> Delete
+                               </button>
+                             </td>
+                           </tr>
+                         ))}
+                       </tbody>
+                     </table>
+                   </div>
                  )}
             </div>
           )}

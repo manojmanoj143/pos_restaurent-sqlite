@@ -5,7 +5,7 @@ import './SystemSettings.css';
 
 const SystemSettings = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('Login');
+  const [activeTab, setActiveTab] = useState('Details');
   const [searchQuery, setSearchQuery] = useState('');
   const [showUserList, setShowUserList] = useState(false);
   const [showAddUserForm, setShowAddUserForm] = useState(false);
@@ -19,39 +19,17 @@ const SystemSettings = () => {
     password: '',
   });
   const [settings, setSettings] = useState({
-    country: 'United Arab Emirates',
+    country: 'Japan',
     language: 'English',
     timeZone: 'Asia/Dubai',
-    currency: '',
-    enableOnboarding: false,
-    disableDocumentSharing: false,
-    dateFormat: 'dd-mm-yyyy',
+    currency: 'JPY',
+    dateFormat: 'yyyy/mm/dd',
     timeFormat: 'HH:mm:ss',
     numberFormat: '#,##,###.##',
     useNumberFormatFromCurrency: false,
     firstDayOfWeek: 'Monday',
     floatPrecision: 3,
-    currencyPrecision: '',
-    roundingMethod: '',
-    applyStrictUserPermissions: false,
-    allowOlderWebViewLinks: false,
-    numberOfBackups: 5,
-    sessionExpiry: '06:00',
-    documentShareKeyExpiry: 30,
-    denyMultipleSessions: false,
-    disableUserPassLogin: false,
-    allowLoginUsingMobileNumber: false,
-    allowLoginUsingUserName: false,
-    loginWithEmailLink: false,
-    allowConsecutiveLoginAttempts: 0,
-    allowLoginAfterFail: 60,
-    enableTwoFactorAuth: false,
-    logoutOnPasswordReset: false,
-    forceUserToResetPassword: 0,
-    resetPasswordLinkExpiryDuration: '24:00',
-    passwordResetLimit: 3,
-    enablePasswordPolicy: false,
-    minimumPasswordScore: 2,
+    currencyPrecision: 4,
   });
   const [clickCount, setClickCount] = useState(0);
   const [warningMessage, setWarningMessage] = useState('');
@@ -129,28 +107,6 @@ const SystemSettings = () => {
     } catch (error) {
       console.error('Error saving settings:', error);
       setWarningMessage(`Failed to save settings: ${error.message}`);
-    }
-  };
-
-  const handleTriggerBackup = async () => {
-    const newClickCount = clickCount + 1;
-    setClickCount(newClickCount);
-    if (newClickCount === 4) {
-      try {
-        const response = await fetch('http://localhost:8000/api/trigger-backup', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        });
-        if (!response.ok) throw new Error('Failed to trigger backup');
-        const data = await response.json();
-        setWarningMessage(data.message);
-        setClickCount(0);
-      } catch (error) {
-        console.error('Error triggering backup:', error);
-        setWarningMessage(`Failed: ${error.message}`);
-      }
-    } else {
-      setWarningMessage(`Click ${4 - newClickCount} more time(s)!`);
     }
   };
 
@@ -232,14 +188,22 @@ const SystemSettings = () => {
     }
   };
 
-  const dateFormatOptions = ['dd-mm-yyyy', 'mm-dd-yyyy', 'yyyy-mm-dd', 'dd/mm/yyyy', 'mm/dd/yyyy', 'yyyy/mm/dd'];
-  const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const passwordScoreOptions = [
-    { value: 1, label: 'Weak' },
-    { value: 2, label: 'Medium' },
-    { value: 3, label: 'Strong' },
-    { value: 4, label: 'Very Strong' },
+  const dateFormatOptions = [
+    'dd-mm-yyyy', 
+    'mm-dd-yyyy', 
+    'yyyy-mm-dd', 
+    'dd/mm/yyyy', 
+    'mm/dd/yyyy', 
+    'yyyy/mm/dd',
+    'yyyy-long-mm-dd'  // New: yyyy longmonth dd, e.g., 2025 October 29
   ];
+  const timeFormatOptions = [
+    'HH:mm:ss',  // 24-hour with seconds
+    'hh:mm:ss a',  // 12-hour with seconds and AM/PM
+    'HH:mm',  // 24-hour without seconds
+    'hh:mm a'  // 12-hour without seconds and AM/PM
+  ];
+  const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const roleProfileOptions = ['User', 'Admin', 'Bearer'];
 
   const renderUserList = () => (
@@ -383,18 +347,6 @@ const SystemSettings = () => {
               <input type="text" id="currency" name="currency" value={settings.currency} onChange={handleInputChange} />
             </div>
             <div>
-              <label>
-                <input type="checkbox" name="enableOnboarding" checked={settings.enableOnboarding} onChange={handleInputChange} />
-                Enable Onboarding
-              </label>
-            </div>
-            <div>
-              <label>
-                <input type="checkbox" name="disableDocumentSharing" checked={settings.disableDocumentSharing} onChange={handleInputChange} />
-                Disable Document Sharing
-              </label>
-            </div>
-            <div>
               <label htmlFor="dateFormat">Date Format</label>
               <select id="dateFormat" name="dateFormat" value={settings.dateFormat} onChange={handleInputChange}>
                 {dateFormatOptions.map((option) => (
@@ -404,7 +356,11 @@ const SystemSettings = () => {
             </div>
             <div>
               <label htmlFor="timeFormat">Time Format</label>
-              <input type="text" id="timeFormat" name="timeFormat" value={settings.timeFormat} onChange={handleInputChange} />
+              <select id="timeFormat" name="timeFormat" value={settings.timeFormat} onChange={handleInputChange}>
+                {timeFormatOptions.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label htmlFor="numberFormat">Number Format</label>
@@ -431,22 +387,6 @@ const SystemSettings = () => {
             <div>
               <label htmlFor="currencyPrecision">Currency Precision</label>
               <input type="number" id="currencyPrecision" name="currencyPrecision" value={settings.currencyPrecision} onChange={handleInputChange} placeholder="Depends on number format" />
-            </div>
-            <div>
-              <label htmlFor="roundingMethod">Rounding Method</label>
-              <input type="text" id="roundingMethod" name="roundingMethod" value={settings.roundingMethod} onChange={handleInputChange} />
-            </div>
-            <div>
-              <label>
-                <input type="checkbox" name="applyStrictUserPermissions" checked={settings.applyStrictUserPermissions} onChange={handleInputChange} />
-                Apply Strict User Permissions
-              </label>
-            </div>
-            <div>
-              <label>
-                <input type="checkbox" name="allowOlderWebViewLinks" checked={settings.allowOlderWebViewLinks} onChange={handleInputChange} />
-                Allow Older Web View Links
-              </label>
             </div>
             <button type="submit" className="save-settings-btn">Save Settings</button>
           </form>
@@ -514,82 +454,12 @@ const SystemSettings = () => {
             <button type="submit" className="save-settings-btn">Save Settings</button>
           </form>
         );
-      case 'Password':
-        return (
-          <form onSubmit={handleSubmit} className="settings-form">
-            <div>
-              <label>
-                <input type="checkbox" name="logoutOnPasswordReset" checked={settings.logoutOnPasswordReset} onChange={handleInputChange} />
-                Logout All Sessions on Password Reset
-              </label>
-            </div>
-            <div>
-              <label htmlFor="forceUserToResetPassword">Force User to Reset Password (Days)</label>
-              <input type="number" id="forceUserToResetPassword" name="forceUserToResetPassword" value={settings.forceUserToResetPassword} onChange={handleInputChange} min="0" />
-            </div>
-            <div>
-              <label htmlFor="resetPasswordLinkExpiryDuration">Reset Password Link Expiry (HH:MM)</label>
-              <input type="text" id="resetPasswordLinkExpiryDuration" name="resetPasswordLinkExpiryDuration" value={settings.resetPasswordLinkExpiryDuration} onChange={handleInputChange} placeholder="e.g., 24:00" />
-            </div>
-            <div>
-              <label htmlFor="passwordResetLimit">Password Reset Link Generation Limit</label>
-              <input type="number" id="passwordResetLimit" name="passwordResetLimit" value={settings.passwordResetLimit} onChange={handleInputChange} min="1" />
-              <small>Hourly rate limit for generating links</small>
-            </div>
-            <div>
-              <label>
-                <input type="checkbox" name="enablePasswordPolicy" checked={settings.enablePasswordPolicy} onChange={handleInputChange} />
-                Enable Password Policy
-              </label>
-              <small>Enforces password strength based on score</small>
-            </div>
-            <div>
-              <label htmlFor="minimumPasswordScore">Minimum Password Score</label>
-              <select id="minimumPasswordScore" name="minimumPasswordScore" value={settings.minimumPasswordScore} onChange={handleInputChange}>
-                {passwordScoreOptions.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label} ({option.value})</option>
-                ))}
-              </select>
-              <small>2 = Medium, 4 = Very Strong</small>
-            </div>
-            <button type="submit" className="save-settings-btn">Save Settings</button>
-          </form>
-        );
-      case 'Email':
-        return <div className="coming-soon">Email settings coming soon...</div>;
-      case 'Files':
-        return <div className="coming-soon">File settings coming soon...</div>;
-      case 'App':
-        return <div className="coming-soon">App settings coming soon...</div>;
-      case 'Updates':
-        return <div className="coming-soon">Update settings coming soon...</div>;
-      case 'Backups':
-        return (
-          <div className="settings-form">
-            <div>
-              <label htmlFor="numberOfBackups">Number of Backups to Keep</label>
-              <input
-                type="number"
-                id="numberOfBackups"
-                name="numberOfBackups"
-                value={settings.numberOfBackups}
-                onChange={(e) => setSettings((prev) => ({ ...prev, numberOfBackups: Math.min(10, Math.max(1, e.target.value)) }))}
-                min="1"
-                max="10"
-              />
-            </div>
-            <button className="trigger-backup-btn" onClick={handleTriggerBackup}>Trigger Backup (Click 4 times)</button>
-            <button type="submit" className="save-settings-btn" onClick={handleSubmit}>Save Settings</button>
-          </div>
-        );
-      case 'Advanced':
-        return <div className="coming-soon">Advanced settings coming soon...</div>;
       default:
         return <div className="coming-soon">Coming soon...</div>;
     }
   };
 
-  const tabs = ['Details', 'Login', 'Password', 'Email', 'Files', 'App', 'Updates', 'Backups', 'Advanced'];
+  const tabs = ['Details', 'Login'];
 
   return (
     <div className="system-settings">

@@ -10,7 +10,9 @@ function CompanyDetails() {
     ownerName: '',
     businessType: '',
     otherBusinessType: '',
-    gstNumber: '',
+    taxType: '',
+    taxPercentage: '',
+    taxNumber: '',
     fssaiNumber: '',
     panNumber: '',
     addresses: [{ addressLine1: '', addressLine2: '', city: '', state: '', pincode: '', country: '' }],
@@ -25,11 +27,28 @@ function CompanyDetails() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [message, setMessage] = useState('');
-  const [activeSection, setActiveSection] = useState('basic');
+  const [activeSection, setActiveSection] = useState('basic'); // Default to 'basic' to show form first
   const [savedDetails, setSavedDetails] = useState(null);
+  const [logoUrl, setLogoUrl] = useState(null); // State for logo URL
+
+  // Function to fetch the logo
+  const fetchLogo = async () => {
+    try {
+      // Assuming API URL is the same base as other calls
+      const response = await axios.get('http://localhost:8000/api/logo');
+      if (response.data.logo) {
+        // Prepend the base URL as the path might be relative
+        setLogoUrl('http://localhost:8000' + response.data.logo);
+      }
+    } catch (err) {
+      console.error("Failed to fetch logo:", err);
+      // Don't set a main error, just log it
+    }
+  };
 
   useEffect(() => {
     fetchCompanyDetails();
+    fetchLogo(); // Call fetchLogo on component mount
   }, []);
 
   const fetchCompanyDetails = async () => {
@@ -41,7 +60,8 @@ function CompanyDetails() {
         setFormData(latestDetails); // Pre-fill form with the latest data
         console.log('Fetched details:', latestDetails); // Debug log
       } else {
-        setError('No company details found.');
+        // setError('No company details found.'); // Don't show error, just means new entry
+        console.log('No existing company details found. Ready for new entry.');
       }
     } catch (err) {
       setError('Failed to fetch company details: ' + err.message);
@@ -94,12 +114,17 @@ function CompanyDetails() {
       setSavedDetails(response.data.companyDetails); // Update with the saved data
       console.log('Saved details:', response.data.companyDetails); // Debug log
       await fetchCompanyDetails(); // Refresh the displayed details
+      setActiveSection('details'); // Switch to details view after saving
     } catch (err) {
       setError('Failed to save company details: ' + err.message);
       console.error('Submit error:', err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const getTaxLabel = () => {
+    return formData.taxType === 'GST' ? 'GST Number' : 'VAT Number';
   };
 
   const handlePrint = () => {
@@ -113,93 +138,124 @@ function CompanyDetails() {
     printWindow.document.write(`
       <html>
         <head>
-          <title>Company Details</title>
+          <title>Company Details Application</title>
           <style>
-            body { font-family: Arial, sans-serif; margin: 20px; }
-            h1 { text-align: center; color: #2c3e50; font-size: 24px; }
-            h3 { text-align: center; color: #2c3e50; margin-top: 20px; font-size: 18px; }
+            body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; }
+            .a4-sheet { 
+              width: 210mm; 
+              min-height: 297mm; 
+              padding: 20mm; 
+              margin: 10mm auto; 
+              background: #fff; 
+              box-shadow: 0 0 5px rgba(0,0,0,0.1); 
+              box-sizing: border-box;
+            }
+            .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+            .header img { width: 100px; height: 100px; object-fit: contain; border-radius: 10px; }
+            .header h1 { color: #2c3e50; font-size: 24px; margin: 0; text-align: right; font-weight: 600; }
+            hr.divider { border: 0; border-top: 2px solid #3498db; margin: 20px 0; }
+            h3 { text-align: center; color: #2c3e50; margin-top: 20px; font-size: 18px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
             .section { margin-bottom: 20px; }
             .row { display: flex; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; }
-            .column { width: 48%; }
-            .field { display: flex; justify-content: space-between; margin-bottom: 5px; }
-            .label { font-weight: bold; width: 40%; text-align: right; padding-right: 10px; }
+            .column { width: 48%; min-width: 250px; }
+            .field { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; }
+            .label { font-weight: bold; width: 40%; text-align: right; padding-right: 10px; color: #555; }
             .centered-label { font-weight: bold; width: 40%; text-align: center; padding-right: 10px; }
-            .value { width: 60%; text-align: left; }
+            .value { width: 60%; text-align: left; color: #000; }
             .owner-name { width: 60%; text-align: left; }
-            hr { border: 0; border-top: 1px solid #2c3e50; margin: 20px 0; }
-            .footer { text-align: center; font-weight: bold; color: #2c3e50; }
+            .footer { text-align: center; font-weight: bold; color: #2c3e50; margin-top: 30px; font-size: 12px; }
+            @media print {
+              body { margin: 0; background-color: #fff; }
+              .a4-sheet { margin: 0; box-shadow: none; border: none; width: 100%; min-height: 0; padding: 10mm; }
+            }
           </style>
         </head>
         <body>
-          <h1>Company Details Application</h1>
-          <div class="section">
-            <h3>Basic Information</h3>
-            <div class="row">
-              <div class="column">
-                <div class="field"><span class="label">Restaurant Name:</span><span class="value">${savedDetails.restaurantName || 'N/A'}</span></div>
-                <div class="field"><span class="label">Business Type:</span><span class="value">${savedDetails.businessType || 'N/A'}${savedDetails.businessType === 'Other' ? ` (${savedDetails.otherBusinessType || 'N/A'})` : ''}</span></div>
-                <div class="field"><span class="label">FSSAI Number:</span><span class="value">${savedDetails.fssaiNumber || 'N/A'}</span></div>
-              </div>
-              <div class="column">
-                <div class="field"><span class="label">Owner/Manager Name:</span><span class="owner-name">${savedDetails.ownerName || 'N/A'}</span></div>
-                <div class="field"><span class="label">GST Number:</span><span class="value">${savedDetails.gstNumber || 'N/A'}</span></div>
-                <div class="field"><span class="label">PAN Number:</span><span class="value">${savedDetails.panNumber || 'N/A'}</span></div>
-              </div>
+          <div class="a4-sheet">
+            <!-- MODIFIED: Header with Logo (left) and Title (right) -->
+            <div class="header">
+              ${logoUrl ? `
+                <div>
+                  <img src="${logoUrl}" alt="Company Logo" />
+                </div>
+              ` : '<div></div>'}
+              <h1>Company Details<br/>Application</h1>
             </div>
-          </div>
-          <div class="section">
-            <h3>Address Details</h3>
-            ${savedDetails.addresses && savedDetails.addresses.length > 0 ? savedDetails.addresses.map((address, index) => `
+
+            <!-- MODIFIED: Border Line -->
+            <hr class="divider" />
+
+            <div class="section">
+              <h3>Basic Information</h3>
               <div class="row">
                 <div class="column">
-                  <div class="field"><span class="centered-label">Address ${index + 1}:</span><span class="value"></span></div>
-                  <div class="field"><span class="label">Line 1:</span><span class="value">${address.addressLine1 || 'N/A'}</span></div>
-                  <div class="field"><span class="label">City:</span><span class="value">${address.city || 'N/A'}</span></div>
-                  <div class="field"><span class="label">Pincode:</span><span class="value">${address.pincode || 'N/A'}</span></div>
+                  <div class="field"><span class="label">Restaurant Name:</span><span class="value">${savedDetails.restaurantName || 'N/A'}</span></div>
+                  <div class="field"><span class="label">Business Type:</span><span class="value">${savedDetails.businessType || 'N/A'}${savedDetails.businessType === 'Other' ? ` (${savedDetails.otherBusinessType || 'N/A'})` : ''}</span></div>
+                  <div class="field"><span class="label">Tax Type:</span><span class="value">${savedDetails.taxType || 'N/A'}</span></div>
+                  <div class="field"><span class="label">Tax Percentage:</span><span class="value">${savedDetails.taxPercentage || 'N/A'}%</span></div>
+                  <div class="field"><span class="label">FSSAI Number:</span><span class="value">${savedDetails.fssaiNumber || 'N/A'}</span></div>
                 </div>
                 <div class="column">
-                  <div class="field"><span class="label"></span><span class="value"></span></div>
-                  <div class="field"><span class="label">Line 2:</span><span class="value">${address.addressLine2 || 'N/A'}</span></div>
-                  <div class="field"><span class="label">State:</span><span class="value">${address.state || 'N/A'}</span></div>
-                  <div class="field"><span class="label">Country:</span><span class="value">${address.country || 'N/A'}</span></div>
+                  <div class="field"><span class="label">Owner/Manager Name:</span><span class="owner-name">${savedDetails.ownerName || 'N/A'}</span></div>
+                  <div class="field"><span class="label">${savedDetails.taxType === 'GST' ? 'GST' : 'VAT'} Number:</span><span class="value">${savedDetails.taxNumber || 'N/A'}</span></div>
+                  <div class="field"><span class="label">PAN Number:</span><span class="value">${savedDetails.panNumber || 'N/A'}</span></div>
                 </div>
-              </div>
-            `).join('') : '<div class="row"><div class="column"><div class="field"><span class="centered-label">No addresses available.</span><span class="value"></span></div></div></div>'}
-          </div>
-          <div class="section">
-            <h3>Contact Details</h3>
-            ${savedDetails.contacts && savedDetails.contacts.length > 0 ? savedDetails.contacts.map((contact, index) => `
-              <div class="row">
-                <div class="column">
-                  <div class="field"><span class="centered-label">Contact ${index + 1}:</span><span class="value"></span></div>
-                  <div class="field"><span class="label">Phone Number:</span><span class="value">${contact.phoneNumber || 'N/A'}</span></div>
-                  <div class="field"><span class="label">Email Address:</span><span class="value">${contact.emailAddress || 'N/A'}</span></div>
-                </div>
-                <div class="column">
-                  <div class="field"><span class="label"></span><span class="value"></span></div>
-                  <div class="field"><span class="label">WhatsApp Number:</span><span class="value">${contact.whatsappNumber || 'N/A'}</span></div>
-                  <div class="field"><span class="label">Website:</span><span class="value">${contact.website || 'N/A'}</span></div>
-                </div>
-              </div>
-            `).join('') : '<div class="row"><div class="column"><div class="field"><span class="centered-label">No contacts available.</span><span class="value"></span></div></div></div>'}
-          </div>
-          <div class="section">
-            <h3>Payment Information</h3>
-            <div class="row">
-              <div class="column">
-                <div class="field"><span class="label">Bank Name:</span><span class="value">${savedDetails.bankName || 'N/A'}</span></div>
-                <div class="field"><span class="label">Account Number:</span><span class="value">${savedDetails.accountNumber || 'N/A'}</span></div>
-                <div class="field"><span class="label">UPI ID:</span><span class="value">${savedDetails.upiId || 'N/A'}</span></div>
-              </div>
-              <div class="column">
-                <div class="field"><span class="label">Account Holder Name:</span><span class="value">${savedDetails.accountHolderName || 'N/A'}</span></div>
-                <div class="field"><span class="label">IFSC Code:</span><span class="value">${savedDetails.ifscCode || 'N/A'}</span></div>
-                <div class="field"><span class="label">Currency Type:</span><span class="value">${savedDetails.currencyType || 'N/A'}</span></div>
               </div>
             </div>
+            <div class="section">
+              <h3>Address Details</h3>
+              ${savedDetails.addresses && savedDetails.addresses.length > 0 ? savedDetails.addresses.map((address, index) => `
+                <div class="row" style="margin-bottom: 15px; border-bottom: 1px dashed #ccc; padding-bottom: 10px;">
+                  <div class="column">
+                    <div class="field"><span class="centered-label">Address ${index + 1}:</span><span class="value"></span></div>
+                    <div class="field"><span class="label">Line 1:</span><span class="value">${address.addressLine1 || 'N/A'}</span></div>
+                    <div class="field"><span class="label">City:</span><span class="value">${address.city || 'N/A'}</span></div>
+                    <div class="field"><span class="label">Pincode:</span><span class="value">${address.pincode || 'N/A'}</span></div>
+                  </div>
+                  <div class="column">
+                    <div class="field"><span class="label"></span><span class="value"></span></div>
+                    <div class="field"><span class="label">Line 2:</span><span class="value">${address.addressLine2 || 'N/A'}</span></div>
+                    <div class="field"><span class="label">State:</span><span class="value">${address.state || 'N/A'}</span></div>
+                    <div class="field"><span class="label">Country:</span><span class="value">${address.country || 'N/A'}</span></div>
+                  </div>
+                </div>
+              `).join('') : '<div class="row"><div class="column"><div class="field"><span class="centered-label">No addresses available.</span><span class="value"></span></div></div></div>'}
+            </div>
+            <div class="section">
+              <h3>Contact Details</h3>
+              ${savedDetails.contacts && savedDetails.contacts.length > 0 ? savedDetails.contacts.map((contact, index) => `
+                <div class="row" style="margin-bottom: 15px; border-bottom: 1px dashed #ccc; padding-bottom: 10px;">
+                  <div class="column">
+                    <div class="field"><span class="centered-label">Contact ${index + 1}:</span><span class="value"></span></div>
+                    <div class="field"><span class="label">Phone Number:</span><span class="value">${contact.phoneNumber || 'N/A'}</span></div>
+                    <div class="field"><span class="label">Email Address:</span><span class="value">${contact.emailAddress || 'N/A'}</span></div>
+                  </div>
+                  <div class="column">
+                    <div class="field"><span class="label"></span><span class="value"></span></div>
+                    <div class="field"><span class="label">WhatsApp Number:</span><span class="value">${contact.whatsappNumber || 'N/A'}</span></div>
+                    <div class="field"><span class="label">Website:</span><span class="value">${contact.website || 'N/A'}</span></div>
+                  </div>
+                </div>
+              `).join('') : '<div class="row"><div class="column"><div class="field"><span class="centered-label">No contacts available.</span><span class="value"></span></div></div></div>'}
+            </div>
+            <div class="section">
+              <h3>Payment Information</h3>
+              <div class="row">
+                <div class="column">
+                  <div class="field"><span class="label">Bank Name:</span><span class="value">${savedDetails.bankName || 'N/A'}</span></div>
+                  <div class="field"><span class="label">Account Number:</span><span class="value">${savedDetails.accountNumber || 'N/A'}</span></div>
+                  <div class="field"><span class="label">UPI ID:</span><span class="value">${savedDetails.upiId || 'N/A'}</span></div>
+                </div>
+                <div class="column">
+                  <div class="field"><span class="label">Account Holder Name:</span><span class="value">${savedDetails.accountHolderName || 'N/A'}</span></div>
+                  <div class="field"><span class="label">IFSC Code:</span><span class="value">${savedDetails.ifscCode || 'N/A'}</span></div>
+                  <div class="field"><span class="label">Currency Type:</span><span class="value">${savedDetails.currencyType || 'N/A'}</span></div>
+                </div>
+              </div>
+            </div>
+            <hr class="divider" />
+            <div class="footer">Company Name: ${savedDetails.restaurantName || 'N/A'}</div>
           </div>
-          <hr />
-          <div class="footer">Company Name: ${savedDetails.restaurantName || 'N/A'}</div>
         </body>
       </html>
     `);
@@ -264,7 +320,7 @@ function CompanyDetails() {
             {message}
           </div>
         )}
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', backgroundColor: '#3498db', padding: '10px', borderRadius: '10px' }}>
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', backgroundColor: '#3498db', padding: '10px', borderRadius: '10px', flexWrap: 'wrap' }}>
           <button
             onClick={() => toggleSection('details')}
             style={{
@@ -337,101 +393,167 @@ function CompanyDetails() {
           </button>
         </div>
         <div style={{ display: 'grid', gap: '20px' }}>
+          {/* MODIFIED: Details section with A4-sheet styling */}
           {activeSection === 'details' && (
             <div>
-              <h3 style={{ color: '#2c3e50', fontSize: '1.5rem', marginBottom: '15px', textAlign: 'center' }}>Saved Company Details</h3>
-              {savedDetails ? (
-                <div style={{ display: 'grid', gap: '15px' }}>
-                  <div className="section">
-                    <h4 style={{ color: '#2c3e50', fontSize: '1.2rem', textAlign: 'center' }}>Basic Information</h4>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: '10px' }}>
-                      <div style={{ width: '48%' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px' }}>Restaurant Name:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{savedDetails.restaurantName || 'N/A'}</span></div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px' }}>Business Type:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{savedDetails.businessType || 'N/A'}{savedDetails.businessType === 'Other' ? ` (${savedDetails.otherBusinessType || 'N/A'})` : ''}</span></div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px' }}>FSSAI Number:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{savedDetails.fssaiNumber || 'N/A'}</span></div>
-                      </div>
-                      <div style={{ width: '48%' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px' }}>Owner/Manager Name:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{savedDetails.ownerName || 'N/A'}</span></div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px' }}>GST Number:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{savedDetails.gstNumber || 'N/A'}</span></div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px' }}>PAN Number:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{savedDetails.panNumber || 'N/A'}</span></div>
-                      </div>
+              {/* A4 Sheet Styled Container */}
+              <div style={{
+                backgroundColor: '#fff',
+                border: '1px solid #ddd',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                padding: '25px',
+                margin: '20px 0',
+                borderRadius: '5px'
+              }}>
+                {/* Header: Logo (left) + Title (right) */}
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '20px',
+                  paddingBottom: '15px',
+                }}>
+                  {/* Logo */}
+                  {logoUrl ? (
+                    <img
+                      src={logoUrl}
+                      alt="Company Logo"
+                      style={{
+                        width: '100px',
+                        height: '100px',
+                        objectFit: 'contain',
+                        borderRadius: '10px',
+                        border: '1px solid #ddd'
+                      }}
+                    />
+                  ) : (
+                    <div style={{ 
+                      width: '100px', 
+                      height: '100px', 
+                      border: '1px dashed #ccc', 
+                      borderRadius: '10px', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center', 
+                      color: '#888', 
+                      fontSize: '12px',
+                      padding: '10px',
+                      textAlign: 'center'
+                    }}>
+                      No Logo Uploaded
                     </div>
-                  </div>
-                  <div className="section">
-                    <h4 style={{ color: '#2c3e50', fontSize: '1.2rem', textAlign: 'center' }}>Address Details</h4>
-                    {savedDetails.addresses && savedDetails.addresses.length > 0 ? savedDetails.addresses.map((address, index) => (
-                      <div key={index} style={{ marginBottom: '10px' }}>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: '10px' }}>
-                          <div style={{ width: '48%' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'center', paddingRight: '10px' }}>Address {index + 1}:</strong> <span style={{ width: '60%', textAlign: 'left' }}></span></div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px' }}>Line 1:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{address.addressLine1 || 'N/A'}</span></div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px' }}>City:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{address.city || 'N/A'}</span></div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px' }}>Pincode:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{address.pincode || 'N/A'}</span></div>
-                          </div>
-                          <div style={{ width: '48%' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px' }}></strong> <span style={{ width: '60%', textAlign: 'left' }}></span></div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px' }}>Line 2:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{address.addressLine2 || 'N/A'}</span></div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px' }}>State:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{address.state || 'N/A'}</span></div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px' }}>Country:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{address.country || 'N/A'}</span></div>
-                          </div>
-                        </div>
-                      </div>
-                    )) : <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'center', paddingRight: '10px' }}>No addresses available.</strong> <span style={{ width: '60%', textAlign: 'left' }}></span></div>}
-                  </div>
-                  <div className="section">
-                    <h4 style={{ color: '#2c3e50', fontSize: '1.2rem', textAlign: 'center' }}>Contact Details</h4>
-                    {savedDetails.contacts && savedDetails.contacts.length > 0 ? savedDetails.contacts.map((contact, index) => (
-                      <div key={index} style={{ marginBottom: '10px' }}>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: '10px' }}>
-                          <div style={{ width: '48%' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'center', paddingRight: '10px' }}>Contact {index + 1}:</strong> <span style={{ width: '60%', textAlign: 'left' }}></span></div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px' }}>Phone Number:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{contact.phoneNumber || 'N/A'}</span></div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px' }}>Email Address:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{contact.emailAddress || 'N/A'}</span></div>
-                          </div>
-                          <div style={{ width: '48%' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px' }}></strong> <span style={{ width: '60%', textAlign: 'left' }}></span></div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px' }}>WhatsApp Number:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{contact.whatsappNumber || 'N/A'}</span></div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px' }}>Website:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{contact.website || 'N/A'}</span></div>
-                          </div>
-                        </div>
-                      </div>
-                    )) : <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'center', paddingRight: '10px' }}>No contacts available.</strong> <span style={{ width: '60%', textAlign: 'left' }}></span></div>}
-                  </div>
-                  <div className="section">
-                    <h4 style={{ color: '#2c3e50', fontSize: '1.2rem', textAlign: 'center' }}>Payment Information</h4>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: '10px' }}>
-                      <div style={{ width: '48%' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px' }}>Bank Name:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{savedDetails.bankName || 'N/A'}</span></div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px' }}>Account Number:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{savedDetails.accountNumber || 'N/A'}</span></div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px' }}>UPI ID:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{savedDetails.upiId || 'N/A'}</span></div>
-                      </div>
-                      <div style={{ width: '48%' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px' }}>Account Holder Name:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{savedDetails.accountHolderName || 'N/A'}</span></div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px' }}>IFSC Code:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{savedDetails.ifscCode || 'N/A'}</span></div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px' }}>Currency Type:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{savedDetails.currencyType || 'N/A'}</span></div>
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={handlePrint}
-                    style={{
-                      padding: '10px 20px',
-                      backgroundColor: '#3498db',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: '10px',
-                      cursor: 'pointer',
-                      marginTop: '10px',
-                    }}
-                    onMouseOver={(e) => (e.target.style.backgroundColor = '#2980b9')}
-                    onMouseOut={(e) => (e.target.style.backgroundColor = '#3498db')}
-                  >
-                    Print Details
-                  </button>
+                  )}
+                  
+                  {/* Title */}
+                  <h3 style={{ color: '#2c3e50', fontSize: '1.8rem', margin: 0, textAlign: 'right', fontWeight: '600' }}>
+                    Company Details<br/>Application
+                  </h3>
                 </div>
-              ) : (
-                <p>No saved details available.</p>
-              )}
+
+                {/* Border Line */}
+                <hr style={{ border: '0', borderTop: '2px solid #3498db', marginBottom: '25px' }} />
+
+                {/* Saved Details Content */}
+                {savedDetails ? (
+                  <div style={{ display: 'grid', gap: '20px' }}>
+                    {/* Basic Information */}
+                    <div className="section">
+                      <h4 style={{ color: '#2c3e50', fontSize: '1.3rem', textAlign: 'center', borderBottom: '1px solid #eee', paddingBottom: '8px', marginBottom: '15px' }}>Basic Information</h4>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: '10px', fontSize: '0.95rem' }}>
+                        <div style={{ width: '48%', minWidth: '250px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>Restaurant Name:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{savedDetails.restaurantName || 'N/A'}</span></div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>Business Type:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{savedDetails.businessType || 'N/A'}{savedDetails.businessType === 'Other' ? ` (${savedDetails.otherBusinessType || 'N/A'})` : ''}</span></div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>Tax Type:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{savedDetails.taxType || 'N/A'}</span></div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>Tax Percentage:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{savedDetails.taxPercentage || 'N/A'}%</span></div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>FSSAI Number:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{savedDetails.fssaiNumber || 'N/A'}</span></div>
+                        </div>
+                        <div style={{ width: '48%', minWidth: '250px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>Owner/Manager:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{savedDetails.ownerName || 'N/A'}</span></div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>${savedDetails.taxType === 'GST' ? 'GST' : 'VAT'} Number:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{savedDetails.taxNumber || 'N/A'}</span></div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>PAN Number:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{savedDetails.panNumber || 'N/A'}</span></div>
+                        </div>
+                      </div>
+                    </div>
+                    {/* Address Details */}
+                    <div className="section">
+                      <h4 style={{ color: '#2c3e50', fontSize: '1.3rem', textAlign: 'center', borderBottom: '1px solid #eee', paddingBottom: '8px', marginBottom: '15px' }}>Address Details</h4>
+                      {savedDetails.addresses && savedDetails.addresses.length > 0 ? savedDetails.addresses.map((address, index) => (
+                        <div key={index} style={{ marginBottom: '15px', borderBottom: '1px dashed #ccc', paddingBottom: '10px', fontSize: '0.95rem' }}>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: '10px' }}>
+                            <div style={{ width: '48%', minWidth: '250px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'center', paddingRight: '10px', color: '#333' }}>Address {index + 1}:</strong> <span style={{ width: '60%', textAlign: 'left' }}></span></div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>Line 1:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{address.addressLine1 || 'N/A'}</span></div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>City:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{address.city || 'N/A'}</span></div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>Pincode:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{address.pincode || 'N/A'}</span></div>
+                            </div>
+                            <div style={{ width: '48%', minWidth: '250px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px' }}></strong> <span style={{ width: '60%', textAlign: 'left' }}></span></div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>Line 2:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{address.addressLine2 || 'N/A'}</span></div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>State:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{address.state || 'N/A'}</span></div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>Country:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{address.country || 'N/A'}</span></div>
+                            </div>
+                          </div>
+                        </div>
+                      )) : <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'center', paddingRight: '10px' }}>No addresses available.</strong> <span style={{ width: '60%', textAlign: 'left' }}></span></div>}
+                    </div>
+                    {/* Contact Details */}
+                    <div className="section">
+                      <h4 style={{ color: '#2c3e50', fontSize: '1.3rem', textAlign: 'center', borderBottom: '1px solid #eee', paddingBottom: '8px', marginBottom: '15px' }}>Contact Details</h4>
+                      {savedDetails.contacts && savedDetails.contacts.length > 0 ? savedDetails.contacts.map((contact, index) => (
+                        <div key={index} style={{ marginBottom: '15px', borderBottom: '1px dashed #ccc', paddingBottom: '10px', fontSize: '0.95rem' }}>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: '10px' }}>
+                            <div style={{ width: '48%', minWidth: '250px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'center', paddingRight: '10px', color: '#333' }}>Contact {index + 1}:</strong> <span style={{ width: '60%', textAlign: 'left' }}></span></div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>Phone Number:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{contact.phoneNumber || 'N/A'}</span></div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>Email Address:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{contact.emailAddress || 'N/A'}</span></div>
+                            </div>
+                            <div style={{ width: '48%', minWidth: '250px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px' }}></strong> <span style={{ width: '60%', textAlign: 'left' }}></span></div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>WhatsApp:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{contact.whatsappNumber || 'N/A'}</span></div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>Website:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{contact.website || 'N/A'}</span></div>
+                            </div>
+                          </div>
+                        </div>
+                      )) : <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'center', paddingRight: '10px' }}>No contacts available.</strong> <span style={{ width: '60%', textAlign: 'left' }}></span></div>}
+                    </div>
+                    {/* Payment Information */}
+                    <div className="section">
+                      <h4 style={{ color: '#2c3e50', fontSize: '1.3rem', textAlign: 'center', borderBottom: '1px solid #eee', paddingBottom: '8px', marginBottom: '15px' }}>Payment Information</h4>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: '10px', fontSize: '0.95rem' }}>
+                        <div style={{ width: '48%', minWidth: '250px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>Bank Name:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{savedDetails.bankName || 'N/A'}</span></div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>Account No:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{savedDetails.accountNumber || 'N/A'}</span></div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>UPI ID:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{savedDetails.upiId || 'N/A'}</span></div>
+                        </div>
+                        <div style={{ width: '48%', minWidth: '250px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>Account Holder:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{savedDetails.accountHolderName || 'N/A'}</span></div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>IFSC Code:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{savedDetails.ifscCode || 'N/A'}</span></div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>Currency Type:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{savedDetails.currencyType || 'N/A'}</span></div>
+                        </div>
+                      </div>
+                    </div>
+                    {/* This print button is inside the 'details' section */}
+                    <button
+                      onClick={handlePrint}
+                      style={{
+                        padding: '10px 20px',
+                        backgroundColor: '#3498db',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '10px',
+                        cursor: 'pointer',
+                        marginTop: '10px',
+                      }}
+                      onMouseOver={(e) => (e.target.style.backgroundColor = '#2980b9')}
+                      onMouseOut={(e) => (e.target.style.backgroundColor = '#3498db')}
+                    >
+                      Print Details
+                    </button>
+                  </div>
+                ) : (
+                  <p style={{textAlign: 'center', color: '#7f8c8d', fontSize: '1.1rem'}}>No saved details available. Please fill out the form sections.</p>
+                )}
+              </div>
             </div>
           )}
           {activeSection === 'basic' && (
@@ -477,12 +599,30 @@ function CompanyDetails() {
                     style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
                   />
                 )}
+                <select
+                  name="taxType"
+                  value={formData.taxType}
+                  onChange={handleChange}
+                  style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
+                >
+                  <option value="">Select Tax Type</option>
+                  <option value="GST">GST</option>
+                  <option value="VAT">VAT</option>
+                </select>
+                <input
+                  type="number"
+                  name="taxPercentage"
+                  value={formData.taxPercentage}
+                  onChange={handleChange}
+                  placeholder="Tax Percentage (e.g., 18)"
+                  style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
+                />
                 <input
                   type="text"
-                  name="gstNumber"
-                  value={formData.gstNumber}
+                  name="taxNumber"
+                  value={formData.taxNumber}
                   onChange={handleChange}
-                  placeholder="GST Number (optional)"
+                  placeholder={getTaxLabel() + " (optional)"}
                   style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
                 />
                 <input
@@ -508,7 +648,8 @@ function CompanyDetails() {
             <div>
               <h3 style={{ color: '#2c3e50', fontSize: '1.5rem', marginBottom: '15px', textAlign: 'center' }}>Address Details</h3>
               {formData.addresses.map((address, index) => (
-                <div key={index} style={{ display: 'grid', gap: '15px', marginBottom: '15px' }}>
+                <div key={index} style={{ display: 'grid', gap: '15px', marginBottom: '15px', border: '1px solid #ddd', padding: '10px', borderRadius: '10px' }}>
+                  <h4 style={{textAlign: 'center', margin: '5px 0'}}>Address {index + 1}</h4>
                   <input
                     type="text"
                     name="addressLine1"
@@ -584,7 +725,8 @@ function CompanyDetails() {
             <div>
               <h3 style={{ color: '#2c3e50', fontSize: '1.5rem', marginBottom: '15px', textAlign: 'center' }}>Contact Details</h3>
               {formData.contacts.map((contact, index) => (
-                <div key={index} style={{ display: 'grid', gap: '15px', marginBottom: '15px' }}>
+                <div key={index} style={{ display: 'grid', gap: '15px', marginBottom: '15px', border: '1px solid #ddd', padding: '10px', borderRadius: '10px' }}>
+                   <h4 style={{textAlign: 'center', margin: '5px 0'}}>Contact {index + 1}</h4>
                   <input
                     type="text"
                     name="phoneNumber"
@@ -689,12 +831,13 @@ function CompanyDetails() {
                   name="currencyType"
                   value={formData.currencyType}
                   onChange={handleChange}
-                  placeholder="Currency Type"
+                  placeholder="Currency Type (e.g., INR, USD)"
                   style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
                 />
               </div>
             </div>
           )}
+          {/* Main Save/Print buttons at the bottom */}
           <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
             <button
               onClick={handleSubmit}

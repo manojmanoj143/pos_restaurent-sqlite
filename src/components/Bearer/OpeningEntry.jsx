@@ -1,4 +1,4 @@
-// src/components/Bearer/OpeningEntryWithNavbar.jsx
+// OpeningEntryWithNavbar.jsx
 import React, { useContext, useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
@@ -30,6 +30,21 @@ function OpeningEntryWithNavbar() {
   // Date and Time state for Navbar
   const [currentTime, setCurrentTime] = useState(new Date());
 
+  // System settings state with defaults
+  const [settings, setSettings] = useState({
+    country: 'Japan',
+    language: 'English',
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, // Use local timezone
+    currency: 'JPY',
+    dateFormat: 'dd-MMM-yy', // Default to match image: 30-Oct-25
+    timeFormat: 'hh:mm a', // Default to 12-hour without seconds
+    numberFormat: '#,##,###.##',
+    useNumberFormatFromCurrency: false,
+    firstDayOfWeek: 'Monday',
+    floatPrecision: 3,
+    currencyPrecision: 4,
+  });
+
   // Warning message states
   const [warningMessage, setWarningMessage] = useState(''); // For logout and error messages
   const [warningType, setWarningType] = useState('warning'); // 'warning' or 'success'
@@ -41,17 +56,111 @@ function OpeningEntryWithNavbar() {
     return () => clearInterval(timer);
   }, []);
 
-  // Dynamic date and time formatting
-  const formattedDate = currentTime.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  }); // e.g., 'April 7, 2025'
-  const formattedTime = currentTime.toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  }); // e.g., '09:14:18 AM'
+  // Fetch system settings on mount with fallback
+  useEffect(() => {
+    fetch('/api/settings')
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to fetch settings');
+        return res.json();
+      })
+      .then((data) => setSettings((prev) => ({ ...prev, ...data })))
+      .catch((err) => {
+        console.error('Error fetching settings:', err);
+        // Fallback to local defaults
+        setSettings({
+          ...settings,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          dateFormat: 'dd-MMM-yy',
+          timeFormat: 'hh:mm a',
+        });
+      });
+  }, []);
+
+  // Dynamic date formatting based on system settings (local time only)
+  const getFormattedDate = (date, dateFormat) => {
+    if (!dateFormat) {
+      // Default: yyyy longmonth dd
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+    }
+
+    const numericFormatter = new Intl.DateTimeFormat('en', { year: 'numeric', month: '2-digit', day: 'numeric' });
+    const parts = numericFormatter.formatToParts(date);
+    const year = parts.find((p) => p.type === 'year')?.value || '';
+    const month = parts.find((p) => p.type === 'month')?.value || '';
+    const day = parts.find((p) => p.type === 'day')?.value || '';
+
+    switch (dateFormat) {
+      case 'dd-mm-yyyy':
+        return `${day.padStart(2, '0')}-${month}-${year}`;
+      case 'mm-dd-yyyy':
+        return `${month}-${day.padStart(2, '0')}-${year}`;
+      case 'yyyy-mm-dd':
+        return `${year}-${month}-${day.padStart(2, '0')}`;
+      case 'dd/mm/yyyy':
+        return `${day.padStart(2, '0')}/${month}/${year}`;
+      case 'mm/dd/yyyy':
+        return `${month}/${day.padStart(2, '0')}/${year}`;
+      case 'yyyy/mm/dd':
+        return `${year}/${month}/${day.padStart(2, '0')}`;
+      case 'yyyy-long-mm-dd':
+        // yyyy longmonth dd, e.g., 2025 October 29
+        return date.toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        });
+      case 'dd-MMM-yy':
+        // dd-MMM-yy, e.g., 30-Oct-25
+        const monthShort = date.toLocaleDateString('en-US', { month: 'short' });
+        const dayStr = date.getDate().toString().padStart(2, '0');
+        const yearShort = date.getFullYear().toString().slice(-2);
+        return `${dayStr}-${monthShort}-${yearShort}`;
+      default:
+        // Fallback to yyyy longmonth dd
+        return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    }
+  };
+
+  // Dynamic time formatting based on system settings (local time only, conditional seconds)
+  const getFormattedTime = (date, timeFormat) => {
+    if (!timeFormat) {
+      // Default: 12-hour without seconds
+      return date.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
+    }
+
+    const hasSeconds = timeFormat.includes(':ss') || timeFormat.includes('ss');
+    const is12Hour = timeFormat.includes(' a') || timeFormat.startsWith('hh');
+
+    const options = {
+      hour: '2-digit',
+      minute: '2-digit',
+      ...(hasSeconds && { second: '2-digit' }),
+      hour12: is12Hour,
+    };
+
+    return date.toLocaleTimeString('en-US', options);
+  };
+
+  const formattedDate = getFormattedDate(currentTime, settings.dateFormat);
+  const formattedTime = getFormattedTime(currentTime, settings.timeFormat);
+
+  // Currency formatter for totals
+  const getCurrencyFormatter = () => {
+    return new Intl.NumberFormat(settings.language || 'en-US', {
+      style: 'currency',
+      currency: settings.currency || 'JPY',
+      minimumFractionDigits: parseInt(settings.currencyPrecision) || 4,
+      maximumFractionDigits: parseInt(settings.currencyPrecision) || 4,
+    });
+  };
 
   // Handle OK button click for warning messages
   const handleWarningOk = () => {
@@ -221,6 +330,10 @@ function OpeningEntryWithNavbar() {
     navigate('/home');
   };
 
+  // Calculate total
+  const totalAmount = balanceDetails.reduce((sum, detail) => sum + (parseFloat(detail.opening_amount) || 0), 0);
+  const currencyFormat = getCurrencyFormatter().format(totalAmount);
+
   return (
     <>
       {/* Warning Alert for Logout and Errors */}
@@ -300,9 +413,7 @@ function OpeningEntryWithNavbar() {
                 <a
                   className={`nav-link ${location.pathname === '/salespage' ? 'active text-primary' : 'text-black'} cursor-pointer`}
                   onClick={() => navigate('/salespage')}
-                  title="
-
-Sales Invoice"
+                  title="Sales Invoice"
                 >
                   <img src={SaveIcon} alt="Save" className="icon-size" />
                 </a>
@@ -476,12 +587,7 @@ Sales Invoice"
               <div className="col-md-6">
                 <div className="grand-tot-div">
                   <span>Total Opening Amount:</span>
-                  <span>
-                    $
-                    {balanceDetails
-                      .reduce((sum, detail) => sum + (parseFloat(detail.opening_amount) || 0), 0)
-                      .toFixed(2)}
-                  </span>
+                  <span>{currencyFormat}</span>
                 </div>
               </div>
               <div className="col-md-6 text-end">

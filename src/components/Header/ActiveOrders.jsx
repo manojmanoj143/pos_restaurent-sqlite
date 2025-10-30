@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
@@ -374,8 +375,18 @@ function ActiveOrders() {
         kitchen: item.kitchen || "Main Kitchen",
         addonQuantities: item.addonQuantities || {},
         addonVariants: item.addonVariants || {},
+        addonPrices: item.addonPrices || {},
+        addonSizePrices: item.addonSizePrices || {},
+        addonIcePrices: item.addonIcePrices || {},
+        addonSpicyPrices: item.addonSpicyPrices || {},
+        addonImages: item.addonImages || {},
         comboQuantities: item.comboQuantities || {},
         comboVariants: item.comboVariants || {},
+        comboPrices: item.comboPrices || {},
+        comboSizePrices: item.comboSizePrices || {},
+        comboIcePrices: item.comboIcePrices || {},
+        comboSpicyPrices: item.comboSpicyPrices || {},
+        comboImages: item.comboImages || {},
         selectedCombos: item.selectedCombos || [],
         ingredients: item.ingredients || [],
         requiredKitchens: item.requiredKitchens || [],
@@ -384,8 +395,17 @@ function ActiveOrders() {
         servedQuantity: item.servedQuantity || 0,
       };
 
-      // Reconstruct addon details from addons array if not already objects
-      if (Array.isArray(item.addons)) {
+      // Preserve existing addon details if available, reconstruct only if necessary
+      formattedItem.addonQuantities = item.addonQuantities || {};
+      formattedItem.addonVariants = item.addonVariants || {};
+      formattedItem.addonPrices = item.addonPrices || {};
+      formattedItem.addonSizePrices = item.addonSizePrices || {};
+      formattedItem.addonIcePrices = item.addonIcePrices || {};
+      formattedItem.addonSpicyPrices = item.addonSpicyPrices || {};
+      formattedItem.addonImages = item.addonImages || {};
+      formattedItem.addonCustomVariantsDetails = item.addonCustomVariantsDetails || {};
+
+      if (Object.keys(formattedItem.addonVariants).length === 0 && Array.isArray(item.addons)) {
         const addonQuantities = {};
         const addonVariants = {};
         const addonPrices = {};
@@ -435,7 +455,6 @@ function ActiveOrders() {
         formattedItem.addonImages = addonImages;
         formattedItem.addonCustomVariantsDetails = addonCustomVariantsDetails;
       } else {
-        formattedItem.addonImages = formattedItem.addonImages || {};
         Object.keys(formattedItem.addonQuantities || {}).forEach((addonName) => {
           if (!formattedItem.addonImages[addonName]) {
             formattedItem.addonImages[addonName] = "/static/images/default-addon-image.jpg" + cacheBuster;
@@ -443,8 +462,18 @@ function ActiveOrders() {
         });
       }
 
-      // Reconstruct combo details from selectedCombos array if not already objects
-      if (Array.isArray(item.selectedCombos)) {
+      // Preserve existing combo details if available, reconstruct only if necessary
+      formattedItem.comboQuantities = item.comboQuantities || {};
+      formattedItem.comboVariants = item.comboVariants || {};
+      formattedItem.comboPrices = item.comboPrices || {};
+      formattedItem.comboSizePrices = item.comboSizePrices || {};
+      formattedItem.comboIcePrices = item.comboIcePrices || {};
+      formattedItem.comboSpicyPrices = item.comboSpicyPrices || {};
+      formattedItem.comboImages = item.comboImages || {};
+      formattedItem.comboCustomVariantsDetails = item.comboCustomVariantsDetails || {};
+      formattedItem.selectedCombos = item.selectedCombos || [];
+
+      if (Object.keys(formattedItem.comboVariants).length === 0 && Array.isArray(item.selectedCombos)) {
         const comboQuantities = {};
         const comboVariants = {};
         const comboPrices = {};

@@ -1,3 +1,4 @@
+// ClosingEntryWithNavbar.jsx
 import React, { useContext, useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
@@ -25,7 +26,24 @@ function ClosingEntryWithNavbar() {
   const storedUser = JSON.parse(localStorage.getItem('user')) || { email: "Guest" };
   const currentUser = userData?.user || storedUser;
 
+  // Date and Time state for Navbar
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  // System settings state with defaults (same as OpeningEntry)
+  const [settings, setSettings] = useState({
+    country: 'Japan',
+    language: 'English',
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, // Use local timezone
+    currency: 'JPY',
+    dateFormat: 'dd-MMM-yy', // Default to match image: 30-Oct-25
+    timeFormat: 'hh:mm a', // Default to 12-hour without seconds
+    numberFormat: '#,##,###.##',
+    useNumberFormatFromCurrency: false,
+    firstDayOfWeek: 'Monday',
+    floatPrecision: 3,
+    currencyPrecision: 4,
+  });
+
   const [warningMessage, setWarningMessage] = useState(""); // For warning and success messages
   const [warningType, setWarningType] = useState("warning"); // "warning" or "success"
   const [pendingAction, setPendingAction] = useState(null); // Store the action to perform after OK
@@ -36,17 +54,111 @@ function ClosingEntryWithNavbar() {
     return () => clearInterval(timer);
   }, []);
 
-  // Dynamic date and time formatting
-  const formattedDate = currentTime.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  }); // e.g., "April 7, 2025"
-  const formattedTime = currentTime.toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  }); // e.g., "09:14:18 AM"
+  // Fetch system settings on mount with fallback (same as OpeningEntry)
+  useEffect(() => {
+    fetch('/api/settings')
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to fetch settings');
+        return res.json();
+      })
+      .then((data) => setSettings((prev) => ({ ...prev, ...data })))
+      .catch((err) => {
+        console.error('Error fetching settings:', err);
+        // Fallback to local defaults
+        setSettings({
+          ...settings,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          dateFormat: 'dd-MMM-yy',
+          timeFormat: 'hh:mm a',
+        });
+      });
+  }, []);
+
+  // Dynamic date formatting based on system settings (local time only) - Copied from OpeningEntry
+  const getFormattedDate = (date, dateFormat) => {
+    if (!dateFormat) {
+      // Default: yyyy longmonth dd
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+    }
+
+    const numericFormatter = new Intl.DateTimeFormat('en', { year: 'numeric', month: '2-digit', day: 'numeric' });
+    const parts = numericFormatter.formatToParts(date);
+    const year = parts.find((p) => p.type === 'year')?.value || '';
+    const month = parts.find((p) => p.type === 'month')?.value || '';
+    const day = parts.find((p) => p.type === 'day')?.value || '';
+
+    switch (dateFormat) {
+      case 'dd-mm-yyyy':
+        return `${day.padStart(2, '0')}-${month}-${year}`;
+      case 'mm-dd-yyyy':
+        return `${month}-${day.padStart(2, '0')}-${year}`;
+      case 'yyyy-mm-dd':
+        return `${year}-${month}-${day.padStart(2, '0')}`;
+      case 'dd/mm/yyyy':
+        return `${day.padStart(2, '0')}/${month}/${year}`;
+      case 'mm/dd/yyyy':
+        return `${month}/${day.padStart(2, '0')}/${year}`;
+      case 'yyyy/mm/dd':
+        return `${year}/${month}/${day.padStart(2, '0')}`;
+      case 'yyyy-long-mm-dd':
+        // yyyy longmonth dd, e.g., 2025 October 29
+        return date.toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        });
+      case 'dd-MMM-yy':
+        // dd-MMM-yy, e.g., 30-Oct-25
+        const monthShort = date.toLocaleDateString('en-US', { month: 'short' });
+        const dayStr = date.getDate().toString().padStart(2, '0');
+        const yearShort = date.getFullYear().toString().slice(-2);
+        return `${dayStr}-${monthShort}-${yearShort}`;
+      default:
+        // Fallback to yyyy longmonth dd
+        return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    }
+  };
+
+  // Dynamic time formatting based on system settings (local time only, conditional seconds) - Copied from OpeningEntry
+  const getFormattedTime = (date, timeFormat) => {
+    if (!timeFormat) {
+      // Default: 12-hour without seconds
+      return date.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
+    }
+
+    const hasSeconds = timeFormat.includes(':ss') || timeFormat.includes('ss');
+    const is12Hour = timeFormat.includes(' a') || timeFormat.startsWith('hh');
+
+    const options = {
+      hour: '2-digit',
+      minute: '2-digit',
+      ...(hasSeconds && { second: '2-digit' }),
+      hour12: is12Hour,
+    };
+
+    return date.toLocaleTimeString('en-US', options);
+  };
+
+  const formattedDate = getFormattedDate(currentTime, settings.dateFormat);
+  const formattedTime = getFormattedTime(currentTime, settings.timeFormat);
+
+  // Currency formatter for totals - Copied from OpeningEntry
+  const getCurrencyFormatter = () => {
+    return new Intl.NumberFormat(settings.language || 'en-US', {
+      style: 'currency',
+      currency: settings.currency || 'JPY',
+      minimumFractionDigits: parseInt(settings.currencyPrecision) || 4,
+      maximumFractionDigits: parseInt(settings.currencyPrecision) || 4,
+    });
+  };
 
   // Handle OK button click for warning messages
   const handleWarningOk = () => {
@@ -316,6 +428,11 @@ function ClosingEntryWithNavbar() {
     }
   };
 
+  // Format money values for display (using currency formatter)
+  const formatMoney = (value) => {
+    return getCurrencyFormatter().format(parseFloat(value) || 0);
+  };
+
   return (
     <>
       {/* Warning Alert for Messages */}
@@ -567,15 +684,10 @@ function ClosingEntryWithNavbar() {
                         />
                       </td>
                       <td>
-                        <input
-                          type="number"
-                          className="form-control"
-                          value={tx.grand_total}
-                          onChange={(e) => handlePosTransactionChange(index, 'grand_total', e.target.value)}
-                          min="0"
-                          step="0.01"
-                          disabled
-                        />
+                        {/* Format grand_total for display since it's disabled */}
+                        <span className="form-control-plaintext text-end d-block">
+                          {formatMoney(tx.grand_total)}
+                        </span>
                       </td>
                       <td>
                         <input
@@ -638,23 +750,16 @@ function ClosingEntryWithNavbar() {
                         />
                       </td>
                       <td>
-                        <input
-                          type="number"
-                          className="form-control"
-                          value={pr.opening_amount}
-                          onChange={(e) => handlePaymentReconciliationChange(index, 'opening_amount', e.target.value)}
-                          min="0"
-                          step="0.01"
-                          disabled
-                        />
+                        {/* Format opening_amount for display since it's disabled */}
+                        <span className="form-control-plaintext text-end d-block">
+                          {formatMoney(pr.opening_amount)}
+                        </span>
                       </td>
                       <td>
-                        <input
-                          type="number"
-                          className="form-control"
-                          value={pr.expected_amount}
-                          disabled
-                        />
+                        {/* Format expected_amount for display (computed/disabled) */}
+                        <span className="form-control-plaintext text-end d-block">
+                          {formatMoney(pr.expected_amount)}
+                        </span>
                       </td>
                       <td>
                         <input
@@ -664,6 +769,7 @@ function ClosingEntryWithNavbar() {
                           onChange={(e) => handlePaymentReconciliationChange(index, 'closing_amount', e.target.value)}
                           min="0"
                           step="0.01"
+                          placeholder={`e.g., ${settings.currency} 0.00`}
                         />
                       </td>
                       <td>
@@ -724,6 +830,7 @@ function ClosingEntryWithNavbar() {
                           onChange={(e) => handleTaxChange(index, 'amount', e.target.value)}
                           min="0"
                           step="0.01"
+                          placeholder={`e.g., ${settings.currency} 0.00`}
                         />
                       </td>
                       <td>
@@ -755,7 +862,10 @@ function ClosingEntryWithNavbar() {
                   onChange={(e) => setGrandTotal(e.target.value)}
                   min="0"
                   step="0.01"
+                  placeholder={`e.g., ${settings.currency} 0.00`}
                 />
+                {/* Formatted display below input */}
+                <small className="text-muted d-block text-end">{formatMoney(grandTotal)}</small>
               </div>
               <div className="col-md-4">
                 <label htmlFor="netTotal" className="form-label">Net Total</label>
@@ -767,7 +877,10 @@ function ClosingEntryWithNavbar() {
                   onChange={(e) => setNetTotal(e.target.value)}
                   min="0"
                   step="0.01"
+                  placeholder={`e.g., ${settings.currency} 0.00`}
                 />
+                {/* Formatted display below input */}
+                <small className="text-muted d-block text-end">{formatMoney(netTotal)}</small>
               </div>
               <div className="col-md-4">
                 <label htmlFor="totalQuantity" className="form-label">Total Quantity</label>
@@ -857,6 +970,11 @@ function ClosingEntryWithNavbar() {
           margin-top: 20px;
           margin-bottom: 10px;
           font-weight: bold;
+        }
+        .form-control-plaintext {
+          background-color: transparent;
+          border: none;
+          padding: 0.375rem 0;
         }
         /* Responsive Adjustments */
         @media (max-width: 991px) {

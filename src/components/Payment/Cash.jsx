@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+// Cash.jsx
+import React, { useContext, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Modal, Button } from "react-bootstrap";
 import axios from "axios";
@@ -12,7 +13,7 @@ function Cash() {
   const [billDetails, setBillDetails] = useState(null);
   const [cashGiven, setCashGiven] = useState("");
   const [change, setChange] = useState(0);
-  const [vatRate, setVatRate] = useState(0.1);
+  const [vatRate, setVatRate] = useState(0.2); // Default to 20% as per request
   const [showModal, setShowModal] = useState(false);
   const [emailAddress, setEmailAddress] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -21,6 +22,137 @@ function Cash() {
   const [warningType, setWarningType] = useState("warning");
   const [pendingAction, setPendingAction] = useState(null);
   const [printSettings, setPrintSettings] = useState(null);
+  const [logoUrl, setLogoUrl] = useState(null);
+  // System settings state
+  const [settings, setSettings] = useState({});
+  // Current time state for real-time updates (like OpeningEntry)
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const API_URL = 'http://localhost:8000';
+  // Default print settings (used when no active settings fetched)
+  const defaultPrintSettings = {
+    restaurantName: "My Restaurant",
+    street: "123 Store Street",
+    city: "City",
+    pincode: "",
+    phone: "+91 123-456-7890",
+    gstin: "12ABCDE3456F7Z8",
+    thankYouMessage: "Thank You! Visit Again!",
+    poweredBy: "MyRestaurant"
+  };
+  // Update current time every second
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  // Fetch logo for preview
+  const fetchLogo = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/api/logo`);
+      if (response.data.logo) {
+        setLogoUrl(API_URL + response.data.logo);
+      }
+    } catch (err) {
+      console.error("Failed to fetch logo for preview:", err);
+      setLogoUrl(null); // Ensure null if fetch fails
+    }
+  };
+  // Fetch system settings on mount
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const response = await fetch('/api/settings');
+        if (!response.ok) throw new Error('Failed to fetch settings');
+        const data = await response.json();
+        setSettings(data);
+      } catch (err) {
+        console.error('Error fetching settings:', err);
+      }
+    };
+    fetchSettings();
+  }, []);
+  // Dynamic date formatting based on system settings (local time only)
+  const getFormattedDate = (date, dateFormat) => {
+    if (!dateFormat) {
+      // Default: yyyy longmonth dd
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+    }
+
+    const numericFormatter = new Intl.DateTimeFormat('en', { year: 'numeric', month: '2-digit', day: 'numeric' });
+    const parts = numericFormatter.formatToParts(date);
+    const year = parts.find((p) => p.type === 'year')?.value || '';
+    const month = parts.find((p) => p.type === 'month')?.value || '';
+    const day = parts.find((p) => p.type === 'day')?.value || '';
+
+    switch (dateFormat) {
+      case 'dd-mm-yyyy':
+        return `${day.padStart(2, '0')}-${month}-${year}`;
+      case 'mm-dd-yyyy':
+        return `${month}-${day.padStart(2, '0')}-${year}`;
+      case 'yyyy-mm-dd':
+        return `${year}-${month}-${day.padStart(2, '0')}`;
+      case 'dd/mm/yyyy':
+        return `${day.padStart(2, '0')}/${month}/${year}`;
+      case 'mm/dd/yyyy':
+        return `${month}/${day.padStart(2, '0')}/${year}`;
+      case 'yyyy/mm/dd':
+        return `${year}/${month}/${day.padStart(2, '0')}`;
+      case 'yyyy-long-mm-dd':
+        // yyyy longmonth dd, e.g., 2025 October 29
+        return date.toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        });
+      case 'dd-MMM-yy':
+        // dd-MMM-yy, e.g., 30-Oct-25
+        const monthShort = date.toLocaleDateString('en-US', { month: 'short' });
+        const dayStr = date.getDate().toString().padStart(2, '0');
+        const yearShort = date.getFullYear().toString().slice(-2);
+        return `${dayStr}-${monthShort}-${yearShort}`;
+      default:
+        // Fallback to yyyy longmonth dd
+        return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    }
+  };
+  // Dynamic time formatting based on system settings (local time only, conditional seconds) - Fixed to match OpeningEntry logic
+  const getFormattedTime = (date, timeFormat) => {
+    if (!timeFormat) {
+      // Default: 12-hour without seconds
+      return date.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
+    }
+
+    const hasSeconds = timeFormat.includes(':ss') || timeFormat.includes('ss');
+    const is12Hour = timeFormat.includes(' a') || timeFormat.startsWith('hh');
+
+    const options = {
+      hour: '2-digit',
+      minute: '2-digit',
+      ...(hasSeconds && { second: '2-digit' }),
+      hour12: is12Hour,
+    };
+
+    return date.toLocaleTimeString('en-US', options);
+  };
+  // Currency formatter for totals
+  const getCurrencyFormatter = () => {
+    const locale = settings.language || 'en-IN'; // Use en-IN for INR defaults
+    const currency = settings.currency || 'INR'; // Default to INR as per request
+    const precision = parseInt(settings.currencyPrecision) || 2;
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: currency,
+      minimumFractionDigits: precision,
+      maximumFractionDigits: precision,
+    });
+  };
   // CSS Styles (Updated with improved design: modern gradients, shadows, transitions, responsive adjustments)
   const styles = `
     .cash-container {
@@ -428,6 +560,9 @@ function Cash() {
         font-size: 0.9rem;
       }
     }
+    .strikethroughStyle {
+      text-decoration: line-through;
+    }
   `;
   // Fetch active print settings
   useEffect(() => {
@@ -438,13 +573,23 @@ function Cash() {
       } catch (err) {
         console.error("Failed to fetch active print settings:", err);
         // Use default if fetch fails
+        setPrintSettings(defaultPrintSettings);
       }
     };
     fetchPrintSettings();
   }, []);
+  // Fetch logo
+  useEffect(() => {
+    fetchLogo();
+  }, []);
   // Initialize bill details from location state
   useEffect(() => {
     if (location.state?.billDetails) {
+      const defaultTime = currentTime.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false
+      });
       const formattedBillDetails = {
         ...location.state.billDetails,
         invoice_no: location.state.billDetails.invoice_no || `INV-${Date.now()}`,
@@ -459,8 +604,8 @@ function Cash() {
           flat_villa_no: "",
           location: "",
         },
-        date: location.state.billDetails.date || new Date().toISOString().split("T")[0],
-        time: location.state.billDetails.time || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        date: location.state.billDetails.date || currentTime.toISOString().split("T")[0],
+        time: location.state.billDetails.time || defaultTime,
         payments: location.state.billDetails.payments || [{ mode_of_payment: "CASH" }],
         items: location.state.billDetails.items.map((item) => ({
           ...item,
@@ -529,8 +674,8 @@ function Cash() {
       setBillDetails(formattedBillDetails);
       setEmailAddress(formattedBillDetails.email);
     }
-  }, [location]);
-  // Fetch VAT rate
+  }, [location, currentTime]);
+  // Fetch VAT rate - If API fails, keep default 20%
   useEffect(() => {
     const fetchVat = async () => {
       try {
@@ -538,6 +683,7 @@ function Cash() {
         setVatRate(response.data.vat / 100);
       } catch (error) {
         console.error('Failed to fetch VAT:', error);
+        // Keep default 0.2 if fetch fails
       }
     };
     fetchVat();
@@ -613,6 +759,34 @@ function Cash() {
   const calculateGrandTotal = () => {
     return Number(calculateSubtotal() + calculateVAT());
   };
+  // Parse bill date and time to Date object
+  const parseBillDateTime = (dateStr, timeStr, timeZone) => {
+    // Assume dateStr is 'YYYY-MM-DD', timeStr is 'HH:mm' or similar
+    // Ensure timeStr is in HH:mm format (24-hour)
+    let cleanTimeStr = timeStr;
+    if (timeStr.includes(':')) {
+      // If it has AM/PM, parse to 24-hour (simple check, assuming standard format)
+      const [timePart, period] = timeStr.split(' ');
+      if (period && (period.toUpperCase() === 'AM' || period.toUpperCase() === 'PM')) {
+        let [hours, minutes] = timePart.split(':');
+        hours = parseInt(hours, 10);
+        minutes = parseInt(minutes, 10);
+        if (period.toUpperCase() === 'PM' && hours !== 12) {
+          hours += 12;
+        } else if (period.toUpperCase() === 'AM' && hours === 12) {
+          hours = 0;
+        }
+        cleanTimeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+      }
+    }
+    const fullDateStr = `${dateStr}T${cleanTimeStr}:00.000Z`; // Add Z for UTC
+    const date = new Date(fullDateStr);
+    if (isNaN(date.getTime())) {
+      // Fallback to current date/time
+      return new Date();
+    }
+    return date;
+  };
   // Handle cash input change
   const handleCashChange = (e) => {
     const givenAmount = e.target.value === "" ? "" : Number(e.target.value);
@@ -638,7 +812,7 @@ function Cash() {
     const grandTotal = calculateGrandTotal();
     const cashGivenNum = cashGiven === "" ? 0 : Number(cashGiven);
     if (cashGivenNum > 0 && cashGivenNum < grandTotal) {
-      setWarningMessage(`Insufficient cash amount! Please provide at least ₹${grandTotal.toFixed(2)}`);
+      setWarningMessage(`Insufficient cash amount! Please provide at least ${getCurrencyFormatter().format(grandTotal)}`);
       setWarningType("warning");
       return;
     }
@@ -648,17 +822,19 @@ function Cash() {
       setShowModal(true);
     });
   };
-  // Format numbers for display
-  const formatTotal = (amount) => {
-    const num = Number(amount);
-    return Number.isInteger(num) ? num.toString() : num.toFixed(2);
+  // Format numbers for display using currency formatter
+  const formatCurrency = (amount) => {
+    return getCurrencyFormatter().format(Number(amount));
   };
-  // Generate printable receipt content
+  // Generate printable receipt content - Updated for better alignment, matching image style, proper currency display
   const generatePrintableContent = (isPreview = false) => {
     if (!billDetails) return "";
     const subtotal = calculateSubtotal();
     const vatAmount = calculateVAT();
     const grandTotal = calculateGrandTotal();
+    // Use currentTime for date and time in receipt (real-time like OpeningEntry)
+    const formattedDate = getFormattedDate(currentTime, settings.dateFormat);
+    const formattedTime = getFormattedTime(currentTime, settings.timeFormat);
     const hasDeliveryAddress =
       billDetails.deliveryAddress &&
       (billDetails.deliveryAddress.building_name ||
@@ -668,78 +844,85 @@ function Cash() {
       ? `${billDetails.deliveryAddress.building_name || ""}, ${billDetails.deliveryAddress.flat_villa_no || ""}, ${billDetails.deliveryAddress.location || ""}`
       : null;
     const borderStyle = isPreview ? "border: none;" : "border: 1px solid #000000;";
-    const restaurantName = printSettings?.restaurantName || "My Restaurant";
-    const street = printSettings?.street || "123 Store Street";
-    const city = printSettings?.city || "City";
-    const pincode = printSettings?.pincode || "";
+    const effectivePrintSettings = printSettings || defaultPrintSettings;
+    const restaurantName = effectivePrintSettings.restaurantName;
+    const street = effectivePrintSettings.street;
+    const city = effectivePrintSettings.city;
+    const pincode = effectivePrintSettings.pincode;
     const address = `${street}${street ? ', ' : ''}${city}${pincode ? `, ${pincode}` : ''}`;
-    const phone = printSettings?.phone || "+91 123-456-7890";
-    const gstin = printSettings?.gstin || "12ABCDE3456F7Z8";
-    const thankYouMessage = printSettings?.thankYouMessage || "Thank You! Visit Again!";
-    const poweredBy = printSettings?.poweredBy ? `Powered by ${printSettings.poweredBy}` : "Powered by MyRestaurant";
+    const phone = effectivePrintSettings.phone;
+    const gstin = effectivePrintSettings.gstin;
+    const thankYouMessage = effectivePrintSettings.thankYouMessage;
+    const poweredBy = effectivePrintSettings.poweredBy ? `Powered by ${effectivePrintSettings.poweredBy}` : "Powered by MyRestaurant";
+    const formatter = getCurrencyFormatter(); // Use updated formatter for consistent currency display
     const cashGivenDisplay =
       cashGiven && !isNaN(cashGiven) && Number(cashGiven) > 0
         ? `
-            <tr style="margin-bottom: 5px;">
-              <td style="text-align: left; padding: 2px; border: none; line-height: 1.5;">Cash Given</td>
-              <td style="text-align: center; padding: 2px; border: none; line-height: 1.5;">:</td>
-              <td style="text-align: right; padding: 2px; border: none; line-height: 1.5;">₹${Number(cashGiven).toFixed(2)}</td>
+            <tr>
+              <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">Cash Given</td>
+              <td style="text-align: center; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">:</td>
+              <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">${formatter.format(cashGiven)}</td>
             </tr>
-            <tr style="margin-bottom: 5px;">
-              <td style="text-align: left; padding: 2px; border: none; line-height: 1.5;">Change Returned</td>
-              <td style="text-align: center; padding: 2px; border: none; line-height: 1.5;">:</td>
-              <td style="text-align: right; padding: 2px; border: none; line-height: 1.5;">₹${change.toFixed(2)}</td>
+            <tr>
+              <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">Change Returned</td>
+              <td style="text-align: center; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">:</td>
+              <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">${formatter.format(change)}</td>
             </tr>
           `
         : "";
-    const offerRows = billDetails.items.filter(item => item.originalBasePrice).map(item => `
-      <tr>
-        <td style="text-align: left; padding: 2px; border: none; line-height: 1.5; font-size: 15px;">${item.item_name}:</td>
-        <td style="text-align: right; padding: 2px; border: none; line-height: 1.5; font-size: 15px;"><span style="text-decoration: line-through;">₹${(item.originalBasePrice * item.quantity).toFixed(2)}</span> ₹${(item.basePrice * item.quantity).toFixed(2)}</td>
-      </tr>
-    `).join('');
+    const offerRows = billDetails.items.filter(item => item.originalBasePrice).map(item => {
+      return `
+        <tr>
+          <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">${item.item_name}:</td>
+          <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;"><span style="text-decoration: line-through;">${formatter.format(item.originalBasePrice * item.quantity)}</span> ${formatter.format(item.basePrice * item.quantity)}</td>
+        </tr>
+      `;
+    }).join('');
     return `
-      <div style="font-family: Arial, sans-serif; width: 88mm; font-size: 12px; padding: 10px; color: #000000; ${borderStyle} box-sizing: border-box;">
-        <div style="text-align: center; margin-bottom: 15px;">
-          <h3 style="margin: 0; font-size: 16px; color: #000000;">${restaurantName}</h3>
-          <p style="margin: 2px 0;">${address}</p>
-          <p style="margin: 2px 0;">Phone: ${phone}</p>
-          <p style="margin: 2px 0;">GSTIN: ${gstin}</p>
+      <div style="font-family: Arial, sans-serif; width: 88mm; font-size: 12px; padding: 10px; color: #000000; ${borderStyle} box-sizing: border-box; line-height: 1.2;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
+          ${logoUrl ? `<div style="flex: 0 0 auto;"><img src="${logoUrl}" alt="Logo" style="width: 30px; height: 30px; object-fit: contain; border-radius: 3px;"/></div>` : ''}
+          <div style="flex: 1; text-align: right; font-family: Arial, sans-serif; font-size: 12px;">
+            <h3 style="margin: 0 0 5px 0; font-size: 16px; color: #000000;">${restaurantName}</h3>
+            <p style="margin: 2px 0;">${address}</p>
+            <p style="margin: 2px 0;">Phone: ${phone}</p>
+            <p style="margin: 2px 0;">GSTIN: ${gstin}</p>
+          </div>
         </div>
         <table style="width: 100%; border-collapse: collapse; border: none; margin-bottom: 10px;">
           <tbody>
-            <tr style="margin-bottom: 5px;">
-              <td style="width: 50%; text-align: left; padding: 2px; border: none; line-height: 1.5;">Invoice No</td>
-              <td style="text-align: center; padding: 2px; border: none; line-height: 1.5;">:</td>
-              <td style="width: 50%; text-align: right; padding: 2px; border: none; line-height: 1.5; white-space: nowrap;">${billDetails.invoice_no}</td>
+            <tr>
+              <td style="width: 50%; text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">Invoice No</td>
+              <td style="text-align: center; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">:</td>
+              <td style="width: 50%; text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; white-space: nowrap;">${billDetails.invoice_no}</td>
             </tr>
-            <tr style="margin-bottom: 5px;">
-              <td style="text-align: left; padding: 2px; border: none; line-height: 1.5;">Customer</td>
-              <td style="text-align: center; padding: 2px; border: none; line-height: 1.5;">:</td>
-              <td style="text-align: right; padding: 2px; border: none; line-height: 1.5; word-break: break-all;">${billDetails.customerName || "N/A"}</td>
+            <tr>
+              <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">Customer</td>
+              <td style="text-align: center; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">:</td>
+              <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; word-break: break-all;">${billDetails.customerName || "N/A"}</td>
             </tr>
-            <tr style="margin-bottom: 5px;">
-              <td style="text-align: left; padding: 2px; border: none; line-height: 1.5;">Phone</td>
-              <td style="text-align: center; padding: 2px; border: none; line-height: 1.5;">:</td>
-              <td style="text-align: right; padding: 2px; border: none; line-height: 1.5; word-break: break-all;">${billDetails.phoneNumber || "N/A"}</td>
+            <tr>
+              <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">Phone</td>
+              <td style="text-align: center; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">:</td>
+              <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; word-break: break-all;">${billDetails.phoneNumber || "N/A"}</td>
             </tr>
-            <tr style="margin-bottom: 5px;">
-              <td style="text-align: left; padding: 2px; border: none; line-height: 1.5;">Email</td>
-              <td style="text-align: center; padding: 2px; border: none; line-height: 1.5;">:</td>
-              <td style="text-align: right; padding: 2px; border: none; line-height: 1.5; word-break: break-all;">${billDetails.email || "N/A"}</td>
+            <tr>
+              <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">Email</td>
+              <td style="text-align: center; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">:</td>
+              <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; word-break: break-all;">${billDetails.email || "N/A"}</td>
             </tr>
-            <tr style="margin-bottom: 5px;">
-              <td style="text-align: left; padding: 2px; border: none; line-height: 1.5;">WhatsApp</td>
-              <td style="text-align: center; padding: 2px; border: none; line-height: 1.5;">:</td>
-              <td style="text-align: right; padding: 2px; border: none; line-height: 1.5; word-break: break-all;">${billDetails.whatsappNumber || "N/A"}</td>
+            <tr>
+              <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">WhatsApp</td>
+              <td style="text-align: center; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">:</td>
+              <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; word-break: break-all;">${billDetails.whatsappNumber || "N/A"}</td>
             </tr>
             ${
               billDetails.tableNumber && billDetails.tableNumber !== "N/A"
                 ? `
-                  <tr style="margin-bottom: 5px;">
-                    <td style="text-align: left; padding: 2px; border: none; line-height: 1.5;">Table</td>
-                    <td style="text-align: center; padding: 2px; border: none; line-height: 1.5;">:</td>
-                    <td style="text-align: right; padding: 2px; border: none; line-height: 1.5; word-break: break-all;">${billDetails.tableNumber}</td>
+                  <tr>
+                    <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">Table</td>
+                    <td style="text-align: center; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">:</td>
+                    <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; word-break: break-all;">${billDetails.tableNumber}</td>
                   </tr>
                 `
                 : ""
@@ -747,51 +930,51 @@ function Cash() {
             ${
               hasDeliveryAddress
                 ? `
-                  <tr style="margin-bottom: 5px;">
-                    <td style="text-align: left; padding: 2px; border: none; line-height: 1.5;">Delivery Address</td>
-                    <td style="text-align: center; padding: 2px; border: none; line-height: 1.5;">:</td>
-                    <td style="text-align: right; padding: 2px; border: none; line-height: 1.5; word-break: break-all;">${deliveryAddress}</td>
+                  <tr>
+                    <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">Delivery Address</td>
+                    <td style="text-align: center; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">:</td>
+                    <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; word-break: break-all;">${deliveryAddress}</td>
                   </tr>
                 `
                 : ""
             }
-            <tr style="margin-bottom: 5px;">
-              <td style="text-align: left; padding: 2px; border: none; line-height: 1.5;">Payment Mode</td>
-              <td style="text-align: center; padding: 2px; border: none; line-height: 1.5;">:</td>
-              <td style="text-align: right; padding: 2px; border: none; line-height: 1.5; word-break: break-all;">${billDetails.payments?.[0]?.mode_of_payment || "CASH"}</td>
+            <tr>
+              <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">Payment Mode</td>
+              <td style="text-align: center; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">:</td>
+              <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; word-break: break-all;">${billDetails.payments?.[0]?.mode_of_payment || "CASH"}</td>
             </tr>
             ${cashGivenDisplay}
-            <tr style="margin-bottom: 5px;">
-              <td style="text-align: left; padding: 2px; border: none; line-height: 1.5;">Date</td>
-              <td style="text-align: center; padding: 2px; border: none; line-height: 1.5;">:</td>
-              <td style="text-align: right; padding: 2px; border: none; line-height: 1.5; white-space: nowrap;">${billDetails.date}</td>
+            <tr>
+              <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">Date</td>
+              <td style="text-align: center; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">:</td>
+              <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; white-space: nowrap;">${formattedDate}</td>
             </tr>
-            <tr style="margin-bottom: 5px;">
-              <td style="text-align: left; padding: 2px; border: none; line-height: 1.5;">Time</td>
-              <td style="text-align: center; padding: 2px; border: none; line-height: 1.5;">:</td>
-              <td style="text-align: right; padding: 2px; border: none; line-height: 1.5; white-space: nowrap;">${billDetails.time}</td>
+            <tr>
+              <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">Time</td>
+              <td style="text-align: center; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">:</td>
+              <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; white-space: nowrap;">${formattedTime}</td>
             </tr>
           </tbody>
         </table>
         <table style="width: 100%; margin-bottom: 10px; border-collapse: collapse; border: 1px solid #000000; table-layout: fixed;">
           <thead>
             <tr style="border-bottom: 1px dashed #000000;">
-              <th style="text-align: left; width: 40%; padding: 4px;">Item</th>
-              <th style="text-align: center; width: 15%; padding: 4px;">Qty</th>
-              <th style="text-align: right; width: 20%; padding: 4px;">Price</th>
-              <th style="text-align: right; width: 25%; padding: 4px;">Total</th>
+              <th style="text-align: left; width: 40%; padding: 4px 8px; border: none; font-size: 12px; font-weight: bold;">Item</th>
+              <th style="text-align: center; width: 15%; padding: 4px 8px; border: none; font-size: 12px; font-weight: bold;">Qty</th>
+              <th style="text-align: right; width: 20%; padding: 4px 8px; border: none; font-size: 12px; font-weight: bold;">Price</th>
+              <th style="text-align: right; width: 25%; padding: 4px 8px; border: none; font-size: 12px; font-weight: bold;">Total</th>
             </tr>
           </thead>
           <tbody>
             ${billDetails.items
               .map((item) => {
-                const { basePrice, icePrice, spicyPrice } = calculateItemPrices(item);
+                const { basePrice, icePrice, spicyPrice, addonTotal, comboTotal } = calculateItemPrices(item);
                 return `
                   <tr>
-                    <td style="text-align: left; padding: 4px;">${getItemDisplayName(item)}</td>
-                    <td style="text-align: center; padding: 4px;">${item.quantity}</td>
-                    <td style="text-align: right; padding: 4px;">₹${formatTotal(basePrice)}</td>
-                    <td style="text-align: right; padding: 4px;">₹${formatTotal(basePrice * item.quantity)}</td>
+                    <td style="text-align: left; padding: 4px 8px; border-bottom: 1px solid #000; line-height: 1.2; font-size: 12px; vertical-align: top;">${getItemDisplayName(item)}</td>
+                    <td style="text-align: center; padding: 4px 8px; border-bottom: 1px solid #000; line-height: 1.2; font-size: 12px;">${item.quantity}</td>
+                    <td style="text-align: right; padding: 4px 8px; border-bottom: 1px solid #000; line-height: 1.2; font-size: 12px;">${formatter.format(basePrice)}</td>
+                    <td style="text-align: right; padding: 4px 8px; border-bottom: 1px solid #000; line-height: 1.2; font-size: 12px;">${formatter.format(basePrice * item.quantity)}</td>
                   </tr>
                   ${
                     item.isCombo && item.comboItems && item.comboItems.length > 0
@@ -799,10 +982,10 @@ function Cash() {
                           .map(
                             (comboItem) => `
                               <tr>
-                                <td style="text-align: left; padding-left: 10px; padding: 4px;">+ ${comboItem.name}</td>
-                                <td style="text-align: center; padding: 4px;">${item.quantity}</td>
-                                <td style="text-align: right; padding: 4px;">₹${formatTotal(comboItem.price)}</td>
-                                <td style="text-align: right; padding: 4px;">₹${formatTotal(comboItem.price * item.quantity)}</td>
+                                <td style="text-align: left; padding: 2px 8px 2px 16px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px; color: #666; vertical-align: top;">+ ${comboItem.name}</td>
+                                <td style="text-align: center; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${item.quantity}</td>
+                                <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${formatter.format(comboItem.price)}</td>
+                                <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${formatter.format(comboItem.price * item.quantity)}</td>
                               </tr>
                             `
                           )
@@ -813,10 +996,10 @@ function Cash() {
                     item.icePreference === "with_ice" && icePrice > 0
                       ? `
                         <tr>
-                          <td style="text-align: left; padding-left: 10px; padding: 4px;">+ Ice</td>
-                          <td style="text-align: center; padding: 4px;">${item.quantity}</td>
-                          <td style="text-align: right; padding: 4px;">₹${formatTotal(icePrice)}</td>
-                          <td style="text-align: right; padding: 4px;">₹${formatTotal(icePrice * item.quantity)}</td>
+                          <td style="text-align: left; padding: 2px 8px 2px 16px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px; color: #666; vertical-align: top;">+ Ice</td>
+                          <td style="text-align: center; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${item.quantity}</td>
+                          <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${formatter.format(icePrice)}</td>
+                          <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${formatter.format(icePrice * item.quantity)}</td>
                         </tr>
                       `
                       : ""
@@ -825,10 +1008,10 @@ function Cash() {
                     item.isSpicy && spicyPrice > 0
                       ? `
                         <tr>
-                          <td style="text-align: left; padding-left: 10px; padding: 4px;">+ Spicy</td>
-                          <td style="text-align: center; padding: 4px;">${item.quantity}</td>
-                          <td style="text-align: right; padding: 4px;">₹${formatTotal(spicyPrice)}</td>
-                          <td style="text-align: right; padding: 4px;">₹${formatTotal(spicyPrice * item.quantity)}</td>
+                          <td style="text-align: left; padding: 2px 8px 2px 16px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px; color: #666; vertical-align: top;">+ Spicy</td>
+                          <td style="text-align: center; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${item.quantity}</td>
+                          <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${formatter.format(spicyPrice)}</td>
+                          <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${formatter.format(spicyPrice * item.quantity)}</td>
                         </tr>
                       `
                       : ""
@@ -839,10 +1022,10 @@ function Cash() {
                           .map(
                             ([variantName, variant]) => `
                             <tr>
-                              <td style="text-align: left; padding-left: 10px; padding: 4px;">+ ${variant.heading}: ${variant.name}</td>
-                              <td style="text-align: center; padding: 4px;">${item.customVariantsQuantities?.[variantName] || 1}</td>
-                              <td style="text-align: right; padding: 4px;">₹${formatTotal(variant.price)}</td>
-                              <td style="text-align: right; padding: 4px;">₹${formatTotal(variant.price * (item.customVariantsQuantities?.[variantName] || 1))}</td>
+                              <td style="text-align: left; padding: 2px 8px 2px 16px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px; color: #666; vertical-align: top;">+ ${variant.heading}: ${variant.name}</td>
+                              <td style="text-align: center; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${item.customVariantsQuantities?.[variantName] || 1}</td>
+                              <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${formatter.format(variant.price)}</td>
+                              <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${formatter.format(variant.price * (item.customVariantsQuantities?.[variantName] || 1))}</td>
                             </tr>
                           `
                           )
@@ -857,19 +1040,19 @@ function Cash() {
                               addon.addon_quantity > 0
                                 ? `
                                   <tr>
-                                    <td style="text-align: left; padding-left: 10px; padding: 4px;">+ Addon: ${addon.addon_name}${addon.size ? ` (${addon.size})` : ""}</td>
-                                    <td style="text-align: center; padding: 4px;">${addon.addon_quantity}</td>
-                                    <td style="text-align: right; padding: 4px;">₹${formatTotal(addon.addon_price)}</td>
-                                    <td style="text-align: right; padding: 4px;">₹${formatTotal(addon.addon_price * addon.addon_quantity)}</td>
+                                    <td style="text-align: left; padding: 2px 8px 2px 16px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px; color: #666; vertical-align: top;">+ Addon: ${addon.addon_name}${addon.size ? ` (${addon.size})` : ""}</td>
+                                    <td style="text-align: center; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${addon.addon_quantity}</td>
+                                    <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${formatter.format(addon.addon_price)}</td>
+                                    <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${formatter.format(addon.addon_price * addon.addon_quantity)}</td>
                                   </tr>
                                   ${
                                     addon.isSpicy && addon.spicyPrice > 0
                                       ? `
                                         <tr>
-                                          <td style="text-align: left; padding-left: 15px; padding: 4px;">+ Spicy</td>
-                                          <td style="text-align: center; padding: 4px;">${addon.addon_quantity}</td>
-                                          <td style="text-align: right; padding: 4px;">₹${formatTotal(addon.spicyPrice)}</td>
-                                          <td style="text-align: right; padding: 4px;">₹${formatTotal(addon.spicyPrice * addon.addon_quantity)}</td>
+                                          <td style="text-align: left; padding: 2px 8px 2px 24px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px; color: #999; vertical-align: top;">+ Spicy</td>
+                                          <td style="text-align: center; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px;">${addon.addon_quantity}</td>
+                                          <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px;">${formatter.format(addon.spicyPrice)}</td>
+                                          <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px;">${formatter.format(addon.spicyPrice * addon.addon_quantity)}</td>
                                         </tr>
                                       `
                                       : ""
@@ -888,19 +1071,19 @@ function Cash() {
                               combo.combo_quantity > 0
                                 ? `
                                   <tr>
-                                    <td style="text-align: left; padding-left: 10px; padding: 4px;">+ Combo: ${combo.name1}${combo.size ? ` (${combo.size})` : ""}</td>
-                                    <td style="text-align: center; padding: 4px;">${combo.combo_quantity}</td>
-                                    <td style="text-align: right; padding: 4px;">₹${formatTotal(combo.combo_price)}</td>
-                                    <td style="text-align: right; padding: 4px;">₹${formatTotal(combo.combo_price * combo.combo_quantity)}</td>
+                                    <td style="text-align: left; padding: 2px 8px 2px 16px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px; color: #666; vertical-align: top;">+ Combo: ${combo.name1}${combo.size ? ` (${combo.size})` : ""}</td>
+                                    <td style="text-align: center; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${combo.combo_quantity}</td>
+                                    <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${formatter.format(combo.combo_price)}</td>
+                                    <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${formatter.format(combo.combo_price * combo.combo_quantity)}</td>
                                   </tr>
                                   ${
                                     combo.isSpicy && combo.spicyPrice > 0
                                       ? `
                                         <tr>
-                                          <td style="text-align: left; padding-left: 15px; padding: 4px;">+ Spicy</td>
-                                          <td style="text-align: center; padding: 4px;">${combo.combo_quantity}</td>
-                                          <td style="text-align: right; padding: 4px;">₹${formatTotal(combo.spicyPrice)}</td>
-                                          <td style="text-align: right; padding: 4px;">₹${formatTotal(combo.spicyPrice * combo.combo_quantity)}</td>
+                                          <td style="text-align: left; padding: 2px 8px 2px 24px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px; color: #999; vertical-align: top;">+ Spicy</td>
+                                          <td style="text-align: center; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px;">${combo.combo_quantity}</td>
+                                          <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px;">${formatter.format(combo.spicyPrice)}</td>
+                                          <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px;">${formatter.format(combo.spicyPrice * combo.combo_quantity)}</td>
                                         </tr>
                                       `
                                       : ""
@@ -919,27 +1102,27 @@ function Cash() {
         <table style="width: 100%; border-collapse: collapse; border: none; margin-bottom: 10px;">
           <tbody>
             <tr>
-              <td style="text-align: left; padding: 2px; border: none; line-height: 1.5; font-size: 15px;">Total Quantity:</td>
-              <td style="text-align: right; padding: 2px; border: none; line-height: 1.5; font-size: 15px;">${billDetails.items.reduce((sum, item) => sum + item.quantity, 0)}</td>
+              <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">Total Quantity:</td>
+              <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">${billDetails.items.reduce((sum, item) => sum + item.quantity, 0)}</td>
             </tr>
             ${offerRows}
             <tr>
-              <td style="text-align: left; padding: 2px; border: none; line-height: 1.5; font-size: 15px;">Subtotal:</td>
-              <td style="text-align: right; padding: 2px; border: none; line-height: 1.5; font-size: 15px;">₹${subtotal.toFixed(2)}</td>
+              <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; font-weight: bold;">Subtotal:</td>
+              <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; font-weight: bold;">${formatter.format(subtotal)}</td>
             </tr>
             <tr>
-              <td style="text-align: left; padding: 2px; border: none; line-height: 1.5; font-size: 15px;">VAT (${vatRate * 100}%):</td>
-              <td style="text-align: right; padding: 2px; border: none; line-height: 1.5; font-size: 15px;">₹${vatAmount.toFixed(2)}</td>
+              <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">VAT (${(vatRate * 100).toFixed(0)}%):</td>
+              <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">${formatter.format(vatAmount)}</td>
             </tr>
-            <tr>
-              <td style="text-align: left; padding: 2px; border: none; line-height: 1.5; font-size: 15px;">Grand Total:</td>
-              <td style="text-align: right; padding: 2px; border: none; line-height: 1.5; font-size: 15px;">₹${grandTotal.toFixed(2)}</td>
+            <tr style="font-weight: bold; border-top: 2px solid #000;">
+              <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 14px;">Grand Total:</td>
+              <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 14px;">${formatter.format(grandTotal)}</td>
             </tr>
           </tbody>
         </table>
         <div style="text-align: center; margin-top: 15px;">
-          <p style="margin: 2px 0;">${thankYouMessage}</p>
-          <p style="margin: 2px 0;">${poweredBy}</p>
+          <p style="margin: 2px 0; font-size: 12px;">${thankYouMessage}</p>
+          <p style="margin: 2px 0; font-size: 10px;">${poweredBy}</p>
         </div>
       </div>
     `;
@@ -1051,6 +1234,58 @@ function Cash() {
     (billDetails.deliveryAddress.building_name ||
       billDetails.deliveryAddress.flat_villa_no ||
       billDetails.deliveryAddress.location);
+  // Render receipt preview in UI (similar to printsettings) - Hidden in UI, shown only in print
+  const renderReceiptPreview = () => {
+    if (!billDetails) return null;
+    const effectivePrintSettings = printSettings || defaultPrintSettings;
+    // Use currentTime for preview
+    const formattedDatePreview = getFormattedDate(currentTime, settings.dateFormat);
+    const formattedTimePreview = getFormattedTime(currentTime, settings.timeFormat);
+    const address = `${effectivePrintSettings.street || ''}${effectivePrintSettings.street ? ', ' : ''}${effectivePrintSettings.city || ''}${effectivePrintSettings.pincode ? `, ${effectivePrintSettings.pincode}` : ''}`;
+    return (
+      <div style={{ display: 'none' }}> {/* Hidden in UI */}
+        <h2 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '12px', textAlign: 'center' }}>Receipt Preview</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          {/* Logo on the left */}
+          {logoUrl && (
+            <div style={{ flex: '0 0 auto' }}>
+              <img
+                src={logoUrl}
+                alt="Logo"
+                style={{
+                  width: '50px',
+                  height: '50px',
+                  objectFit: 'contain',
+                  borderRadius: '5px'
+                }}
+                onError={(e) => {
+                  e.target.style.display = 'none'; // Hide if error
+                }}
+              />
+            </div>
+          )}
+          {/* Restaurant details on the right */}
+          <div style={{ fontFamily: 'Arial, sans-serif', fontSize: '12px', textAlign: 'right' }}>
+            <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{effectivePrintSettings.restaurantName}</div>
+            <div>{address}</div>
+            <div style={{ margin: '2px 0' }}>Phone: {effectivePrintSettings.phone}</div>
+            <div>GSTIN: {effectivePrintSettings.gstin}</div>
+          </div>
+        </div>
+        <div style={{ marginTop: '10px', fontSize: '10px' }}>
+          <p>Invoice: {billDetails.invoice_no}</p>
+          <p>Customer: {billDetails.customerName}</p>
+          <p>Date: {formattedDatePreview}</p>
+          <p>Time: {formattedTimePreview}</p>
+          <p>Total: {formatCurrency(calculateGrandTotal())}</p>
+        </div>
+        <div>
+          <div style={{ textAlign: 'center', marginTop: '16px', fontWeight: 'bold', fontSize: '12px' }}>{effectivePrintSettings.thankYouMessage}</div>
+          <div style={{ textAlign: 'center', fontSize: '10px', marginTop: '4px' }}>Powered by {effectivePrintSettings.poweredBy}</div>
+        </div>
+      </div>
+    );
+  };
   return (
     <>
       <style>{styles}</style>
@@ -1131,10 +1366,10 @@ function Cash() {
                                 <td>
                                   {item.originalBasePrice ? (
                                     <>
-                                      <span className="strikethroughStyle">₹{formatTotal(item.originalBasePrice)}</span> ₹{formatTotal(basePrice)}
+                                      <span className="strikethroughStyle">{formatCurrency(item.originalBasePrice)}</span> {formatCurrency(basePrice)}
                                     </>
                                   ) : (
-                                    `₹${formatTotal(basePrice)}`
+                                    formatCurrency(basePrice)
                                   )}
                                 </td>
                               </tr>
@@ -1145,27 +1380,27 @@ function Cash() {
                                     <div style={{ fontSize: "12px" }}>+ {comboItem.name}</div>
                                   </td>
                                   <td>{item.quantity}</td>
-                                  <td>₹{formatTotal(comboItem.price)}</td>
+                                  <td>{formatCurrency(comboItem.price)}</td>
                                 </tr>
                               ))}
                               {item.icePreference === "with_ice" && icePrice > 0 && (
                                 <tr className="cash-sub-item">
                                   <td></td>
                                   <td>
-                                    <div style={{ fontSize: "12px" }}>+ Ice (₹{formatTotal(icePrice)})</div>
+                                    <div style={{ fontSize: "12px" }}>+ Ice ({formatCurrency(icePrice)})</div>
                                   </td>
                                   <td>{item.quantity}</td>
-                                  <td>₹{formatTotal(icePrice)}</td>
+                                  <td>{formatCurrency(icePrice)}</td>
                                 </tr>
                               )}
                               {item.isSpicy && spicyPrice > 0 && (
                                 <tr className="cash-sub-item">
                                   <td></td>
                                   <td>
-                                    <div style={{ fontSize: "12px" }}>+ Spicy (₹{formatTotal(spicyPrice)})</div>
+                                    <div style={{ fontSize: "12px" }}>+ Spicy ({formatCurrency(spicyPrice)})</div>
                                   </td>
                                   <td>{item.quantity}</td>
-                                  <td>₹{formatTotal(spicyPrice)}</td>
+                                  <td>{formatCurrency(spicyPrice)}</td>
                                 </tr>
                               )}
                               {item.customVariantsDetails &&
@@ -1175,11 +1410,11 @@ function Cash() {
                                     <td></td>
                                     <td>
                                       <div style={{ fontSize: "12px" }}>
-                                        + {variant.heading}: {variant.name} (₹{formatTotal(variant.price)})
+                                        + {variant.heading}: {variant.name} ({formatCurrency(variant.price)})
                                       </div>
                                     </td>
                                     <td>{item.customVariantsQuantities?.[variantName] || 1}</td>
-                                    <td>₹{formatTotal(variant.price)}</td>
+                                    <td>{formatCurrency(variant.price)}</td>
                                   </tr>
                                 ))}
                               {item.addons &&
@@ -1196,16 +1431,16 @@ function Cash() {
                                             </div>
                                           </td>
                                           <td>{addon.addon_quantity}</td>
-                                          <td>₹{formatTotal(addon.addon_price)}</td>
+                                          <td>{formatCurrency(addon.addon_price)}</td>
                                         </tr>
                                         {addon.isSpicy && addon.spicyPrice > 0 && (
                                           <tr className="cash-sub-item">
                                             <td></td>
                                             <td>
-                                              <div style={{ fontSize: "12px" }}>+ Spicy (₹{formatTotal(addon.spicyPrice)})</div>
+                                              <div style={{ fontSize: "12px" }}>+ Spicy ({formatCurrency(addon.spicyPrice)})</div>
                                             </td>
                                             <td>{addon.addon_quantity}</td>
-                                            <td>₹{formatTotal(addon.spicyPrice)}</td>
+                                            <td>{formatCurrency(addon.spicyPrice)}</td>
                                           </tr>
                                         )}
                                       </React.Fragment>
@@ -1225,16 +1460,16 @@ function Cash() {
                                             </div>
                                           </td>
                                           <td>{combo.combo_quantity}</td>
-                                          <td>₹{formatTotal(combo.combo_price)}</td>
+                                          <td>{formatCurrency(combo.combo_price)}</td>
                                         </tr>
                                         {combo.isSpicy && combo.spicyPrice > 0 && (
                                           <tr className="cash-sub-item">
                                             <td></td>
                                             <td>
-                                              <div style={{ fontSize: "12px" }}>+ Spicy (₹{formatTotal(combo.spicyPrice)})</div>
+                                              <div style={{ fontSize: "12px" }}>+ Spicy ({formatCurrency(combo.spicyPrice)})</div>
                                             </td>
                                             <td>{combo.combo_quantity}</td>
-                                            <td>₹{formatTotal(combo.spicyPrice)}</td>
+                                            <td>{formatCurrency(combo.spicyPrice)}</td>
                                           </tr>
                                         )}
                                       </React.Fragment>
@@ -1254,19 +1489,21 @@ function Cash() {
                     {billDetails.items.filter(item => item.originalBasePrice).map(item => (
                       <p key={item.item_name}>
                         <strong>{item.item_name}:</strong>{" "}
-                        <span className="strikethroughStyle">₹{(item.originalBasePrice * item.quantity).toFixed(2)}</span> ₹{(item.basePrice * item.quantity).toFixed(2)}
+                        <span className="strikethroughStyle">{formatCurrency(item.originalBasePrice * item.quantity)}</span> {formatCurrency(item.basePrice * item.quantity)}
                       </p>
                     ))}
                     <p>
-                      <strong>Subtotal:</strong> ₹{calculateSubtotal().toFixed(2)}
+                      <strong>Subtotal:</strong> {formatCurrency(calculateSubtotal())}
                     </p>
                     <p>
-                      <strong>VAT (${vatRate * 100}%):</strong> ₹{calculateVAT().toFixed(2)}
+                      <strong>VAT (${(vatRate * 100).toFixed(0)}%):</strong> {formatCurrency(calculateVAT())}
                     </p>
                     <p>
-                      <strong>Grand Total:</strong> <span className="grand-total">₹{calculateGrandTotal().toFixed(2)}</span>
+                      <strong>Grand Total:</strong> <span className="grand-total">{formatCurrency(calculateGrandTotal())}</span>
                     </p>
                   </div>
+                  {/* Receipt Preview Section - Hidden in UI, shown only in print */}
+                  {renderReceiptPreview()}
                   {/* Cash input section */}
                   <div className="cash-input-section">
                     <label>Cash Given:</label>
@@ -1283,7 +1520,7 @@ function Cash() {
                   </div>
                   <div className="cash-change">
                     <label>Change to Return:</label>
-                    <span>₹{change.toFixed(2)}</span>
+                    <span>{formatCurrency(change)}</span>
                   </div>
                   <div className="cash-confirm">
                     <button className="cash-confirm-btn" onClick={handlePaymentConfirm} disabled={isLoading}>
@@ -1381,13 +1618,13 @@ function Cash() {
                       <td style={{ textAlign: "left" }}>
                         <strong>Date:</strong>
                       </td>
-                      <td style={{ textAlign: "right" }}>{billDetails.date}</td>
+                      <td style={{ textAlign: "right" }}>{getFormattedDate(currentTime, settings.dateFormat)}</td>
                     </tr>
                     <tr>
                       <td style={{ textAlign: "left" }}>
                         <strong>Time:</strong>
                       </td>
-                      <td style={{ textAlign: "right" }}>{billDetails.time}</td>
+                      <td style={{ textAlign: "right" }}>{getFormattedTime(currentTime, settings.timeFormat)}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1419,10 +1656,10 @@ function Cash() {
                               <td>
                                 {item.originalBasePrice ? (
                                   <>
-                                    <span className="strikethroughStyle">₹{formatTotal(item.originalBasePrice)}</span> ₹{formatTotal(basePrice)}
+                                    <span className="strikethroughStyle">{formatCurrency(item.originalBasePrice)}</span> {formatCurrency(basePrice)}
                                   </>
                                 ) : (
-                                  `₹${formatTotal(basePrice)}`
+                                  formatCurrency(basePrice)
                                 )}
                               </td>
                             </tr>
@@ -1433,27 +1670,27 @@ function Cash() {
                                   <div style={{ fontSize: "12px" }}>+ {comboItem.name}</div>
                                 </td>
                                 <td>{item.quantity}</td>
-                                <td>₹{formatTotal(comboItem.price)}</td>
+                                <td>{formatCurrency(comboItem.price)}</td>
                               </tr>
                             ))}
                             {item.icePreference === "with_ice" && icePrice > 0 && (
                               <tr>
                                 <td></td>
                                 <td>
-                                  <div style={{ fontSize: "12px" }}>+ Ice (₹{formatTotal(icePrice)})</div>
+                                  <div style={{ fontSize: "12px" }}>+ Ice ({formatCurrency(icePrice)})</div>
                                 </td>
                                 <td>{item.quantity}</td>
-                                <td>₹{formatTotal(icePrice)}</td>
+                                <td>{formatCurrency(icePrice)}</td>
                               </tr>
                             )}
                             {item.isSpicy && spicyPrice > 0 && (
                               <tr>
                                 <td></td>
                                 <td>
-                                  <div style={{ fontSize: "12px" }}>+ Spicy (₹{formatTotal(spicyPrice)})</div>
+                                  <div style={{ fontSize: "12px" }}>+ Spicy ({formatCurrency(spicyPrice)})</div>
                                 </td>
                                 <td>{item.quantity}</td>
-                                <td>₹{formatTotal(spicyPrice)}</td>
+                                <td>{formatCurrency(spicyPrice)}</td>
                               </tr>
                             )}
                             {item.customVariantsDetails &&
@@ -1463,11 +1700,11 @@ function Cash() {
                                   <td></td>
                                   <td>
                                     <div style={{ color: "#888", fontSize: "12px" }}>
-                                      + {variant.heading}: {variant.name} (₹{formatTotal(variant.price)})
+                                      + {variant.heading}: {variant.name} ({formatCurrency(variant.price)})
                                     </div>
                                   </td>
                                   <td>{item.customVariantsQuantities?.[variantName] || 1}</td>
-                                  <td>₹{formatTotal(variant.price)}</td>
+                                  <td>{formatCurrency(variant.price)}</td>
                                 </tr>
                               ))}
                             {item.addons &&
@@ -1479,21 +1716,22 @@ function Cash() {
                                         <td></td>
                                         <td>
                                           <div style={{ color: "#2ecc71", fontSize: "12px" }}>
-                                            + Addon: {addon.addon_name}
-                                            {addon.size ? ` (${addon.size})` : ""}
+                                            + Addon: {addon.addon_name}{addon.size ? ` (${addon.size})` : ""}
                                           </div>
                                         </td>
                                         <td>{addon.addon_quantity}</td>
-                                        <td>₹{formatTotal(addon.addon_price)}</td>
+                                        <td>{formatCurrency(addon.addon_price)}</td>
                                       </tr>
                                       {addon.isSpicy && addon.spicyPrice > 0 && (
                                         <tr>
                                           <td></td>
                                           <td>
-                                            <div style={{ color: "#888", fontSize: "12px" }}>+ Spicy (₹{formatTotal(addon.spicyPrice)})</div>
+                                            <div style={{ color: "#888", fontSize: "12px" }}>
+                                              + Spicy ({formatCurrency(addon.spicyPrice)})
+                                            </div>
                                           </td>
                                           <td>{addon.addon_quantity}</td>
-                                          <td>₹{formatTotal(addon.spicyPrice)}</td>
+                                          <td>{formatCurrency(addon.spicyPrice * addon.addon_quantity)}</td>
                                         </tr>
                                       )}
                                     </React.Fragment>
@@ -1508,21 +1746,22 @@ function Cash() {
                                         <td></td>
                                         <td>
                                           <div style={{ color: "#e74c3c", fontSize: "12px" }}>
-                                            + Combo: {combo.name1}
-                                            {combo.size ? ` (${combo.size})` : ""}
+                                            + Combo: {combo.name1}{combo.size ? ` (${combo.size})` : ""}
                                           </div>
                                         </td>
                                         <td>{combo.combo_quantity}</td>
-                                        <td>₹{formatTotal(combo.combo_price)}</td>
+                                        <td>{formatCurrency(combo.combo_price)}</td>
                                       </tr>
                                       {combo.isSpicy && combo.spicyPrice > 0 && (
                                         <tr>
                                           <td></td>
                                           <td>
-                                            <div style={{ color: "#888", fontSize: "12px" }}>+ Spicy (₹{formatTotal(combo.spicyPrice)})</div>
+                                            <div style={{ color: "#888", fontSize: "12px" }}>
+                                              + Spicy ({formatCurrency(combo.spicyPrice)})
+                                            </div>
                                           </td>
                                           <td>{combo.combo_quantity}</td>
-                                          <td>₹{formatTotal(combo.spicyPrice)}</td>
+                                          <td>{formatCurrency(combo.spicyPrice * combo.combo_quantity)}</td>
                                         </tr>
                                       )}
                                     </React.Fragment>
@@ -1536,13 +1775,13 @@ function Cash() {
                 </div>
                 <div className="mt-3">
                   <p>
-                    <strong>Subtotal:</strong> ₹{calculateSubtotal().toFixed(2)}
+                    <strong>Subtotal:</strong> {formatCurrency(calculateSubtotal())}
                   </p>
                   <p>
-                    <strong>VAT (${vatRate * 100}%):</strong> ₹{calculateVAT().toFixed(2)}
+                    <strong>VAT (${(vatRate * 100).toFixed(0)}%):</strong> {formatCurrency(calculateVAT())}
                   </p>
                   <p>
-                    <strong>Grand Total:</strong> ₹{calculateGrandTotal().toFixed(2)}
+                    <strong>Grand Total:</strong> {formatCurrency(calculateGrandTotal())}
                   </p>
                 </div>
               </div>

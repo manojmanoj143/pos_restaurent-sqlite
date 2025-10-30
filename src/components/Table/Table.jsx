@@ -1,4 +1,4 @@
-// Table.jsx (full corrected code)
+// Table.jsx (full updated code with system settings integration for currency and date/time)
 import React, { useContext, useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import "./table.css";
@@ -105,6 +105,84 @@ function Table() {
   const [showListPopup, setShowListPopup] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedOrder, setSelectedOrder] = useState(null);
+
+  // System settings state with defaults
+  const [settings, setSettings] = useState({
+    country: 'Japan',
+    language: 'English',
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    currency: 'JPY',
+    dateFormat: 'dd-mm-yyyy',
+    timeFormat: 'hh:mm a',
+    numberFormat: '#,##,###.##',
+    useNumberFormatFromCurrency: false,
+    firstDayOfWeek: 'Monday',
+    floatPrecision: 3,
+    currencyPrecision: 4,
+  });
+
+  // Load system settings on mount
+  useEffect(() => {
+    const storedSettings = JSON.parse(localStorage.getItem('systemSettings'));
+    if (storedSettings) {
+      setSettings((prev) => ({ ...prev, ...storedSettings }));
+    }
+  }, []);
+
+  // Currency formatter based on settings
+  const getCurrencyFormatter = () => {
+    return new Intl.NumberFormat(settings.language || 'en-US', {
+      style: 'currency',
+      currency: settings.currency || 'JPY',
+      minimumFractionDigits: parseInt(settings.currencyPrecision) || 2,
+      maximumFractionDigits: parseInt(settings.currencyPrecision) || 2,
+    });
+  };
+
+  // Dynamic date formatting based on system settings
+  const getFormattedDate = (date, dateFormat) => {
+    if (!dateFormat) {
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+    }
+
+    const numericFormatter = new Intl.DateTimeFormat('en', { year: 'numeric', month: '2-digit', day: 'numeric' });
+    const parts = numericFormatter.formatToParts(date);
+    const year = parts.find((p) => p.type === 'year')?.value || '';
+    const month = parts.find((p) => p.type === 'month')?.value || '';
+    const day = parts.find((p) => p.type === 'day')?.value || '';
+
+    switch (dateFormat) {
+      case 'dd-mm-yyyy':
+        return `${day.padStart(2, '0')}-${month}-${year}`;
+      case 'mm-dd-yyyy':
+        return `${month}-${day.padStart(2, '0')}-${year}`;
+      case 'yyyy-mm-dd':
+        return `${year}-${month}-${day.padStart(2, '0')}`;
+      case 'dd/mm/yyyy':
+        return `${day.padStart(2, '0')}/${month}/${year}`;
+      case 'mm/dd/yyyy':
+        return `${month}/${day.padStart(2, '0')}/${year}`;
+      case 'yyyy/mm/dd':
+        return `${year}/${month}/${day.padStart(2, '0')}`;
+      case 'yyyy-long-mm-dd':
+        return date.toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        });
+      case 'dd-MMM-yy':
+        const monthShort = date.toLocaleDateString('en-US', { month: 'short' });
+        const dayStr = date.getDate().toString().padStart(2, '0');
+        const yearShort = date.getFullYear().toString().slice(-2);
+        return `${dayStr}-${monthShort}-${yearShort}`;
+      default:
+        return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    }
+  };
 
   useEffect(() => {
     const fetchVat = async () => {
@@ -1028,6 +1106,9 @@ function Table() {
     );
   });
 
+  const formatter = getCurrencyFormatter();
+  const formattedGrandTotal = formatter.format(grandTotal);
+
   return (
     <ErrorBoundary>
       <div className="main-container" style={styles.container}>
@@ -1077,7 +1158,7 @@ function Table() {
           >
             List
           </button>
-          <div style={styles.grandTotal}>Grand Total: ₹{grandTotal.toFixed(2)}</div>
+          <div style={styles.grandTotal}>Grand Total: {formattedGrandTotal}</div>
         </div>
         <div className="floor-plan" style={styles.floorPlan} ref={floorPlanRef}>
           <div style={{ transform: `scale(${scale})`, transformOrigin: '0 0' }}>
@@ -1220,7 +1301,7 @@ function Table() {
                                     <p className="card-text"><strong>Floor:</strong> {order.floor}</p>
                                     <p className="card-text"><strong>Customer:</strong> {order.customerName || 'N/A'}</p>
                                     <p className="card-text"><strong>Chairs:</strong> {order.chairsBooked?.sort((a, b) => a - b).join(', ') || 'None'}</p>
-                                    <p className="card-text"><strong>Grand Total:</strong> ₹{calculateOrderGrandTotal(order.cartItems).toFixed(2)} <span className={`badge ${order.paid ? 'bg-success' : 'bg-warning'}`}>{order.paid ? "(Paid)" : "(Unpaid)"}</span></p>
+                                    <p className="card-text"><strong>Grand Total:</strong> {formatter.format(calculateOrderGrandTotal(order.cartItems))} <span className={`badge ${order.paid ? 'bg-success' : 'bg-warning'}`}>{order.paid ? "(Paid)" : "(Unpaid)"}</span></p>
                                   </div>
                                 </div>
                               </div>
@@ -1282,36 +1363,36 @@ function Table() {
                             {selectedOrder.cartItems.map((item, i) => (
                               <React.Fragment key={i}>
                                 <div className="mb-2">
-                                  <strong>{i + 1}. {item.item_name || item.name}</strong> - Qty: {item.quantity} - ₹{getMainItemTotal(item).toFixed(2)} - Kitchen: {item.kitchen || "Main Kitchen"}
+                                  <strong>{i + 1}. {item.item_name || item.name}</strong> - Qty: {item.quantity} - {formatter.format(getMainItemTotal(item))} - Kitchen: {item.kitchen || "Main Kitchen"}
                                 </div>
                                 {item.icePreference === "with_ice" && (
-                                  <div className="ms-4 small">&nbsp;- Ice: {item.quantity} - ₹{((item.icePrice || 0) * item.quantity).toFixed(2)}</div>
+                                  <div className="ms-4 small">&nbsp;- Ice: {item.quantity} - {formatter.format((item.icePrice || 0) * item.quantity)}</div>
                                 )}
                                 {item.isSpicy && (
-                                  <div className="ms-4 small">&nbsp;- Spicy: {item.quantity} - ₹{((item.spicyPrice || 0) * item.quantity).toFixed(2)}</div>
+                                  <div className="ms-4 small">&nbsp;- Spicy: {item.quantity} - {formatter.format((item.spicyPrice || 0) * item.quantity)}</div>
                                 )}
                                 {item.customVariantsDetails && Object.entries(item.customVariantsDetails).map(([variantName, variant]) => (
                                   <div key={variantName} className="ms-4 small">
-                                    &nbsp;- {variant.heading}: {variant.name} - Qty: {item.customVariantsQuantities?.[variantName] || 1} - ₹{((variant.price || 0) * (item.customVariantsQuantities?.[variantName] || 1)).toFixed(2)}
+                                    &nbsp;- {variant.heading}: {variant.name} - Qty: {item.customVariantsQuantities?.[variantName] || 1} - {formatter.format((variant.price || 0) * (item.customVariantsQuantities?.[variantName] || 1))}
                                   </div>
                                 ))}
                                 {item.addonQuantities && Object.entries(item.addonQuantities).map(([addonName, qty]) => qty > 0 && (
                                   <React.Fragment key={addonName}>
                                     <div className="ms-4 small">
-                                      &nbsp;- Addon: {addonName} ({item.addonVariants?.[addonName]?.size || "M"}) - Qty: {qty} - ₹{((item.addonPrices?.[addonName] || 0) * qty).toFixed(2)} - Kitchen: {item.addonVariants?.[addonName]?.kitchen || "Main Kitchen"}
+                                      &nbsp;- Addon: {addonName} ({item.addonVariants?.[addonName]?.size || "M"}) - Qty: {qty} - {formatter.format((item.addonPrices?.[addonName] || 0) * qty)} - Kitchen: {item.addonVariants?.[addonName]?.kitchen || "Main Kitchen"}
                                     </div>
                                     {item.addonVariants?.[addonName]?.cold === 'with_ice' && (
-                                      <div className="ms-5 small">&nbsp;&nbsp;- Ice: {qty} - ₹{((item.addonIcePrices?.[addonName] || 0) * qty).toFixed(2)}</div>
+                                      <div className="ms-5 small">&nbsp;&nbsp;- Ice: {qty} - {formatter.format((item.addonIcePrices?.[addonName] || 0) * qty)}</div>
                                     )}
                                     {item.addonVariants?.[addonName]?.spicy && (
-                                      <div className="ms-5 small">&nbsp;&nbsp;- Spicy: {qty} - ₹{((item.addonSpicyPrices?.[addonName] || 0) * qty).toFixed(2)}</div>
+                                      <div className="ms-5 small">&nbsp;&nbsp;- Spicy: {qty} - {formatter.format((item.addonSpicyPrices?.[addonName] || 0) * qty)}</div>
                                     )}
                                     {item.addonVariants?.[addonName]?.sugar && item.addonVariants?.[addonName]?.sugar !== "medium" && (
-                                      <div className="ms-5 small">&nbsp;&nbsp;- Sugar: {item.addonVariants?.[addonName]?.sugar.charAt(0).toUpperCase() + item.addonVariants?.[addonName]?.sugar.slice(1)} - Qty: {qty} - ₹0.00</div>
+                                      <div className="ms-5 small">&nbsp;&nbsp;- Sugar: {item.addonVariants?.[addonName]?.sugar.charAt(0).toUpperCase() + item.addonVariants?.[addonName]?.sugar.slice(1)} - Qty: {qty} - {formatter.format(0)}</div>
                                     )}
                                     {item.addonCustomVariantsDetails?.[addonName] && Object.entries(item.addonCustomVariantsDetails[addonName]).map(([variantName, variant]) => (
                                       <div key={variantName} className="ms-5 small">
-                                        &nbsp;&nbsp;- {variant.heading}: {variant.name} - Qty: {qty} - ₹{((variant.price || 0) * qty).toFixed(2)}
+                                        &nbsp;&nbsp;- {variant.heading}: {variant.name} - Qty: {qty} - {formatter.format((variant.price || 0) * qty)}
                                       </div>
                                     ))}
                                   </React.Fragment>
@@ -1319,20 +1400,20 @@ function Table() {
                                 {item.comboQuantities && Object.entries(item.comboQuantities).map(([comboName, qty]) => qty > 0 && (
                                   <React.Fragment key={comboName}>
                                     <div className="ms-4 small">
-                                      &nbsp;- Combo: {comboName} ({item.comboVariants?.[comboName]?.size || "M"}) - Qty: {qty} - ₹{((item.comboPrices?.[comboName] || 0) * qty).toFixed(2)} - Kitchen: {item.comboVariants?.[comboName]?.kitchen || "Main Kitchen"}
+                                      &nbsp;- Combo: {comboName} ({item.comboVariants?.[comboName]?.size || "M"}) - Qty: {qty} - {formatter.format((item.comboPrices?.[comboName] || 0) * qty)} - Kitchen: {item.comboVariants?.[comboName]?.kitchen || "Main Kitchen"}
                                     </div>
                                     {item.comboVariants?.[comboName]?.cold === 'with_ice' && (
-                                      <div className="ms-5 small">&nbsp;&nbsp;- Ice: {qty} - ₹{((item.comboIcePrices?.[comboName] || 0) * qty).toFixed(2)}</div>
+                                      <div className="ms-5 small">&nbsp;&nbsp;- Ice: {qty} - {formatter.format((item.comboIcePrices?.[comboName] || 0) * qty)}</div>
                                     )}
                                     {item.comboVariants?.[comboName]?.spicy && (
-                                      <div className="ms-5 small">&nbsp;&nbsp;- Spicy: {qty} - ₹{((item.comboSpicyPrices?.[comboName] || 0) * qty).toFixed(2)}</div>
+                                      <div className="ms-5 small">&nbsp;&nbsp;- Spicy: {qty} - {formatter.format((item.comboSpicyPrices?.[comboName] || 0) * qty)}</div>
                                     )}
                                     {item.comboVariants?.[comboName]?.sugar && item.comboVariants?.[comboName]?.sugar !== "medium" && (
-                                      <div className="ms-5 small">&nbsp;&nbsp;- Sugar: {item.comboVariants?.[comboName]?.sugar.charAt(0).toUpperCase() + item.comboVariants?.[comboName]?.sugar.slice(1)} - Qty: {qty} - ₹0.00</div>
+                                      <div className="ms-5 small">&nbsp;&nbsp;- Sugar: {item.comboVariants?.[comboName]?.sugar.charAt(0).toUpperCase() + item.comboVariants?.[comboName]?.sugar.slice(1)} - Qty: {qty} - {formatter.format(0)}</div>
                                     )}
                                     {item.comboCustomVariantsDetails?.[comboName] && Object.entries(item.comboCustomVariantsDetails[comboName]).map(([variantName, variant]) => (
                                       <div key={variantName} className="ms-5 small">
-                                        &nbsp;&nbsp;- {variant.heading}: {variant.name} - Qty: {qty} - ₹{((variant.price || 0) * qty).toFixed(2)}
+                                        &nbsp;&nbsp;- {variant.heading}: {variant.name} - Qty: {qty} - {formatter.format((variant.price || 0) * qty)}
                                       </div>
                                     ))}
                                   </React.Fragment>
@@ -1340,9 +1421,9 @@ function Table() {
                               </React.Fragment>
                             ))}
                             <hr />
-                            <p><strong>Subtotal:</strong> ₹{calculateOrderSubtotal(selectedOrder.cartItems).toFixed(2)}</p>
-                            <p><strong>VAT ({(vatRate * 100).toFixed(0)}%):</strong> ₹{(calculateOrderSubtotal(selectedOrder.cartItems) * vatRate).toFixed(2)}</p>
-                            <p className="fw-bold"><strong>Grand Total:</strong> ₹{calculateOrderGrandTotal(selectedOrder.cartItems).toFixed(2)} <span className={`badge ${selectedOrder.paid ? 'bg-success' : 'bg-warning'}`}>{selectedOrder.paid ? "(Paid)" : "(Unpaid)"}</span></p>
+                            <p><strong>Subtotal:</strong> {formatter.format(calculateOrderSubtotal(selectedOrder.cartItems))}</p>
+                            <p><strong>VAT ({(vatRate * 100).toFixed(0)}%):</strong> {formatter.format(calculateOrderSubtotal(selectedOrder.cartItems) * vatRate)}</p>
+                            <p className="fw-bold"><strong>Grand Total:</strong> {formatter.format(calculateOrderGrandTotal(selectedOrder.cartItems))} <span className={`badge ${selectedOrder.paid ? 'bg-success' : 'bg-warning'}`}>{selectedOrder.paid ? "(Paid)" : "(Unpaid)"}</span></p>
                           </div>
                         </div>
                       ) : ( // Reservation details
@@ -1354,6 +1435,7 @@ function Table() {
                             <p><strong>Floor:</strong> {selectedOrder.floor}</p>
                             <p><strong>Chairs:</strong> {selectedOrder.chairs.sort((a, b) => a - b).join(', ')}</p>
                             <p><strong>Time:</strong> {selectedOrder.startTime} to {selectedOrder.endTime}</p>
+                            <p><strong>Date:</strong> {getFormattedDate(new Date(selectedOrder.date), settings.dateFormat)}</p>
                             <p><strong>Customer:</strong> {selectedOrder.customerName}</p>
                             <p><strong>Phone:</strong> {selectedOrder.phoneNumber}</p>
                             <p><strong>Email:</strong> {selectedOrder.email}</p>
