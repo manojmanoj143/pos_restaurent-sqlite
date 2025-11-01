@@ -1,3 +1,4 @@
+// SalesPage.jsx (Updated: Added Offer Name filter dropdown with unique offer descriptions from sales data)
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import {
@@ -54,6 +55,9 @@ const SalesPage = () => {
   const [itemSearch, setItemSearch] = useState("");
   const [showItemDropdown, setShowItemDropdown] = useState(false);
   const [filterOrderType, setFilterOrderType] = useState("");
+  // NEW: Offer filter states
+  const [filterOffer, setFilterOffer] = useState("");
+  const [offerOptions, setOfferOptions] = useState([]); // Unique offer descriptions from sales data
   const [warningMessage, setWarningMessage] = useState("");
   const [warningType, setWarningType] = useState("warning");
   const navigate = useNavigate();
@@ -108,6 +112,19 @@ const SalesPage = () => {
     };
     fetchConfig();
   }, []);
+  // NEW: Extract unique offer descriptions from sales data after fetching
+  const extractOfferOptions = (sales) => {
+    const offers = [];
+    sales.forEach((sale) => {
+      sale.items.forEach((item) => {
+        if (item.is_combo_offer && item.offer_description) {
+          offers.push(item.offer_description);
+        }
+      });
+    });
+    const uniqueOffers = [...new Set(offers)].sort(); // Sort alphabetically
+    setOfferOptions(uniqueOffers);
+  };
   // NEW: This useEffect now depends on `baseUrl`
   // It will run once `baseUrl` is set (from null to a string)
   useEffect(() => {
@@ -269,13 +286,58 @@ const SalesPage = () => {
     };
     fetchAllData();
   }, [baseUrl]); // This effect now runs when `baseUrl` changes
+  // NEW: Extract offer options after salesData is updated
+  useEffect(() => {
+    if (salesData.length > 0) {
+      extractOfferOptions(salesData);
+    }
+  }, [salesData]);
   // NEW: Listen for settings changes (e.g., from SystemSettings) and re-fetch if needed
   useEffect(() => {
     const handleSettingsUpdate = () => {
       // Re-fetch settings to ensure latest from server/localStorage
       const API_URL = baseUrl || '';
       if (API_URL) {
-        fetchSettings(); // Define fetchSettings here or call the one from above
+        const fetchSettings = async () => {
+          try {
+            const response = await axios.get(`${API_URL}/api/settings`);
+            if (response.data) {
+              // Merge with existing state to ensure defaults are preserved
+              setSettings((prevSettings) => ({
+                ...prevSettings,
+                ...response.data,
+                // Ensure defaults for missing fields
+                currency: response.data.currency || 'INR',
+                currencyPrecision: parseInt(response.data.currencyPrecision) || 2,
+                language: response.data.language || 'en-IN',
+                dateFormat: response.data.dateFormat || 'yyyy-long-mm-dd',
+                timeFormat: response.data.timeFormat || 'HH:mm:ss',
+                timeZone: response.data.timeZone || 'Asia/Dubai',
+              }));
+              // Also store in localStorage for persistence across refreshes
+              localStorage.setItem('systemSettings', JSON.stringify(response.data));
+            }
+          } catch (err) {
+            console.error('Error fetching settings:', err);
+            // On error, load from localStorage if available
+            const stored = localStorage.getItem('systemSettings');
+            if (stored) {
+              const parsed = JSON.parse(stored);
+              setSettings((prevSettings) => ({
+                ...prevSettings,
+                ...parsed,
+                currency: parsed.currency || 'INR',
+                currencyPrecision: parseInt(parsed.currencyPrecision) || 2,
+                language: parsed.language || 'en-IN',
+                dateFormat: parsed.dateFormat || 'yyyy-long-mm-dd',
+                timeFormat: parsed.timeFormat || 'HH:mm:ss',
+                timeZone: parsed.timeZone || 'Asia/Dubai',
+              }));
+            }
+            // Keep default otherwise
+          }
+        };
+        fetchSettings();
       } else {
         // Fallback to localStorage
         const stored = localStorage.getItem('systemSettings');
@@ -471,7 +533,11 @@ const SalesPage = () => {
     const totalAmount = baseAmount * (item.quantity || 1) + addonTotal + comboTotal;
     return { baseAmount, addonTotal, comboTotal, totalAmount };
   };
+  // UPDATED: Get display name for item, with special handling for combo offers
   const getItemDisplayName = (item) => {
+    if (item.is_combo_offer) {
+      return `OFFER: ${item.offer_description || item.item_name}`;
+    }
     return `${item.item_name}${item.selectedSize ? ` (${item.selectedSize})` : ""}`;
   };
   const formatTotal = (value) => {
@@ -499,6 +565,7 @@ const SalesPage = () => {
   };
   // UPDATED: Generate printable receipt content - Now uses currentTime for date/time (like cash.jsx)
   // CORRECTED: Standardized padding, line-height, font-size to exactly match Cash.jsx for alignment
+  // NEW: Handle combo offer display name
   const generatePrintableContent = (sale, isPreview = false) => {
     if (!sale) return "";
     const subtotal = calculateSubtotal(sale);
@@ -559,6 +626,7 @@ const SalesPage = () => {
     `).join('');
     // Fix for missing variables `icePrice` and `spicyPrice` from user's original `calculateItemPrices`
     // We'll look for them on the item object directly as `generatePrintableContent` does.
+    // NEW: Updated item row to use getItemDisplayName which handles combo offers
     return `
       <div style="font-family: Arial, sans-serif; width: 88mm; font-size: 12px; padding: 10px; color: #000000; ${borderStyle} box-sizing: border-box; line-height: 1.2;">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
@@ -657,12 +725,14 @@ const SalesPage = () => {
                 // Get baseAmount from calculateItemPrices
                 const { baseAmount } = calculateItemPrices(item);
                 // Get icePrice and spicyPrice from item object as they are not in calculateItemPrices
-                const icePrice = parseFloat(item.icePrice) || 0;
-                const spicyPrice = parseFloat(item.spicyPrice) || 0;
-       
+                const icePrice = parseFloat(item.ice_price) || 0;
+                const spicyPrice = parseFloat(item.spicy_price) || 0;
+                // NEW: Use updated display name for combo offers
+                const displayName = getItemDisplayName(item);
+     
                 return `
                   <tr>
-                    <td style="text-align: left; padding: 4px 8px; border-bottom: 1px solid #000; line-height: 1.2; font-size: 12px; vertical-align: top;">${getItemDisplayName(item)}</td>
+                    <td style="text-align: left; padding: 4px 8px; border-bottom: 1px solid #000; line-height: 1.2; font-size: 12px; vertical-align: top;">${displayName}</td>
                     <td style="text-align: center; padding: 4px 8px; border-bottom: 1px solid #000; line-height: 1.2; font-size: 12px;">${item.quantity}</td>
                     <td style="text-align: right; padding: 4px 8px; border-bottom: 1px solid #000; line-height: 1.2; font-size: 12px;">${formatter.format(baseAmount)}</td>
                     <td style="text-align: right; padding: 4px 8px; border-bottom: 1px solid #000; line-height: 1.2; font-size: 12px;">${formatter.format(baseAmount * item.quantity)}</td>
@@ -721,13 +791,13 @@ const SalesPage = () => {
                                   <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${formatter.format(addon.addon_price * addon.addon_quantity)}</td>
                                 </tr>
                                 ${
-                                  addon.isSpicy && addon.spicyPrice > 0
+                                  addon.isSpicy && addon.spicy_price > 0
                                     ? `
                                       <tr>
                                         <td style="text-align: left; padding: 2px 8px 2px 24px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px; color: #999; vertical-align: top;">+ Spicy</td>
                                         <td style="text-align: center; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px;">${addon.addon_quantity}</td>
-                                        <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px;">${formatter.format(addon.spicyPrice)}</td>
-                                        <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px;">${formatter.format(addon.spicyPrice * addon.addon_quantity)}</td>
+                                        <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px;">${formatter.format(addon.spicy_price)}</td>
+                                        <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px;">${formatter.format(addon.spicy_price * addon.addon_quantity)}</td>
                                       </tr>
                                     `
                                     : ""
@@ -752,13 +822,13 @@ const SalesPage = () => {
                                   <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${formatter.format(combo.combo_price * combo.combo_quantity)}</td>
                                 </tr>
                                 ${
-                                  combo.isSpicy && combo.spicyPrice > 0
+                                  combo.isSpicy && combo.spicy_price > 0
                                     ? `
                                       <tr>
                                         <td style="text-align: left; padding: 2px 8px 2px 24px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px; color: #999; vertical-align: top;">+ Spicy</td>
                                         <td style="text-align: center; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px;">${combo.combo_quantity}</td>
-                                        <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px;">${formatter.format(combo.spicyPrice)}</td>
-                                        <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px;">${formatter.format(combo.spicyPrice * combo.combo_quantity)}</td>
+                                        <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px;">${formatter.format(combo.spicy_price)}</td>
+                                        <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px;">${formatter.format(combo.spicy_price * combo.combo_quantity)}</td>
                                       </tr>
                                     `
                                     : ""
@@ -992,6 +1062,10 @@ const SalesPage = () => {
       ? normalizeOrderType(sale.orderType).toLowerCase() ===
       normalizeOrderType(filterOrderType).toLowerCase()
       : true;
+    // NEW: Offer match logic - Check if any item in the sale has is_combo_offer: true and offer_description matches filterOffer
+    const offerMatch = filterOffer
+      ? sale.items.some((item) => item.is_combo_offer && item.offer_description === filterOffer)
+      : true;
     return (
       dateMatch &&
       timeMatch &&
@@ -1001,7 +1075,8 @@ const SalesPage = () => {
       itemMatch &&
       categoryMatch &&
       userMatch &&
-      orderTypeMatch
+      orderTypeMatch &&
+      offerMatch // NEW: Include offer filter
     );
   });
   // NEW: Updated back button logic
@@ -1213,6 +1288,22 @@ const SalesPage = () => {
             ))}
           </Form.Select>
         </div>
+        {/* NEW: Offer Name Filter Dropdown */}
+        <div className="filter-item">
+          <Form.Label className="fw-bold">Offer Name:</Form.Label>
+          <Form.Select
+            value={filterOffer}
+            onChange={(e) => setFilterOffer(e.target.value)}
+            className="form-control shadow-sm"
+          >
+            <option value="">All Offers</option>
+            {offerOptions.map((offer, index) => (
+              <option key={index} value={offer}>
+                {offer}
+              </option>
+            ))}
+          </Form.Select>
+        </div>
         <div className="filter-item">
           <Form.Label className="fw-bold">Bearer:</Form.Label>
           <Form.Select
@@ -1256,6 +1347,7 @@ const SalesPage = () => {
                   filterPhone ||
                   filterItem ||
                   filterCategory ||
+                  filterOffer || // NEW: Include offer in title check
                   filterUser ||
                   filterOrderType
                   ? "Filtered Sales Data"

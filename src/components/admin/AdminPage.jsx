@@ -1,4 +1,4 @@
-// AdminPage.jsx (updated with Sign-Out Confirmation Modal)
+// AdminPage.jsx (updated with Sign-Out Confirmation Modal and System Settings moved to Settings submenu)
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -69,6 +69,7 @@ function AdminPage() {
   };
 
   const handleNavigation = (path) => navigate(path);
+
   const toggleMasterMenu = () => setIsMasterOpen(!isMasterOpen);
 
   // Fetch logo
@@ -295,6 +296,7 @@ function AdminPage() {
         { icon: <FaPrint />, text: 'Print Settings', path: '/print-settings' },
         { icon: <FaEnvelope />, text: 'Email Settings', path: '/email-settings' },
         { icon: <FaDatabase />, text: 'Backups', path: '/backup' },
+        { icon: <FaCog />, text: 'System Settings', path: '/system-settings' }, // MOVED: System Settings added here
       ],
     },
     { icon: <FaShoppingCart />, text: 'Purchase Module', path: '/purchase' },
@@ -311,7 +313,7 @@ function AdminPage() {
 
   const otherMenuItems = [
     // REMOVED: { icon: <FaFileAlt />, text: 'Record', path: '/record' },
-    { icon: <FaCog />, text: 'System Settings', path: '/system-settings' },
+    // Note: System Settings has been moved to Settings submenu under Master
   ];
 
   // Filter menu items based on search query
@@ -488,7 +490,6 @@ function AdminPage() {
             </button>
           )}
         </div>
-
         {/* Search Box */}
         <div style={{
           position: 'relative',
@@ -935,7 +936,6 @@ function AdminPage() {
           </div>
         </div>
       </div>
-
       {/* NEW: Logout Confirmation Modal */}
       {showLogoutConfirm && (
         <div style={{
@@ -1007,7 +1007,6 @@ function AdminPage() {
         </div>
       )}
       {/* End of Logout Modal */}
-
     </div>
   );
 }

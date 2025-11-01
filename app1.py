@@ -578,6 +578,36 @@ def document_to_dict(doc):
     if isinstance(doc, datetime):
         return doc.isoformat()
     return doc
+# NEW: Function to clean expired combo offers
+def clean_expired_combo_offers():
+    """Delete expired combo offers from the database."""
+    try:
+        current_time = datetime.now(timezone.utc)
+        offers = combo_offers_collection.find()
+        deleted_count = 0
+        for offer in offers:
+            if 'offer_end_time' in offer and offer['offer_end_time']:
+                try:
+                    end_time_str = str(offer['offer_end_time'])
+                    if end_time_str.endswith('Z'):
+                        end_time_str = end_time_str.replace('Z', '+00:00')
+                    end_time = datetime.fromisoformat(end_time_str)
+                    if end_time.tzinfo is None:
+                        end_time = end_time.replace(tzinfo=timezone.utc)
+                    if current_time > end_time:
+                        combo_offers_collection.delete_one({'_id': offer['_id']})
+                        logger.info(f"Automatically deleted expired combo offer: {offer['_id']} (ended {end_time})")
+                        deleted_count += 1
+                except (ValueError, TypeError) as e:
+                    logger.error(f"Invalid offer_end_time for combo offer {offer['_id']}: {str(e)}")
+            else:
+                # If no end time, keep it (always active)
+                continue
+        logger.info(f"Cleanup job completed: Deleted {deleted_count} expired combo offers")
+        return True
+    except Exception as e:
+        logger.error(f"Error in clean_expired_combo_offers: {str(e)}")
+        return False
 # --- Local Routes (available in both modes) ---
 @app.route('/api/test', methods=['GET'])
 def test_endpoint():
@@ -899,9 +929,9 @@ def import_mongodb():
         filename = secure_filename(file.filename)
         collection_name = filename.rsplit('.', 1)[0].split('.')[-1]
         valid_collections = [
-            'users', 'tables', 'items', 'customers', 'sales',
-            'picked_up_items', 'pos_opening_entries', 'pos_closing_entries',
-            'system_settings', 'kitchens', 'item_groups', 'customer_groups' # NEW: customer_groups
+            'active_orders', 'combo_offers', 'customers', 'email_settings', 'email_tokens', 'employees', 'item_groups', 'items', 'kitchen_saved_orders', 'kitchens',
+            'order_counters', 'picked_up_items', 'pos_closing_entries', 'pos_opening_entries', 'print_settings', 'purchase_invoices', 'purchase_items', 'purchase_orders',
+            'purchase_receipts', 'purchase_sales', 'sales', 'suppliers', 'system_settings', 'tables', 'trip_reports', 'uoms', 'users', 'variants', 'vat', 'customer_groups', 'company_details', 'logo_details', 'supplier_groups' # NEW: customer_groups
         ]
         if collection_name not in valid_collections:
             logger.error(f"Invalid collection name: {collection_name}")
@@ -927,7 +957,28 @@ def import_mongodb():
                 {'name': record.get('name')} if collection_name in ['pos_opening_entries', 'pos_closing_entries'] else
                 {'kitchen_name': record.get('kitchen_name')} if collection_name == 'kitchens' else
                 {'group_name': record.get('group_name')} if collection_name == 'item_groups' else
-                {'group_name': record.get('group_name')} if collection_name == 'customer_groups' else # NEW: for customer_groups
+                {'group_name': record.get('group_name')} if collection_name == 'customer_groups' else
+                {'group_name': record.get('group_name')} if collection_name == 'supplier_groups' else
+                {'order_id': record.get('order_id')} if collection_name == 'active_orders' else
+                {'combo_name': record.get('combo_name')} if collection_name == 'combo_offers' else
+                {'email': record.get('email')} if collection_name == 'email_settings' else
+                {'token': record.get('token')} if collection_name == 'email_tokens' else
+                {'employee_id': record.get('employee_id')} if collection_name == 'employees' else
+                {'kitchen_order_id': record.get('kitchen_order_id')} if collection_name == 'kitchen_saved_orders' else
+                {'counter_id': record.get('counter_id')} if collection_name == 'order_counters' else
+                {'print_setting_id': record.get('print_setting_id')} if collection_name == 'print_settings' else
+                {'invoice_no': record.get('invoice_no')} if collection_name == 'purchase_invoices' else
+                {'item_name': record.get('item_name')} if collection_name == 'purchase_items' else
+                {'order_no': record.get('order_no')} if collection_name == 'purchase_orders' else
+                {'receipt_no': record.get('receipt_no')} if collection_name == 'purchase_receipts' else
+                {'sale_id': record.get('sale_id')} if collection_name == 'purchase_sales' else
+                {'supplier_name': record.get('supplier_name')} if collection_name == 'suppliers' else
+                {'report_id': record.get('report_id')} if collection_name == 'trip_reports' else
+                {'uom_name': record.get('uom_name')} if collection_name == 'uoms' else
+                {'variant_name': record.get('variant_name')} if collection_name == 'variants' else
+                {'vat_rate': record.get('vat_rate')} if collection_name == 'vat' else
+                {'company_name': record.get('company_name')} if collection_name == 'company_details' else
+                {'logo': record.get('logo')} if collection_name == 'logo_details' else # NEW: for customer_groups
                 {}
             )
             if not unique_key:
@@ -1088,7 +1139,10 @@ def export_all_to_excel():
             'users': users_collection,
             'variants': variants_collection,
             'vat': vat_collection,
-            'customer_groups': customer_groups_collection  # NEW: customer_groups
+            'customer_groups': customer_groups_collection,
+            'company_details': company_details_collection,
+            'logo_details': logo_details_collection,
+            'supplier_groups': supplier_group_collection
         }
         for collection_name, collection in collections.items():
             ws = wb.create_sheet(title=collection_name)
@@ -1164,7 +1218,10 @@ def create_backup():
             'users': users_collection,
             'variants': variants_collection,
             'vat': vat_collection,
-            'customer_groups': customer_groups_collection  # NEW: customer_groups
+            'customer_groups': customer_groups_collection,
+            'company_details': company_details_collection,
+            'logo_details': logo_details_collection,
+            'supplier_groups': supplier_group_collection
         }
         for collection_name, collection in collections.items():
             ws = wb.create_sheet(title=collection_name)
@@ -1313,6 +1370,17 @@ def set_backup_interval():
     except Exception as e:
         logger.error(f"Error setting backup interval: {str(e)}")
         return jsonify({"error": str(e)}), 500
+def start_scheduler():
+    if schedule:
+        settings = get_system_settings()
+        interval = settings.get('backup_interval_hours', 6)
+        schedule.every(interval).hours.do(create_backup).tag('backup')
+        threading.Thread(target=run_scheduler, daemon=True).start()
+        logger.info(f"Scheduler started with backup every {interval} hours")
+def run_scheduler():
+    while True:
+        schedule.run_pending()
+        time.sleep(60)
 @app.route('/api/shutdown', methods=['POST'])
 @db_required
 def shutdown():
@@ -1910,6 +1978,9 @@ if config.get('mode') == 'server':
                 if not all(key in item for key in ['item_name', 'basePrice', 'quantity']):
                     logger.error("Invalid item structure in sales invoice")
                     return jsonify({"error": "Each item must include item_name, basePrice, and quantity"}), 400
+                # NEW: Handle combo offer flag and description
+                if item.get('is_combo_offer'):
+                    item['offer_description'] = item.get('offer_description', item['item_name'])
                 processed_addons = []
                 for addon in item.get('addons', []):
                     if not all(key in addon for key in ['name1', 'addon_price', 'addon_quantity']):
@@ -1949,6 +2020,9 @@ if config.get('mode') == 'server':
                     "ingredients": item.get('ingredients', []),
                     "addons": processed_addons,
                     "selectedCombos": processed_combos,
+                    # NEW: Preserve combo offer fields
+                    "is_combo_offer": item.get('is_combo_offer', False),
+                    "offer_description": item.get('offer_description'),
                 })
             sales_data['items'] = processed_items
             sales_data['created_at'] = datetime.now(ZoneInfo("UTC")).isoformat()
@@ -3720,22 +3794,30 @@ if config.get('mode') == 'server':
     @db_required
     def get_combo_offers():
         try:
+            # NEW: Run cleanup before fetching (in addition to scheduler)
+            clean_expired_combo_offers()
             offers = combo_offers_collection.find()
-            current_time = datetime.now(ZoneInfo("UTC"))
+            current_time = datetime.now(timezone.utc)  # FIXED: Use timezone.utc for awareness
             offers_list = []
             for offer in offers:
                 if 'offer_end_time' in offer and offer['offer_end_time']:
                     try:
-                        end_time = datetime.fromisoformat(str(offer['offer_end_time']).replace('Z', '+00:00'))
+                        end_time_str = str(offer['offer_end_time'])
+                        if end_time_str.endswith('Z'):
+                            end_time_str = end_time_str.replace('Z', '+00:00')
+                        end_time = datetime.fromisoformat(end_time_str)
+                        # FIXED: Ensure end_time is timezone-aware (UTC)
+                        if end_time.tzinfo is None:
+                            end_time = end_time.replace(tzinfo=timezone.utc)
                         if current_time > end_time:
                             combo_offers_collection.delete_one({'_id': offer['_id']})
-                            logger.info(f"Deleted expired combo offer: {offer['_id']}")
+                            logger.info(f"Deleted expired combo offer on fetch: {offer['_id']} (ended {end_time})")
                             continue
                     except (ValueError, TypeError) as e:
-                        logger.error(f"Invalid offer end time format in offer {offer['_id']}: {str(e)}")
+                        logger.error(f"Invalid offer_end_time for combo offer {offer['_id']}: {str(e)}")
                 offer_str = convert_objectid_to_str(offer)
                 offers_list.append(offer_str)
-            logger.info(f"Fetched {len(offers_list)} combo offers")
+            logger.info(f"Fetched {len(offers_list)} active combo offers")
             return jsonify(offers_list), 200
         except Exception as e:
             logger.error(f"Error fetching combo offers: {str(e)}\n{traceback.format_exc()}")
@@ -3748,16 +3830,22 @@ if config.get('mode') == 'server':
             if not offer:
                 logger.warning(f"Combo offer not found: {offer_id}")
                 return jsonify({"error": "Combo offer not found"}), 404
-            current_time = datetime.now(ZoneInfo("UTC"))
+            current_time = datetime.now(timezone.utc)  # FIXED: Use timezone.utc
             if 'offer_end_time' in offer and offer['offer_end_time']:
                 try:
-                    end_time = datetime.fromisoformat(str(offer['offer_end_time']).replace('Z', '+00:00'))
+                    end_time_str = str(offer['offer_end_time'])
+                    if end_time_str.endswith('Z'):
+                        end_time_str = end_time_str.replace('Z', '+00:00')
+                    end_time = datetime.fromisoformat(end_time_str)
+                    # FIXED: Ensure awareness
+                    if end_time.tzinfo is None:
+                        end_time = end_time.replace(tzinfo=timezone.utc)
                     if current_time > end_time:
                         combo_offers_collection.delete_one({'_id': offer['_id']})
-                        logger.info(f"Deleted expired combo offer: {offer_id}")
-                        return jsonify({"error": "Combo offer not found"}), 404
+                        logger.info(f"Deleted expired combo offer on single fetch: {offer_id} (ended {end_time})")
+                        return jsonify({"error": "Combo offer not found (expired)"}), 404
                 except (ValueError, TypeError) as e:
-                    logger.error(f"Invalid offer end time format in offer {offer_id}: {str(e)}")
+                    logger.error(f"Invalid offer_end_time for combo offer {offer_id}: {str(e)}")
             offer = convert_objectid_to_str(offer)
             logger.info(f"Fetched combo offer: {offer_id}")
             return jsonify(offer), 200
@@ -3805,7 +3893,7 @@ if config.get('mode') == 'server':
                 except (ValueError, TypeError) as e:
                     logger.error(f"Invalid offer time format: {str(e)}")
                     return jsonify({"error": f"Invalid offer time format: {str(e)}"}), 400
-            data['created_at'] = datetime.now(ZoneInfo("UTC")).isoformat()
+            data['created_at'] = datetime.now(timezone.utc).isoformat()  # FIXED: Use timezone.utc
             offer_id = combo_offers_collection.insert_one(data).inserted_id
             logger.info(f"Combo offer created with ID: {offer_id}")
             return jsonify({'message': 'Combo offer created successfully!', 'id': offer_id}), 201
@@ -3846,7 +3934,7 @@ if config.get('mode') == 'server':
                 except (ValueError, TypeError) as e:
                     logger.error(f"Invalid offer time format: {str(e)}")
                     return jsonify({"error": f"Invalid offer time format: {str(e)}"}), 400
-            data['modified_at'] = datetime.now(ZoneInfo("UTC")).isoformat()
+            data['modified_at'] = datetime.now(timezone.utc).isoformat()  # FIXED: Use timezone.utc
             result = combo_offers_collection.update_one({'_id': offer_id}, {'$set': data})
             if result.matched_count == 0:
                 logger.warning(f"Combo offer not found for update: {offer_id}")

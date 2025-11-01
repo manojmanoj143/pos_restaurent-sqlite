@@ -578,143 +578,229 @@ const CreateItemPage = () => {
   const handleImageUpload = async (e, field, subField = null, variantId = null, subheading = null) => {
     const file = e.target.files[0];
     if (!file) return;
+    const localUrl = URL.createObjectURL(file);
+    // Optimistic update: show local preview immediately
+    if (field === "image") {
+      setImagePreviews(prev => ({ ...prev, item: localUrl }));
+    } else if (field === "images") {
+      setImagePreviews(prev => ({ ...prev, multiple: [...prev.multiple, localUrl] }));
+    } else if (subField === "spicy_image") {
+      setImagePreviews(prev => ({ ...prev, spicy: localUrl }));
+    } else if (subField === "non_spicy_image") {
+      setImagePreviews(prev => ({ ...prev, non_spicy: localUrl }));
+    } else if (subField === "customVariantImage") {
+      setImagePreviews(prev => ({
+        ...prev,
+        custom_variant_images: {
+          ...prev.custom_variant_images,
+          [`${variantId}_${subheading}_image`]: localUrl,
+        },
+      }));
+    }
     const formDataUpload = new FormData();
     formDataUpload.append("files", file);
     try {
       const response = await axios.post(`${baseUrl}/api/upload-image`, formDataUpload);
-      const imagePath = response.data.urls[0]; // "/api/images/uuid.ext"
-      if (subField === "customVariantImage") {
-        setFormData((prev) => ({
-          ...prev,
-          custom_variants: prev.custom_variants.map((variant) =>
-            variant._id === variantId
-              ? {
-                  ...variant,
-                  subheadings: variant.subheadings.map((sub) =>
-                    sub.name === subheading ? { ...sub, image: extractImageName(imagePath) } : sub
-                  ),
-                }
-              : variant
-          ),
-        }));
-        setImagePreviews((prev) => ({
-          ...prev,
-          custom_variant_images: {
-            ...prev.custom_variant_images,
-            [`${variantId}_${subheading}_image`]: `${baseUrl}${imagePath}`,
-          },
-        }));
-      } else if (subField) {
-        setFormData((prev) => ({
+      const imagePath = response.data.urls[0];
+      const serverUrl = `${baseUrl}${imagePath}`;
+      const filename = extractImageName(imagePath);
+      // Update with server data
+      if (field === "image") {
+        setFormData(prev => ({ ...prev, image: filename }));
+        setImagePreviews(prev => ({ ...prev, item: serverUrl }));
+      } else if (field === "images") {
+        setFormData(prev => ({ ...prev, images: [...prev.images, filename] }));
+        setImagePreviews(prev => {
+          const newMultiple = [...prev.multiple];
+          newMultiple[newMultiple.length - 1] = serverUrl; // Replace last (local) with server
+          return { ...prev, multiple: newMultiple };
+        });
+      } else if (subField === "spicy_image") {
+        setFormData(prev => ({
           ...prev,
           variants: {
             ...prev.variants,
-            [field]: { ...prev.variants[field], [subField]: extractImageName(imagePath) },
+            spicy: { ...prev.variants.spicy, spicy_image: filename },
           },
         }));
-        setImagePreviews((prev) => ({
+        setImagePreviews(prev => ({ ...prev, spicy: serverUrl }));
+      } else if (subField === "non_spicy_image") {
+        setFormData(prev => ({
           ...prev,
-          [subField === "spicy_image" ? "spicy" : "non_spicy"]: `${baseUrl}${imagePath}`,
+          variants: {
+            ...prev.variants,
+            spicy: { ...prev.variants.spicy, non_spicy_image: filename },
+          },
         }));
-      } else if (field === "images") {
-        setFormData((prev) => ({
-          ...prev,
-          images: [...prev.images, extractImageName(imagePath)],
-        }));
-        setImagePreviews((prev) => ({
-          ...prev,
-          multiple: [...prev.multiple, `${baseUrl}${imagePath}`],
-        }));
-      } else {
-        setFormData((prev) => ({ ...prev, [field]: extractImageName(imagePath) }));
-        setImagePreviews((prev) => ({ ...prev, [field]: `${baseUrl}${imagePath}` }));
-      }
-      setWarningMessage("Image uploaded successfully!");
-    } catch (error) {
-      setWarningMessage(`Failed to upload image: ${error.message}`);
-    }
-  };
-
-  const handleImageDelete = async (field, subField = null, index = null, variantId = null, subheading = null) => {
-    let filename;
-    if (subField === "customVariantImage") {
-      const variant = formData.custom_variants.find((v) => v._id === variantId);
-      filename = variant?.subheadings.find((sub) => sub.name === subheading)?.image;
-      if (!filename) return;
-      try {
-        await axios.delete(`${baseUrl}/api/delete-image/${filename}?field=customVariantImage&item_id=${itemToEdit?._id || "new"}`);
-        setFormData((prev) => ({
+        setImagePreviews(prev => ({ ...prev, non_spicy: serverUrl }));
+      } else if (subField === "customVariantImage") {
+        setFormData(prev => ({
           ...prev,
           custom_variants: prev.custom_variants.map((variant) =>
             variant._id === variantId
               ? {
                   ...variant,
                   subheadings: variant.subheadings.map((sub) =>
-                    sub.name === subheading ? { ...sub, image: null } : sub
+                    sub.name === subheading ? { ...sub, image: filename } : sub
                   ),
                 }
               : variant
           ),
         }));
-        setImagePreviews((prev) => ({
+        setImagePreviews(prev => ({
+          ...prev,
+          custom_variant_images: {
+            ...prev.custom_variant_images,
+            [`${variantId}_${subheading}_image`]: serverUrl,
+          },
+        }));
+      }
+      URL.revokeObjectURL(localUrl);
+      setWarningMessage("Image uploaded successfully!");
+    } catch (error) {
+      // Revert on failure
+      if (field === "image") {
+        setImagePreviews(prev => ({ ...prev, item: "" }));
+      } else if (field === "images") {
+        setImagePreviews(prev => ({ ...prev, multiple: prev.multiple.slice(0, -1) }));
+      } else if (subField === "spicy_image") {
+        setImagePreviews(prev => ({ ...prev, spicy: "" }));
+      } else if (subField === "non_spicy_image") {
+        setImagePreviews(prev => ({ ...prev, non_spicy: "" }));
+      } else if (subField === "customVariantImage") {
+        setImagePreviews(prev => ({
           ...prev,
           custom_variant_images: {
             ...prev.custom_variant_images,
             [`${variantId}_${subheading}_image`]: "",
           },
         }));
-        setWarningMessage(`${subheading} image deleted successfully!`);
-      } catch (error) {
-        setWarningMessage(`Failed to delete ${subheading} image: ${error.message}`);
       }
+      URL.revokeObjectURL(localUrl);
+      setWarningMessage(`Failed to upload image: ${error.message}`);
+    }
+  };
+
+  const handleImageDelete = async (field, subField = null, index = null, variantId = null, subheading = null) => {
+    let filename;
+    let oldPreview;
+    let updateFormData;
+    let updatePreview;
+    if (subField === "customVariantImage") {
+      const variant = formData.custom_variants.find((v) => v._id === variantId);
+      filename = variant?.subheadings.find((sub) => sub.name === subheading)?.image;
+      oldPreview = imagePreviews.custom_variant_images[`${variantId}_${subheading}_image`];
+      if (!filename) return;
+      updateFormData = () => setFormData(prev => ({
+        ...prev,
+        custom_variants: prev.custom_variants.map((variant) =>
+          variant._id === variantId
+            ? {
+                ...variant,
+                subheadings: variant.subheadings.map((sub) =>
+                  sub.name === subheading ? { ...sub, image: "" } : sub
+                ),
+              }
+            : variant
+        ),
+      }));
+      updatePreview = () => setImagePreviews(prev => ({
+        ...prev,
+        custom_variant_images: {
+          ...prev.custom_variant_images,
+          [`${variantId}_${subheading}_image`]: "",
+        },
+      }));
     } else if (subField) {
       filename = formData.variants[field][subField];
+      oldPreview = subField === "spicy_image" ? imagePreviews.spicy : imagePreviews.non_spicy;
       if (!filename) return;
-      try {
-        await axios.delete(`${baseUrl}/api/delete-image/${filename}?field=${subField}&item_id=${itemToEdit?._id || "new"}`);
-        setFormData((prev) => ({
+      updateFormData = () => setFormData(prev => ({
+        ...prev,
+        variants: {
+          ...prev.variants,
+          [field]: { ...prev.variants[field], [subField]: "" },
+        },
+      }));
+      updatePreview = () => setImagePreviews(prev => ({
+        ...prev,
+        [subField === "spicy_image" ? "spicy" : "non_spicy"]: "",
+      }));
+    } else if (field === "images" && index !== null) {
+      filename = formData.images[index];
+      oldPreview = imagePreviews.multiple[index];
+      if (!filename) return;
+      updateFormData = () => setFormData(prev => ({
+        ...prev,
+        images: prev.images.filter((_, i) => i !== index),
+      }));
+      updatePreview = () => setImagePreviews(prev => ({
+        ...prev,
+        multiple: prev.multiple.filter((_, i) => i !== index),
+      }));
+    } else {
+      filename = formData[field];
+      oldPreview = field === "image" ? imagePreviews.item : "";
+      if (!filename) return;
+      updateFormData = () => setFormData(prev => ({ ...prev, [field]: "" }));
+      updatePreview = () => setImagePreviews(prev => ({ ...prev, [field]: "" }));
+    }
+    // Optimistic update: remove immediately
+    updateFormData();
+    updatePreview();
+    try {
+      await axios.delete(`${baseUrl}/api/delete-image/${filename}?field=${subField || field}&item_id=${itemToEdit?._id || "new"}`);
+      setWarningMessage(`${subField ? subField.replace("_", " ") : field} image deleted successfully!`);
+    } catch (error) {
+      // Revert on failure
+      if (subField === "customVariantImage") {
+        setFormData(prev => ({
+          ...prev,
+          custom_variants: prev.custom_variants.map((variant) =>
+            variant._id === variantId
+              ? {
+                  ...variant,
+                  subheadings: variant.subheadings.map((sub) =>
+                    sub.name === subheading ? { ...sub, image: filename } : sub
+                  ),
+                }
+              : variant
+          ),
+        }));
+        setImagePreviews(prev => ({
+          ...prev,
+          custom_variant_images: {
+            ...prev.custom_variant_images,
+            [`${variantId}_${subheading}_image`]: oldPreview,
+          },
+        }));
+      } else if (subField) {
+        setFormData(prev => ({
           ...prev,
           variants: {
             ...prev.variants,
-            [field]: { ...prev.variants[field], [subField]: "" },
+            [field]: { ...prev.variants[field], [subField]: filename },
           },
         }));
-        setImagePreviews((prev) => ({
+        setImagePreviews(prev => ({
           ...prev,
-          [subField === "spicy_image" ? "spicy" : "non_spicy"]: "",
+          [subField === "spicy_image" ? "spicy" : "non_spicy"]: oldPreview,
         }));
-        setWarningMessage(`${subField.replace("_", " ")} deleted successfully!`);
-      } catch (error) {
-        setWarningMessage(`Failed to delete ${subField.replace("_", " ")}: ${error.message}`);
-      }
-    } else if (field === "images" && index !== null) {
-      filename = formData.images[index];
-      if (!filename) return;
-      try {
-        await axios.delete(`${baseUrl}/api/delete-image/${filename}?field=images&item_id=${itemToEdit?._id || "new"}`);
-        setFormData((prev) => ({
+      } else if (field === "images" && index !== null) {
+        setFormData(prev => ({
           ...prev,
-          images: prev.images.filter((_, i) => i !== index),
+          images: [...prev.images.slice(0, index), filename, ...prev.images.slice(index + 1)],
         }));
-        setImagePreviews((prev) => ({
-          ...prev,
-          multiple: prev.multiple.filter((_, i) => i !== index),
-        }));
-        setWarningMessage("Multiple image deleted successfully!");
-      } catch (error) {
-        setWarningMessage(`Failed to delete multiple image: ${error.message}`);
+        setImagePreviews(prev => {
+          const newMultiple = [...prev.multiple];
+          newMultiple.splice(index, 0, oldPreview); // Insert back at index
+          return { ...prev, multiple: newMultiple };
+        });
+      } else {
+        setFormData(prev => ({ ...prev, [field]: filename }));
+        setImagePreviews(prev => ({ ...prev, [field]: oldPreview }));
       }
-    } else {
-      filename = formData[field];
-      if (!filename) return;
-      try {
-        await axios.delete(`${baseUrl}/api/delete-image/${filename}?field=image&item_id=${itemToEdit?._id || "new"}`);
-        setFormData((prev) => ({ ...prev, [field]: "" }));
-        setImagePreviews((prev) => ({ ...prev, [field]: "" }));
-        setWarningMessage("Item image deleted successfully!");
-      } catch (error) {
-        setWarningMessage(`Failed to delete image: ${error.message}`);
-      }
+      setWarningMessage(`Failed to delete ${subField ? subField.replace("_", " ") : field} image: ${error.message}`);
     }
   };
 
@@ -811,7 +897,7 @@ const CreateItemPage = () => {
             type="number"
             value={sub.price || ""}
             onChange={(e) => handleCustomVariantFieldChange(variant._id, sub.name, "price", e.target.value)}
-            onWheel={disableNumberInputScroll} // Disable scroll
+            onWheel={disableNumberInputScroll}
             className="field-input"
             placeholder="Enter price"
             min="0"
@@ -827,7 +913,7 @@ const CreateItemPage = () => {
             type="number"
             value={sub.price || ""}
             onChange={(e) => handleCustomVariantFieldChange(variant._id, sub.name, "price", e.target.value)}
-            onWheel={disableNumberInputScroll} // Disable scroll
+            onWheel={disableNumberInputScroll}
             className="field-input"
             placeholder="Enter price"
             min="0"
@@ -876,7 +962,7 @@ const CreateItemPage = () => {
     try {
       const response = await axios.get(`${baseUrl}/api/variants/${variantId}`);
       const variantData = response.data;
-      
+    
       setModalState(prev => ({
         ...prev,
         modalCustomSelectedVariantId: variantId,
@@ -943,11 +1029,27 @@ const CreateItemPage = () => {
   const handleModalCustomVariantImageUpload = async (e, variantId, subheading) => {
     const file = e.target.files[0];
     if (!file) return;
+    const localUrl = URL.createObjectURL(file);
+    setModalState(prev => ({
+      ...prev,
+      data: {
+        ...prev.data,
+        custom_variants: prev.data.custom_variants.map(variant =>
+          variant._id === variantId ? {
+            ...variant,
+            subheadings: variant.subheadings.map(sub =>
+              sub.name === subheading ? { ...sub, imageTemp: localUrl } : sub
+            )
+          } : variant
+        )
+      }
+    }));
     const formDataUpload = new FormData();
     formDataUpload.append("files", file);
     try {
       const response = await axios.post(`${baseUrl}/api/upload-image`, formDataUpload);
       const imagePath = response.data.urls[0];
+      const filename = extractImageName(imagePath);
       setModalState(prev => ({
         ...prev,
         data: {
@@ -956,13 +1058,29 @@ const CreateItemPage = () => {
             variant._id === variantId ? {
               ...variant,
               subheadings: variant.subheadings.map(sub =>
-                sub.name === subheading ? { ...sub, image: extractImageName(imagePath) } : sub
+                sub.name === subheading ? { ...sub, image: filename } : sub
               )
             } : variant
           )
         }
       }));
+      URL.revokeObjectURL(localUrl);
     } catch (error) {
+      setModalState(prev => ({
+        ...prev,
+        data: {
+          ...prev.data,
+          custom_variants: prev.data.custom_variants.map(variant =>
+            variant._id === variantId ? {
+              ...variant,
+              subheadings: variant.subheadings.map(sub =>
+                sub.name === subheading ? { ...sub, imageTemp: null } : sub
+              )
+            } : variant
+          )
+        }
+      }));
+      URL.revokeObjectURL(localUrl);
       setWarningMessage(`Failed to upload image: ${error.message}`);
     }
   };
@@ -970,9 +1088,27 @@ const CreateItemPage = () => {
   const handleModalCustomVariantImageDelete = async (variantId, subheading) => {
     const variant = modalState.data.custom_variants.find(v => v._id === variantId);
     const sub = variant?.subheadings.find(s => s.name === subheading);
-    if (!sub || !sub.image) return;
+    const filename = sub?.image;
+    if (!filename) return;
+    // Optimistic
+    setModalState(prev => ({
+      ...prev,
+      data: {
+        ...prev.data,
+        custom_variants: prev.data.custom_variants.map(v =>
+          v._id === variantId ? {
+            ...v,
+            subheadings: v.subheadings.map(s =>
+              s.name === subheading ? { ...s, image: "" } : s
+            )
+          } : v
+        )
+      }
+    }));
     try {
-      await axios.delete(`${baseUrl}/api/delete-image/${sub.image}`);
+      await axios.delete(`${baseUrl}/api/delete-image/${filename}`);
+    } catch (error) {
+      // Revert
       setModalState(prev => ({
         ...prev,
         data: {
@@ -981,20 +1117,19 @@ const CreateItemPage = () => {
             v._id === variantId ? {
               ...v,
               subheadings: v.subheadings.map(s =>
-                s.name === subheading ? { ...s, image: null } : s
+                s.name === subheading ? { ...s, image: filename } : s
               )
             } : v
           )
         }
       }));
-    } catch (error) {
       setWarningMessage(`Failed to delete image: ${error.message}`);
     }
   };
 
   const renderModalCustomVariantFields = (variant) => {
     if (!variant) return null;
-    
+  
     return (
       <div className="variant-section">
         <div className="variant-toggle">
@@ -1015,7 +1150,7 @@ const CreateItemPage = () => {
             }}
           />
         </div>
-        
+      
         {variant.enabled && (
           <>
             <h6>{variant.heading} Options</h6>
@@ -1026,13 +1161,13 @@ const CreateItemPage = () => {
                   type="number"
                   value={sub.price || ""}
                   onChange={e => handleModalCustomVariantFieldChange(variant._id, sub.name, "price", e.target.value)}
-                  onWheel={disableNumberInputScroll} // Disable scroll
+                  onWheel={disableNumberInputScroll}
                   className="field-input"
                   placeholder="Enter price"
                   min="0"
                   step="0.01"
                 />
-                
+              
                 <label className="field-label">{`${sub.name} Image`}</label>
                 <input
                   type="file"
@@ -1040,11 +1175,11 @@ const CreateItemPage = () => {
                   onChange={e => handleModalCustomVariantImageUpload(e, variant._id, sub.name)}
                   className="field-input"
                 />
-                
-                {sub.image && (
+              
+                {(sub.image || sub.imageTemp) && (
                   <div className="image-container">
                     <img
-                      src={`${baseUrl}/api/images/${extractImageName(sub.image)}`}
+                      src={sub.imageTemp || `${baseUrl}/api/images/${extractImageName(sub.image)}`}
                       alt={`${sub.name} Preview`}
                       className="image-preview"
                     />
@@ -1428,14 +1563,15 @@ const CreateItemPage = () => {
           };
         }
       }
+      // Force clear previous image preview to ensure update
       setModalState((prev) => ({
         ...prev,
         data: {
           ...prev.data,
           selectedId: value,
           ...selectedData,
-          image: prev.data.image || selectedData.image || "",
-          imagePreview: prev.data.imagePreview || selectedData.imagePreview || "",
+          image: selectedData.image || "",
+          imagePreview: selectedData.imagePreview || "",
         },
       }));
     } else if (name === "newName" && modalState.addonType === "new") {
@@ -1529,50 +1665,110 @@ const CreateItemPage = () => {
     }
   };
 
-  const handleModalImageUpload = async (e, variant, subField = null) => {
+  const handleModalImageUpload = async (e, variant = null, subField = null) => {
     const file = e.target.files[0];
     if (!file) return;
+    const localUrl = URL.createObjectURL(file);
+    setModalState(prev => ({
+      ...prev,
+      data: {
+        ...prev.data,
+        imagePreview: localUrl,
+        ...(subField && {
+          variants: {
+            ...prev.data.variants,
+            [variant]: {
+              ...prev.data.variants[variant],
+              [subField + 'Temp']: localUrl
+            }
+          }
+        })
+      }
+    }));
     const formDataUpload = new FormData();
     formDataUpload.append("files", file);
     try {
       const response = await axios.post(`${baseUrl}/api/upload-image`, formDataUpload);
       const imagePath = response.data.urls[0];
-      if (subField) {
-        setModalState((prev) => ({
-          ...prev,
-          data: {
-            ...prev.data,
+      const serverUrl = `${baseUrl}${imagePath}`;
+      const filename = extractImageName(imagePath);
+      setModalState(prev => ({
+        ...prev,
+        data: {
+          ...prev.data,
+          image: filename,
+          imagePreview: serverUrl,
+          ...(subField && {
             variants: {
               ...prev.data.variants,
               [variant]: {
                 ...prev.data.variants[variant],
-                [subField]: extractImageName(imagePath),
-              },
-            },
-          },
-        }));
-      } else {
-        setModalState((prev) => ({
-          ...prev,
-          data: {
-            ...prev.data,
-            image: extractImageName(imagePath),
-            imagePreview: `${baseUrl}${imagePath}`,
-          },
-        }));
-      }
+                [subField]: filename,
+                [subField + 'Temp']: null
+              }
+            }
+          })
+        }
+      }));
+      URL.revokeObjectURL(localUrl);
     } catch (error) {
+      setModalState(prev => ({
+        ...prev,
+        data: {
+          ...prev.data,
+          imagePreview: "",
+          ...(subField && {
+            variants: {
+              ...prev.data.variants,
+              [variant]: {
+                ...prev.data.variants[variant],
+                [subField + 'Temp']: null
+              }
+            }
+          })
+        }
+      }));
+      URL.revokeObjectURL(localUrl);
       setWarningMessage(`Failed to upload image in modal: ${error.message}`);
     }
   };
 
-  const handleModalImageDelete = async (variant, subField = null) => {
+  const handleModalImageDelete = async (variant = null, subField = null) => {
     const filename = subField ? modalState.data.variants[variant][subField] : modalState.data.image;
+    const oldPreview = subField ? modalState.data.variants[variant][subField + 'Temp'] || `${baseUrl}/api/images/${filename}` : modalState.data.imagePreview;
     if (!filename) return;
+    // Optimistic
+    if (subField) {
+      setModalState(prev => ({
+        ...prev,
+        data: {
+          ...prev.data,
+          variants: {
+            ...prev.data.variants,
+            [variant]: {
+              ...prev.data.variants[variant],
+              [subField]: ""
+            }
+          }
+        }
+      }));
+    } else {
+      setModalState(prev => ({
+        ...prev,
+        data: {
+          ...prev.data,
+          image: "",
+          imagePreview: ""
+        }
+      }));
+    }
     try {
       await axios.delete(`${baseUrl}/api/delete-image/${filename}`);
+      setWarningMessage("Modal image deleted successfully!");
+    } catch (error) {
+      // Revert
       if (subField) {
-        setModalState((prev) => ({
+        setModalState(prev => ({
           ...prev,
           data: {
             ...prev.data,
@@ -1580,23 +1776,21 @@ const CreateItemPage = () => {
               ...prev.data.variants,
               [variant]: {
                 ...prev.data.variants[variant],
-                [subField]: "",
-              },
-            },
-          },
+                [subField]: filename
+              }
+            }
+          }
         }));
       } else {
-        setModalState((prev) => ({
+        setModalState(prev => ({
           ...prev,
           data: {
             ...prev.data,
-            image: "",
-            imagePreview: "",
-          },
+            image: filename,
+            imagePreview: oldPreview
+          }
         }));
       }
-      setWarningMessage("Modal image deleted successfully!");
-    } catch (error) {
       setWarningMessage(`Failed to delete modal image: ${error.message}`);
     }
   };
@@ -1919,7 +2113,7 @@ const CreateItemPage = () => {
                       onChange={handleInputChange}
                       onFocus={field.type === "number" ? (e) => handleNumericInputFocus(e) : undefined}
                       onBlur={field.type === "number" ? (e) => handleNumericInputBlur(e, field.name) : undefined}
-                      onWheel={field.type === "number" ? disableNumberInputScroll : undefined} // Disable scroll
+                      onWheel={field.type === "number" ? disableNumberInputScroll : undefined}
                       className="input"
                       required={field.required}
                       min={field.min}
@@ -2030,7 +2224,7 @@ const CreateItemPage = () => {
                     onChange={(e) => handleVariantFieldChange("size", "small_price", e.target.value)}
                     onFocus={(e) => handleVariantNumericFieldFocus(e, "size", "small_price")}
                     onBlur={(e) => handleVariantNumericFieldBlur(e, "size", "small_price")}
-                    onWheel={disableNumberInputScroll} // Disable scroll
+                    onWheel={disableNumberInputScroll}
                     className="input"
                     min="0"
                     step="0.01"
@@ -2042,7 +2236,7 @@ const CreateItemPage = () => {
                     onChange={(e) => handleVariantFieldChange("size", "medium_price", e.target.value)}
                     onFocus={(e) => handleVariantNumericFieldFocus(e, "size", "medium_price")}
                     onBlur={(e) => handleVariantNumericFieldBlur(e, "size", "medium_price")}
-                    onWheel={disableNumberInputScroll} // Disable scroll
+                    onWheel={disableNumberInputScroll}
                     className="input"
                     min="0"
                     step="0.01"
@@ -2054,7 +2248,7 @@ const CreateItemPage = () => {
                     onChange={(e) => handleVariantFieldChange("size", "large_price", e.target.value)}
                     onFocus={(e) => handleVariantNumericFieldFocus(e, "size", "large_price")}
                     onBlur={(e) => handleVariantNumericFieldBlur(e, "size", "large_price")}
-                    onWheel={disableNumberInputScroll} // Disable scroll
+                    onWheel={disableNumberInputScroll}
                     className="input"
                     min="0"
                     step="0.01"
@@ -2084,7 +2278,7 @@ const CreateItemPage = () => {
                         onChange={(e) => handleVariantFieldChange("cold", "ice_price", e.target.value)}
                         onFocus={(e) => handleVariantNumericFieldFocus(e, "cold", "ice_price")}
                         onBlur={(e) => handleVariantNumericFieldBlur(e, "cold", "ice_price")}
-                        onWheel={disableNumberInputScroll} // Disable scroll
+                        onWheel={disableNumberInputScroll}
                         className="input"
                         min="0"
                         step="0.01"
@@ -2105,7 +2299,7 @@ const CreateItemPage = () => {
                     onChange={(e) => handleVariantFieldChange("spicy", "spicy_price", e.target.value)}
                     onFocus={(e) => handleVariantNumericFieldFocus(e, "spicy", "spicy_price")}
                     onBlur={(e) => handleVariantNumericFieldBlur(e, "spicy", "spicy_price")}
-                    onWheel={disableNumberInputScroll} // Disable scroll
+                    onWheel={disableNumberInputScroll}
                     className="input"
                     min="0"
                     step="0.01"
@@ -2140,7 +2334,7 @@ const CreateItemPage = () => {
                     onChange={(e) => handleVariantFieldChange("spicy", "non_spicy_price", e.target.value)}
                     onFocus={(e) => handleVariantNumericFieldFocus(e, "spicy", "non_spicy_price")}
                     onBlur={(e) => handleVariantNumericFieldBlur(e, "spicy", "non_spicy_price")}
-                    onWheel={disableNumberInputScroll} // Disable scroll
+                    onWheel={disableNumberInputScroll}
                     className="input"
                     min="0"
                     step="0.01"
@@ -2464,7 +2658,6 @@ const CreateItemPage = () => {
           </button>
         </div>
       </div>
-
       {/* New Kitchen Modal */}
       <Modal isOpen={showNewKitchenModal} onClose={() => setShowNewKitchenModal(false)} title="Create New Kitchen">
         <div className="field-container">
@@ -2481,7 +2674,6 @@ const CreateItemPage = () => {
           </button>
         </div>
       </Modal>
-
       {/* New Item Group Modal */}
       <Modal isOpen={showNewItemGroupModal} onClose={() => setShowNewItemGroupModal(false)} title="Create New Item Group">
         <div className="field-container">
@@ -2498,7 +2690,6 @@ const CreateItemPage = () => {
           </button>
         </div>
       </Modal>
-
       <Modal
         isOpen={addonListModalOpen}
         onClose={() => setAddonListModalOpen(false)}
@@ -2696,7 +2887,7 @@ const CreateItemPage = () => {
               onChange={handleModalInputChange}
               onFocus={handleModalNumericFocus}
               onBlur={(e) => handleModalNumericBlur(e, "price")}
-              onWheel={disableNumberInputScroll} // Disable scroll
+              onWheel={disableNumberInputScroll}
               className="input"
               min="0"
               step="0.01"
@@ -2756,7 +2947,7 @@ const CreateItemPage = () => {
                         onChange={handleModalInputChange}
                         onFocus={(e) => handleModalVariantNumericFocus(e, "size", "small_price")}
                         onBlur={(e) => handleModalVariantNumericBlur(e, "size", "small_price")}
-                        onWheel={disableNumberInputScroll} // Disable scroll
+                        onWheel={disableNumberInputScroll}
                         className="input"
                         min="0"
                         step="0.01"
@@ -2769,7 +2960,7 @@ const CreateItemPage = () => {
                         onChange={handleModalInputChange}
                         onFocus={(e) => handleModalVariantNumericFocus(e, "size", "medium_price")}
                         onBlur={(e) => handleModalVariantNumericBlur(e, "size", "medium_price")}
-                        onWheel={disableNumberInputScroll} // Disable scroll
+                        onWheel={disableNumberInputScroll}
                         className="input"
                         min="0"
                         step="0.01"
@@ -2782,7 +2973,7 @@ const CreateItemPage = () => {
                         onChange={handleModalInputChange}
                         onFocus={(e) => handleModalVariantNumericFocus(e, "size", "large_price")}
                         onBlur={(e) => handleModalVariantNumericBlur(e, "size", "large_price")}
-                        onWheel={disableNumberInputScroll} // Disable scroll
+                        onWheel={disableNumberInputScroll}
                         className="input"
                         min="0"
                         step="0.01"
@@ -2824,7 +3015,7 @@ const CreateItemPage = () => {
                             onChange={handleModalInputChange}
                             onFocus={(e) => handleModalVariantNumericFocus(e, "cold", "ice_price")}
                             onBlur={(e) => handleModalVariantNumericBlur(e, "cold", "ice_price")}
-                            onWheel={disableNumberInputScroll} // Disable scroll
+                            onWheel={disableNumberInputScroll}
                             className="input"
                             min="0"
                             step="0.01"
@@ -2856,7 +3047,7 @@ const CreateItemPage = () => {
                         onChange={handleModalInputChange}
                         onFocus={(e) => handleModalVariantNumericFocus(e, "spicy", "spicy_price")}
                         onBlur={(e) => handleModalVariantNumericBlur(e, "spicy", "spicy_price")}
-                        onWheel={disableNumberInputScroll} // Disable scroll
+                        onWheel={disableNumberInputScroll}
                         className="input"
                         min="0"
                         step="0.01"
@@ -2868,10 +3059,10 @@ const CreateItemPage = () => {
                         onChange={(e) => handleModalImageUpload(e, "spicy", "spicy_image")}
                         className="input"
                       />
-                      {modalState.data.variants.spicy.spicy_image && (
+                      {(modalState.data.variants.spicy.spicy_image || modalState.data.variants.spicy.spicy_imageTemp) && (
                         <div className="image-container">
                           <img
-                            src={`${baseUrl}/api/images/${modalState.data.variants.spicy.spicy_image}`}
+                            src={modalState.data.variants.spicy.spicy_imageTemp || `${baseUrl}/api/images/${modalState.data.variants.spicy.spicy_image}`}
                             alt="Spicy Preview"
                             className="image-preview"
                           />
@@ -2892,7 +3083,7 @@ const CreateItemPage = () => {
                         onChange={handleModalInputChange}
                         onFocus={(e) => handleModalVariantNumericFocus(e, "spicy", "non_spicy_price")}
                         onBlur={(e) => handleModalVariantNumericBlur(e, "spicy", "non_spicy_price")}
-                        onWheel={disableNumberInputScroll} // Disable scroll
+                        onWheel={disableNumberInputScroll}
                         className="input"
                         min="0"
                         step="0.01"
@@ -2904,10 +3095,10 @@ const CreateItemPage = () => {
                         onChange={(e) => handleModalImageUpload(e, "spicy", "non_spicy_image")}
                         className="input"
                       />
-                      {modalState.data.variants.spicy.non_spicy_image && (
+                      {(modalState.data.variants.spicy.non_spicy_image || modalState.data.variants.spicy.non_spicy_imageTemp) && (
                         <div className="image-container">
                           <img
-                            src={`${baseUrl}/api/images/${modalState.data.variants.spicy.non_spicy_image}`}
+                            src={modalState.data.variants.spicy.non_spicy_imageTemp || `${baseUrl}/api/images/${modalState.data.variants.spicy.non_spicy_image}`}
                             alt="Non-Spicy Preview"
                             className="image-preview"
                           />
@@ -3019,9 +3210,9 @@ const CreateItemPage = () => {
                           <td>Spicy</td>
                           <td>₹{modalState.data.variants.spicy.spicy_price}</td>
                           <td>
-                            {modalState.data.variants.spicy.spicy_image ? (
+                            {(modalState.data.variants.spicy.spicy_imageTemp || modalState.data.variants.spicy.spicy_image) ? (
                               <img
-                                src={`${baseUrl}/api/images/${modalState.data.variants.spicy.spicy_image}`}
+                                src={modalState.data.variants.spicy.spicy_imageTemp || `${baseUrl}/api/images/${modalState.data.variants.spicy.spicy_image}`}
                                 alt="Spicy Preview"
                                 className="image-preview"
                               />
@@ -3034,9 +3225,9 @@ const CreateItemPage = () => {
                           <td>Non-Spicy</td>
                           <td>₹{modalState.data.variants.spicy.non_spicy_price}</td>
                           <td>
-                            {modalState.data.variants.spicy.non_spicy_image ? (
+                            {(modalState.data.variants.spicy.non_spicy_imageTemp || modalState.data.variants.spicy.non_spicy_image) ? (
                               <img
-                                src={`${baseUrl}/api/images/${modalState.data.variants.spicy.non_spicy_image}`}
+                                src={modalState.data.variants.spicy.non_spicy_imageTemp || `${baseUrl}/api/images/${modalState.data.variants.spicy.non_spicy_image}`}
                                 alt="Non-Spicy Preview"
                                 className="image-preview"
                               />
@@ -3114,9 +3305,9 @@ const CreateItemPage = () => {
                             <td>{sub.name}</td>
                             <td>{sub.price ? `₹${sub.price}` : "N/A"}</td>
                             <td>
-                              {sub.image ? (
+                              {(sub.imageTemp || sub.image) ? (
                                 <img
-                                  src={`${baseUrl}/api/images/${extractImageName(sub.image)}`}
+                                  src={sub.imageTemp || `${baseUrl}/api/images/${extractImageName(sub.image)}`}
                                   alt={`${sub.name} Preview`}
                                   className="image-preview"
                                 />
@@ -3155,7 +3346,7 @@ const CreateItemPage = () => {
                 Manage Ingredients and Nutrition
               </button>
             </div>
-        
+      
             <div className="modal-actions">
               <button type="button" className="save-button" onClick={handleModalSave}>
                 Save

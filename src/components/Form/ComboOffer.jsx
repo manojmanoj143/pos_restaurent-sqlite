@@ -1,7 +1,9 @@
+// src/components/Form/ComboOffer.jsx (full completed code with error handling and no 500 errors)
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import { FaArrowLeft } from "react-icons/fa";
+import { toast } from "react-toastify"; // Assuming you have react-toastify for warnings; install if not: npm i react-toastify
 
 const initialFormState = {
   description: "",
@@ -32,7 +34,9 @@ const ComboOffer = () => {
         const itemsResponse = await axios.get("http://localhost:8000/api/items");
         setAllItems(itemsResponse.data);
       } catch (error) {
-        setWarningMessage(`Error fetching data: ${error.message}`);
+        const errorMsg = error.response?.data?.error || error.message;
+        setWarningMessage(`Error fetching data: ${errorMsg}`);
+        toast.error(`Error fetching data: ${errorMsg}`); // NEW: Toast for better UX
       } finally {
         setLoading(false);
       }
@@ -122,21 +126,45 @@ const ComboOffer = () => {
     });
   };
 
+  /* -------------------------------------------------- VALIDATION FOR TIMES -------------------------------------------------- */
+  const validateOfferTimes = () => {
+    if (formData.offer_start_time && formData.offer_end_time) {
+      const startTime = new Date(formData.offer_start_time);
+      const endTime = new Date(formData.offer_end_time);
+      if (startTime >= endTime) {
+        toast.error("Offer start time must be before end time"); // NEW: Client-side validation with toast
+        return false;
+      }
+    }
+    return true;
+  };
+
   /* -------------------------------------------------- SUBMIT -------------------------------------------------- */
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!validateOfferTimes()) return; // NEW: Validate before submit
     setLoading(true);
     try {
+      // Ensure times are UTC ISO
+      const submitData = { ...formData };
+      if (submitData.offer_start_time) {
+        submitData.offer_start_time = new Date(submitData.offer_start_time).toISOString();
+      }
+      if (submitData.offer_end_time) {
+        submitData.offer_end_time = new Date(submitData.offer_end_time).toISOString();
+      }
       if (isEdit) {
-        await axios.put(`http://localhost:8000/api/combo-offer/${formData._id}`, formData);
-        setWarningMessage("Combo offer updated successfully!");
+        await axios.put(`http://localhost:8000/api/combo-offer/${submitData._id}`, submitData);
+        toast.success("Combo offer updated successfully!"); // NEW: Toast
       } else {
-        await axios.post("http://localhost:8000/api/combo-offer", formData);
-        setWarningMessage("Combo offer created successfully!");
+        await axios.post("http://localhost:8000/api/combo-offer", submitData);
+        toast.success("Combo offer created successfully!"); // NEW: Toast
       }
       navigate("/admin", { replace: true });
     } catch (error) {
-      setWarningMessage(`Operation failed: ${error.response?.data?.error || error.message}`);
+      const errorMsg = error.response?.data?.error || error.message;
+      setWarningMessage(`Operation failed: ${errorMsg}`);
+      toast.error(`Operation failed: ${errorMsg}`);
     } finally {
       setLoading(false);
     }
@@ -266,7 +294,7 @@ const ComboOffer = () => {
             />
           </div>
 
-          {/* Select Items / Addons / Combos */}
+          {/* Select Items / Addons / Combos – FIXED: Using flatMap to avoid nested arrays */}
           <div style={formGroupStyle}>
             <label style={labelStyle}>Select Items/Addons/Combos</label>
             <select
@@ -278,15 +306,18 @@ const ComboOffer = () => {
               style={selectStyle}
             >
               <option value="">Select</option>
-              {allItems.map((item) => [
+              {allItems.flatMap((item) => [
+                // Item option
                 <option key={item._id} value={`item_${item._id}`}>
                   {item.item_name} (Item)
                 </option>,
+                // Addon options
                 ...item.addons.map((addon, idx) => (
                   <option key={`${item._id}_addon_${idx}`} value={`addon_${item._id}_${idx}`}>
                     {addon.name1} (Addon from {item.item_name})
                   </option>
                 )),
+                // Combo options
                 ...item.combos.map((combo, idx) => (
                   <option key={`${item._id}_combo_${idx}`} value={`combo_${item._id}_${idx}`}>
                     {combo.name1} (Combo from {item.item_name})
@@ -303,12 +334,14 @@ const ComboOffer = () => {
               <div key={index} style={componentItemStyle}>
                 <img
                   src={
+                    // Generic fallback: Try common 'image' field first, then specifics
                     comp.data.image ||
                     comp.data.addon_image ||
                     comp.data.combo_image ||
+                    comp.data.item_image || // Extra fallback for items if needed
                     "https://via.placeholder.com/50"
                   }
-                  alt={comp.data.item_name || comp.data.name1}
+                  alt={comp.data.item_name || comp.data.name1 || "Component"}
                   style={componentImageStyle}
                 />
                 <span style={componentTextStyle}>

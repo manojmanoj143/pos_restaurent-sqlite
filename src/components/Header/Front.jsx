@@ -1,4 +1,3 @@
-// FrontPage.jsx (Merged version: New code base with detailed addon/combo billing rendering from old code, fixed dynamic baseUrl, preserved statuses, all issues resolved)
 "use client"
 import React, { useEffect, useState, useRef } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
@@ -80,6 +79,13 @@ function FrontPage() {
   const [showGroupModal, setShowGroupModal] = useState(false)
   const [newGroupName, setNewGroupName] = useState("")
 
+  // FIXED: Define generate_order_number function to resolve ReferenceError
+  const generate_order_number = (orderType) => {
+    const timestamp = Date.now().toString().slice(-6); // Last 6 digits of timestamp
+    const typePrefix = orderType === "Dine In" ? "DIN" : orderType === "Takeaway" ? "TAK" : "DEL";
+    return `${typePrefix}-${timestamp}`;
+  };
+
   const handleThemeChange = (theme) => {
     setCurrentTheme(theme)
     setShowThemeSelector(false)
@@ -100,6 +106,7 @@ function FrontPage() {
   const reduxUser = useSelector((state) => state.user.user)
   const storedUser = JSON.parse(localStorage.getItem("user")) || { email: "Guest" }
   const user = reduxUser || storedUser
+
   const isdCodes = [
     { code: "+91", country: "India" },
     { code: "+1", country: "USA" },
@@ -107,6 +114,7 @@ function FrontPage() {
     { code: "+971", country: "UAE" },
     { code: "+61", country: "Australia" },
   ]
+
   const location = useLocation()
   const { state } = location
   const {
@@ -122,6 +130,7 @@ function FrontPage() {
     whatsappNumber: initialWhatsappNumber,
     email: initialEmail,
   } = state || {}
+
   const navigate = useNavigate()
 
   // Fetch config for baseUrl (client/server mode)
@@ -478,6 +487,9 @@ function FrontPage() {
         basePrice: finalPrice,
         totalPrice: finalPrice * (updatedItem.quantity || 1),
         isCombo: true,
+        // FIXED: Set is_combo_offer and offer_description for backend recognition
+        is_combo_offer: true,
+        offer_description: updatedItem.name,
         comboItems: updatedItem.comboItems,
         kitchen: updatedItem.kitchen || "Main Kitchen",
         status: "Pending",
@@ -985,6 +997,9 @@ function FrontPage() {
         customVariantsDetails: item.customVariantsDetails || {},
         customVariantsQuantities: item.customVariantsQuantities || {},
         image: item.image || "/static/images/default-item.jpg",
+        // FIXED: Preserve is_combo_offer and offer_description for backend
+        is_combo_offer: item.is_combo_offer || false,
+        offer_description: item.offer_description || null,
         kitchenStatuses: item.kitchenStatuses || {},
       })),
       totalAmount: Number(subtotal.toFixed(2)),
@@ -1138,6 +1153,9 @@ function FrontPage() {
         customVariantsDetails: item.customVariantsDetails || {},
         customVariantsQuantities: item.customVariantsQuantities || {},
         image: item.image || "/static/images/default-item.jpg",
+        // FIXED: Preserve is_combo_offer and offer_description for backend
+        is_combo_offer: item.is_combo_offer || false,
+        offer_description: item.offer_description || null,
         kitchenStatuses: item.kitchenStatuses || {},
       })),
       total: Number(subtotal.toFixed(2)),
@@ -1384,6 +1402,7 @@ function FrontPage() {
     }
   }
 
+  // FIXED: Updated saveOrder to use generate_order_number without undefined orderNo
   const saveOrder = async () => {
     if (cartItems.length === 0) {
       setWarningMessage("Cart is empty. Please add items before saving.")
@@ -1399,6 +1418,7 @@ function FrontPage() {
     const { chairsBooked } = location.state || {}
     const newOrder = {
       orderId: currentOrderId,
+      orderNo: generate_order_number(orderType), // FIXED: Use the defined function directly
       customerName: customerName || "N/A",
       tableNumber: tableNumber || "N/A",
       chairsBooked: Array.isArray(chairsBooked) ? chairsBooked : [],
@@ -1444,6 +1464,10 @@ function FrontPage() {
         icePreference: item.icePreference || "without_ice",
         isSpicy: item.isSpicy || false,
         sugarLevel: item.sugarLevel || "medium",
+        // FIXED: Preserve is_combo_offer and offer_description
+        is_combo_offer: item.is_combo_offer || false,
+        offer_description: item.offer_description || null,
+        comboItems: item.comboItems || [], // Include comboItems for combo offers
       })),
       timestamp: new Date().toISOString(),
       orderType: orderType || "Dine In",
@@ -2201,7 +2225,7 @@ function FrontPage() {
                                       onClick={() => {
                                         const updatedVariants = {
                                           ...item.addonVariants,
-                  [addonName]: { ...item.addonVariants[addonName], cold: 'without_ice' },
+                                          [addonName]: { ...item.addonVariants[addonName], cold: 'without_ice' },
                                         }
                                         handleItemUpdate({
                                           ...item,

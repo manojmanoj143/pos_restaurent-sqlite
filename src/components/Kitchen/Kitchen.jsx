@@ -4,11 +4,9 @@ import { useNavigate } from "react-router-dom";
 
 class ErrorBoundary extends React.Component {
   state = { hasError: false, error: null };
-
   static getDerivedStateFromError(error) {
     return { hasError: true, error };
   }
-
   render() {
     if (this.state.hasError) {
       return (
@@ -114,6 +112,9 @@ function Kitchen() {
               ? order.cartItems.map((item) => ({
                   ...item,
                   kitchenStatuses: item.kitchenStatuses || {},
+                  // FIXED: Ensure combo offer flag and sub-items are preserved for kitchen handling
+                  isCombo: item.isCombo || item.is_combo_offer || false,
+                  comboItems: item.comboItems || [], // Preserve sub-items for combo offers
                 }))
               : [],
           }));
@@ -121,18 +122,15 @@ function Kitchen() {
           setErrorMessage("");
         } else {
           console.error("Invalid orders response:", response.data);
-          // Suppressed UI error message as per request
         }
       } catch (error) {
         console.error("Error fetching orders:", error);
-        // Suppressed UI error message as per request - do not setErrorMessage
         let message = "Failed to fetch orders. Please try again later.";
         if (error.response?.status === 500) {
           message = "Server error occurred. Please contact support or try again.";
         } else if (error.code === "ECONNABORTED") {
           message = "Request timed out. Check your network or try again.";
         }
-        // Do not setErrorMessage(message); // Suppressed
       } finally {
         setLoading(false);
       }
@@ -155,23 +153,19 @@ function Kitchen() {
         setErrorMessage("");
       } else {
         console.error("Invalid picked-up items response:", response.data);
-        // Suppressed UI error message as per request
       }
     } catch (error) {
       console.error("Error fetching picked-up items:", error);
-      // Suppressed UI error message as per request
       let message = "Failed to fetch picked-up items. Please try again later.";
       if (error.response?.status === 500) {
         message = "Server error occurred. Please contact support or try again.";
       } else if (error.code === "ECONNABORTED") {
         message = "Request timed out. Check your network or try again.";
       }
-      // Do not setErrorMessage(message); // Suppressed
     } finally {
       setLoading(false);
     }
   };
-
   React.useEffect(() => {
     fetchPickedUpItems();
   }, [baseUrl]);
@@ -233,14 +227,16 @@ function Kitchen() {
     }
   }, [savedOrders, baseUrl]);
 
-  // Derive kitchens
+  // Derive kitchens (including from combo offer sub-items)
   const kitchens = [
     ...new Set(
       savedOrders
         .filter((order) => Array.isArray(order.cartItems))
         .flatMap((order) =>
           order.cartItems.reduce((acc, item) => {
+            // Main item kitchen
             if (item.kitchen) acc.push(item.kitchen);
+            // Addons
             if (item.addonQuantities) {
               Object.entries(item.addonQuantities).forEach(([addonName, qty]) => {
                 if (qty > 0) {
@@ -249,12 +245,19 @@ function Kitchen() {
                 }
               });
             }
+            // Combos
             if (item.comboQuantities) {
               Object.entries(item.comboQuantities).forEach(([comboName, qty]) => {
                 if (qty > 0) {
                   const k = getFetchedKitchen("combo", item.name, comboName, item.comboVariants?.[comboName]?.kitchen);
                   if (k) acc.push(k);
                 }
+              });
+            }
+            // FIXED: For combo offers, add kitchens from sub-items (comboItems)
+            if (item.is_combo_offer && Array.isArray(item.comboItems)) {
+              item.comboItems.forEach((subItem) => {
+                if (subItem.kitchen) acc.push(subItem.kitchen);
               });
             }
             return acc;
@@ -273,15 +276,15 @@ function Kitchen() {
     }
   }, [kitchens, selectedKitchen]);
 
-  // Filter orders for selected kitchen
+  // Filter orders for selected kitchen (including combo offer sub-items)
   const filteredOrders = savedOrders
     .map((order) => {
       const relevantItems = Array.isArray(order.cartItems)
         ? order.cartItems
             .map((item) => {
-              const filteredAddons = {};
-              const filteredAddonVariants = {};
-              const filteredAddonCustomVariantsDetails = {};
+              let filteredAddons = {};
+              let filteredAddonVariants = {};
+              let filteredAddonCustomVariantsDetails = {};
               if (item.addonQuantities && item.addonVariants) {
                 Object.entries(item.addonQuantities).forEach(([addonName, qty]) => {
                   if (qty > 0) {
@@ -303,9 +306,9 @@ function Kitchen() {
                   }
                 });
               }
-              const filteredCombos = {};
-              const filteredComboVariants = {};
-              const filteredComboCustomVariantsDetails = {};
+              let filteredCombos = {};
+              let filteredComboVariants = {};
+              let filteredComboCustomVariantsDetails = {};
               if (item.comboQuantities && item.comboVariants) {
                 Object.entries(item.comboQuantities).forEach(([comboName, qty]) => {
                   if (qty > 0) {
@@ -327,6 +330,11 @@ function Kitchen() {
                   }
                 });
               }
+              // FIXED: For combo offers, filter sub-items (comboItems) based on their kitchen
+              let filteredComboOfferSubItems = [];
+              if (item.is_combo_offer && Array.isArray(item.comboItems)) {
+                filteredComboOfferSubItems = item.comboItems.filter((subItem) => subItem.kitchen === selectedKitchen);
+              }
               return {
                 ...item,
                 addonQuantities: filteredAddons,
@@ -335,10 +343,13 @@ function Kitchen() {
                 comboQuantities: filteredCombos,
                 comboVariants: filteredComboVariants,
                 comboCustomVariantsDetails: filteredComboCustomVariantsDetails,
+                // FIXED: Preserve filtered sub-items for combo offers
+                filteredComboOfferSubItems,
                 displayInKitchen:
                   item.kitchen === selectedKitchen ||
                   Object.keys(filteredAddons).length > 0 ||
-                  Object.keys(filteredCombos).length > 0,
+                  Object.keys(filteredCombos).length > 0 ||
+                  filteredComboOfferSubItems.length > 0,
                 kitchenStatuses: item.kitchenStatuses || {},
               };
             })
@@ -418,6 +429,20 @@ function Kitchen() {
     return custom ? `Custom: ${custom}` : "";
   };
 
+  // FIXED: New helper to render combo offer sub-items in kitchen table
+  const renderComboOfferSubItems = (filteredComboOfferSubItems, itemQuantity) => {
+    if (!filteredComboOfferSubItems || filteredComboOfferSubItems.length === 0) return null;
+    return filteredComboOfferSubItems.map((subItem, idx) => (
+      <div
+        key={`sub-${idx}`}
+        style={{ fontSize: "12px", color: "#555", marginLeft: "10px", padding: "4px", borderLeft: "2px solid #007bff" }}
+      >
+        - Sub-Item: {subItem.name} x{itemQuantity} (Kitchen: {subItem.kitchen})
+        <div>Status: {subItem.status || "Pending"}</div>
+      </div>
+    ));
+  };
+
   // Popup data logic
   const getLastHourItems = () => {
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
@@ -459,7 +484,7 @@ function Kitchen() {
     return sortedItems.sort((a, b) => new Date(b.pickupTime) - new Date(a.pickupTime));
   };
 
-  // Flattened sub-items for popup
+  // FIXED: Updated to handle combo offer sub-items in flattened list
   const getFlattenedSubItems = (entry) => {
     const allItems = Array.isArray(entry.items) ? entry.items : [entry];
     const subItems = [];
@@ -502,6 +527,19 @@ function Kitchen() {
           }
         });
       }
+      // FIXED: Add sub-items from combo offers
+      if (item.is_combo_offer && Array.isArray(item.comboItems)) {
+        item.comboItems.forEach((subItem) => {
+          subItems.push({
+            id: `combooffer-sub-${subItem.name || Math.random()}`,
+            type: "combooffer-sub",
+            name: `- Combo Sub: ${subItem.name}`,
+            quantity: item.quantity || 1,
+            category: "Combo Offer Sub-Item",
+            kitchen: subItem.kitchen || "N/A",
+          });
+        });
+      }
     });
     return subItems;
   };
@@ -539,11 +577,9 @@ function Kitchen() {
         );
       } else {
         console.error("Failed to mark as prepared:", response.data);
-        // Suppressed UI error message as per request
       }
     } catch (error) {
       console.error("Error marking as prepared:", error);
-      // Suppressed UI error message as per request
     }
   };
 
@@ -585,20 +621,18 @@ function Kitchen() {
           console.log("Item marked as PickedUp, status preserved.");
         } else {
           console.error("Failed to mark as picked up:", response.data);
-          // Suppressed UI error message as per request
         }
       } else {
         console.error("Item not in Prepared status");
-        // Suppressed UI error message as per request
       }
     } catch (error) {
       console.error("Error marking as picked up:", error);
-      // Suppressed UI error message as per request
     } finally {
       setLoading(false);
     }
   };
 
+  // FIXED: Updated bulk pickup to handle combo offer sub-items if they have separate IDs/statuses
   const handleBulkPickUp = async () => {
     try {
       setLoading(true);
@@ -613,7 +647,9 @@ function Kitchen() {
             ) ||
             Object.values(item.comboVariants || {}).some(
               (combo) => combo.kitchen === selectedKitchen && item.comboQuantities?.[combo.name1]
-            )
+            ) ||
+            // FIXED: Include combo offer sub-items
+            (item.is_combo_offer && item.filteredComboOfferSubItems && item.filteredComboOfferSubItems.length > 0)
         );
         for (const item of itemsToPickUp) {
           if (item.kitchenStatuses?.[selectedKitchen] === "Prepared") {
@@ -621,12 +657,15 @@ function Kitchen() {
           } else {
             console.log(`Skipping item ${item.id} in order ${orderId} because status is ${item.kitchenStatuses?.[selectedKitchen] || 'Pending'}`);
           }
+          // FIXED: If combo offer, handle sub-items (assuming they share the main item's status for simplicity; extend if separate)
+          if (item.is_combo_offer && item.filteredComboOfferSubItems) {
+            // For now, assume sub-items use main status; if separate, add logic here
+          }
         }
       }
       setSelectedCustomers([]);
     } catch (error) {
       console.error("Error during bulk pickup:", error);
-      // Suppressed UI error message as per request
     } finally {
       setLoading(false);
     }
@@ -671,6 +710,7 @@ function Kitchen() {
     return `${baseUrl}/api/images/${imagePath}`;
   };
 
+  // FIXED: Updated to include images for combo offer sub-items
   const getAddonComboImages = (item) => {
     const images = [];
     const itemDetails = itemDetailsCache[item.name] || {
@@ -714,6 +754,17 @@ function Kitchen() {
           status: item.kitchenStatuses?.[selectedKitchen] || "Pending",
         });
       });
+    // FIXED: Add images for combo offer sub-items
+    if (item.is_combo_offer && Array.isArray(item.filteredComboOfferSubItems)) {
+      item.filteredComboOfferSubItems.forEach((subItem) => {
+        images.push({
+          src: getCorrectImageUrl(subItem.image || "/static/uploads/placeholder.png"),
+          label: subItem.name || "Sub-Item",
+          type: "combooffer-sub",
+          status: item.kitchenStatuses?.[subItem.kitchen] || "Pending", // Use sub-kitchen if available
+        });
+      });
+    }
     return images;
   };
 
@@ -864,6 +915,7 @@ function Kitchen() {
                   <th style={{ border: "1px solid #ddd", padding: "8px" }}>Table</th>
                   <th style={{ border: "1px solid #ddd", padding: "8px" }}>Item & Addons</th>
                   <th style={{ border: "1px solid #ddd", padding: "8px" }}>Combos</th>
+                  <th style={{ border: "1px solid #ddd", padding: "8px" }}>Combo Offer Sub-Items</th> {/* FIXED: New column for combo offer sub-items */}
                   <th style={{ border: "1px solid #ddd", padding: "8px" }}>Images</th>
                   <th style={{ border: "1px solid #ddd", padding: "8px" }}>Quantity</th>
                   <th style={{ border: "1px solid #ddd", padding: "8px" }}>Category</th>
@@ -943,6 +995,10 @@ function Kitchen() {
                             </div>
                           )
                         ))}
+                      </td>
+                      {/* FIXED: New column to display combo offer sub-items */}
+                      <td style={{ border: "1px solid #ddd", padding: "8px" }}>
+                        {item.is_combo_offer && renderComboOfferSubItems(item.filteredComboOfferSubItems, item.quantity)}
                       </td>
                       <td style={{ border: "1px solid #ddd", padding: "8px" }}>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>

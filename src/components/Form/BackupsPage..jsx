@@ -1,5 +1,3 @@
-// BackupPage.jsx (full updated code)
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaArrowLeft, FaDownload } from 'react-icons/fa';
@@ -134,6 +132,12 @@ function BackupPage() {
     }
   };
 
+  const handleSetMaxBackups = (newMax) => {
+    setMaxBackups(newMax);
+    localStorage.setItem('numberOfBackups', newMax);
+    fetchBackupInfo(); // Refresh the list with new limit
+  };
+
   return (
     <div className="container mt-5" style={{ maxWidth: '1200px' }}>
       {warningMessage && (
@@ -202,6 +206,21 @@ function BackupPage() {
               </button>
             </div>
             <p>Current interval: every {backupInterval} hours</p>
+          </div>
+        </div>
+        <div className="col-md-6">
+          <div className="card p-3">
+            <h5>Set Number of Backups to Display</h5>
+            <div className="input-group mb-3">
+              <input
+                type="number"
+                className="form-control"
+                value={maxBackups}
+                onChange={(e) => handleSetMaxBackups(parseInt(e.target.value) || 5)}
+                min={1}
+              />
+            </div>
+            <p>Current display limit: {maxBackups}</p>
           </div>
         </div>
       </div>
@@ -360,4 +379,4 @@ function BackupPage() {
   );
 }
 
-export default BackupPage; 
+export default BackupPage;

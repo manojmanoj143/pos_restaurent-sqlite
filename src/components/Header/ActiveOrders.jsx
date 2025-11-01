@@ -1,11 +1,11 @@
-
+// ActiveOrders.jsx (Updated: Added detailed rendering for combo offers, including sub-items with prices, kitchens, ticks.
+// Also updated handleSelectOrder to use is_combo_offer. Full detailed code.)
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
 import axios from "axios";
 import { FaArrowLeft, FaSyncAlt, FaCheck } from "react-icons/fa";
 import "./ActiveOrders.css";
-
 function ActiveOrders() {
   const [savedOrders, setSavedOrders] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -20,10 +20,8 @@ function ActiveOrders() {
   const [selectedDeliveryPersonId, setSelectedDeliveryPersonId] = useState(null);
   const [filterType, setFilterType] = useState("Dine In");
   const [baseUrl, setBaseUrl] = useState(""); // Dynamic base URL for client/server mode
-
   const navigate = useNavigate();
   const vatRate = 0.10;
-
   // Fetch config for baseUrl (client/server mode)
   useEffect(() => {
     const fetchConfig = async () => {
@@ -43,13 +41,11 @@ function ActiveOrders() {
     };
     fetchConfig();
   }, []);
-
   const fetchData = async () => {
     try {
       const ordersResponse = await axios.get(`${baseUrl}/api/activeorders`);
       console.log("Fetched orders from server in ActiveOrders:", ordersResponse.data);
       const orders = Array.isArray(ordersResponse.data) ? ordersResponse.data : [];
-
       const sanitizedOrders = orders.map((order) => ({
         ...order,
         orderNo: order.orderNo || "N/A",
@@ -60,12 +56,13 @@ function ActiveOrders() {
               originalBasePrice: item.originalBasePrice || null,
               served: item.served !== undefined ? item.served : false,
               servedQuantity: item.servedQuantity || (item.served ? (item.quantity || 1) : 0),
+              // FIXED: Ensure combo offer flag is preserved
+              isCombo: item.isCombo || item.is_combo_offer || false,
             }))
           : [],
         pickedUpTime: order.pickedUpTime || null,
         paid: order.paid || false,
       }));
-
       setSavedOrders(sanitizedOrders);
       localStorage.setItem("savedOrders", JSON.stringify(sanitizedOrders));
       // Suppressed UI warning message as per request
@@ -74,7 +71,6 @@ function ActiveOrders() {
       // Suppressed UI warning message as per request - do not setWarningMessage
     }
   };
-
   const fetchEmployees = async () => {
     try {
       const response = await axios.get(`${baseUrl}/api/employees`);
@@ -84,7 +80,6 @@ function ActiveOrders() {
       // Suppressed UI warning message as per request
     }
   };
-
   const fetchTables = async () => {
     try {
       const response = await axios.get(`${baseUrl}/api/tables`);
@@ -94,7 +89,6 @@ function ActiveOrders() {
       // Suppressed UI warning message as per request
     }
   };
-
   useEffect(() => {
     fetchData();
     fetchEmployees();
@@ -102,19 +96,16 @@ function ActiveOrders() {
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, [baseUrl]); // Re-fetch after baseUrl is set
-
   const getFloor = (tableNumber) => {
     const table = tables.find((t) => String(t.table_number) === String(tableNumber));
     return table ? table.floor : "N/A";
   };
-
   const handleRefresh = () => {
     fetchData();
     // Suppressed UI warning message as per request
     // setWarningMessage("Orders refreshed!");
     // setWarningType("success");
   };
-
   const handleWarningOk = () => {
     if (pendingAction) {
       pendingAction();
@@ -124,7 +115,6 @@ function ActiveOrders() {
     setWarningType("warning");
     setIsConfirmation(false);
   };
-
   const handleConfirmYes = () => {
     if (pendingAction) {
       pendingAction();
@@ -134,14 +124,12 @@ function ActiveOrders() {
     setWarningType("warning");
     setIsConfirmation(false);
   };
-
   const handleConfirmNo = () => {
     setWarningMessage("");
     setWarningType("warning");
     setPendingAction(null);
     setIsConfirmation(false);
   };
-
   const handleDeleteOrder = (orderId, tableNumber, orderNo) => {
     setWarningMessage(`Are you sure you want to delete order ${orderNo || "N/A"}?`);
     setWarningType("warning");
@@ -169,7 +157,6 @@ function ActiveOrders() {
       }
     );
   };
-
   const handleDeleteItem = async (orderId, itemId) => {
     try {
       await axios.delete(`${baseUrl}/api/activeorders/${orderId}/items/${itemId}`);
@@ -180,7 +167,6 @@ function ActiveOrders() {
       // Suppressed UI warning message as per request
     }
   };
-
   const handleDeleteAllCompleted = () => {
     setWarningMessage("Are you sure you want to delete all completed orders?");
     setWarningType("warning");
@@ -207,13 +193,10 @@ function ActiveOrders() {
       }
     );
   };
-
   const handleCompleted = async (orderId) => {
     const order = savedOrders.find((o) => o.orderId === orderId);
     if (!order) return;
-
     const allItemsCompleted = order.cartItems.every((item) => (item.servedQuantity || 0) >= (item.quantity || 1));
-
     if (order.paid && allItemsCompleted) {
       setWarningMessage("Are you sure you want to mark this order as completed and delete it?");
       setWarningType("warning");
@@ -242,7 +225,6 @@ function ActiveOrders() {
       // Suppressed UI warning message as per request
     }
   };
-
   const checkAllItemsPickedUp = (order) => {
     if (!order.cartItems || order.cartItems.length === 0) return false;
     const allPickedUp = order.cartItems.every((item) => {
@@ -254,7 +236,6 @@ function ActiveOrders() {
     console.log(`Check if all items picked up for order ${order.orderNo}: ${allPickedUp}`);
     return allPickedUp;
   };
-
   const handleAssignDeliveryPerson = (orderId, deliveryPersonId) => {
     const order = savedOrders.find((o) => o.orderId === orderId);
     if (!order) {
@@ -262,24 +243,20 @@ function ActiveOrders() {
       // Suppressed UI warning message as per request
       return;
     }
-
     if (order.orderType !== "Online Delivery") {
       console.error("Delivery person can only be assigned to Online Delivery orders.");
       // Suppressed UI warning message as per request
       return;
     }
-
     if (!checkAllItemsPickedUp(order)) {
       console.error(`Cannot assign delivery person to order ${order.orderNo}. All items, addons, and combos must be marked as Picked Up in the Kitchen page.`);
       // Suppressed UI warning message as per request
       return;
     }
-
     setSelectedOrderId(orderId);
     setSelectedDeliveryPersonId(deliveryPersonId);
     setShowDeliveryPopup(true);
   };
-
   const confirmDeliveryAssignment = async () => {
     try {
       const order = savedOrders.find((o) => o.orderId === selectedOrderId);
@@ -289,19 +266,16 @@ function ActiveOrders() {
         setShowDeliveryPopup(false);
         return;
       }
-
       if (!checkAllItemsPickedUp(order)) {
         console.error(`Cannot assign delivery person to order ${order.orderNo}. All items, addons, and combos must be marked as Picked Up in the Kitchen page.`);
         // Suppressed UI warning message as per request
         setShowDeliveryPopup(false);
         return;
       }
-
       await axios.put(`${baseUrl}/api/activeorders/${selectedOrderId}`, {
         deliveryPersonId: selectedDeliveryPersonId,
         cartItems: order.cartItems,
       });
-
       const updatedOrders = savedOrders.filter((o) => o.orderId !== selectedOrderId);
       setSavedOrders(updatedOrders);
       localStorage.setItem("savedOrders", JSON.stringify(updatedOrders));
@@ -315,13 +289,11 @@ function ActiveOrders() {
       setShowDeliveryPopup(false);
     }
   };
-
   const cancelDeliveryPopup = () => {
     setShowDeliveryPopup(false);
     setSelectedOrderId(null);
     setSelectedDeliveryPersonId(null);
   };
-
   const updateOrder = async (orderId, updatedOrder) => {
     try {
       const response = await axios.put(`${baseUrl}/api/activeorders/${orderId}`, updatedOrder);
@@ -336,7 +308,6 @@ function ActiveOrders() {
       // Suppressed UI warning message as per request
     }
   };
-
   const inferOrderType = (order) => {
     if (order.tableNumber && order.tableNumber !== "N/A") return "Dine In";
     else if (
@@ -346,7 +317,6 @@ function ActiveOrders() {
       return "Online Delivery";
     else return "Take Away";
   };
-
   const handleSelectOrder = (order) => {
     if (!order.cartItems || order.cartItems.length === 0) {
       console.error("This order has no items.");
@@ -354,10 +324,8 @@ function ActiveOrders() {
       setIsConfirmation(false);
       return;
     }
-
     const baseURL = baseUrl || "http://localhost:8000";
     const cacheBuster = `?t=${new Date().getTime()}`;
-
     const formattedCartItems = order.cartItems.map((item) => {
       const formattedItem = {
         ...item,
@@ -394,7 +362,6 @@ function ActiveOrders() {
         served: item.served || false,
         servedQuantity: item.servedQuantity || 0,
       };
-
       // Preserve existing addon details if available, reconstruct only if necessary
       formattedItem.addonQuantities = item.addonQuantities || {};
       formattedItem.addonVariants = item.addonVariants || {};
@@ -404,7 +371,6 @@ function ActiveOrders() {
       formattedItem.addonSpicyPrices = item.addonSpicyPrices || {};
       formattedItem.addonImages = item.addonImages || {};
       formattedItem.addonCustomVariantsDetails = item.addonCustomVariantsDetails || {};
-
       if (Object.keys(formattedItem.addonVariants).length === 0 && Array.isArray(item.addons)) {
         const addonQuantities = {};
         const addonVariants = {};
@@ -414,7 +380,6 @@ function ActiveOrders() {
         const addonSpicyPrices = {};
         const addonImages = {};
         const addonCustomVariantsDetails = {};
-
         item.addons.forEach((addon) => {
           const addonName = addon.name1;
           addonQuantities[addonName] = addon.addon_quantity || 1;
@@ -445,7 +410,6 @@ function ActiveOrders() {
             : "/static/images/default-addon-image.jpg") + cacheBuster;
           addonCustomVariantsDetails[addonName] = addon.custom_variants || {};
         });
-
         formattedItem.addonQuantities = addonQuantities;
         formattedItem.addonVariants = addonVariants;
         formattedItem.addonPrices = addonPrices;
@@ -461,7 +425,6 @@ function ActiveOrders() {
           }
         });
       }
-
       // Preserve existing combo details if available, reconstruct only if necessary
       formattedItem.comboQuantities = item.comboQuantities || {};
       formattedItem.comboVariants = item.comboVariants || {};
@@ -472,7 +435,6 @@ function ActiveOrders() {
       formattedItem.comboImages = item.comboImages || {};
       formattedItem.comboCustomVariantsDetails = item.comboCustomVariantsDetails || {};
       formattedItem.selectedCombos = item.selectedCombos || [];
-
       if (Object.keys(formattedItem.comboVariants).length === 0 && Array.isArray(item.selectedCombos)) {
         const comboQuantities = {};
         const comboVariants = {};
@@ -482,7 +444,6 @@ function ActiveOrders() {
         const comboSpicyPrices = {};
         const comboImages = {};
         const comboCustomVariantsDetails = {};
-
         item.selectedCombos.forEach((combo) => {
           const comboName = combo.name1;
           comboQuantities[comboName] = Number(combo.combo_quantity) || 1;
@@ -519,7 +480,6 @@ function ActiveOrders() {
             : "/static/images/default-combo-image.jpg") + cacheBuster;
           comboCustomVariantsDetails[comboName] = combo.custom_variants || {};
         });
-
         formattedItem.comboQuantities = comboQuantities;
         formattedItem.comboVariants = comboVariants;
         formattedItem.comboPrices = comboPrices;
@@ -537,20 +497,18 @@ function ActiveOrders() {
           }
         });
       }
-
       // Custom variants for main item
       formattedItem.selectedCustomVariants = item.selectedCustomVariants || {};
       formattedItem.customVariantsDetails = item.customVariantsDetails || {};
       formattedItem.customVariantsQuantities = item.customVariantsQuantities || {};
-
-      // For combo offers
-      if (item.isCombo) {
+      // FIXED: For combo offers (use is_combo_offer)
+      if (item.is_combo_offer) {
         formattedItem.isCombo = true;
         formattedItem.comboItems = item.comboItems || [];
+        formattedItem.offer_description = item.offer_description || item.name;
       }
-
       // Format comboItems images for combo offers
-      if (item.isCombo && Array.isArray(item.comboItems)) {
+      if (item.is_combo_offer && Array.isArray(item.comboItems)) {
         formattedItem.comboItems = item.comboItems.map((comboItem) => ({
           ...comboItem,
           image: (comboItem.image
@@ -560,13 +518,11 @@ function ActiveOrders() {
             : "/static/images/default-combo-image.jpg") + cacheBuster,
         }));
       }
-
       formattedItem.image = (item.image
         ? item.image.startsWith("http")
           ? item.image
           : `${baseURL}${item.image}`
         : "/static/images/default-item.jpg") + cacheBuster;
-
       // Recalculate totalPrice for consistency
       let itemSubtotal = formattedItem.basePrice * formattedItem.quantity;
       let addonTotal = 0;
@@ -588,21 +544,17 @@ function ActiveOrders() {
       }
       itemSubtotal += comboTotal;
       formattedItem.totalPrice = itemSubtotal;
-
       return formattedItem;
     });
-
     const orderType = order.orderType || inferOrderType(order);
     const phoneNumber = order.phoneNumber?.replace(/^\+\d+/, "") || "";
-
     // Suppressed UI warning message as per request
     // setWarningMessage(
-    //   `You selected order ${order.orderNo} for ${
-    //     orderType === "Online Delivery" ? "Customer " + order.customerName : "Table " + (order.tableNumber || "N/A")
-    //   }`
+    // `You selected order ${order.orderNo} for ${
+    // orderType === "Online Delivery" ? "Customer " + order.customerName : "Table " + (order.tableNumber || "N/A")
+    // }`
     // );
     // setWarningType("success");
-
     // Directly navigate since warning is suppressed
     navigate("/frontpage", {
       state: {
@@ -623,15 +575,12 @@ function ActiveOrders() {
       },
     });
   };
-
   const handleBack = () => {
     navigate("/frontpage");
   };
-
   const toggleItems = (index) => {
     setExpandedItems((prev) => ({ ...prev, [index]: !prev[index] }));
   };
-
   const renderIngredients = (ingredients) => {
     if (!ingredients || ingredients.length === 0) return "No ingredients";
     return (
@@ -644,12 +593,10 @@ function ActiveOrders() {
       </ul>
     );
   };
-
   const getPickedUpTick = (item, kitchen) => {
     if (!item.kitchenStatuses || !kitchen) return null;
     return item.kitchenStatuses[kitchen] === "PickedUp" ? <FaCheck style={{ color: 'green', marginLeft: '5px' }} /> : null;
   };
-
   const renderAddons = (addonQuantities, addonVariants, addonPrices, item) => {
     if (!addonQuantities || Object.keys(addonQuantities).length === 0) return null;
     return (
@@ -671,7 +618,6 @@ function ActiveOrders() {
       </ul>
     );
   };
-
   const renderCombos = (comboQuantities, comboVariants, comboPrices, item) => {
     if (!comboQuantities || Object.keys(comboQuantities).length === 0) return null;
     return (
@@ -695,19 +641,35 @@ function ActiveOrders() {
       </ul>
     );
   };
-
+  // FIXED: New function to render combo offer sub-items
+  const renderComboOfferSubItems = (comboItems, itemQuantity, item) => {
+    if (!comboItems || comboItems.length === 0) return null;
+    return (
+      <ul className="active-orders-combooffer-subitems-list">
+        {comboItems.map((citem, idx) => {
+          const subPrice = (citem.price || 0) * itemQuantity;
+          const kitchen = citem.kitchen || "Unknown";
+          const tick = getPickedUpTick(item, kitchen);
+          return (
+            <li key={idx} className="active-orders-combooffer-subitem">
+              - {citem.name} x{itemQuantity} (₹{subPrice.toFixed(2)}, Kitchen: {kitchen})
+              {tick}
+            </li>
+          );
+        })}
+      </ul>
+    );
+  };
   const calculateOrderTotal = (cartItems) => {
     if (!Array.isArray(cartItems)) return "0.00";
     return cartItems.reduce((sum, item) => sum + (Number(item.totalPrice) || 0), 0).toFixed(2);
   };
-
   const calculateGrandTotal = (cartItems) => {
     if (!Array.isArray(cartItems)) return "0.00";
     const subtotal = cartItems.reduce((sum, item) => sum + (Number(item.totalPrice) || 0), 0);
     const vat = subtotal * vatRate;
     return (subtotal + vat).toFixed(2);
   };
-
   const getItemStatus = (item) => {
     if (!item.kitchenStatuses) return item.status || "Pending";
     const statuses = Object.values(item.kitchenStatuses);
@@ -716,7 +678,6 @@ function ActiveOrders() {
     else if (statuses.includes("Preparing")) return "Preparing";
     else return "Pending";
   };
-
   const getStatusStyle = (status) => {
     switch (status) {
       case "Pending":
@@ -731,61 +692,49 @@ function ActiveOrders() {
         return {};
     }
   };
-
   const formatDeliveryAddress = (deliveryAddress) => {
     if (!deliveryAddress) return "Not provided";
     const { building_name, flat_villa_no, location } = deliveryAddress;
     const parts = [flat_villa_no, building_name, location].filter((part) => part != null && String(part).trim() !== "");
     return parts.length > 0 ? parts.join(", ") : "Not provided";
   };
-
   const formatChairsBooked = (chairsBooked) => {
     if (!Array.isArray(chairsBooked) || chairsBooked.length === 0) return "None";
     return chairsBooked.join(", ");
   };
-
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return "N/A";
     return new Date(timestamp).toLocaleString();
   };
-
   const getDeliveryPersonName = (deliveryPersonId) => {
     const employee = employees.find((emp) => emp.employeeId === deliveryPersonId);
     return employee ? `${employee.name} (ID: ${employee.employeeId})` : "Not assigned";
   };
-
   const orderCounts = {
     "Dine In": savedOrders.filter((order) => (order.orderType || inferOrderType(order)) === "Dine In").length,
     "Take Away": savedOrders.filter((order) => (order.orderType || inferOrderType(order)) === "Take Away").length,
     "Online Delivery": savedOrders.filter((order) => (order.orderType || inferOrderType(order)) === "Online Delivery").length,
   };
-
   const filteredOrders = savedOrders.filter((order) => {
     const orderType = order.orderType || inferOrderType(order);
     return orderType === filterType;
   });
-
   const unservedFiltered = filteredOrders.filter((order) => {
     const allItemsCompleted = order.cartItems.every((item) => (item.servedQuantity || 0) >= (item.quantity || 1));
     return !(order.paid && allItemsCompleted);
   });
-
   const completedFiltered = filteredOrders.filter((order) => {
     const allItemsCompleted = order.cartItems.every((item) => (item.servedQuantity || 0) >= (item.quantity || 1));
     return order.paid && allItemsCompleted;
   });
-
   const handleServiceChange = async (orderId, itemId, isServed) => {
     try {
       const order = savedOrders.find((o) => o.orderId === orderId);
       const item = order.cartItems.find((i) => i.id === itemId);
       if (!item) return;
-
       const newServedQty = isServed ? (item.quantity || 1) : 0;
       console.log(`Updating servedQuantity for item ${itemId}: ${newServedQty} (isServed: ${isServed})`);
-
       const response = await axios.post(`${baseUrl}/api/activeorders/${orderId}/items/${itemId}/mark-served`, { servedQuantity: newServedQty });
-
       if (response.data.success) {
         const updatedOrders = savedOrders.map((o) =>
           o.orderId === orderId
@@ -806,7 +755,6 @@ function ActiveOrders() {
       // Suppressed UI warning message as per request
     }
   };
-
   const handlePaymentChange = async (orderId, isPaid) => {
     try {
       const response = await axios.put(`${baseUrl}/api/activeorders/${orderId}`, { paid: isPaid });
@@ -821,7 +769,6 @@ function ActiveOrders() {
       // Suppressed UI warning message as per request
     }
   };
-
   const renderOrderTable = (orders, tableTitle) => {
     const isOnlineDelivery = filterType === "Online Delivery";
     return (
@@ -964,9 +911,22 @@ function ActiveOrders() {
                                       key={itemIndex}
                                       className={`active-orders-list-group-item status-${itemStatus.toLowerCase()}`}
                                     >
-                                      <strong>{item.name || item.item_name}</strong> x{item.quantity} (Served: {item.servedQuantity || 0}, Pending: {remainingQty})
-                                      {mainTick}
-                                      <div>Price: {item.originalBasePrice ? <span style={{ textDecoration: "line-through" }}>₹{item.originalBasePrice.toFixed(2)}</span> : ""} ₹{item.basePrice.toFixed(2)}</div>
+                                      {/* FIXED: Handle combo offer display */}
+                                      {item.is_combo_offer ? (
+                                        <>
+                                          <strong>{item.offer_description || item.name || item.item_name}</strong> x{item.quantity} (Combo Offer)
+                                          <div>Price: {item.originalBasePrice ? <span style={{ textDecoration: "line-through" }}>₹{(item.originalBasePrice * item.quantity).toFixed(2)}</span> : ""} ₹{(item.basePrice * item.quantity).toFixed(2)}</div>
+                                          <div>Served: {item.servedQuantity || 0}, Pending: {remainingQty}</div>
+                                          {mainTick}
+                                          {renderComboOfferSubItems(item.comboItems, item.quantity, item)}
+                                        </>
+                                      ) : (
+                                        <>
+                                          <strong>{item.name || item.item_name}</strong> x{item.quantity} (Served: {item.servedQuantity || 0}, Pending: {remainingQty})
+                                          {mainTick}
+                                          <div>Price: {item.originalBasePrice ? <span style={{ textDecoration: "line-through" }}>₹{item.originalBasePrice.toFixed(2)}</span> : ""} ₹{item.basePrice.toFixed(2)}</div>
+                                        </>
+                                      )}
                                       <div>Size: {item.selectedSize || "M"}</div>
                                       <div>Ice: {item.icePreference || "without_ice"}</div>
                                       <div>Spicy: {item.isSpicy ? "Yes" : "No"}</div>
@@ -1053,12 +1013,10 @@ function ActiveOrders() {
       </div>
     );
   };
-
   function checkAllItemsPickedUpForItem(item) {
     if (!item.kitchenStatuses) return false;
     return Object.values(item.kitchenStatuses).every((status) => status === "PickedUp");
   }
-
   return (
     <div className="active-orders-container">
       {warningMessage && (
@@ -1144,5 +1102,4 @@ function ActiveOrders() {
     </div>
   );
 }
-
 export default ActiveOrders;
