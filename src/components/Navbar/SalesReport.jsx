@@ -17,10 +17,8 @@ import { useNavigate } from "react-router-dom";
 // import "react-datepicker/dist/react-datepicker.css"; // Removed
 // import { FaArrowLeft, FaPrint, FaFilePdf, FaFileExcel } from "react-icons/fa"; // Removed: Will use inline SVGs
 // import * as XLSX from 'xlsx'; // Removed: Will remove Excel export functionality
-
 // --- SVG Icons ---
-// Using heroicons[](https://heroicons.com/) as simple inline SVG replacements
-
+// Using heroicons as simple inline SVG replacements
 const IconArrowLeft = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -37,7 +35,6 @@ const IconArrowLeft = () => (
     />
   </svg>
 );
-
 const IconPrint = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -54,7 +51,6 @@ const IconPrint = () => (
     />
   </svg>
 );
-
 const IconFilePdf = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -71,9 +67,7 @@ const IconFilePdf = () => (
     />
   </svg>
 );
-
 // --- End SVG Icons ---
-
 const SalesReport = () => {
   const [salesData, setSalesData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -106,7 +100,6 @@ const SalesReport = () => {
     timeZone: 'Asia/Dubai', // Default
   });
   const navigate = useNavigate();
-
   // NEW: useEffect to fetch network config and set baseUrl
   useEffect(() => {
     const fetchConfig = async () => {
@@ -126,7 +119,6 @@ const SalesReport = () => {
     };
     fetchConfig();
   }, []);
-
   // NEW: This useEffect now depends on `baseUrl`
   // It will run once `baseUrl` is set (from null to a string)
   useEffect(() => {
@@ -237,7 +229,6 @@ const SalesReport = () => {
     };
     fetchAllData();
   }, [baseUrl]); // This effect now runs when `baseUrl` changes
-
   // NEW: Listen for settings changes (e.g., from SystemSettings) and re-fetch if needed
   useEffect(() => {
     const handleSettingsUpdate = () => {
@@ -306,7 +297,6 @@ const SalesReport = () => {
     const interval = setInterval(handleSettingsUpdate, 5000); // Poll every 5s for changes
     return () => clearInterval(interval);
   }, [baseUrl]);
-
   // NEW: Currency formatter (same as cash.jsx) - Memoized for performance, now accepts optional params
   const getCurrencyFormatter = React.useCallback((invoiceCurrency = null, invoicePrecision = null) => {
     const locale = settings.language || 'en-IN'; // Use en-IN for INR defaults
@@ -319,7 +309,6 @@ const SalesReport = () => {
       maximumFractionDigits: precision,
     });
   }, [settings.language, settings.currency, settings.currencyPrecision]);
-
   // UPDATED: Date formatter (matching cash.jsx) - Now handles both Date objects and strings
   const getFormattedDate = (dateInput, dateFormat = settings.dateFormat, timeZone = settings.timeZone) => {
     if (!dateInput) return '';
@@ -362,7 +351,6 @@ const SalesReport = () => {
         return date.toLocaleDateString('en-US', { ...tzOptions, year: 'numeric', month: 'long', day: 'numeric' });
     }
   };
-
   // UPDATED: Time formatter (matching cash.jsx) - Now handles both Date objects and strings
   const getFormattedTime = (timeInput, timeFormat = settings.timeFormat, timeZone = settings.timeZone) => {
     if (!timeInput) return '';
@@ -404,7 +392,6 @@ const SalesReport = () => {
     };
     return date.toLocaleTimeString('en-US', options);
   };
-
   // Clean and validate sales data (updated to include currency handling like salespage)
   const cleanData = (data) => {
     if (!Array.isArray(data)) return [];
@@ -431,7 +418,6 @@ const SalesReport = () => {
       }));
     return cleaned;
   };
-
   // Fixed calculateItemPrices to properly handle quantity for addons and combos
   const calculateItemPrices = (item) => {
     const baseAmount = parseFloat(item.amount) || parseFloat(item.basePrice) || 0;
@@ -457,7 +443,6 @@ const SalesReport = () => {
     const totalAmount = unitTotal * (item.quantity || 1);
     return { baseAmount, addonTotal, comboTotal, unitTotal, totalAmount };
   };
-
   // Get contribution for a specific item/addon/combo in a sale
   const getItemContribution = (sale, filterItem) => {
     let subtotal = 0;
@@ -493,7 +478,6 @@ const SalesReport = () => {
     });
     return { subtotal, quantity };
   };
-
   // FIXED: Format currency using invoice-specific formatter if available - Ensure historical invoices use their original currency
   const formatCurrency = (value, sale = null) => {
     if (sale && sale.invoice_currency) {
@@ -505,22 +489,18 @@ const SalesReport = () => {
     const formatter = getCurrencyFormatter();
     return formatter.format(Number(value));
   };
-
   // Use backend's total for subtotal
   const calculateSubtotal = (sale) => {
     return parseFloat(sale.total) || 0;
   };
-
   // Use backend's vat_amount for VAT
   const calculateVAT = (sale) => {
     return parseFloat(sale.vat_amount) || 0;
   };
-
   // Use backend's grand_total for grand total
   const calculateGrandTotal = (sale) => {
     return parseFloat(sale.grand_total) || 0;
   };
-
   // Get amounts for a sale (full or item-specific) - UPDATED to use invoice VAT amount
   const getSaleAmounts = (sale, isItemFilter, filterItem) => {
     if (isItemFilter && filterItem) {
@@ -540,21 +520,18 @@ const SalesReport = () => {
       };
     }
   };
-
   // Parse date string to Date object (assuming backend date is yyyy-MM-dd)
   const parseDate = (dateStr) => {
     if (!dateStr) return null;
     const parts = dateStr.split("-");
     return parts.length === 3 ? new Date(parts[0], parts[1] - 1, parts[2]) : null;
   };
-
   // Convert time string to minutes for comparison
   const timeToMinutes = (timeStr) => {
     if (!timeStr) return 0;
     const [hours, minutes] = timeStr.split(":").map(Number);
     return hours * 60 + (minutes || 0);
   };
-
   // Check if sale time is within the selected range
   const isTimeInRange = (saleTime, startTime, endTime) => {
     if (!startTime && !endTime) return true;
@@ -563,18 +540,15 @@ const SalesReport = () => {
     const endMinutes = endTime ? timeToMinutes(endTime) + 59 : Infinity;
     return saleMinutes >= startMinutes && saleMinutes <= endMinutes;
   };
-
   // Generate hourly time slots for dropdowns
   const hourlyTimes = Array.from({ length: 24 }, (_, i) => {
     const hour = i.toString().padStart(2, "0");
     return `${hour}:00`;
   });
-
   // Get unique customers for dropdown
   const uniqueCustomers = [
     ...new Set(salesData.map((sale) => sale.customer).filter(Boolean)),
   ];
-
   // Get unique items, addons, and combos for dropdown (fixed to use name1 for combos)
   const uniqueItems = [
     ...new Set(
@@ -587,7 +561,6 @@ const SalesReport = () => {
       )
     ),
   ].sort();
-
   // Months for dropdown
   const months = [
     "January",
@@ -603,7 +576,6 @@ const SalesReport = () => {
     "November",
     "December",
   ];
-
   // Validate year input
   const validateYear = (year) => {
     const yearNum = parseInt(year);
@@ -614,24 +586,20 @@ const SalesReport = () => {
       yearNum <= new Date().getFullYear()
     );
   };
-
   // Check if current filter is item-wise
   const isItemFilter = selectedFilterType === "item" && filterItem;
-
   // Filter sales data based on user inputs (apply all set filters) - fixed item match to use name1 for combos
   const filteredSales = salesData.filter((sale) => {
     const saleDate = parseDate(sale.date);
-    
+   
     // Convert filter dates (which are Date objects) to start/end of day for comparison
     const from = fromDate ? new Date(fromDate.setHours(0, 0, 0, 0)) : null;
     const to = toDate ? new Date(toDate.setHours(23, 59, 59, 999)) : null;
-
     const dateMatch =
       (!from && !to) ||
       (from && !to && saleDate && saleDate >= from) ||
       (!from && to && saleDate && saleDate <= to) ||
       (from && to && saleDate && saleDate >= from && saleDate <= to);
-
     const monthMatch =
       filterMonth && filterYear && validateYear(filterYear)
         ? saleDate &&
@@ -674,7 +642,6 @@ const SalesReport = () => {
       phoneMatch
     );
   });
-
   // UPDATED: Calculate aggregates per currency (since mixed currencies)
   const calculateAggregates = (sales, isItemFilter, filterItem) => {
     const currencyTotals = new Map();
@@ -698,9 +665,7 @@ const SalesReport = () => {
     });
     return { currencyTotals: new Map([...currencyTotals.entries()]), totalQuantity, totalRecords };
   };
-
   const { currencyTotals, totalQuantity, totalRecords } = calculateAggregates(filteredSales, isItemFilter, filterItem);
-
   // Handle warning message dismissal
   const handleWarningOk = () => {
     if (pendingAction) {
@@ -710,13 +675,11 @@ const SalesReport = () => {
     setWarningMessage("");
     setWarningType("warning");
   };
-
   // *** UPDATED THIS FUNCTION ***
   // Navigate back to the previous page in history
   const handleBack = () => {
     navigate(-1);
   };
-
   // UPDATED: Generate HTML content for printing or PDF export - Now handles per-sale currency
   const generatePrintableContent = (sales, filterType) => {
     if (sales.length === 0) return "";
@@ -787,7 +750,8 @@ const SalesReport = () => {
       )
       .join("");
     let tfoot = '';
-    printCurrencyTotals.forEach(([currency, totals]) => {
+    // FIXED: Correct Map.forEach usage - (value, key) order, not destructuring value as array
+    printCurrencyTotals.forEach((totals, currency) => {
       const formatter = getCurrencyFormatter(currency, totals.precision);
       tfoot += `
         <tr style="border-top: 2px solid #000000;">
@@ -845,7 +809,6 @@ const SalesReport = () => {
       </div>
     `;
   };
-
   // Handle print action
   const handlePrint = () => {
     const content = generatePrintableContent(filteredSales, selectedFilterType);
@@ -871,7 +834,6 @@ const SalesReport = () => {
     win.document.close();
     win.focus();
   };
-
   // Handle PDF export (triggers print dialog for PDF saving)
   const handleExportPDF = () => {
     const content = generatePrintableContent(filteredSales, selectedFilterType);
@@ -897,13 +859,11 @@ const SalesReport = () => {
     win.document.close();
     win.focus();
   };
-
   // Handle Excel export using SheetJS - This functionality is removed
   const handleExportExcel = () => {
      setWarningMessage("Excel export is currently unavailable.");
      setWarningType("warning");
   };
-
   // Render loading, error, or empty states
   if (loading || baseUrl === null)
     return (
@@ -919,13 +879,11 @@ const SalesReport = () => {
         No sales data available.
       </div>
     );
-
   // Helper function to format Date object to "YYYY-MM-DD" for input
   const formatDateForInput = (date) => {
     if (!date) return "";
     return date.toISOString().split('T')[0];
   };
-
   return (
     <>
       {/* Inline styles to replace ./salesreport.css */}
@@ -1423,5 +1381,4 @@ const SalesReport = () => {
     </>
   );
 };
-
 export default SalesReport;

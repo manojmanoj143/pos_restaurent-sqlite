@@ -1,4 +1,3 @@
-// Cash.jsx
 import React, { useContext, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Modal, Button } from "react-bootstrap";
@@ -80,13 +79,11 @@ function Cash() {
         day: 'numeric',
       });
     }
-
     const numericFormatter = new Intl.DateTimeFormat('en', { year: 'numeric', month: '2-digit', day: 'numeric' });
     const parts = numericFormatter.formatToParts(date);
     const year = parts.find((p) => p.type === 'year')?.value || '';
     const month = parts.find((p) => p.type === 'month')?.value || '';
     const day = parts.find((p) => p.type === 'day')?.value || '';
-
     switch (dateFormat) {
       case 'dd-mm-yyyy':
         return `${day.padStart(2, '0')}-${month}-${year}`;
@@ -128,17 +125,14 @@ function Cash() {
         hour12: true,
       });
     }
-
     const hasSeconds = timeFormat.includes(':ss') || timeFormat.includes('ss');
     const is12Hour = timeFormat.includes(' a') || timeFormat.startsWith('hh');
-
     const options = {
       hour: '2-digit',
       minute: '2-digit',
       ...(hasSeconds && { second: '2-digit' }),
       hour12: is12Hour,
     };
-
     return date.toLocaleTimeString('en-US', options);
   };
   // Currency formatter for totals
@@ -602,7 +596,10 @@ function Cash() {
         deliveryAddress: location.state.billDetails.deliveryAddress || {
           building_name: "",
           flat_villa_no: "",
-          location: "",
+          country: "",
+          field1: "",
+          field2: "",
+          field3: "",
         },
         date: location.state.billDetails.date || currentTime.toISOString().split("T")[0],
         time: location.state.billDetails.time || defaultTime,
@@ -826,6 +823,43 @@ function Cash() {
   const formatCurrency = (amount) => {
     return getCurrencyFormatter().format(Number(amount));
   };
+  // Helper to format delivery address in the specified order (single line for UI)
+  const formatDeliveryAddress = (deliveryAddress) => {
+    if (!deliveryAddress) return null;
+    const parts = [
+      deliveryAddress.flat_villa_no || "",
+      deliveryAddress.building_name || "",
+      deliveryAddress.field3 || "",
+      deliveryAddress.field2 || "",
+      deliveryAddress.field1 || "",
+      deliveryAddress.country || ""
+    ].filter(part => part.trim() !== ""); // Filter out empty parts
+    return parts.length > 0 ? parts.join(", ") : null;
+  };
+  // Helper to format delivery address for print (multi-line HTML)
+  const getPrintDeliveryAddressHtml = (deliveryAddress) => {
+    if (!deliveryAddress) return null;
+    const lines = [];
+    // Line 1: flat_villa_no + building_name
+    const line1 = [deliveryAddress.flat_villa_no, deliveryAddress.building_name].filter(Boolean).join(', ');
+    if (line1) lines.push(line1);
+    // Line 2: field3 + field2
+    const line2 = [deliveryAddress.field3, deliveryAddress.field2].filter(Boolean).join(', ');
+    if (line2) lines.push(line2);
+    // Line 3: field1 + country
+    const line3 = [deliveryAddress.field1, deliveryAddress.country].filter(Boolean).join(', ');
+    if (line3) lines.push(line3);
+    return lines.length > 0 ? lines.join('<br>') : null;
+  };
+  // Check if delivery address is available
+  const hasDeliveryAddress = billDetails?.deliveryAddress &&
+    (billDetails.deliveryAddress.building_name ||
+      billDetails.deliveryAddress.flat_villa_no ||
+      billDetails.deliveryAddress.country ||
+      billDetails.deliveryAddress.field1 ||
+      billDetails.deliveryAddress.field2 ||
+      billDetails.deliveryAddress.field3);
+  const formattedDeliveryAddress = formatDeliveryAddress(billDetails?.deliveryAddress);
   // Generate printable receipt content - Updated for better alignment, matching image style, proper currency display
   const generatePrintableContent = (isPreview = false) => {
     if (!billDetails) return "";
@@ -835,14 +869,7 @@ function Cash() {
     // Use currentTime for date and time in receipt (real-time like OpeningEntry)
     const formattedDate = getFormattedDate(currentTime, settings.dateFormat);
     const formattedTime = getFormattedTime(currentTime, settings.timeFormat);
-    const hasDeliveryAddress =
-      billDetails.deliveryAddress &&
-      (billDetails.deliveryAddress.building_name ||
-        billDetails.deliveryAddress.flat_villa_no ||
-        billDetails.deliveryAddress.location);
-    const deliveryAddress = hasDeliveryAddress
-      ? `${billDetails.deliveryAddress.building_name || ""}, ${billDetails.deliveryAddress.flat_villa_no || ""}, ${billDetails.deliveryAddress.location || ""}`
-      : null;
+    const deliveryAddressHtml = getPrintDeliveryAddressHtml(billDetails.deliveryAddress);
     const borderStyle = isPreview ? "border: none;" : "border: 1px solid #000000;";
     const effectivePrintSettings = printSettings || defaultPrintSettings;
     const restaurantName = effectivePrintSettings.restaurantName;
@@ -928,12 +955,12 @@ function Cash() {
                 : ""
             }
             ${
-              hasDeliveryAddress
+              hasDeliveryAddress && deliveryAddressHtml
                 ? `
                   <tr>
-                    <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">Delivery Address</td>
+                    <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; vertical-align: top;">Delivery Address</td>
                     <td style="text-align: center; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">:</td>
-                    <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; word-break: break-all;">${deliveryAddress}</td>
+                    <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; white-space: pre-line; word-break: break-all;">${deliveryAddressHtml}</td>
                   </tr>
                 `
                 : ""
@@ -1228,12 +1255,6 @@ function Cash() {
     setShowModal(false);
     navigate("/frontpage");
   };
-  // Check if delivery address is available
-  const hasDeliveryAddress =
-    billDetails?.deliveryAddress &&
-    (billDetails.deliveryAddress.building_name ||
-      billDetails.deliveryAddress.flat_villa_no ||
-      billDetails.deliveryAddress.location);
   // Render receipt preview in UI (similar to printsettings) - Hidden in UI, shown only in print
   const renderReceiptPreview = () => {
     if (!billDetails) return null;
@@ -1331,10 +1352,9 @@ function Cash() {
                         <strong>Table:</strong> {billDetails.tableNumber}
                       </p>
                     )}
-                    {hasDeliveryAddress && (
+                    {hasDeliveryAddress && formattedDeliveryAddress && (
                       <p>
-                        <strong>Delivery Address:</strong>{" "}
-                        {`${billDetails.deliveryAddress.building_name || ""}, ${billDetails.deliveryAddress.flat_villa_no || ""}, ${billDetails.deliveryAddress.location || ""}`}
+                        <strong>Delivery Address:</strong> {formattedDeliveryAddress}
                       </p>
                     )}
                   </div>
@@ -1598,14 +1618,12 @@ function Cash() {
                         <td style={{ textAlign: "right" }}>{billDetails.tableNumber}</td>
                       </tr>
                     )}
-                    {hasDeliveryAddress && (
+                    {hasDeliveryAddress && formattedDeliveryAddress && (
                       <tr>
                         <td style={{ textAlign: "left" }}>
                           <strong>Delivery Address:</strong>
                         </td>
-                        <td style={{ textAlign: "right" }}>
-                          {`${billDetails.deliveryAddress.building_name || ""}, ${billDetails.deliveryAddress.flat_villa_no || ""}, ${billDetails.deliveryAddress.location || ""}`}
-                        </td>
+                        <td style={{ textAlign: "right" }}>{formattedDeliveryAddress}</td>
                       </tr>
                     )}
                     <tr>

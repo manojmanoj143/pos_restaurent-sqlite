@@ -14,8 +14,38 @@ const CreateVariant = () => {
   const [editingVariantId, setEditingVariantId] = useState(null);
   const [showList, setShowList] = useState(false);
   const [warning, setWarning] = useState(null);
-
+  const [loading, setLoading] = useState(true); // NEW: Loading state for initial fetch
+  const [error, setError] = useState(null); // NEW: Error state for network/config issues
   const navigate = useNavigate(); // Initialize useNavigate hook
+  const [baseUrl, setBaseUrl] = useState(""); // NEW: baseUrl state like in AdminPage
+
+  // NEW: Fetch config to determine baseUrl (same logic as AdminPage)
+  useEffect(() => {
+    const fetchConfig = async () => {
+      let currentBaseUrl = "";
+      try {
+        const response = await axios.get("http://localhost:8000/api/network_info");
+        const { config: appConfig } = response.data;
+        if (appConfig.mode === "client") {
+          currentBaseUrl = `http://${appConfig.server_ip}:8000`;
+          setBaseUrl(currentBaseUrl);
+        } else {
+          setBaseUrl("");
+        }
+      } catch (error) {
+        console.error("Failed to fetch config:", error);
+        setBaseUrl("");
+        setError("Failed to connect to server. Using local mode.");
+      } finally {
+        setLoading(false);
+        // If not loading, fetch variants after config
+        if (!currentBaseUrl) {
+          fetchVariants("");
+        }
+      }
+    };
+    fetchConfig();
+  }, []);
 
   // Clear warning after 3 seconds
   useEffect(() => {
@@ -25,10 +55,11 @@ const CreateVariant = () => {
     }
   }, [warning]);
 
-  // Fetch all variants for the list
-  const fetchVariants = async () => {
+  // UPDATED: Fetch all variants for the list (use baseUrl)
+  const fetchVariants = async (currentBaseUrl) => {
     try {
-      const response = await axios.get('http://localhost:8000/api/variants');
+      const apiUrl = currentBaseUrl || 'http://localhost:8000';
+      const response = await axios.get(`${apiUrl}/api/variants`);
       setVariants(response.data);
     } catch (error) {
       setWarning({ type: 'error', message: 'Failed to fetch variants' });
@@ -36,10 +67,11 @@ const CreateVariant = () => {
     }
   };
 
-  // Fetch a specific variant for editing
-  const fetchVariant = async (id) => {
+  // UPDATED: Fetch a specific variant for editing (use baseUrl)
+  const fetchVariant = async (id, currentBaseUrl) => {
     try {
-      const response = await axios.get(`http://localhost:8000/api/variants/${id}`);
+      const apiUrl = currentBaseUrl || 'http://localhost:8000';
+      const response = await axios.get(`${apiUrl}/api/variants/${id}`);
       const variant = response.data;
       setVariantName(variant.heading);
       setTypes(variant.subheadings.map((sub) => sub.name));
@@ -64,6 +96,58 @@ const CreateVariant = () => {
     }
   };
 
+  // UPDATED: Handle saving variant (use baseUrl)
+  const handleSave = async () => {
+    try {
+      if (!variantName.trim()) {
+        setWarning({ type: 'error', message: 'Variant name is required' });
+        return;
+      }
+      if (types.length === 0) {
+        setWarning({ type: 'error', message: 'At least one type is required' });
+        return;
+      }
+      const variantData = {
+        heading: variantName,
+        subheadings: types.map((type) => {
+          const subheading = { name: type };
+          if (activeSection === 'price' || activeSection === 'priceAndImage') {
+            subheading.price = prices[type] ? parseFloat(prices[type]) : null;
+          }
+          if (activeSection === 'priceAndImage') {
+            subheading.image = images[type] || null;
+          }
+          if (activeSection === 'dropdown') {
+            subheading.dropdown = true;
+          }
+          return subheading;
+        }),
+        activeSection,
+      };
+      const apiUrl = baseUrl || 'http://localhost:8000';
+      if (editingVariantId) {
+        await axios.put(`${apiUrl}/api/variants/${editingVariantId}`, variantData);
+        setWarning({ type: 'success', message: 'Variant updated successfully' });
+      } else {
+        await axios.delete(`${apiUrl}/api/variants/heading/${variantName}`);
+        await axios.post(`${apiUrl}/api/variants`, variantData);
+        setWarning({ type: 'success', message: 'Variant saved successfully' });
+      }
+      setVariantName('');
+      setTypes([]);
+      setNewType('');
+      setPrices({});
+      setImages({});
+      setActiveSection(null);
+      setEditingVariantId(null);
+      fetchVariants(baseUrl); // Re-fetch after save
+    } catch (error) {
+      const errorMsg = error.response?.data?.error || 'Failed to save variant';
+      setWarning({ type: 'error', message: errorMsg });
+      console.error('Error saving variant:', error);
+    }
+  };
+
   // Handle adding a new type
   const handleAddType = () => {
     if (newType.trim() && !types.includes(newType.trim())) {
@@ -83,60 +167,6 @@ const CreateVariant = () => {
     if (file) {
       const imageUrl = URL.createObjectURL(file);
       setImages({ ...images, [type]: imageUrl });
-    }
-  };
-
-  // Handle saving variant
-  const handleSave = async () => {
-    try {
-      if (!variantName.trim()) {
-        setWarning({ type: 'error', message: 'Variant name is required' });
-        return;
-      }
-      if (types.length === 0) {
-        setWarning({ type: 'error', message: 'At least one type is required' });
-        return;
-      }
-
-      const variantData = {
-        heading: variantName,
-        subheadings: types.map((type) => {
-          const subheading = { name: type };
-          if (activeSection === 'price' || activeSection === 'priceAndImage') {
-            subheading.price = prices[type] ? parseFloat(prices[type]) : null;
-          }
-          if (activeSection === 'priceAndImage') {
-            subheading.image = images[type] || null;
-          }
-          if (activeSection === 'dropdown') {
-            subheading.dropdown = true;
-          }
-          return subheading;
-        }),
-        activeSection,
-      };
-
-      if (editingVariantId) {
-        await axios.put(`http://localhost:8000/api/variants/${editingVariantId}`, variantData);
-        setWarning({ type: 'success', message: 'Variant updated successfully' });
-      } else {
-        await axios.delete(`http://localhost:8000/api/variants/heading/${variantName}`);
-        await axios.post('http://localhost:8000/api/variants', variantData);
-        setWarning({ type: 'success', message: 'Variant saved successfully' });
-      }
-
-      setVariantName('');
-      setTypes([]);
-      setNewType('');
-      setPrices({});
-      setImages({});
-      setActiveSection(null);
-      setEditingVariantId(null);
-      fetchVariants();
-    } catch (error) {
-      const errorMsg = error.response?.data?.error || 'Failed to save variant';
-      setWarning({ type: 'error', message: errorMsg });
-      console.error('Error saving variant:', error);
     }
   };
 
@@ -203,16 +233,49 @@ const CreateVariant = () => {
     setActiveSection(section);
   };
 
-  // Toggle variant list visibility
+  // UPDATED: Toggle variant list visibility (fetch with baseUrl)
   const handleShowList = () => {
     setShowList(!showList);
-    if (!showList) fetchVariants();
+    if (!showList) fetchVariants(baseUrl);
   };
 
   // Handle back navigation
   const handleBack = () => {
     navigate('/admin'); // Adjust the path as needed (e.g., '/dashboard')
   };
+
+  // UPDATED: If loading, show loader; if error, show error
+  if (loading) {
+    return (
+      <div className="variant-container">
+        <div style={{ textAlign: 'center', padding: '50px', color: '#7f8c8d' }}>
+          Loading configuration...
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="variant-container">
+        <div
+          style={{
+            backgroundColor: '#ffebee',
+            padding: '20px',
+            margin: '20px',
+            color: '#c0392b',
+            borderRadius: '15px',
+            textAlign: 'center'
+          }}
+        >
+          {error}
+        </div>
+        <button onClick={handleBack} className="action-button back-button">
+          ← Back
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="variant-container">
@@ -222,16 +285,13 @@ const CreateVariant = () => {
           ← Back
         </button>
       </div>
-
       <h2 className="title">Create Variant</h2>
-
       {/* Warning Message */}
       {warning && (
         <div className={`warning ${warning.type === 'success' ? 'warning-success' : 'warning-error'}`}>
           {warning.message}
         </div>
       )}
-
       {/* Variant Name Input */}
       <div className="field-container">
         <label className="field-label">Variant Name</label>
@@ -243,7 +303,6 @@ const CreateVariant = () => {
           placeholder="e.g., Size"
         />
       </div>
-
       {/* Type Input */}
       <div className="field-container">
         <label className="field-label">Add Type</label>
@@ -263,7 +322,6 @@ const CreateVariant = () => {
           </button>
         </div>
       </div>
-
       {/* Display Added Types */}
       {types.length > 0 && (
         <div className="field-container">
@@ -275,7 +333,6 @@ const CreateVariant = () => {
           </ul>
         </div>
       )}
-
       {/* Action Buttons */}
       <div className="button-group">
         <button
@@ -309,12 +366,10 @@ const CreateVariant = () => {
           {showList ? 'Hide List' : 'List'}
         </button>
       </div>
-
       {/* Conditionally Render Sections */}
       {types.length > 0 && activeSection === 'price' && renderPriceFields()}
       {types.length > 0 && activeSection === 'priceAndImage' && renderPriceAndImageFields()}
       {types.length > 0 && activeSection === 'dropdown' && renderDropdown()}
-
       {/* Variant List */}
       {showList && (
         <div className="variant-list">
@@ -323,7 +378,7 @@ const CreateVariant = () => {
             {variants.map((variant) => (
               <li
                 key={variant._id}
-                onClick={() => fetchVariant(variant._id)}
+                onClick={() => fetchVariant(variant._id, baseUrl)}
                 className="variant-item"
               >
                 {variant.heading}

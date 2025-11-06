@@ -1,6 +1,6 @@
-// AddTablePage.jsx (full corrected code)
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import axios from 'axios';
 
 function AddTablePage() {
   const [tableNumber, setTableNumber] = useState("");
@@ -13,6 +13,7 @@ function AddTablePage() {
   const [selectedFloor, setSelectedFloor] = useState("");
   const [selectedTableNumber, setSelectedTableNumber] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [baseUrl, setBaseUrl] = useState(""); // Added baseUrl state like in AdminPage
   const navigate = useNavigate();
 
   // Clear selection when floor changes
@@ -83,54 +84,71 @@ function AddTablePage() {
     return positions;
   };
 
-  // Fetch tables from backend
+  // Fetch network config to set baseUrl (similar to AdminPage)
+  const fetchConfig = async () => {
+    try {
+      const response = await axios.get("http://localhost:8000/api/network_info");
+      const { config: appConfig } = response.data;
+      if (appConfig.mode === "client") {
+        const currentBaseUrl = `http://${appConfig.server_ip}:8000`;
+        setBaseUrl(currentBaseUrl);
+      } else {
+        setBaseUrl("");
+      }
+    } catch (error) {
+      console.error("Failed to fetch config:", error);
+      setBaseUrl("");
+    }
+  };
+
+  // Fetch tables from backend (updated to use baseUrl)
   const fetchTables = async () => {
     try {
-      const response = await fetch("/api/tables", {
-        method: "GET",
+      const apiUrl = baseUrl ? `${baseUrl}/api/tables` : "/api/tables";
+      const response = await axios.get(apiUrl, {
         headers: {
-          "Content-Type": "application/json",
           "Accept": "application/json",
         },
       });
-      const data = await response.json();
-      if (response.ok) {
-        let fetchedTables = data.message || [];
-        // Handle tables without floor by assigning "Ground Floor" and default type to "Round"
-        fetchedTables = fetchedTables.map(t => ({
-          ...t,
-          floor: t.floor ? t.floor.trim() : "Ground Floor",
-          type: t.type ? t.type : "Round"
-        }));
-        // Initialize chairs if missing
-        for (const t of fetchedTables) {
-          if (!t.chairs || t.chairs.length !== t.number_of_chairs) {
-            t.chairs = getDefaultChairPositions(t.type, t.number_of_chairs);
-            updateTableChairs(t.floor, t.table_number, t.chairs).catch(err => console.error("Failed to init chairs:", err));
-          }
+      let fetchedTables = response.data.message || [];
+      // Handle tables without floor by assigning "Ground Floor" and default type to "Round"
+      fetchedTables = fetchedTables.map(t => ({
+        ...t,
+        floor: t.floor ? t.floor.trim() : "Ground Floor",
+        type: t.type ? t.type : "Round"
+      }));
+      // Initialize chairs if missing
+      for (const t of fetchedTables) {
+        if (!t.chairs || t.chairs.length !== t.number_of_chairs) {
+          t.chairs = getDefaultChairPositions(t.type, t.number_of_chairs);
+          updateTableChairs(t.floor, t.table_number, t.chairs).catch(err => console.error("Failed to init chairs:", err));
         }
-        setTables(fetchedTables);
-        const floors = [...new Set(fetchedTables.map(t => t.floor))].sort();
-        setUniqueFloors(floors);
-        if (floors.length > 0 && !selectedFloor) {
-          setSelectedFloor(floors[0]);
-        } else if (selectedFloor && !floors.includes(selectedFloor)) {
-          setSelectedFloor(floors.length > 0 ? floors[0] : "");
-        }
-      } else {
-        throw new Error(data.error || "Failed to fetch tables");
+      }
+      setTables(fetchedTables);
+      const floors = [...new Set(fetchedTables.map(t => t.floor))].sort();
+      setUniqueFloors(floors);
+      if (floors.length > 0 && !selectedFloor) {
+        setSelectedFloor(floors[0]);
+      } else if (selectedFloor && !floors.includes(selectedFloor)) {
+        setSelectedFloor(floors.length > 0 ? floors[0] : "");
       }
     } catch (err) {
       console.error("Error fetching tables:", err);
-      setMessage(err.message);
+      setMessage(err.response?.data?.error || err.message || "Failed to fetch tables");
       setMessageType('error');
     }
   };
 
-  // Run fetchTables on component mount
+  // Run fetchConfig and fetchTables on component mount
   useEffect(() => {
-    fetchTables();
+    fetchConfig();
   }, []);
+
+  useEffect(() => {
+    if (baseUrl !== "" || baseUrl === "") { // Run fetchTables after baseUrl is set
+      fetchTables();
+    }
+  }, [baseUrl]);
 
   // Clear message after 5 seconds
   useEffect(() => {
@@ -180,25 +198,14 @@ function AddTablePage() {
       y: 0,
     };
     try {
-      const response = await fetch("/api/tables", {
-        method: "POST",
+      const apiUrl = baseUrl ? `${baseUrl}/api/tables` : "/api/tables";
+      const response = await axios.post(apiUrl, tableData, {
         headers: {
           "Content-Type": "application/json",
           "Accept": "application/json",
         },
-        body: JSON.stringify(tableData),
       });
-      const text = await response.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch (jsonError) {
-        throw new Error(`Invalid JSON response: ${text}`);
-      }
-      if (!response.ok) {
-        throw new Error(data.error || `HTTP error! Status: ${response.status}`);
-      }
-      setMessage(data.message);
+      setMessage(response.data.message);
       setMessageType('success');
       setSelectedFloor(normalizedFloor); // Switch to the floor of the newly added table
       setTableNumber("");
@@ -207,94 +214,77 @@ function AddTablePage() {
       setShowModal(false);
       fetchTables(); // Refresh table list
     } catch (err) {
-      setMessage(err.message);
+      setMessage(err.response?.data?.error || err.message || "Failed to add table");
       setMessageType('error');
       console.error("Error adding table:", err);
     }
   };
 
-  // Delete table function - now includes floor
+  // Delete table function - now includes floor (updated to use baseUrl)
   const handleDelete = async (tableNumber, floor) => {
     try {
-      const response = await fetch(`/api/tables/${tableNumber}`, {
-        method: "DELETE",
+      const apiUrl = baseUrl ? `${baseUrl}/api/tables/${tableNumber}` : `/api/tables/${tableNumber}`;
+      const response = await axios.delete(apiUrl, {
         headers: {
           "Content-Type": "application/json",
           "Accept": "application/json",
         },
-        body: JSON.stringify({ floor }),  // Include floor in body for floor-specific delete
+        data: { floor }, // Include floor in body for floor-specific delete
       });
-      const text = await response.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch (jsonError) {
-        throw new Error(`Invalid JSON response: ${text}`);
-      }
-      if (!response.ok) {
-        throw new Error(data.error || `HTTP error! Status: ${response.status}`);
-      }
-      setMessage(data.message);
+      setMessage(response.data.message);
       setMessageType('success');
       fetchTables(); // Refresh table list after deletion
     } catch (err) {
-      setMessage(err.message);
+      setMessage(err.response?.data?.error || err.message || "Failed to delete table");
       setMessageType('error');
       console.error("Error deleting table:", err);
     }
   };
 
-  // Update table position - now includes floor
+  // Update table position - now includes floor (updated to use baseUrl)
   const updateTablePosition = async (tableNumber, floor, x, y) => {
     try {
-      const response = await fetch(`/api/tables/${tableNumber}`, {
-        method: "PUT",
+      const apiUrl = baseUrl ? `${baseUrl}/api/tables/${tableNumber}` : `/api/tables/${tableNumber}`;
+      const response = await axios.put(apiUrl, { floor, x: Math.round(x), y: Math.round(y) }, {
         headers: {
           "Content-Type": "application/json",
           "Accept": "application/json",
         },
-        body: JSON.stringify({ floor, x: Math.round(x), y: Math.round(y) }),
       });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to update position");
+      if (response.status >= 200 && response.status < 300) {
+        // Local update after successful backend update
+        setTables(prevTables => prevTables.map(t =>
+          t.table_number === tableNumber && t.floor === floor ? { ...t, x: Math.round(x), y: Math.round(y) } : t
+        ));
       }
-      // Optionally setMessage(data.message, 'success');
-      // Local update after successful backend update
-      setTables(prevTables => prevTables.map(t => 
-        t.table_number === tableNumber && t.floor === floor ? { ...t, x: Math.round(x), y: Math.round(y) } : t
-      ));
     } catch (err) {
-      setMessage(err.message);
+      setMessage(err.response?.data?.error || err.message || "Failed to update position");
       setMessageType('error');
       console.error("Error updating position:", err);
     }
   };
 
-  // Update table chairs - now includes floor
+  // Update table chairs - now includes floor (updated to use baseUrl)
   const updateTableChairs = async (floor, tableNumber, chairs) => {
     try {
-      const response = await fetch(`/api/tables/${tableNumber}`, {
-        method: "PUT",
+      const apiUrl = baseUrl ? `${baseUrl}/api/tables/${tableNumber}` : `/api/tables/${tableNumber}`;
+      const response = await axios.put(apiUrl, { floor, chairs }, {
         headers: {
           "Content-Type": "application/json",
           "Accept": "application/json",
         },
-        body: JSON.stringify({ floor, chairs }),
       });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to update chairs");
+      if (response.status >= 200 && response.status < 300) {
+        // No message, silent update
       }
-      // Optionally setMessage(data.message, 'success');
     } catch (err) {
-      setMessage(err.message);
+      setMessage(err.response?.data?.error || err.message || "Failed to update chairs");
       setMessageType('error');
       console.error("Error updating chairs:", err);
     }
   };
 
-  // Update table type - now includes floor
+  // Update table type - now includes floor (updated to use baseUrl)
   const updateTableType = async (tableNumber, floor, newType, currentX, currentY) => {
     try {
       const selectedTable = tables.find((t) => t.table_number === tableNumber && t.floor === floor);
@@ -308,27 +298,23 @@ function AddTablePage() {
         y: Math.round(currentY),
         chairs: newChairs,
       };
-      const response = await fetch(`/api/tables/${tableNumber}`, {
-        method: "PUT",
+      const apiUrl = baseUrl ? `${baseUrl}/api/tables/${tableNumber}` : `/api/tables/${tableNumber}`;
+      const response = await axios.put(apiUrl, tableData, {
         headers: {
           "Content-Type": "application/json",
           "Accept": "application/json",
         },
-        body: JSON.stringify(tableData),
       });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to update type");
+      if (response.status >= 200 && response.status < 300) {
+        setMessage(response.data.message);
+        setMessageType('success');
+        // Local update
+        setTables(prevTables => prevTables.map(t =>
+          t.table_number === tableNumber && t.floor === floor ? { ...t, type: newType, chairs: newChairs } : t
+        ));
       }
-      setMessage(data.message);
-      setMessageType('success');
-      // Do not fetchTables here to keep the local change
-      // Local update
-      setTables(prevTables => prevTables.map(t => 
-        t.table_number === tableNumber && t.floor === floor ? { ...t, type: newType, chairs: newChairs } : t
-      ));
     } catch (err) {
-      setMessage(err.message);
+      setMessage(err.response?.data?.error || err.message || "Failed to update type");
       setMessageType('error');
       // Revert local update on error
       fetchTables();
@@ -614,11 +600,9 @@ function AddTablePage() {
     const [dragging, setDragging] = useState(false);
     const [offset, setOffset] = useState({ x: 0, y: 0 });
     const ref = useRef(null);
-
     useEffect(() => {
       setPos(initialPosition);
     }, [initialPosition]);
-
     const handleMouseDown = (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -631,7 +615,6 @@ function AddTablePage() {
         setDragging(true);
       }
     };
-
     useEffect(() => {
       const handleMouseMove = (e) => {
         if (dragging && ref.current) {
@@ -665,7 +648,6 @@ function AddTablePage() {
         document.removeEventListener("mouseup", handleMouseUp);
       };
     }, [dragging, offset, tableCenter, onSavePosition, pos]);
-
     return (
       <div
         ref={ref}
@@ -705,11 +687,9 @@ function AddTablePage() {
     const centerY = 140;
     const radius = 80;
     const chairSize = 24;
-
     useEffect(() => {
       setPos({ x: table.x || 0, y: table.y || 0 });
     }, [table.x, table.y]);
-
     useEffect(() => {
       let initPositions;
       if (table.chairs) {
@@ -719,7 +699,6 @@ function AddTablePage() {
       }
       setLocalChairPositions(initPositions);
     }, [table.type, table.number_of_chairs, table.chairs]);
-
     useEffect(() => {
       const handleMouseMove = (e) => {
         if (dragging && ref.current) {
@@ -746,7 +725,7 @@ function AddTablePage() {
           const boundedX = Math.max(0, Math.min(parentRect.width - tableWidth, newX));
           const boundedY = Math.max(0, Math.min(parentRect.height - tableHeight, newY));
           setPos({ x: boundedX, y: boundedY });
-          onSavePosition(table.table_number, table.floor, boundedX, boundedY);  // Pass floor
+          onSavePosition(table.table_number, table.floor, boundedX, boundedY); // Pass floor
         }
       };
       if (dragging) {
@@ -758,7 +737,6 @@ function AddTablePage() {
         document.removeEventListener("mouseup", handleMouseUp);
       };
     }, [dragging, offset, table.table_number, table.floor, onSavePosition]);
-
     const handleMouseDown = (e) => {
       e.preventDefault();
       if (ref.current) {
@@ -770,23 +748,20 @@ function AddTablePage() {
         setDragging(true);
       }
     };
-
     const handleDoubleClick = (e) => {
       e.stopPropagation();
-      onSelect(table.table_number, table.floor);  // Pass floor for selection
+      onSelect(table.table_number, table.floor); // Pass floor for selection
     };
-
     const handleSaveChairPosition = (index, newPos) => {
       const newPositions = [...localChairPositions];
       newPositions[index] = newPos;
       setLocalChairPositions(newPositions);
-      updateTableChairs(table.floor, table.table_number, newPositions);  // Pass floor
+      updateTableChairs(table.floor, table.table_number, newPositions); // Pass floor
       // Update local tables state to reflect saved chairs
-      setTables(prevTables => prevTables.map(t => 
-        t.table_number === table.table_number && t.floor === table.floor ? { ...t, chairs: newPositions } : t  // Floor-specific update
+      setTables(prevTables => prevTables.map(t =>
+        t.table_number === table.table_number && t.floor === table.floor ? { ...t, chairs: newPositions } : t // Floor-specific update
       ));
     };
-
     // Determine table dimensions and style based on type
     let tableWidth = 80;
     let tableHeight = 80;
@@ -821,7 +796,6 @@ function AddTablePage() {
       default:
         break;
     }
-
     return (
       <div
         ref={ref}
@@ -884,11 +858,8 @@ function AddTablePage() {
   };
 
   const filteredTables = tables.filter((table) => table.floor === selectedFloor);
-
-  const selectedTable = tables.find((t) => t.table_number === selectedTableNumber && t.floor === selectedFloor);  // Floor-specific selection
-
+  const selectedTable = tables.find((t) => t.table_number === selectedTableNumber && t.floor === selectedFloor); // Floor-specific selection
   const tableTypes = ["Round", "Square", "Rectangle", "Long", "Oval", "Bar"];
-
   const getTypeIcon = (type) => {
     let iconStyle = {
       width: 25,
@@ -928,9 +899,8 @@ function AddTablePage() {
     }
     return <div style={iconStyle} />;
   };
-
   const handleChangeType = (newType) => {
-    if (!selectedTableNumber || !selectedTable || !selectedFloor) return;  // Ensure floor is selected
+    if (!selectedTableNumber || !selectedTable || !selectedFloor) return; // Ensure floor is selected
     if (newType === selectedTable.type) {
       setMessage(`The table is already of type ${newType}. No changes to update.`);
       setMessageType('error');
@@ -938,15 +908,14 @@ function AddTablePage() {
     }
     // Optimistic update - floor-specific
     const newChairs = getDefaultChairPositions(newType, selectedTable.number_of_chairs);
-    setTables(prevTables => prevTables.map(t => 
+    setTables(prevTables => prevTables.map(t =>
       t.table_number === selectedTableNumber && t.floor === selectedFloor
-        ? { ...t, type: newType, chairs: newChairs } 
+        ? { ...t, type: newType, chairs: newChairs }
         : t
     ));
     // Call server with floor
     updateTableType(selectedTableNumber, selectedFloor, newType, selectedTable.x || 0, selectedTable.y || 0);
   };
-
   return (
     <div style={styles.container}>
       <i
@@ -1002,14 +971,14 @@ function AddTablePage() {
                 </thead>
                 <tbody>
                   {filteredTables.map((table, index) => (
-                    <tr key={`${table.floor}-${table.table_number}-${index}`}>  {/* Unique key with floor */}
+                    <tr key={`${table.floor}-${table.table_number}-${index}`}> {/* Unique key with floor */}
                       <td style={styles.td}>{formatFloor(table.floor)}</td>
                       <td style={styles.td}>{table.table_number}</td>
                       <td style={styles.td}>{table.number_of_chairs}</td>
                       <td style={styles.td}>
                         <button
                           style={styles.deleteButton}
-                          onClick={() => handleDelete(table.table_number, table.floor)}  // Pass floor
+                          onClick={() => handleDelete(table.table_number, table.floor)} // Pass floor
                           onMouseOver={(e) =>
                             (e.target.style.backgroundColor = styles.deleteButtonHover.backgroundColor)
                           }
@@ -1035,11 +1004,11 @@ function AddTablePage() {
           {tables
             .filter((table) => table.floor === selectedFloor)
             .map((table) => (
-              <TableItem 
-                key={`${table.floor}-${table.table_number}`}  // Unique key with floor
-                table={table} 
-                onSavePosition={updateTablePosition} 
-                onSelect={(tn, fl) => setSelectedTableNumber(tn)}  // Set only table_number, floor is selectedFloor
+              <TableItem
+                key={`${table.floor}-${table.table_number}`} // Unique key with floor
+                table={table}
+                onSavePosition={updateTablePosition}
+                onSelect={(tn, fl) => setSelectedTableNumber(tn)} // Set only table_number, floor is selectedFloor
               />
             ))}
           {selectedTableNumber && selectedTable && (
@@ -1064,7 +1033,6 @@ function AddTablePage() {
           )}
         </div>
       </div>
-
       {/* Modal */}
       {showModal && (
         <div style={styles.modalOverlay} onClick={closeModal}>

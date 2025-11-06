@@ -12,17 +12,38 @@ function BackupPage() {
   const [pendingAction, setPendingAction] = useState(null);
   const [backupInterval, setBackupInterval] = useState(6);
   const [newInterval, setNewInterval] = useState(6);
+  const [baseUrl, setBaseUrl] = useState("");
 
   useEffect(() => {
-    fetchBackupInfo();
-    fetchBackupInterval();
-    const storedMax = parseInt(localStorage.getItem('numberOfBackups')) || 5;
-    setMaxBackups(storedMax);
+    const fetchConfig = async () => {
+      let currentBaseUrl = "";
+      try {
+        const response = await axios.get("http://localhost:8000/api/network_info");
+        const { config: appConfig } = response.data;
+        if (appConfig.mode === "client") {
+          currentBaseUrl = `http://${appConfig.server_ip}:8000`;
+          setBaseUrl(currentBaseUrl);
+        } else {
+          setBaseUrl("");
+        }
+      } catch (error) {
+        console.error("Failed to fetch config:", error);
+        setBaseUrl("");
+      } finally {
+        // Fetch data using currentBaseUrl
+        fetchBackupInfo(currentBaseUrl);
+        fetchBackupInterval(currentBaseUrl);
+        // Set maxBackups from localStorage (local operation, no URL needed)
+        const storedMax = parseInt(localStorage.getItem('numberOfBackups')) || 5;
+        setMaxBackups(storedMax);
+      }
+    };
+    fetchConfig();
   }, []);
 
-  const fetchBackupInterval = async () => {
+  const fetchBackupInterval = async (currentBaseUrl) => {
     try {
-      const response = await axios.get('http://localhost:8000/api/get-backup-interval');
+      const response = await axios.get(`${currentBaseUrl}/api/get-backup-interval`);
       setBackupInterval(response.data.interval);
       setNewInterval(response.data.interval);
     } catch (error) {
@@ -34,7 +55,7 @@ function BackupPage() {
 
   const handleSetInterval = async () => {
     try {
-      await axios.post('http://localhost:8000/api/set-backup-interval', { interval: newInterval });
+      await axios.post(`${baseUrl}/api/set-backup-interval`, { interval: newInterval });
       setBackupInterval(newInterval);
       setWarningMessage('Backup interval updated successfully!');
       setWarningType('success');
@@ -54,9 +75,9 @@ function BackupPage() {
     setWarningType('warning');
   };
 
-  const fetchBackupInfo = async () => {
+  const fetchBackupInfo = async (currentBaseUrl) => {
     try {
-      const response = await axios.get('http://localhost:8000/api/backup-info');
+      const response = await axios.get(`${currentBaseUrl}/api/backup-info`);
       const sortedData = response.data.sort((a, b) => new Date(b.date) - new Date(a.date));
       const limitedData = sortedData.slice(0, maxBackups);
       setBackups(limitedData);
@@ -73,7 +94,7 @@ function BackupPage() {
 
   const handleBackup = async () => {
     try {
-      const response = await axios.get('http://localhost:8000/api/backup-to-excel', {
+      const response = await axios.get(`${baseUrl}/api/backup-to-excel`, {
         responseType: 'blob',
       });
       const blob = response.data;
@@ -89,7 +110,7 @@ function BackupPage() {
       window.URL.revokeObjectURL(url);
       setWarningMessage('Backup created successfully! Excel file downloaded and sent to configured email.');
       setWarningType('success');
-      setPendingAction(() => () => fetchBackupInfo());
+      setPendingAction(() => () => fetchBackupInfo(baseUrl));
     } catch (error) {
       console.error('Backup error:', error);
       let errorMessage = 'Failed to create backup';
@@ -105,7 +126,7 @@ function BackupPage() {
 
   const handleDownloadBackup = async (filename) => {
     try {
-      const response = await axios.post('http://localhost:8000/api/download-backup', { filename }, {
+      const response = await axios.post(`${baseUrl}/api/download-backup`, { filename }, {
         responseType: 'blob',
       });
       const blob = response.data;
@@ -135,7 +156,7 @@ function BackupPage() {
   const handleSetMaxBackups = (newMax) => {
     setMaxBackups(newMax);
     localStorage.setItem('numberOfBackups', newMax);
-    fetchBackupInfo(); // Refresh the list with new limit
+    fetchBackupInfo(baseUrl); // Refresh the list with new limit using baseUrl
   };
 
   return (

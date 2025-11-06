@@ -21,14 +21,14 @@ const PrintSettingsPage = () => {
   const [showForm, setShowForm] = useState(true);
   const [selectedId, setSelectedId] = useState(null);
   const [logoUrl, setLogoUrl] = useState(null);
-  const API_URL = 'http://localhost:8000';
+  const [baseUrl, setBaseUrl] = useState("");
 
   // Fetch logo for preview
-  const fetchLogo = async () => {
+  const fetchLogo = async (currentBaseUrl) => {
     try {
-      const response = await axios.get(`${API_URL}/api/logo`);
+      const response = await axios.get(`${currentBaseUrl}/api/logo`);
       if (response.data.logo) {
-        setLogoUrl(API_URL + response.data.logo);
+        setLogoUrl(currentBaseUrl + response.data.logo);
       }
     } catch (err) {
       console.error("Failed to fetch logo for preview:", err);
@@ -37,9 +37,10 @@ const PrintSettingsPage = () => {
 
   // Fetch all print settings
   const fetchAllSettings = async () => {
+    const currentBaseUrl = baseUrl || 'http://localhost:8000';
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/api/print_settings`);
+      const response = await fetch(`${currentBaseUrl}/api/print_settings`);
       if (!response.ok) {
         throw new Error(`Failed to fetch print settings: ${response.statusText}`);
       }
@@ -60,9 +61,10 @@ const PrintSettingsPage = () => {
 
   // Fetch a single setting for editing
   const fetchSetting = async (id) => {
+    const currentBaseUrl = baseUrl || 'http://localhost:8000';
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/api/print_settings/${id}`);
+      const response = await fetch(`${currentBaseUrl}/api/print_settings/${id}`);
       if (!response.ok) {
         throw new Error(`Failed to fetch print setting: ${response.statusText}`);
       }
@@ -88,13 +90,14 @@ const PrintSettingsPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const currentBaseUrl = baseUrl || 'http://localhost:8000';
     setLoading(true);
     setMessage(null);
     try {
-      let url = `${API_URL}/api/print_settings`;
+      let url = `${currentBaseUrl}/api/print_settings`;
       let method = "POST";
       if (editId) {
-        url = `${API_URL}/api/print_settings/${editId}`;
+        url = `${currentBaseUrl}/api/print_settings/${editId}`;
         method = "PUT";
       }
       const response = await fetch(url, {
@@ -122,10 +125,11 @@ const PrintSettingsPage = () => {
 
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this setting?")) return;
+    const currentBaseUrl = baseUrl || 'http://localhost:8000';
     setLoading(true);
     setMessage(null);
     try {
-      const response = await fetch(`${API_URL}/api/print_settings/${id}`, {
+      const response = await fetch(`${currentBaseUrl}/api/print_settings/${id}`, {
         method: "DELETE",
       });
       if (!response.ok) {
@@ -142,11 +146,12 @@ const PrintSettingsPage = () => {
   };
 
   const handleUse = async () => {
+    const currentBaseUrl = baseUrl || 'http://localhost:8000';
     setLoading(true);
     setMessage(null);
     try {
       if (selectedId) {
-        const response = await fetch(`${API_URL}/api/print_settings/set_active/${selectedId}`, {
+        const response = await fetch(`${currentBaseUrl}/api/print_settings/set_active/${selectedId}`, {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
@@ -158,7 +163,7 @@ const PrintSettingsPage = () => {
         const result = await response.json();
         setMessage({ type: 'success', text: result.message });
       } else {
-        const response = await fetch(`${API_URL}/api/print_settings/deactivate_all`, {
+        const response = await fetch(`${currentBaseUrl}/api/print_settings/deactivate_all`, {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
@@ -212,8 +217,29 @@ const PrintSettingsPage = () => {
     }
   };
 
+  // Fetch config and set baseUrl
+  const fetchConfig = async () => {
+    let currentBaseUrl = 'http://localhost:8000'; // Default fallback
+    try {
+      const response = await axios.get("http://localhost:8000/api/network_info");
+      const { config: appConfig } = response.data;
+      if (appConfig.mode === "client") {
+        currentBaseUrl = `http://${appConfig.server_ip}:8000`;
+        setBaseUrl(currentBaseUrl);
+      } else {
+        setBaseUrl("");
+      }
+    } catch (error) {
+      console.error("Failed to fetch config:", error);
+      setBaseUrl("");
+    } finally {
+      // Use currentBaseUrl for initial fetchLogo
+      fetchLogo(currentBaseUrl);
+    }
+  };
+
   useEffect(() => {
-    fetchLogo();
+    fetchConfig();
   }, []);
 
   if (loading) {
@@ -222,7 +248,6 @@ const PrintSettingsPage = () => {
   if (error) {
     return <div style={{ textAlign: 'center', padding: '24px', color: 'red' }}>Error: {error}</div>;
   }
-
   return (
     <div style={{ width: '100%', minHeight: '100vh', padding: '24px', background: 'linear-gradient(135deg, #ffffff 0%, #3498db 100%)', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)', borderRadius: '8px' }}>
       <div style={{ marginBottom: '16px', textAlign: 'left' }}>
@@ -244,7 +269,7 @@ const PrintSettingsPage = () => {
         </button>
       </div>
       <h1 style={{ fontSize: '28px', fontWeight: 'bold', marginBottom: '24px', textAlign: 'center' }}>Print Settings</h1>
-     
+    
       {message && (
         <div style={{
           padding: '12px',

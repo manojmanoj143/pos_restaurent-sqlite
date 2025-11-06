@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -21,7 +20,7 @@ function EmployeePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [message, setMessage] = useState('');
-
+  const [baseUrl, setBaseUrl] = useState(""); // Added baseUrl state similar to AdminPage
   // List of country codes for dropdown
   const countryCodes = [
     { code: '+91', country: 'India' },
@@ -31,12 +30,37 @@ function EmployeePage() {
     { code: '+61', country: 'Australia' },
   ];
 
-  // Fetch employees
-  const fetchEmployees = async () => {
+  // Fetch config to determine baseUrl (similar to AdminPage)
+  useEffect(() => {
+    const fetchConfig = async () => {
+      let currentBaseUrl = "";
+      try {
+        const response = await axios.get("http://localhost:8000/api/network_info");
+        const { config: appConfig } = response.data;
+        if (appConfig.mode === "client") {
+          currentBaseUrl = `http://${appConfig.server_ip}:8000`;
+          setBaseUrl(currentBaseUrl);
+        } else {
+          setBaseUrl("");
+        }
+      } catch (error) {
+        console.error("Failed to fetch config:", error);
+        setBaseUrl("");
+      } finally {
+        // Fetch employees after config is loaded
+        fetchEmployees(currentBaseUrl);
+      }
+    };
+    fetchConfig();
+  }, []);
+
+  // Fetch employees (updated to use baseUrl)
+  const fetchEmployees = async (currentBaseUrl = baseUrl) => {
     try {
       setLoading(true);
       setError(null);
-      const response = await axios.get('http://localhost:8000/api/employees');
+      const apiUrl = currentBaseUrl ? `${currentBaseUrl}/api/employees` : 'http://localhost:8000/api/employees';
+      const response = await axios.get(apiUrl);
       const data = Array.isArray(response.data) ? response.data : [];
       setEmployees(data);
     } catch (err) {
@@ -47,17 +71,13 @@ function EmployeePage() {
     }
   };
 
-  useEffect(() => {
-    fetchEmployees();
-  }, []);
-
   // Handle form input changes
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
   };
 
-  // Handle employee creation
+  // Handle employee creation (updated to use baseUrl)
   const handleCreateEmployee = async (e) => {
     e.preventDefault();
     const fullPhoneNumber = `${formData.countryCode}${formData.phoneNumber}`;
@@ -69,7 +89,8 @@ function EmployeePage() {
       setLoading(true);
       setError(null);
       setMessage('');
-      await axios.post('http://localhost:8000/api/employees', {
+      const apiUrl = baseUrl ? `${baseUrl}/api/employees` : 'http://localhost:8000/api/employees';
+      await axios.post(apiUrl, {
         name: formData.name,
         phoneNumber: fullPhoneNumber,
         vehicleNumber: formData.vehicleNumber,
@@ -103,7 +124,7 @@ function EmployeePage() {
     setSelectedEmployee(employee);
   };
 
-  // Handle employee update
+  // Handle employee update (updated to use baseUrl)
   const handleUpdateEmployee = async (e) => {
     e.preventDefault();
     const fullPhoneNumber = `${formData.countryCode}${formData.phoneNumber}`;
@@ -115,7 +136,8 @@ function EmployeePage() {
       setLoading(true);
       setError(null);
       setMessage('');
-      await axios.put(`http://localhost:8000/api/employees/${editEmployeeId}`, {
+      const apiUrl = baseUrl ? `${baseUrl}/api/employees/${editEmployeeId}` : `http://localhost:8000/api/employees/${editEmployeeId}`;
+      await axios.put(apiUrl, {
         name: formData.name,
         phoneNumber: fullPhoneNumber,
         vehicleNumber: formData.vehicleNumber,
@@ -135,14 +157,15 @@ function EmployeePage() {
     }
   };
 
-  // Handle employee deletion
+  // Handle employee deletion (updated to use baseUrl)
   const handleDeleteEmployee = async (employeeId) => {
     if (!window.confirm('Are you sure you want to delete this employee?')) return;
     try {
       setLoading(true);
       setError(null);
       setMessage('');
-      await axios.delete(`http://localhost:8000/api/employees/${employeeId}`);
+      const apiUrl = baseUrl ? `${baseUrl}/api/employees/${employeeId}` : `http://localhost:8000/api/employees/${employeeId}`;
+      await axios.delete(apiUrl);
       setMessage('Employee deleted successfully');
       setSelectedEmployee(null);
       fetchEmployees();
@@ -186,11 +209,9 @@ function EmployeePage() {
         >
           <FaArrowLeft style={{ fontSize: '24px', color: '#333' }} />
         </button>
-
         <h2 style={{ textAlign: 'center', marginBottom: '40px', color: '#333', fontSize: '2rem', fontWeight: '600' }}>
           Employee Management
         </h2>
-
         {loading && (
           <div style={{ textAlign: 'center', color: '#666', fontSize: '1.2rem' }}>Loading...</div>
         )}
@@ -220,7 +241,6 @@ function EmployeePage() {
             {message}
           </div>
         )}
-
         <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
           {/* Create/Edit Employee Form */}
           <div
@@ -374,7 +394,6 @@ function EmployeePage() {
               )}
             </div>
           </div>
-
           {/* Employee List */}
           <div
             style={{
@@ -458,7 +477,6 @@ function EmployeePage() {
             )}
           </div>
         </div>
-
         {/* Employee Details */}
         {selectedEmployee && (
           <div

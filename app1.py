@@ -1,4 +1,3 @@
-# app.py (modified backend)
 # -*- mode: python ; coding: utf-8 -*-
 from flask import Flask, request, jsonify, send_from_directory, Response
 from flask_cors import CORS
@@ -96,7 +95,7 @@ def save_config(config_data):
 config = load_config()
 UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', os.path.join(BASE_DIR, 'static', 'uploads'))
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp','jfif'}
+ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp','jfif','ico'}
 ALLOWED_JSON_EXTENSIONS = {'json'}
 MAX_BACKUPS = 10
 def create_directory(directory):
@@ -302,7 +301,7 @@ class SQLiteCollection:
             return doc
         return None
 def connect_to_sqlite():
-    global conn, items_collection, customers_collection, sales_collection, tables_collection, users_collection, settings_collection, email_tokens_collection, opening_collection, pos_closing_collection, kitchens_collection, item_groups_collection, kitchen_saved_collection, picked_up_collection, variants_collection, employees_collection, activeorders_collection, order_counters_collection, tripreports_collection, email_settings_collection, purchase_items_collection, suppliers_collection, purchase_orders_collection, purchase_receipts_collection, purchase_invoices_collection, uoms_collection, purchase_sales_collection, print_settings_collection, combo_offers_collection, vat_collection, customer_groups_collection, company_details_collection, logo_details_collection, supplier_group_collection
+    global conn, items_collection, customers_collection, sales_collection, tables_collection, users_collection, settings_collection, email_tokens_collection, opening_collection, pos_closing_collection, kitchens_collection, item_groups_collection, kitchen_saved_collection, picked_up_collection, variants_collection, employees_collection, activeorders_collection, order_counters_collection, tripreports_collection, email_settings_collection, purchase_items_collection, suppliers_collection, purchase_orders_collection, purchase_receipts_collection, purchase_invoices_collection, uoms_collection, purchase_sales_collection, print_settings_collection, combo_offers_collection, vat_collection, customer_groups_collection, company_details_collection, logo_details_collection, supplier_group_collection,address_structures_collection
     mode = config.get("mode", "server")
     if mode == 'server':
         db_path = os.path.join(CONFIG_DIR, 'restaurant.db')
@@ -311,7 +310,7 @@ def connect_to_sqlite():
         tables = [
             'active_orders', 'combo_offers', 'customers', 'email_settings', 'email_tokens', 'employees', 'item_groups', 'items', 'kitchen_saved_orders', 'kitchens',
             'order_counters', 'picked_up_items', 'pos_closing_entries', 'pos_opening_entries', 'print_settings', 'purchase_invoices', 'purchase_items', 'purchase_orders',
-            'purchase_receipts', 'purchase_sales', 'sales', 'suppliers', 'system_settings', 'tables', 'trip_reports', 'uoms', 'users', 'variants', 'vat', 'customer_groups', 'company_details', 'logo_details', 'supplier_groups' # NEW: customer_groups
+            'purchase_receipts', 'purchase_sales', 'sales', 'suppliers', 'system_settings', 'tables', 'trip_reports', 'uoms', 'users', 'variants', 'vat', 'customer_groups', 'company_details', 'logo_details', 'supplier_groups','address_structures'
         ]
         for table in tables:
             cur.execute(f"CREATE TABLE IF NOT EXISTS {table} (id TEXT PRIMARY KEY, data TEXT)")
@@ -346,10 +345,11 @@ def connect_to_sqlite():
         print_settings_collection = SQLiteCollection(conn, 'print_settings')
         combo_offers_collection = SQLiteCollection(conn, 'combo_offers')
         vat_collection = SQLiteCollection(conn, 'vat')
-        customer_groups_collection = SQLiteCollection(conn, 'customer_groups')  # NEW: customer_groups_collection
+        customer_groups_collection = SQLiteCollection(conn, 'customer_groups')
         company_details_collection = SQLiteCollection(conn, 'company_details')
         logo_details_collection = SQLiteCollection(conn, 'logo_details')
         supplier_group_collection = SQLiteCollection(conn, 'supplier_groups')
+        address_structures_collection = SQLiteCollection(conn, 'address_structures')
         ensure_test_users()
         return True
     else:
@@ -469,7 +469,7 @@ def get_system_settings():
             "dateFormat": 'dd-mm-yyyy',
             "timeFormat": 'HH:mm:ss',
             "numberFormat": '#,##,###.##',
-            "useNumberFormatFromCurrency": false,
+            "useNumberFormatFromCurrency": False,
             "firstDayOfWeek": 'Monday',
             "floatPrecision": 3,
             "currencyPrecision": '',
@@ -492,38 +492,11 @@ def get_system_settings():
             "dateFormat": 'dd-mm-yyyy',
             "timeFormat": 'HH:mm:ss',
             "numberFormat": '#,##,###.##',
-            "useNumberFormatFromCurrency": false,
+            "useNumberFormatFromCurrency": False,
             "firstDayOfWeek": 'Monday',
             "floatPrecision": 3,
             "currencyPrecision": '',
             "roundingMethod": '',
-        }
-        settings_collection.insert_one(default_settings)
-        logger.info("Inserted default system settings")
-        return default_settings
-    return settings
-def get_system_settings():
-    if settings_collection is None:
-        logger.warning("Settings collection not available, returning default settings")
-        return {
-            "_id": "system_settings",
-            "disableUserPassLogin": False,
-            "allowLoginUsingMobileNumber": True,
-            "allowLoginUsingUsername": True,
-            "loginWithEmailLink": False,
-            "sessionExpiry": "06:00",
-            "backup_interval_hours": 6
-        }
-    settings = settings_collection.find_one({"_id": "system_settings"})
-    if not settings:
-        default_settings = {
-            "_id": "system_settings",
-            "disableUserPassLogin": False,
-            "allowLoginUsingMobileNumber": True,
-            "allowLoginUsingUsername": True,
-            "loginWithEmailLink": False,
-            "sessionExpiry": "06:00",
-            "backup_interval_hours": 6
         }
         settings_collection.insert_one(default_settings)
         logger.info("Inserted default system settings")
@@ -931,7 +904,7 @@ def import_mongodb():
         valid_collections = [
             'active_orders', 'combo_offers', 'customers', 'email_settings', 'email_tokens', 'employees', 'item_groups', 'items', 'kitchen_saved_orders', 'kitchens',
             'order_counters', 'picked_up_items', 'pos_closing_entries', 'pos_opening_entries', 'print_settings', 'purchase_invoices', 'purchase_items', 'purchase_orders',
-            'purchase_receipts', 'purchase_sales', 'sales', 'suppliers', 'system_settings', 'tables', 'trip_reports', 'uoms', 'users', 'variants', 'vat', 'customer_groups', 'company_details', 'logo_details', 'supplier_groups' # NEW: customer_groups
+            'purchase_receipts', 'purchase_sales', 'sales', 'suppliers', 'system_settings', 'tables', 'trip_reports', 'uoms', 'users', 'variants', 'vat', 'customer_groups', 'company_details', 'logo_details', 'supplier_groups'
         ]
         if collection_name not in valid_collections:
             logger.error(f"Invalid collection name: {collection_name}")
@@ -978,7 +951,7 @@ def import_mongodb():
                 {'variant_name': record.get('variant_name')} if collection_name == 'variants' else
                 {'vat_rate': record.get('vat_rate')} if collection_name == 'vat' else
                 {'company_name': record.get('company_name')} if collection_name == 'company_details' else
-                {'logo': record.get('logo')} if collection_name == 'logo_details' else # NEW: for customer_groups
+                {'logo': record.get('logo')} if collection_name == 'logo_details' else
                 {}
             )
             if not unique_key:
@@ -1807,6 +1780,7 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error fetching customers: {str(e)}")
             return jsonify({"error": str(e)}), 500
+
     @app.route('/api/customers/<customer_id>', methods=['GET', 'PUT', 'DELETE'])
     @db_required
     def customer_operations(customer_id):
@@ -1836,16 +1810,22 @@ if config.get('mode') == 'server':
                         'email': customer_data.get('email', ''),
                         'building_name': customer_data.get('building_name', ''),
                         'flat_villa_no': customer_data.get('flat_villa_no', ''),
-                        'location': customer_data.get('location', ''),
-                        'customer_group': customer_data.get('customer_group', ''),  # NEW: Update customer_group
+                        'country': customer_data.get('country', ''),
+                        'field1': customer_data.get('field1', ''),
+                        'field2': customer_data.get('field2', ''),
+                        'field3': customer_data.get('field3', ''),
+                        'customer_group': customer_data.get('customer_group', ''),
                         'modified_at': datetime.now(ZoneInfo("UTC")).isoformat()
                     }}
                 )
                 if result.matched_count == 0:
                     logger.warning(f"Customer not found for update: {customer_id}")
                     return jsonify({"error": "Customer not found"}), 404
+                # Fetch and return the updated customer
+                updated_customer = customers_collection.find_one({'_id': customer_id})
+                updated_customer = convert_objectid_to_str(updated_customer)
                 logger.info(f"Customer updated: {customer_id}")
-                return jsonify({"message": "Customer updated successfully"}), 200
+                return jsonify(updated_customer), 200
             elif request.method == 'DELETE':
                 result = customers_collection.delete_one({'_id': customer_id})
                 if result.deleted_count == 0:
@@ -1856,6 +1836,7 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error in customer operations for {customer_id}: {str(e)}")
             return jsonify({"error": str(e)}), 500
+
     @app.route('/api/customers', methods=['POST'])
     @db_required
     def create_customer():
@@ -1872,11 +1853,15 @@ if config.get('mode') == 'server':
             customer_data['modified_at'] = customer_data['created_at']
             result = customers_collection.insert_one(customer_data)
             new_customer_id = result.inserted_id
+            # Fetch and return the created customer
+            new_customer = customers_collection.find_one({'_id': new_customer_id})
+            new_customer = convert_objectid_to_str(new_customer)
             logger.info(f"Customer created: {new_customer_id}")
-            return jsonify({"id": new_customer_id, "message": "Customer created successfully"}), 201
+            return jsonify(new_customer), 201
         except Exception as e:
             logger.error(f"Error creating customer: {str(e)}")
             return jsonify({"error": str(e)}), 500
+
     @app.route('/api/customer-groups', methods=['GET'])
     @db_required
     def get_customer_groups():
@@ -1888,6 +1873,7 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error fetching customer groups: {str(e)}")
             return jsonify({"error": str(e)}), 500
+
     @app.route('/api/customer-groups', methods=['POST'])
     @db_required
     def create_customer_group():
@@ -1910,6 +1896,7 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error creating customer group: {str(e)}")
             return jsonify({"error": str(e)}), 500
+
     @app.route('/api/customer-groups/<group_id>', methods=['PUT'])
     @db_required
     def update_customer_group(group_id):
@@ -1930,6 +1917,7 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error updating customer group {group_id}: {str(e)}")
             return jsonify({"error": str(e)}), 500
+
     @app.route('/api/customer-groups/<group_id>', methods=['DELETE'])
     @db_required
     def delete_customer_group(group_id):
@@ -1943,10 +1931,53 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error deleting customer group {group_id}: {str(e)}")
             return jsonify({"error": str(e)}), 500
+
+    @app.route('/api/address-structures', methods=['GET'])
+    @db_required
+    def get_address_structure():
+        try:
+            doc = address_structures_collection.find_one({'_id': 'global'})
+            if doc:
+                return jsonify(doc), 200
+            else:
+                default = {
+                    "_id": "global",
+                    "structure": {"countries": {}},
+                    "linkedValues": {},
+                    "created_at": datetime.now(ZoneInfo("UTC")).isoformat()
+                }
+                address_structures_collection.insert_one(default)
+                return jsonify(default), 200
+        except Exception as e:
+            logger.error(f"Error fetching address structure: {str(e)}")
+            return jsonify({"error": str(e)}), 500
+
+    @app.route('/api/address-structures', methods=['PUT'])
+    @db_required
+    def update_address_structure():
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({"error": "No data provided"}), 400
+            update_data = {
+                "structure": data.get("structure", {"countries": {}}),
+                "linkedValues": data.get("linkedValues", {}),
+                "modified_at": datetime.now(ZoneInfo("UTC")).isoformat()
+            }
+            result = address_structures_collection.replace_one(
+                {'_id': 'global'},
+                {**update_data, "_id": "global"},
+                upsert=True
+            )
+            return jsonify({"message": "Address structure updated successfully"}), 200
+        except Exception as e:
+            logger.error(f"Error updating address structure: {str(e)}")
+            return jsonify({"error": str(e)}), 500
     @app.route('/api/sales', methods=['POST'])
     @db_required
     def create_sales_invoice():
         try:
+            logger.info("Starting sales invoice creation")
             sales_data = request.json
             required_fields = ['customer', 'items', 'total', 'userId']
             missing_fields = [field for field in required_fields if field not in sales_data or sales_data[field] is None]
@@ -1954,65 +1985,102 @@ if config.get('mode') == 'server':
                 error_msg = f"Missing required fields: {', '.join(missing_fields)}"
                 logger.error(error_msg)
                 return jsonify({"error": error_msg}), 400
+            
+            # Log full raw payload for debugging (remove in prod)
+            logger.info(f"Raw payload received: {json.dumps(sales_data, default=str)}")
+            
             user = users_collection.find_one({"email": sales_data['userId']})
             if not user:
                 logger.error(f"Invalid userId: {sales_data['userId']}")
                 return jsonify({"error": "Invalid userId"}), 400
+            
             sales_data['date'] = sales_data.get('date', datetime.now().strftime("%Y-%m-%d"))
             sales_data['time'] = sales_data.get('time', datetime.now().strftime("%H:%M:%S"))
-            net_total = float(sales_data['total'])
+            net_total = float(sales_data['total']) if sales_data['total'] and str(sales_data['total']).strip() != '' else 0.0
             vat_settings = vat_collection.find_one({"_id": "vat_settings"})
             vat_rate = vat_settings.get("vat", 10) / 100 if vat_settings else 0
-            vat_amount = float(sales_data.get('vat_amount', net_total * vat_rate))
-            grand_total = float(sales_data.get('grand_total', net_total + vat_amount))
+            vat_amount_raw = sales_data.get('vat_amount', net_total * vat_rate)
+            vat_amount = float(vat_amount_raw) if vat_amount_raw and str(vat_amount_raw).strip() != '' else (net_total * vat_rate)
+            grand_total_raw = sales_data.get('grand_total', net_total + vat_amount)
+            grand_total = float(grand_total_raw) if grand_total_raw and str(grand_total_raw).strip() != '' else (net_total + vat_amount)
             sales_data['vat_amount'] = round(vat_amount, 2)
             sales_data['grand_total'] = round(grand_total, 2)
             sales_data['invoice_no'] = sales_data.get('invoice_no', f"INV-{int(datetime.now().timestamp())}")
             sales_data['status'] = sales_data.get('status', 'Draft')
-            # NEW: Store current currency and precision in sales_data for historical display
+            
+            # Store current currency and precision
             current_settings = get_system_settings()
             sales_data['invoice_currency'] = current_settings.get('currency', 'INR')
-            sales_data['invoice_currency_precision'] = int(current_settings.get('currencyPrecision', 2))
+            sales_data['invoice_currency_precision'] = int(current_settings.get('currencyPrecision', 2)) if current_settings.get('currencyPrecision') and str(current_settings.get('currencyPrecision')).strip() != '' else 2
+            
             processed_items = []
-            for item in sales_data.get('items', []):
+            for item_idx, item in enumerate(sales_data.get('items', [])):
                 if not all(key in item for key in ['item_name', 'basePrice', 'quantity']):
-                    logger.error("Invalid item structure in sales invoice")
+                    logger.error(f"Invalid item structure at index {item_idx}: {item}")
                     return jsonify({"error": "Each item must include item_name, basePrice, and quantity"}), 400
-                # NEW: Handle combo offer flag and description
+                
+                # Safe conversion for item quantity and price
+                qty_val = item.get('quantity')
+                item['quantity'] = int(qty_val) if qty_val is not None and str(qty_val).strip() != '' and str(qty_val).isdigit() else 1
+                price_val = item.get('basePrice')
+                item['basePrice'] = float(price_val) if price_val is not None and str(price_val).strip() != '' else 0.0
+                logger.info(f"Processed item {item_idx}: {item['item_name']} - Raw Qty: '{qty_val}', Processed Qty: {item['quantity']}, Raw Price: '{price_val}', Processed Price: {item['basePrice']}")
+                
                 if item.get('is_combo_offer'):
                     item['offer_description'] = item.get('offer_description', item['item_name'])
+                
                 processed_addons = []
-                for addon in item.get('addons', []):
+                for addon_idx, addon in enumerate(item.get('addons', [])):
                     if not all(key in addon for key in ['name1', 'addon_price', 'addon_quantity']):
-                        logger.error("Invalid addon structure in sales invoice")
+                        logger.error(f"Invalid addon structure at item {item_idx}, addon {addon_idx}: {addon}")
                         return jsonify({"error": "Each addon must include name1, addon_price, and addon_quantity"}), 400
+                    
+                    # FIXED: Safe int() for addon_quantity (handles '', None, non-numeric)
+                    addon_qty_raw = addon.get('addon_quantity')
+                    addon_qty = int(addon_qty_raw) if addon_qty_raw is not None and str(addon_qty_raw).strip() != '' and str(addon_qty_raw).isdigit() else 1
+                    # FIXED: Safe float() for addon_price
+                    addon_price_raw = addon.get('addon_price')
+                    addon_price = float(addon_price_raw) if addon_price_raw is not None and str(addon_price_raw).strip() != '' else 0.0
+                    logger.info(f"Processed addon {addon_idx} for item {item_idx}: {addon['name1']} - Raw Qty: '{addon_qty_raw}', Processed Qty: {addon_qty}, Raw Price: '{addon_price_raw}', Processed Price: {addon_price}")
+                    
                     processed_addons.append({
                         "addon_name": addon['name1'],
-                        "addon_price": float(addon['addon_price']),
-                        "addon_quantity": int(addon['addon_quantity']),
+                        "addon_price": addon_price,
+                        "addon_quantity": addon_qty,
                         "addon_image": addon.get('addon_image', ''),
                         "size": addon.get('size', 'M'),
                         "kitchen": addon.get('kitchen', 'Main Kitchen'),
                     })
+                
                 processed_combos = []
-                for combo in item.get('selectedCombos', []):
+                for combo_idx, combo in enumerate(item.get('selectedCombos', [])):
                     if not all(key in combo for key in ['name1', 'combo_price']):
-                        logger.error("Invalid combo structure in sales invoice")
+                        logger.error(f"Invalid combo structure at item {item_idx}, combo {combo_idx}: {combo}")
                         return jsonify({"error": "Each combo must include name1 and combo_price"}), 400
+                    
+                    # FIXED: Safe int() for combo_quantity (handles '', None, non-numeric; defaults to 1 even if missing)
+                    combo_qty_raw = combo.get('combo_quantity', 1)  # Default 1 if missing key
+                    combo_qty = int(combo_qty_raw) if combo_qty_raw is not None and str(combo_qty_raw).strip() != '' and str(combo_qty_raw).isdigit() else 1
+                    # FIXED: Safe float() for combo_price
+                    combo_price_raw = combo.get('combo_price')
+                    combo_price = float(combo_price_raw) if combo_price_raw is not None and str(combo_price_raw).strip() != '' else 0.0
+                    logger.info(f"Processed combo {combo_idx} for item {item_idx}: {combo['name1']} - Raw Qty: '{combo_qty_raw}', Processed Qty: {combo_qty}, Raw Price: '{combo_price_raw}', Processed Price: {combo_price}")
+                    
                     processed_combos.append({
                         "name1": combo['name1'],
-                        "combo_price": float(combo['combo_price']),
-                        "combo_quantity": int(combo.get('combo_quantity', 1)),
+                        "combo_price": combo_price,
+                        "combo_quantity": combo_qty,
                         "combo_image": combo.get('combo_image', ''),
                         "size": combo.get('size', 'M'),
                         "spicy": combo.get('spicy', False),
                         "kitchen": combo.get('kitchen', 'Main Kitchen'),
                     })
+                
                 processed_items.append({
                     "item_name": item['item_name'],
-                    "basePrice": float(item['basePrice']),
-                    "quantity": int(item['quantity']),
-                    "amount": float(item.get('amount', item['basePrice'])),
+                    "basePrice": item['basePrice'],
+                    "quantity": item['quantity'],
+                    "amount": float(item.get('amount', item['basePrice'])) if item.get('amount') and str(item.get('amount')).strip() != '' else item['basePrice'],
                     "icePreference": item.get('icePreference', 'without_ice'),
                     "isSpicy": item.get('isSpicy', False),
                     "kitchen": item.get('kitchen', 'Main Kitchen'),
@@ -2020,14 +2088,15 @@ if config.get('mode') == 'server':
                     "ingredients": item.get('ingredients', []),
                     "addons": processed_addons,
                     "selectedCombos": processed_combos,
-                    # NEW: Preserve combo offer fields
                     "is_combo_offer": item.get('is_combo_offer', False),
                     "offer_description": item.get('offer_description'),
                 })
+            
             sales_data['items'] = processed_items
             sales_data['created_at'] = datetime.now(ZoneInfo("UTC")).isoformat()
             sales_id = sales_collection.insert_one(sales_data).inserted_id
-            logger.info(f"Sale saved successfully: {sales_data['invoice_no']}")
+            logger.info(f"Sale saved successfully: {sales_data['invoice_no']} (ID: {sales_id})")
+            
             return jsonify({
                 "id": sales_id,
                 "invoice_no": sales_data['invoice_no'],
@@ -2036,8 +2105,12 @@ if config.get('mode') == 'server':
                 "grand_total": sales_data['grand_total'],
                 "userId": sales_data['userId']
             }), 201
+            
+        except ValueError as ve:
+            logger.error(f"ValueError in sales invoice (likely qty/price conversion): {str(ve)}\nFull traceback: {traceback.format_exc()}")
+            return jsonify({"error": f"Invalid data conversion: {str(ve)}. Check quantities/prices."}), 400
         except Exception as e:
-            logger.error(f"Error creating sales invoice: {str(e)}")
+            logger.error(f"Error creating sales invoice: {str(e)}\n{traceback.format_exc()}")
             return jsonify({"error": str(e)}), 500
     @app.route('/api/sales', methods=['GET'])
     @db_required
@@ -2051,6 +2124,7 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error fetching sales: {str(e)}")
             return jsonify({"error": str(e)}), 500
+
     @app.route('/api/sales/<invoice_no>', methods=['GET'])
     @db_required
     def get_sale_by_invoice_no(invoice_no):
@@ -2065,6 +2139,7 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error fetching sale {invoice_no}: {str(e)}")
             return jsonify({"error": str(e)}), 500
+
     @app.route('/api/sales/<invoice_no>/status', methods=['PUT'])
     @db_required
     def update_sale_status(invoice_no):
@@ -4091,7 +4166,7 @@ def manage_company_details():
         response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
         return response, 200
-    
+   
     if request.method == 'POST':
         try:
             data = request.get_json()
@@ -4109,7 +4184,8 @@ def manage_company_details():
                 'taxNumber': data.get('taxNumber', ''),
                 'fssaiNumber': data.get('fssaiNumber', ''),
                 'panNumber': data.get('panNumber', ''),
-                'addresses': data.get('addresses', [{'addressLine1': '', 'addressLine2': '', 'city': '', 'state': '', 'pincode': '', 'country': ''}]),
+                # UPDATED: Addresses now use dynamic fields: country, field1, field2, field3, flat_villa_no, building_name
+                'addresses': data.get('addresses', [{'country': '', 'field1': '', 'field2': '', 'field3': '', 'flat_villa_no': '', 'building_name': ''}]),
                 'contacts': data.get('contacts', [{'phoneNumber': '', 'whatsappNumber': '', 'emailAddress': '', 'website': ''}]),
                 'bankName': data.get('bankName', ''),
                 'accountHolderName': data.get('accountHolderName', ''),
@@ -4131,7 +4207,7 @@ def manage_company_details():
         except Exception as e:
             logger.error(f"Error saving company details: {str(e)}")
             return jsonify({"error": f"Failed to save company details: {str(e)}"}), 500
-    
+   
     if request.method == 'GET':
         try:
             details = list(company_details_collection.find())

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaArrowLeft } from 'react-icons/fa';
+import axios from 'axios';
 import './SystemSettings.css';
 
 const SystemSettings = () => {
@@ -30,15 +31,54 @@ const SystemSettings = () => {
     firstDayOfWeek: 'Monday',
     floatPrecision: 3,
     currencyPrecision: 4,
+    sessionExpiry: '',
+    documentShareKeyExpiry: '',
+    denyMultipleSessions: false,
+    disableUserPassLogin: false,
+    allowLoginUsingMobileNumber: false,
+    allowLoginUsingUserName: false,
+    loginWithEmailLink: false,
+    allowConsecutiveLoginAttempts: 0,
+    allowLoginAfterFail: 0,
+    enableTwoFactorAuth: false,
   });
   const [clickCount, setClickCount] = useState(0);
   const [warningMessage, setWarningMessage] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
+  const [baseUrl, setBaseUrl] = useState("");
 
-  const fetchUsers = async () => {
+  // Fetch config to determine baseUrl
+  const fetchConfig = async () => {
+    let currentBaseUrl = "";
     try {
-      const response = await fetch('http://localhost:8000/api/users', {
+      const response = await axios.get("http://localhost:8000/api/network_info");
+      const { config: appConfig } = response.data;
+      if (appConfig.mode === "client") {
+        currentBaseUrl = `http://${appConfig.server_ip}:8000`;
+        setBaseUrl(currentBaseUrl);
+      } else {
+        setBaseUrl("");
+      }
+    } catch (error) {
+      console.error("Failed to fetch config:", error);
+      setBaseUrl("");
+    } finally {
+      // Fetch users and settings after determining baseUrl
+      if (currentBaseUrl) {
+        fetchUsers(currentBaseUrl);
+        fetchSettings(currentBaseUrl);
+      } else {
+        fetchUsers("");
+        fetchSettings("");
+      }
+    }
+  };
+
+  const fetchUsers = async (currentBaseUrl) => {
+    try {
+      const url = currentBaseUrl ? `${currentBaseUrl}/api/users` : 'http://localhost:8000/api/users';
+      const response = await fetch(url, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -59,9 +99,10 @@ const SystemSettings = () => {
     }
   };
 
-  const fetchSettings = async () => {
+  const fetchSettings = async (currentBaseUrl) => {
     try {
-      const response = await fetch('http://localhost:8000/api/settings', {
+      const url = currentBaseUrl ? `${currentBaseUrl}/api/settings` : 'http://localhost:8000/api/settings';
+      const response = await fetch(url, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -75,13 +116,19 @@ const SystemSettings = () => {
   };
 
   useEffect(() => {
-    fetchUsers();
-    fetchSettings();
+    fetchConfig();
     const storedSettings = JSON.parse(localStorage.getItem('systemSettings'));
     if (storedSettings) setSettings((prev) => ({ ...prev, ...storedSettings }));
-    const interval = setInterval(fetchUsers, 30000);
+    // Set up interval for fetching users after baseUrl is set
+    const interval = setInterval(() => {
+      if (baseUrl) {
+        fetchUsers(baseUrl);
+      } else {
+        fetchUsers("");
+      }
+    }, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [baseUrl]); // Depend on baseUrl to ensure it runs after baseUrl is set
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -96,7 +143,8 @@ const SystemSettings = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch('http://localhost:8000/api/settings', {
+      const url = baseUrl ? `${baseUrl}/api/settings` : 'http://localhost:8000/api/settings';
+      const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings),
@@ -140,7 +188,8 @@ const SystemSettings = () => {
         pos_profile: 'POS-001',
       };
       try {
-        const response = await fetch('http://localhost:8000/api/register', {
+        const url = baseUrl ? `${baseUrl}/api/register` : 'http://localhost:8000/api/register';
+        const response = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newUserData),
@@ -149,7 +198,7 @@ const SystemSettings = () => {
           const errorData = await response.json();
           throw new Error(errorData.message || 'Failed to add user');
         }
-        await fetchUsers();
+        await fetchUsers(baseUrl);
         setNewUser({ email: '', firstName: '', phoneNumber: '', roleProfile: 'User', password: '' });
         setShowAddUserForm(false);
         setWarningMessage('User added successfully! You can now login with these credentials.');
@@ -169,7 +218,8 @@ const SystemSettings = () => {
 
   const confirmDelete = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/api/users/${userToDelete}`, {
+      const url = baseUrl ? `${baseUrl}/api/users/${userToDelete}` : `http://localhost:8000/api/users/${userToDelete}`;
+      const response = await fetch(url, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -177,7 +227,7 @@ const SystemSettings = () => {
         const errorData = await response.json();
         throw new Error(errorData.message || 'Failed to delete user');
       }
-      await fetchUsers();
+      await fetchUsers(baseUrl);
       setWarningMessage('User deleted successfully!');
     } catch (error) {
       console.error('Error deleting user:', error);
@@ -189,21 +239,24 @@ const SystemSettings = () => {
   };
 
   const dateFormatOptions = [
-    'dd-mm-yyyy', 
-    'mm-dd-yyyy', 
-    'yyyy-mm-dd', 
-    'dd/mm/yyyy', 
-    'mm/dd/yyyy', 
+    'dd-mm-yyyy',
+    'mm-dd-yyyy',
+    'yyyy-mm-dd',
+    'dd/mm/yyyy',
+    'mm/dd/yyyy',
     'yyyy/mm/dd',
-    'yyyy-long-mm-dd'  // New: yyyy longmonth dd, e.g., 2025 October 29
+    'yyyy-long-mm-dd' // New: yyyy longmonth dd, e.g., 2025 October 29
   ];
+
   const timeFormatOptions = [
-    'HH:mm:ss',  // 24-hour with seconds
-    'hh:mm:ss a',  // 12-hour with seconds and AM/PM
-    'HH:mm',  // 24-hour without seconds
-    'hh:mm a'  // 12-hour without seconds and AM/PM
+    'HH:mm:ss', // 24-hour with seconds
+    'hh:mm:ss a', // 12-hour with seconds and AM/PM
+    'HH:mm', // 24-hour without seconds
+    'hh:mm a' // 12-hour without seconds and AM/PM
   ];
+
   const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
   const roleProfileOptions = ['User', 'Admin', 'Bearer'];
 
   const renderUserList = () => (
@@ -325,7 +378,6 @@ const SystemSettings = () => {
 
   const renderTabContent = () => {
     if (showUserList) return renderUserList();
-
     switch (activeTab) {
       case 'Details':
         return (
@@ -504,7 +556,6 @@ const SystemSettings = () => {
         </div>
       )}
       <div className="content">{renderTabContent()}</div>
-
       {showDeleteConfirm && (
         <>
           <div className="modal-overlay" onClick={() => setShowDeleteConfirm(false)} />

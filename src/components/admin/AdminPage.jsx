@@ -1,4 +1,3 @@
-// AdminPage.jsx (updated with Sign-Out Confirmation Modal and System Settings moved to Settings submenu)
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -100,7 +99,7 @@ function AdminPage() {
 
   // Check allowed file types for logo
   const allowedFile = (filename) => {
-    const allowed = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'jfif'];
+    const allowed = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'jfif','ico'];
     return allowed.some(ext => filename.toLowerCase().endsWith(`.${ext}`));
   };
 
@@ -275,8 +274,8 @@ function AdminPage() {
         { icon: <FaUtensils />, text: 'Add Kitchen', path: '/add-kitchen' },
         { icon: <FaUtensils />, text: 'Add Ingredient & Nutrition', path: '/add-ingredients-nutrition' },
         { icon: <FaLayerGroup />, text: 'Add Variant', path: '/create-variant' },
-        { icon: <FaMoneyBill />, text: 'Vat', path: '/vat' },
         { icon: <FaGift />, text: 'Combo Offer', path: '/combo-offer' },
+        // MOVED: Vat removed from Items and placed in Settings
       ],
     },
     {
@@ -295,6 +294,7 @@ function AdminPage() {
         { icon: <FaBuilding />, text: 'Company Details', path: '/company-details' },
         { icon: <FaPrint />, text: 'Print Settings', path: '/print-settings' },
         { icon: <FaEnvelope />, text: 'Email Settings', path: '/email-settings' },
+        { icon: <FaMoneyBill />, text: 'Vat', path: '/vat' }, // MOVED: Vat added to Settings
         { icon: <FaDatabase />, text: 'Backups', path: '/backup' },
         { icon: <FaCog />, text: 'System Settings', path: '/system-settings' }, // MOVED: System Settings added here
       ],

@@ -1,7 +1,79 @@
+// src/components/CompanyDetails.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { FaArrowLeft, FaBuilding, FaPlus } from 'react-icons/fa';
+
+const SearchableSelect = ({ options = [], value = '', onChange, placeholder }) => {
+  const [search, setSearch] = useState(value || '');
+  const [showList, setShowList] = useState(false);
+
+  useEffect(() => {
+    setSearch(value || '');
+  }, [value]);
+
+  const filteredOptions = options.filter(option =>
+    option.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const handleInputChange = (e) => {
+    const newSearch = e.target.value;
+    setSearch(newSearch);
+    if (!showList) {
+      setShowList(true);
+    }
+  };
+
+  const handleSelectOption = (option) => {
+    setSearch(option);
+    if (onChange) {
+      onChange(option);
+    }
+    setShowList(false);
+  };
+
+  const handleFocus = () => {
+    setShowList(true);
+  };
+
+  const handleBlur = () => {
+    setTimeout(() => {
+      setShowList(false);
+    }, 200);
+  };
+
+  return (
+    <div className="searchable-select">
+      <input
+        type="text"
+        value={search}
+        onChange={handleInputChange}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+        placeholder={placeholder}
+      />
+      {showList && (
+        <ul className="searchable-list">
+          {filteredOptions.length > 0 ? (
+            filteredOptions.map((option, index) => (
+              <li
+                key={index}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  handleSelectOption(option);
+                }}
+              >
+                {option}
+              </li>
+            ))
+          ) : (
+            <li className="no-options">No matching options</li>
+          )}
+        </ul>
+      )}
+    </div>
+  );
+};
 
 function CompanyDetails() {
   const navigate = useNavigate();
@@ -15,7 +87,7 @@ function CompanyDetails() {
     taxNumber: '',
     fssaiNumber: '',
     panNumber: '',
-    addresses: [{ addressLine1: '', addressLine2: '', city: '', state: '', pincode: '', country: '' }],
+    addresses: [{ country: '', field1: '', field2: '', field3: '', flat_villa_no: '', building_name: '' }],
     contacts: [{ phoneNumber: '', whatsappNumber: '', emailAddress: '', website: '' }],
     bankName: '',
     accountHolderName: '',
@@ -30,15 +102,49 @@ function CompanyDetails() {
   const [activeSection, setActiveSection] = useState('basic'); // Default to 'basic' to show form first
   const [savedDetails, setSavedDetails] = useState(null);
   const [logoUrl, setLogoUrl] = useState(null); // State for logo URL
+  const [addressStructure, setAddressStructure] = useState({ countries: {} });
+  const [linkedValues, setLinkedValues] = useState({});
+  const [baseUrl, setBaseUrl] = useState(""); // NEW: Added baseUrl state like in AdminPage
+  const countryList = Object.keys(addressStructure.countries || {});
 
-  // Function to fetch the logo
-  const fetchLogo = async () => {
+  // NEW: Fetch config to determine baseUrl
+  const fetchConfig = async () => {
+    let currentBaseUrl = "";
     try {
-      // Assuming API URL is the same base as other calls
-      const response = await axios.get('http://localhost:8000/api/logo');
+      const response = await axios.get("http://localhost:8000/api/network_info");
+      const { config: appConfig } = response.data;
+      if (appConfig.mode === "client") {
+        currentBaseUrl = `http://${appConfig.server_ip}:8000`;
+        setBaseUrl(currentBaseUrl);
+      } else {
+        setBaseUrl("");
+      }
+    } catch (error) {
+      console.error("Failed to fetch config:", error);
+      setBaseUrl("");
+    } finally {
+      // Pass the determined baseUrl to fetch functions
+      if (currentBaseUrl) {
+        fetchLogo(currentBaseUrl);
+        fetchAddressStructure(currentBaseUrl);
+        fetchCompanyDetails(currentBaseUrl);
+      } else {
+        // If not client mode, use empty baseUrl (local)
+        fetchLogo("");
+        fetchAddressStructure("");
+        fetchCompanyDetails("");
+      }
+    }
+  };
+
+  // UPDATED: Fetch logo with baseUrl
+  const fetchLogo = async (currentBaseUrl) => {
+    try {
+      const response = await axios.get(`${currentBaseUrl}/api/logo`);
       if (response.data.logo) {
-        // Prepend the base URL as the path might be relative
-        setLogoUrl('http://localhost:8000' + response.data.logo);
+        // Prepend the baseUrl if it's not already included
+        const logoPath = response.data.logo.startsWith('http') ? response.data.logo : currentBaseUrl + response.data.logo;
+        setLogoUrl(logoPath);
       }
     } catch (err) {
       console.error("Failed to fetch logo:", err);
@@ -46,14 +152,23 @@ function CompanyDetails() {
     }
   };
 
-  useEffect(() => {
-    fetchCompanyDetails();
-    fetchLogo(); // Call fetchLogo on component mount
-  }, []);
-
-  const fetchCompanyDetails = async () => {
+  // UPDATED: Fetch address structure with baseUrl
+  const fetchAddressStructure = async (currentBaseUrl) => {
     try {
-      const response = await axios.get('http://localhost:8000/api/company-details');
+      const response = await axios.get(`${currentBaseUrl}/api/address-structures`);
+      if (response.data) {
+        setAddressStructure(response.data.structure || { countries: {} });
+        setLinkedValues(response.data.linkedValues || {});
+      }
+    } catch (error) {
+      console.error('Error fetching address structure:', error);
+    }
+  };
+
+  // UPDATED: Fetch company details with baseUrl
+  const fetchCompanyDetails = async (currentBaseUrl) => {
+    try {
+      const response = await axios.get(`${currentBaseUrl}/api/company-details`);
       if (response.data.companyDetails && response.data.companyDetails.length > 0) {
         const latestDetails = response.data.companyDetails[response.data.companyDetails.length - 1];
         setSavedDetails(latestDetails);
@@ -68,6 +183,10 @@ function CompanyDetails() {
       console.error('Fetch error:', err);
     }
   };
+
+  useEffect(() => {
+    fetchConfig(); // UPDATED: Call fetchConfig instead of individual fetches
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -91,7 +210,7 @@ function CompanyDetails() {
   const addAddress = () => {
     setFormData((prev) => ({
       ...prev,
-      addresses: [...prev.addresses, { addressLine1: '', addressLine2: '', city: '', state: '', pincode: '', country: '' }],
+      addresses: [...prev.addresses, { country: '', field1: '', field2: '', field3: '', flat_villa_no: '', building_name: '' }],
     }));
   };
 
@@ -102,6 +221,26 @@ function CompanyDetails() {
     }));
   };
 
+  // Helper to get filtered values for field2 and field3 based on field1
+  const getFilteredValues = (addressIndex, field) => {
+    const address = formData.addresses[addressIndex];
+    if (!address.country || !address.field1) return [];
+    const links = linkedValues[address.country]?.[address.field1];
+    return links?.[field] || [];
+  };
+
+  const handleAddressFieldChange = (index, field, value) => {
+    const newAddresses = [...formData.addresses];
+    newAddresses[index][field] = value;
+    // If changing country or field1, clear dependent fields (field2, field3)
+    if (field === 'country' || field === 'field1') {
+      newAddresses[index].field2 = '';
+      newAddresses[index].field3 = '';
+    }
+    setFormData((prev) => ({ ...prev, addresses: newAddresses }));
+  };
+
+  // UPDATED: Handle submit with baseUrl
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -109,11 +248,12 @@ function CompanyDetails() {
       setError(null);
       setMessage('');
       console.log('Submitting form data:', formData); // Debug log
-      const response = await axios.post('http://localhost:8000/api/company-details', formData);
+      const response = await axios.post(`${baseUrl}/api/company-details`, formData);
       setMessage('Company details saved successfully!');
       setSavedDetails(response.data.companyDetails); // Update with the saved data
       console.log('Saved details:', response.data.companyDetails); // Debug log
-      await fetchCompanyDetails(); // Refresh the displayed details
+      // Refresh the displayed details with baseUrl
+      fetchCompanyDetails(baseUrl);
       setActiveSection('details'); // Switch to details view after saving
     } catch (err) {
       setError('Failed to save company details: ' + err.message);
@@ -127,12 +267,24 @@ function CompanyDetails() {
     return formData.taxType === 'GST' ? 'GST Number' : 'VAT Number';
   };
 
+  // Format address for print/display: flat_villa_no, building_name, field3, field2, field1, country
+  const formatAddressForPrint = (address) => {
+    const parts = [];
+    if (address.flat_villa_no) parts.push(address.flat_villa_no);
+    if (address.building_name) parts.push(address.building_name);
+    if (address.field3) parts.push(address.field3);
+    if (address.field2) parts.push(address.field2);
+    if (address.field1) parts.push(address.field1);
+    if (address.country) parts.push(address.country);
+    return parts.length > 0 ? parts.join(', ') : 'N/A';
+  };
+
+  // UPDATED: Handle print with dynamic logoUrl
   const handlePrint = () => {
     if (!savedDetails) {
       setError('No saved details available to print.');
       return;
     }
-
     console.log('Printing details:', savedDetails); // Debug log
     const printWindow = window.open('', '_blank');
     printWindow.document.write(`
@@ -141,13 +293,13 @@ function CompanyDetails() {
           <title>Company Details Application</title>
           <style>
             body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; }
-            .a4-sheet { 
-              width: 210mm; 
-              min-height: 297mm; 
-              padding: 20mm; 
-              margin: 10mm auto; 
-              background: #fff; 
-              box-shadow: 0 0 5px rgba(0,0,0,0.1); 
+            .a4-sheet {
+              width: 210mm;
+              min-height: 297mm;
+              padding: 20mm;
+              margin: 10mm auto;
+              background: #fff;
+              box-shadow: 0 0 5px rgba(0,0,0,0.1);
               box-sizing: border-box;
             }
             .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
@@ -181,10 +333,8 @@ function CompanyDetails() {
               ` : '<div></div>'}
               <h1>Company Details<br/>Application</h1>
             </div>
-
             <!-- MODIFIED: Border Line -->
             <hr class="divider" />
-
             <div class="section">
               <h3>Basic Information</h3>
               <div class="row">
@@ -208,15 +358,7 @@ function CompanyDetails() {
                 <div class="row" style="margin-bottom: 15px; border-bottom: 1px dashed #ccc; padding-bottom: 10px;">
                   <div class="column">
                     <div class="field"><span class="centered-label">Address ${index + 1}:</span><span class="value"></span></div>
-                    <div class="field"><span class="label">Line 1:</span><span class="value">${address.addressLine1 || 'N/A'}</span></div>
-                    <div class="field"><span class="label">City:</span><span class="value">${address.city || 'N/A'}</span></div>
-                    <div class="field"><span class="label">Pincode:</span><span class="value">${address.pincode || 'N/A'}</span></div>
-                  </div>
-                  <div class="column">
-                    <div class="field"><span class="label"></span><span class="value"></span></div>
-                    <div class="field"><span class="label">Line 2:</span><span class="value">${address.addressLine2 || 'N/A'}</span></div>
-                    <div class="field"><span class="label">State:</span><span class="value">${address.state || 'N/A'}</span></div>
-                    <div class="field"><span class="label">Country:</span><span class="value">${address.country || 'N/A'}</span></div>
+                    <div class="field"><span class="label">Full Address:</span><span class="value">${formatAddressForPrint(address)}</span></div>
                   </div>
                 </div>
               `).join('') : '<div class="row"><div class="column"><div class="field"><span class="centered-label">No addresses available.</span><span class="value"></span></div></div></div>'}
@@ -239,7 +381,7 @@ function CompanyDetails() {
               `).join('') : '<div class="row"><div class="column"><div class="field"><span class="centered-label">No contacts available.</span><span class="value"></span></div></div></div>'}
             </div>
             <div class="section">
-              <h3>Payment Information</h3>
+              <h3>Bank Details</h3>
               <div class="row">
                 <div class="column">
                   <div class="field"><span class="label">Bank Name:</span><span class="value">${savedDetails.bankName || 'N/A'}</span></div>
@@ -389,7 +531,7 @@ function CompanyDetails() {
               fontSize: '1rem',
             }}
           >
-            Payment Information
+            Bank Details
           </button>
         </div>
         <div style={{ display: 'grid', gap: '20px' }}>
@@ -427,15 +569,15 @@ function CompanyDetails() {
                       }}
                     />
                   ) : (
-                    <div style={{ 
-                      width: '100px', 
-                      height: '100px', 
-                      border: '1px dashed #ccc', 
-                      borderRadius: '10px', 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'center', 
-                      color: '#888', 
+                    <div style={{
+                      width: '100px',
+                      height: '100px',
+                      border: '1px dashed #ccc',
+                      borderRadius: '10px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#888',
                       fontSize: '12px',
                       padding: '10px',
                       textAlign: 'center'
@@ -443,16 +585,14 @@ function CompanyDetails() {
                       No Logo Uploaded
                     </div>
                   )}
-                  
+                
                   {/* Title */}
                   <h3 style={{ color: '#2c3e50', fontSize: '1.8rem', margin: 0, textAlign: 'right', fontWeight: '600' }}>
                     Company Details<br/>Application
                   </h3>
                 </div>
-
                 {/* Border Line */}
                 <hr style={{ border: '0', borderTop: '2px solid #3498db', marginBottom: '25px' }} />
-
                 {/* Saved Details Content */}
                 {savedDetails ? (
                   <div style={{ display: 'grid', gap: '20px' }}>
@@ -474,24 +614,14 @@ function CompanyDetails() {
                         </div>
                       </div>
                     </div>
-                    {/* Address Details */}
+                    {/* Address Details - UPDATED: Use formatAddressForPrint */}
                     <div className="section">
                       <h4 style={{ color: '#2c3e50', fontSize: '1.3rem', textAlign: 'center', borderBottom: '1px solid #eee', paddingBottom: '8px', marginBottom: '15px' }}>Address Details</h4>
                       {savedDetails.addresses && savedDetails.addresses.length > 0 ? savedDetails.addresses.map((address, index) => (
                         <div key={index} style={{ marginBottom: '15px', borderBottom: '1px dashed #ccc', paddingBottom: '10px', fontSize: '0.95rem' }}>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: '10px' }}>
-                            <div style={{ width: '48%', minWidth: '250px' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'center', paddingRight: '10px', color: '#333' }}>Address {index + 1}:</strong> <span style={{ width: '60%', textAlign: 'left' }}></span></div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>Line 1:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{address.addressLine1 || 'N/A'}</span></div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>City:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{address.city || 'N/A'}</span></div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>Pincode:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{address.pincode || 'N/A'}</span></div>
-                            </div>
-                            <div style={{ width: '48%', minWidth: '250px' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px' }}></strong> <span style={{ width: '60%', textAlign: 'left' }}></span></div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>Line 2:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{address.addressLine2 || 'N/A'}</span></div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>State:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{address.state || 'N/A'}</span></div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>Country:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{address.country || 'N/A'}</span></div>
-                            </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                            <strong style={{ width: '40%', textAlign: 'center', paddingRight: '10px', color: '#333' }}>Address {index + 1}:</strong>
+                            <span style={{ width: '60%', textAlign: 'left' }}>{formatAddressForPrint(address)}</span>
                           </div>
                         </div>
                       )) : <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'center', paddingRight: '10px' }}>No addresses available.</strong> <span style={{ width: '60%', textAlign: 'left' }}></span></div>}
@@ -516,9 +646,9 @@ function CompanyDetails() {
                         </div>
                       )) : <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong style={{ width: '40%', textAlign: 'center', paddingRight: '10px' }}>No contacts available.</strong> <span style={{ width: '60%', textAlign: 'left' }}></span></div>}
                     </div>
-                    {/* Payment Information */}
+                    {/* Bank Details */}
                     <div className="section">
-                      <h4 style={{ color: '#2c3e50', fontSize: '1.3rem', textAlign: 'center', borderBottom: '1px solid #eee', paddingBottom: '8px', marginBottom: '15px' }}>Payment Information</h4>
+                      <h4 style={{ color: '#2c3e50', fontSize: '1.3rem', textAlign: 'center', borderBottom: '1px solid #eee', paddingBottom: '8px', marginBottom: '15px' }}>Bank Details</h4>
                       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: '10px', fontSize: '0.95rem' }}>
                         <div style={{ width: '48%', minWidth: '250px' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><strong style={{ width: '40%', textAlign: 'right', paddingRight: '10px', color: '#555' }}>Bank Name:</strong> <span style={{ width: '60%', textAlign: 'left' }}>{savedDetails.bankName || 'N/A'}</span></div>
@@ -644,58 +774,82 @@ function CompanyDetails() {
               </div>
             </div>
           )}
+          {/* UPDATED: Address section with dynamic fields */}
           {activeSection === 'address' && (
             <div>
               <h3 style={{ color: '#2c3e50', fontSize: '1.5rem', marginBottom: '15px', textAlign: 'center' }}>Address Details</h3>
               {formData.addresses.map((address, index) => (
                 <div key={index} style={{ display: 'grid', gap: '15px', marginBottom: '15px', border: '1px solid #ddd', padding: '10px', borderRadius: '10px' }}>
                   <h4 style={{textAlign: 'center', margin: '5px 0'}}>Address {index + 1}</h4>
-                  <input
-                    type="text"
-                    name="addressLine1"
-                    value={address.addressLine1}
-                    onChange={(e) => handleAddressChange(index, e)}
-                    placeholder="Address Line 1"
-                    style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
-                  />
-                  <input
-                    type="text"
-                    name="addressLine2"
-                    value={address.addressLine2}
-                    onChange={(e) => handleAddressChange(index, e)}
-                    placeholder="Address Line 2 (optional)"
-                    style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
-                  />
-                  <input
-                    type="text"
-                    name="city"
-                    value={address.city}
-                    onChange={(e) => handleAddressChange(index, e)}
-                    placeholder="City"
-                    style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
-                  />
-                  <input
-                    type="text"
-                    name="state"
-                    value={address.state}
-                    onChange={(e) => handleAddressChange(index, e)}
-                    placeholder="State"
-                    style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
-                  />
-                  <input
-                    type="text"
-                    name="pincode"
-                    value={address.pincode}
-                    onChange={(e) => handleAddressChange(index, e)}
-                    placeholder="Pincode"
-                    style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
-                  />
-                  <input
-                    type="text"
-                    name="country"
+                  {/* Country */}
+                  <SearchableSelect
+                    options={countryList}
                     value={address.country}
+                    onChange={(value) => handleAddressFieldChange(index, 'country', value)}
+                    placeholder="Select Country"
+                  />
+                  {/* Field1 */}
+                  {address.country && addressStructure.countries[address.country]?.field1 && (
+                    <div>
+                      <label style={{ fontWeight: 'bold', color: '#555', fontSize: '0.9rem' }}>
+                        {addressStructure.countries[address.country].field1.label}
+                      </label>
+                      <SearchableSelect
+                        options={addressStructure.countries[address.country].field1.values || []}
+                        value={address.field1}
+                        onChange={(value) => handleAddressFieldChange(index, 'field1', value)}
+                        placeholder={`Select ${addressStructure.countries[address.country].field1.label}`}
+                      />
+                    </div>
+                  )}
+                  {/* Field2 */}
+                  {address.country && addressStructure.countries[address.country]?.field2 && (
+                    <div>
+                      <label style={{ fontWeight: 'bold', color: '#555', fontSize: '0.9rem' }}>
+                        {addressStructure.countries[address.country].field2.label}
+                      </label>
+                      <SearchableSelect
+                        options={getFilteredValues(index, 'field2').length > 0
+                          ? getFilteredValues(index, 'field2')
+                          : (addressStructure.countries[address.country].field2.values || [])}
+                        value={address.field2}
+                        onChange={(value) => handleAddressFieldChange(index, 'field2', value)}
+                        placeholder={`Select ${addressStructure.countries[address.country].field2.label}`}
+                      />
+                    </div>
+                  )}
+                  {/* Field3 */}
+                  {address.country && addressStructure.countries[address.country]?.field3 && (
+                    <div>
+                      <label style={{ fontWeight: 'bold', color: '#555', fontSize: '0.9rem' }}>
+                        {addressStructure.countries[address.country].field3.label}
+                      </label>
+                      <SearchableSelect
+                        options={getFilteredValues(index, 'field3').length > 0
+                          ? getFilteredValues(index, 'field3')
+                          : (addressStructure.countries[address.country].field3.values || [])}
+                        value={address.field3}
+                        onChange={(value) => handleAddressFieldChange(index, 'field3', value)}
+                        placeholder={`Select ${addressStructure.countries[address.country].field3.label}`}
+                      />
+                    </div>
+                  )}
+                  {/* Flat / Villa No */}
+                  <input
+                    type="text"
+                    name="flat_villa_no"
+                    value={address.flat_villa_no}
                     onChange={(e) => handleAddressChange(index, e)}
-                    placeholder="Country"
+                    placeholder="Flat / Villa No"
+                    style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
+                  />
+                  {/* Building Name */}
+                  <input
+                    type="text"
+                    name="building_name"
+                    value={address.building_name}
+                    onChange={(e) => handleAddressChange(index, e)}
+                    placeholder="Building Name"
                     style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
                   />
                 </div>
@@ -784,7 +938,7 @@ function CompanyDetails() {
           )}
           {activeSection === 'payment' && (
             <div>
-              <h3 style={{ color: '#2c3e50', fontSize: '1.5rem', marginBottom: '15px', textAlign: 'center' }}>Payment Information (Optional)</h3>
+              <h3 style={{ color: '#2c3e50', fontSize: '1.5rem', marginBottom: '15px', textAlign: 'center' }}>Bank Details</h3>
               <div style={{ display: 'grid', gap: '15px' }}>
                 <input
                   type="text"
@@ -879,6 +1033,61 @@ function CompanyDetails() {
           </div>
         </div>
       </div>
+      <style>{`
+        /* Searchable Select */
+        .searchable-select {
+          position: relative;
+          width: 100%;
+        }
+        .searchable-select input {
+          width: 100%;
+          height: 42px;
+          padding: 0 12px;
+          border: 1px solid #bdc3c7;
+          border-radius: 10px;
+          font-size: 1rem;
+          transition: all 0.2s;
+          box-sizing: border-box;
+        }
+        .searchable-select input:focus {
+          outline: none;
+          border-color: #3498db;
+          box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
+        }
+        .searchable-list {
+          position: absolute;
+          top: 100%;
+          left: 0;
+          right: 0;
+          background: #fff;
+          border: 1px solid #bdc3c7;
+          border-top: none;
+          border-radius: 0 0 10px 10px;
+          max-height: 200px;
+          overflow-y: auto;
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          z-index: 100;
+          box-shadow: 0 4px 12px rgba(0,0,0,.15);
+        }
+        .searchable-list li {
+          padding: 8px 12px;
+          cursor: pointer;
+          font-size: 1rem;
+          border-bottom: 1px solid #f0f0f0;
+        }
+        .searchable-list li:hover {
+          background: #f8f9fa;
+        }
+        .searchable-list .no-options {
+          color: #6c757d;
+          font-style: italic;
+          cursor: default;
+          padding: 12px;
+          text-align: center;
+        }
+      `}</style>
     </div>
   );
 }

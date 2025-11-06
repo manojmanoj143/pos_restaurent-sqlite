@@ -18,11 +18,13 @@ const UserList = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [baseUrl, setBaseUrl] = useState('');
 
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:8000/api/users', {
+      const apiUrl = `${baseUrl}/api/users`;
+      const response = await fetch(apiUrl, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -46,11 +48,38 @@ const UserList = () => {
     }
   };
 
+  // Fetch config to determine baseUrl
+  const fetchConfig = async () => {
+    let currentBaseUrl = '';
+    try {
+      const response = await fetch('http://localhost:8000/api/network_info', {
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!response.ok) throw new Error(`Failed to fetch config: ${response.statusText}`);
+      const data = await response.json();
+      const { config: appConfig } = data;
+      if (appConfig.mode === 'client') {
+        currentBaseUrl = `http://${appConfig.server_ip}:8000`;
+      }
+      setBaseUrl(currentBaseUrl);
+    } catch (error) {
+      console.error('Failed to fetch config:', error);
+      setBaseUrl('');
+    }
+  };
+
   useEffect(() => {
-    fetchUsers();
-    const interval = setInterval(fetchUsers, 30000);
-    return () => clearInterval(interval);
+    fetchConfig();
   }, []);
+
+  // Fetch users when baseUrl is set
+  useEffect(() => {
+    if (baseUrl !== undefined) {
+      fetchUsers();
+      const interval = setInterval(fetchUsers, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [baseUrl]);
 
   const handleNewUserChange = (e) => {
     const { name, value } = e.target;
@@ -74,7 +103,8 @@ const UserList = () => {
     };
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:8000/api/register', {
+      const apiUrl = `${baseUrl}/api/register`;
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newUserData),
@@ -103,7 +133,8 @@ const UserList = () => {
   const confirmDelete = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:8000/api/users/${userToDelete}`, {
+      const apiUrl = `${baseUrl}/api/users/${userToDelete}`;
+      const response = await fetch(apiUrl, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
       });

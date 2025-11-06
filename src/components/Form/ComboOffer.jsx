@@ -1,4 +1,3 @@
-// src/components/Form/ComboOffer.jsx (full completed code with error handling and no 500 errors)
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
@@ -17,7 +16,6 @@ const initialFormState = {
 const ComboOffer = () => {
   const navigate = useNavigate();
   const location = useLocation();
-
   const [formData, setFormData] = useState(initialFormState);
   const [allItems, setAllItems] = useState([]);
   const [selectedComponents, setSelectedComponents] = useState([]); // To hold selected items/addons/combos
@@ -25,24 +23,48 @@ const ComboOffer = () => {
   const [warningMessage, setWarningMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [isEdit, setIsEdit] = useState(false);
+  const [baseUrl, setBaseUrl] = useState(""); // NEW: Added baseUrl state like in AdminPage
 
-  /* -------------------------------------------------- FETCH ALL ITEMS -------------------------------------------------- */
+  /* -------------------------------------------------- FETCH CONFIG FOR BASE URL -------------------------------------------------- */
+  // NEW: Added fetchConfig useEffect similar to AdminPage to determine baseUrl for client/server mode
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
+    const fetchConfig = async () => {
+      let currentBaseUrl = "";
       try {
-        const itemsResponse = await axios.get("http://localhost:8000/api/items");
-        setAllItems(itemsResponse.data);
+        const response = await axios.get("http://localhost:8000/api/network_info");
+        const { config: appConfig } = response.data;
+        if (appConfig.mode === "client") {
+          currentBaseUrl = `http://${appConfig.server_ip}:8000`;
+          setBaseUrl(currentBaseUrl);
+        } else {
+          setBaseUrl("");
+        }
       } catch (error) {
-        const errorMsg = error.response?.data?.error || error.message;
-        setWarningMessage(`Error fetching data: ${errorMsg}`);
-        toast.error(`Error fetching data: ${errorMsg}`); // NEW: Toast for better UX
+        console.error("Failed to fetch config:", error);
+        setBaseUrl("");
       } finally {
-        setLoading(false);
+        // After config, fetch items using the determined currentBaseUrl
+        fetchData(currentBaseUrl);
       }
     };
-    fetchData();
+    fetchConfig();
   }, []);
+
+  /* -------------------------------------------------- FETCH ALL ITEMS -------------------------------------------------- */
+  const fetchData = async (currentBaseUrl = "") => {
+    setLoading(true);
+    try {
+      // UPDATED: Use dynamic baseUrl like in AdminPage
+      const itemsResponse = await axios.get(`${currentBaseUrl || 'http://localhost:8000'}/api/items`);
+      setAllItems(itemsResponse.data);
+    } catch (error) {
+      const errorMsg = error.response?.data?.error || error.message;
+      setWarningMessage(`Error fetching data: ${errorMsg}`);
+      toast.error(`Error fetching data: ${errorMsg}`); // NEW: Toast for better UX
+    } finally {
+      setLoading(false);
+    }
+  };
 
   /* -------------------------------------------------- EDIT MODE -------------------------------------------------- */
   useEffect(() => {
@@ -78,7 +100,6 @@ const ComboOffer = () => {
   const handleSelection = (type, id, index = null) => {
     const selected = allItems.find((item) => item._id === id);
     if (!selected) return;
-
     let component;
     if (type === "item") {
       if (selected.price_list_rate === undefined) return;
@@ -98,9 +119,7 @@ const ComboOffer = () => {
         price: selected.combos[index].combo_price,
       };
     }
-
     if (!component || component.price === undefined) return;
-
     setSelectedComponents((prev) => [...prev, component]);
     setTotalPrice((prev) => prev + component.price);
     setFormData((prev) => ({
@@ -113,7 +132,6 @@ const ComboOffer = () => {
   const removeSelection = (index) => {
     const removed = selectedComponents[index];
     if (!removed || removed.price === undefined) return;
-
     setSelectedComponents((prev) => prev.filter((_, i) => i !== index));
     setTotalPrice((prev) => prev - (removed?.price || 0));
     setFormData((prev) => {
@@ -145,6 +163,8 @@ const ComboOffer = () => {
     if (!validateOfferTimes()) return; // NEW: Validate before submit
     setLoading(true);
     try {
+      // UPDATED: Use dynamic baseUrl for POST/PUT requests like in AdminPage
+      const apiBase = baseUrl || 'http://localhost:8000';
       // Ensure times are UTC ISO
       const submitData = { ...formData };
       if (submitData.offer_start_time) {
@@ -154,10 +174,10 @@ const ComboOffer = () => {
         submitData.offer_end_time = new Date(submitData.offer_end_time).toISOString();
       }
       if (isEdit) {
-        await axios.put(`http://localhost:8000/api/combo-offer/${submitData._id}`, submitData);
+        await axios.put(`${apiBase}/api/combo-offer/${submitData._id}`, submitData);
         toast.success("Combo offer updated successfully!"); // NEW: Toast
       } else {
-        await axios.post("http://localhost:8000/api/combo-offer", submitData);
+        await axios.post(`${apiBase}/api/combo-offer`, submitData);
         toast.success("Combo offer created successfully!"); // NEW: Toast
       }
       navigate("/admin", { replace: true });
@@ -272,13 +292,10 @@ const ComboOffer = () => {
         </button>
         <h2 style={titleStyle}>{isEdit ? "Edit Combo Offer" : "Create Combo Offer"}</h2>
       </div>
-
       {/* Warning / Success */}
       {warningMessage && <div style={warningStyle}>{warningMessage}</div>}
-
       {/* Loading */}
       {loading && <div style={loadingStyle}>Loading...</div>}
-
       {/* Form Card */}
       <div style={formCardStyle}>
         <form onSubmit={handleSubmit}>
@@ -293,7 +310,6 @@ const ComboOffer = () => {
               required
             />
           </div>
-
           {/* Select Items / Addons / Combos – FIXED: Using flatMap to avoid nested arrays */}
           <div style={formGroupStyle}>
             <label style={labelStyle}>Select Items/Addons/Combos</label>
@@ -326,7 +342,6 @@ const ComboOffer = () => {
               ])}
             </select>
           </div>
-
           {/* Selected Components */}
           <div style={selectedComponentsStyle}>
             <h3>Selected Components</h3>
@@ -352,7 +367,6 @@ const ComboOffer = () => {
                 </button>
               </div>
             ))}
-
             {/* Editable Total Price */}
             <div style={totalPriceStyle}>
               <label style={labelStyle}>Total Price (Editable)</label>
@@ -368,7 +382,6 @@ const ComboOffer = () => {
               />
             </div>
           </div>
-
           {/* Offer Price – WHEEL DISABLED */}
           <div style={formGroupStyle}>
             <label style={labelStyle}>Offer Price (Optional)</label>
@@ -384,7 +397,6 @@ const ComboOffer = () => {
               onWheel={(e) => e.target.blur()}
             />
           </div>
-
           {/* Offer Start Time */}
           <div style={formGroupStyle}>
             <label style={labelStyle}>Offer Start Time (Optional)</label>
@@ -396,7 +408,6 @@ const ComboOffer = () => {
               style={inputStyle}
             />
           </div>
-
           {/* Offer End Time */}
           <div style={formGroupStyle}>
             <label style={labelStyle}>Offer End Time (Optional)</label>
@@ -408,7 +419,6 @@ const ComboOffer = () => {
               style={inputStyle}
             />
           </div>
-
           {/* Submit */}
           <button
             type="submit"

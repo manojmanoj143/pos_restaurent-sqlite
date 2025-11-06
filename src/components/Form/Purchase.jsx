@@ -32,6 +32,7 @@ function WarningMessage({ message, onConfirm, onCancel }) {
 function Purchase() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('item');
+  const [globalSearch, setGlobalSearch] = useState(''); // NEW: Global search state
   const [items, setItems] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [supplierGroups, setSupplierGroups] = useState([]); // NEW: Supplier Groups
@@ -64,6 +65,7 @@ function Purchase() {
   const [piSelectedSupplier, setPiSelectedSupplier] = useState('');
   const [piSelectedItem, setPiSelectedItem] = useState('');
   const [reportSearch, setReportSearch] = useState('');
+  const [reportSearchTerm, setReportSearchTerm] = useState(''); // NEW: Reports internal search
   const [activeSection, setActiveSection] = useState('details');
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [showSupplierGroupModal, setShowSupplierGroupModal] = useState(false); // NEW: Supplier Group Modal
@@ -213,6 +215,33 @@ function Purchase() {
   const [showNewCompanyModal, setShowNewCompanyModal] = useState(false);
   const [newCompanyName, setNewCompanyName] = useState('');
   const [pendingCompany, setPendingCompany] = useState(null);
+  // NEW: Report tabs for search filtering
+  const reportTabs = [
+    { key: 'stock', name: 'Stock Balance' },
+    { key: 'sales', name: 'SalesReport' },
+    { key: 'po', name: 'Purchase Orders' },
+    { key: 'pr', name: 'Purchase Receipts' },
+    { key: 'pi', name: 'Purchase Invoices' },
+    { key: 'supplier', name: 'Suppliers' },
+  ];
+  // NEW: Tab options for global search (without icons)
+  const tabOptions = [
+    { key: 'item', name: 'Items' },
+    { key: 'supplier', name: 'Suppliers' },
+    { key: 'order', name: 'Purchase Order' },
+    { key: 'receipt', name: 'Purchase Receipt' },
+    { key: 'invoice', name: 'Purchase Invoice' },
+    { key: 'report', name: 'Reports' },
+  ];
+  // NEW: Dynamic headings for tabs
+  const tabHeadings = {
+    item: 'Items',
+    supplier: 'Suppliers',
+    order: 'Purchase Order',
+    receipt: 'Purchase Receipt',
+    invoice: 'Purchase Invoice',
+    report: 'Reports',
+  };
   useEffect(() => {
     fetchItems();
     fetchSuppliers();
@@ -2366,6 +2395,11 @@ function Purchase() {
         setError('Failed to record sale');
     }
   };
+  // NEW: Handle global search click
+  const handleGlobalSearchClick = (tabKey) => {
+    setActiveTab(tabKey);
+    setGlobalSearch('');
+  };
   return (
     <div className="purchase-container">
       <div className="purchase-sidebar">
@@ -2386,7 +2420,33 @@ function Purchase() {
           <FaArrowLeft />
         </button>
         <div className="purchase-main-content">
-          <h2>Purchase Module</h2>
+          <h2>{tabHeadings[activeTab] || 'Purchase Module'}</h2>
+          {/* NEW: Global Search Bar - Top Right */}
+          <div className="purchase-global-search" style={{ position: 'absolute', top: '20px', right: '20px', width: '300px' }}>
+            <input
+              type="text"
+              placeholder="Search modules (Items, Suppliers, etc.)..."
+              value={globalSearch}
+              onChange={(e) => setGlobalSearch(e.target.value)}
+              className="purchase-input"
+            />
+            {globalSearch && (
+              <div className="purchase-search-dropdown" style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: '1px solid #ccc', maxHeight: '200px', overflowY: 'auto', zIndex: 1000 }}>
+                {tabOptions
+                  .filter(tab => tab.name.toLowerCase().includes(globalSearch.toLowerCase()))
+                  .map(tab => (
+                    <button
+                      key={tab.key}
+                      onClick={() => handleGlobalSearchClick(tab.key)}
+                      className="purchase-search-item"
+                      style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px', border: 'none', background: 'none', cursor: 'pointer' }}
+                    >
+                      {tab.name}
+                    </button>
+                  ))}
+              </div>
+            )}
+          </div>
           {loading && <p className="purchase-loading">Loading...</p>}
           {(error || message) && (
             <p className={`purchase-message ${error ? 'error' : 'success'}`}>
@@ -2573,10 +2633,10 @@ function Purchase() {
                         {itemFormRows.map((row, idx) => (
                             <tr key={idx}>
                                 <td>
-                                    <select 
-                                        value={row.company} 
-                                        onChange={(e) => handleItemFormChange(idx, 'company', e.target.value)} 
-                                        className="purchase-input select" 
+                                    <select
+                                        value={row.company}
+                                        onChange={(e) => handleItemFormChange(idx, 'company', e.target.value)}
+                                        className="purchase-input select"
                                         required
                                     >
                                         <option value="">Select Company</option>
@@ -2682,7 +2742,7 @@ function Purchase() {
                 <tbody>
                   {filteredItems.map(item => {
                     const remainingPatties = item.totalStock;
-             
+           
                     const supplierNamesList = (item.suppliers && Array.isArray(item.suppliers))
                         ? item.suppliers.map(s => s.supplierName).join(', ')
                         : 'N/A';
@@ -2764,8 +2824,8 @@ function Purchase() {
                             {/* NEW: Supplier Group Dropdown */}
                             <div className="purchase-form-field">
                                 <label className="purchase-label">Supplier group/Category</label>
-                                <select 
-                                    value={supplierForm.group} 
+                                <select
+                                    value={supplierForm.group}
                                     onChange={(e) => setSupplierForm({ ...supplierForm, group: e.target.value })}
                                     className="purchase-input select"
                                 >
@@ -3993,25 +4053,28 @@ function Purchase() {
             <div className="purchase-section">
               <div className="purchase-header">
                 <h3>Reports</h3>
+                {/* NEW: Reports Internal Search */}
+                <div className="purchase-report-search" style={{ position: 'absolute', top: '20px', right: '20px', width: '300px' }}>
+                  <input
+                    type="text"
+                    placeholder="Search reports (Stock Balance, Purchase Orders, etc.)..."
+                    value={reportSearchTerm}
+                    onChange={(e) => setReportSearchTerm(e.target.value)}
+                    className="purchase-input"
+                  />
+                </div>
                 <div className="purchase-report-buttons">
-                  <button onClick={() => setActiveReport('stock')} className={`purchase-button report ${activeReport === 'stock' ? 'active' : ''}`}>
-                    Stock Balance
-                  </button>
-                  <button onClick={() => setActiveReport('sales')} className={`purchase-button report ${activeReport === 'sales' ? 'active' : ''}`}>
-                    SalesReport
-                  </button>
-                  <button onClick={() => setActiveReport('po')} className={`purchase-button report ${activeReport === 'po' ? 'active' : ''}`}>
-                    Purchase Orders
-                  </button>
-                  <button onClick={() => setActiveReport('pr')} className={`purchase-button report ${activeReport === 'pr' ? 'active' : ''}`}>
-                    Purchase Receipts
-                  </button>
-                  <button onClick={() => setActiveReport('pi')} className={`purchase-button report ${activeReport === 'pi' ? 'active' : ''}`}>
-                    Purchase Invoices
-                  </button>
-                  <button onClick={() => setActiveReport('supplier')} className={`purchase-button report ${activeReport === 'supplier' ? 'active' : ''}`}>
-                    Suppliers
-                  </button>
+                  {reportTabs
+                    .filter(rt => rt.name.toLowerCase().includes(reportSearchTerm.toLowerCase()))
+                    .map(rt => (
+                      <button
+                        key={rt.key}
+                        onClick={() => setActiveReport(rt.key)}
+                        className={`purchase-button report ${activeReport === rt.key ? 'active' : ''}`}
+                      >
+                        {rt.name}
+                      </button>
+                    ))}
                 </div>
               </div>
               {activeReport === 'stock' && (

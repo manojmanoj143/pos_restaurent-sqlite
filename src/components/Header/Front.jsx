@@ -7,7 +7,77 @@ import { v4 as uuidv4 } from "uuid"
 import axios from "axios"
 import { Card, Button } from 'react-bootstrap';
 import "./front.css"
-
+const SearchableSelect = ({ options = [], value = '', onChange, placeholder }) => {
+  const [search, setSearch] = useState(value || '');
+  const [showList, setShowList] = useState(false);
+  const selectRef = useRef(null); // Ref for the entire select container
+  useEffect(() => {
+    setSearch(value || '');
+  }, [value]);
+  const filteredOptions = options.filter(option =>
+    option.toLowerCase().includes(search.toLowerCase())
+  );
+  const handleInputChange = (e) => {
+    const newSearch = e.target.value;
+    setSearch(newSearch);
+    if (!showList) {
+      setShowList(true);
+    }
+  };
+  const handleSelectOption = (option, e) => {
+    e.stopPropagation(); // Prevent event from bubbling
+    setSearch(option);
+    if (onChange) {
+      onChange(option);
+    }
+    setShowList(false);
+  };
+  const handleFocus = () => {
+    setShowList(true);
+  };
+  const handleBlur = (e) => {
+    // Check if the click is moving focus outside the select container
+    if (selectRef.current && !selectRef.current.contains(e.relatedTarget)) {
+      setShowList(false);
+    }
+  };
+  const handleListMouseDown = (e) => {
+    e.stopPropagation(); // Prevent outside click handlers from closing the parent form
+    e.preventDefault(); // Prevent default to avoid blur issues
+  };
+  return (
+    <div className="searchable-select" ref={selectRef}>
+      <input
+        type="text"
+        value={search}
+        onChange={handleInputChange}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+        placeholder={placeholder}
+      />
+      {showList && (
+        <ul className="searchable-list" onMouseDown={handleListMouseDown}>
+          {filteredOptions.length > 0 ? (
+            filteredOptions.map((option, index) => (
+              <li
+                key={index}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  handleSelectOption(option, e);
+                }}
+              >
+                {option}
+              </li>
+            ))
+          ) : (
+            <li className="no-options">No matching options</li>
+          )}
+        </ul>
+      )}
+    </div>
+  );
+};
 function FrontPage() {
   const [menuItems, setMenuItems] = useState([])
   const [comboList, setComboList] = useState([])
@@ -28,7 +98,10 @@ function FrontPage() {
   const [deliveryAddress, setDeliveryAddress] = useState({
     building_name: "",
     flat_villa_no: "",
-    location: "",
+    country: "",
+    field1: "",
+    field2: "",
+    field3: "",
   })
   const [whatsappNumber, setWhatsappNumber] = useState("")
   const [email, setEmail] = useState("")
@@ -78,35 +151,35 @@ function FrontPage() {
   const [selectedGroupId, setSelectedGroupId] = useState("")
   const [showGroupModal, setShowGroupModal] = useState(false)
   const [newGroupName, setNewGroupName] = useState("")
-
+  // Address Structure State
+  const defaultStructure = {
+    countries: {},
+  };
+  const [addressStructure, setAddressStructure] = useState(defaultStructure);
+  const [linkedValues, setLinkedValues] = useState({});
   // FIXED: Define generate_order_number function to resolve ReferenceError
   const generate_order_number = (orderType) => {
     const timestamp = Date.now().toString().slice(-6); // Last 6 digits of timestamp
     const typePrefix = orderType === "Dine In" ? "DIN" : orderType === "Takeaway" ? "TAK" : "DEL";
     return `${typePrefix}-${timestamp}`;
   };
-
   const handleThemeChange = (theme) => {
     setCurrentTheme(theme)
     setShowThemeSelector(false)
     localStorage.setItem("selectedTheme", theme)
     document.body.className = `theme-${theme}`
   }
-
   useEffect(() => {
     const savedTheme = localStorage.getItem("selectedTheme") || "light"
     setCurrentTheme(savedTheme)
     document.body.className = `theme-${savedTheme}`
   }, [])
-
   useEffect(() => {
     document.body.className = `theme-${currentTheme}`
   }, [currentTheme])
-
   const reduxUser = useSelector((state) => state.user.user)
   const storedUser = JSON.parse(localStorage.getItem("user")) || { email: "Guest" }
   const user = reduxUser || storedUser
-
   const isdCodes = [
     { code: "+91", country: "India" },
     { code: "+1", country: "USA" },
@@ -114,7 +187,6 @@ function FrontPage() {
     { code: "+971", country: "UAE" },
     { code: "+61", country: "Australia" },
   ]
-
   const location = useLocation()
   const { state } = location
   const {
@@ -130,9 +202,7 @@ function FrontPage() {
     whatsappNumber: initialWhatsappNumber,
     email: initialEmail,
   } = state || {}
-
   const navigate = useNavigate()
-
   // Fetch config for baseUrl (client/server mode)
   useEffect(() => {
     const fetchConfig = async () => {
@@ -152,7 +222,6 @@ function FrontPage() {
     };
     fetchConfig();
   }, []);
-
   // Handle clicks outside customer section
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -163,7 +232,6 @@ function FrontPage() {
     document.addEventListener("mousedown", handleClickOutside)
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [showCustomerSection])
-
   // Update date and time
   useEffect(() => {
     const updateDateTime = () => {
@@ -175,7 +243,6 @@ function FrontPage() {
     const intervalId = setInterval(updateDateTime, 60000)
     return () => clearInterval(intervalId)
   }, [])
-
   // Fetch table data
   useEffect(() => {
     const fetchTableData = async () => {
@@ -194,7 +261,24 @@ function FrontPage() {
     }
     if (tableNumber && tableNumber !== "N/A") fetchTableData()
   }, [tableNumber, baseUrl])
-
+  // FIXED: Always fetch address structure, regardless of baseUrl (use relative if empty)
+  useEffect(() => {
+    const fetchAddressStructure = async () => {
+      try {
+        const apiPath = baseUrl ? `${baseUrl}/api/address-structures` : '/api/address-structures';
+        const response = await fetch(apiPath);
+        if (!response.ok) {
+          throw new Error('Failed to fetch address structure');
+        }
+        const data = await response.json();
+        setAddressStructure(data.structure || defaultStructure);
+        setLinkedValues(data.linkedValues || {});
+      } catch (error) {
+        console.error('Error fetching address structure:', error);
+      }
+    };
+    fetchAddressStructure();
+  }, [baseUrl]);
   // Initialize state from location state
   useEffect(() => {
     if (state) {
@@ -206,7 +290,10 @@ function FrontPage() {
       setDeliveryAddress({
         building_name: savedAddress.building_name || "",
         flat_villa_no: savedAddress.flat_villa_no || "",
-        location: savedAddress.location || "",
+        country: savedAddress.country || "",
+        field1: savedAddress.field1 || "",
+        field2: savedAddress.field2 || "",
+        field3: savedAddress.field3 || "",
       })
       setWhatsappNumber(initialWhatsappNumber || existingOrder?.whatsappNumber || "")
       setEmail(initialEmail || existingOrder?.email || "")
@@ -226,7 +313,6 @@ function FrontPage() {
     initialWhatsappNumber,
     initialEmail,
   ])
-
   // Load saved orders and booked tables/chairs
   useEffect(() => {
     const saved = JSON.parse(localStorage.getItem("savedOrders")) || []
@@ -236,7 +322,6 @@ function FrontPage() {
     const chairs = JSON.parse(localStorage.getItem("bookedChairs")) || {}
     setBookedChairs(chairs)
   }, [])
-
   // Fetch menu items and combos
   useEffect(() => {
     const fetchItems = async () => {
@@ -344,18 +429,17 @@ function FrontPage() {
     fetchItems()
     fetchCombos()
   }, [baseUrl])
-
   useEffect(() => {
     const uniqueCategories = [...new Set(menuItems.map((item) => item.category))];
     const filteredCategories = uniqueCategories.filter((category) => category && category !== "uncategorized");
     setCategories([`Combos Offer (${comboList.length})`, "All Items", ...filteredCategories]);
   }, [menuItems, comboList]);
-
   // Fetch customers
   useEffect(() => {
     const fetchCustomers = async () => {
       try {
-        const response = await axios.get(`${baseUrl}/api/customers`)
+        const apiPath = baseUrl ? `${baseUrl}/api/customers` : '/api/customers';
+        const response = await axios.get(apiPath)
         setCustomers(response.data)
         setFilteredCustomers(response.data)
       } catch (error) {
@@ -366,12 +450,12 @@ function FrontPage() {
     }
     fetchCustomers()
   }, [baseUrl])
-
   // Fetch customer groups
   useEffect(() => {
     const fetchGroups = async () => {
       try {
-        const response = await axios.get(`${baseUrl}/api/customer-groups`)
+        const apiPath = baseUrl ? `${baseUrl}/api/customer-groups` : '/api/customer-groups';
+        const response = await axios.get(apiPath)
         setCustomerGroups(response.data)
       } catch (error) {
         console.error("Error fetching customer groups:", error)
@@ -381,12 +465,12 @@ function FrontPage() {
     }
     fetchGroups()
   }, [baseUrl])
-
   // Fetch VAT rate
   useEffect(() => {
     const fetchVat = async () => {
       try {
-        const response = await axios.get(`${baseUrl}/api/get-vat`);
+        const apiPath = baseUrl ? `${baseUrl}/api/get-vat` : '/api/get-vat';
+        const response = await axios.get(apiPath);
         setVatRate(response.data.vat / 100 || 0.1);
       } catch (error) {
         console.error('Failed to fetch VAT:', error);
@@ -394,7 +478,6 @@ function FrontPage() {
     };
     fetchVat();
   }, [baseUrl]);
-
   // Filter menu items based on search query
   useEffect(() => {
     if (searchQuery.trim() === "") {
@@ -406,7 +489,6 @@ function FrontPage() {
       setSelectedCategory("")
     }
   }, [searchQuery, menuItems])
-
   const handleFilter = (category) => {
     setSearchQuery("")
     let cleanCategory = category;
@@ -421,19 +503,16 @@ function FrontPage() {
     }
     setSelectedCategory(cleanCategory)
   }
-
   const handleItemClick = (item) => {
     const existingCartItem = cartItems.find((cartItem) => cartItem.item_name === item.name)
     setSelectedItem(item)
     setSelectedCartItem(existingCartItem || null)
   }
-
   const handleCartItemClick = (cartItem) => {
     const menuItem = menuItems.find((item) => item.name === cartItem.item_name);
     setSelectedItem(menuItem || null);
     setSelectedCartItem(cartItem);
   }
-
   const hasActiveOffer = (item) => {
     if (item.offer_price === undefined || !item.offer_start_time || !item.offer_end_time) {
       return false;
@@ -443,7 +522,6 @@ function FrontPage() {
     const endTime = new Date(item.offer_end_time);
     return startTime <= currentTime && currentTime <= endTime;
   };
-
   const calculateOfferSizePrice = (offerPrice, size) => {
     if (!offerPrice) return 0
     switch (size) {
@@ -457,7 +535,6 @@ function FrontPage() {
         return offerPrice
     }
   }
-
   const handleItemUpdate = (updatedItem) => {
     // FIXED: Prioritize updating by ID if provided (for edits, preserves status)
     let existingItemIndex = -1;
@@ -482,10 +559,10 @@ function FrontPage() {
         id: existingItemIndex !== -1 ? cartItems[existingItemIndex].id : uuidv4(),
         name: updatedItem.name,
         item_name: updatedItem.name,
-        quantity: updatedItem.quantity || 1,
+        quantity: Number(updatedItem.quantity) || 1, // FIXED: Explicit Number() || 1
         originalBasePrice: hasOffer ? updatedItem.basePrice || 0 : null,
         basePrice: finalPrice,
-        totalPrice: finalPrice * (updatedItem.quantity || 1),
+        totalPrice: finalPrice * (Number(updatedItem.quantity) || 1),
         isCombo: true,
         // FIXED: Set is_combo_offer and offer_description for backend recognition
         is_combo_offer: true,
@@ -619,8 +696,8 @@ function FrontPage() {
           variant.subheadings.forEach((sub) => {
             if (updatedItem.selectedCustomVariants[sub.name]) {
               customVariantsDetails[sub.name] = { name: sub.name, price: sub.price || 0, heading: variant.heading }
-              customVariantsQuantities[sub.name] = updatedItem.customVariantsQuantities?.[sub.name] || 1
-              customVariantsTotalPrice += (sub.price || 0) * (updatedItem.customVariantsQuantities?.[sub.name] || 1)
+              customVariantsQuantities[sub.name] = Number(updatedItem.customVariantsQuantities?.[sub.name]) || 1 // FIXED: Explicit Number() || 1
+              customVariantsTotalPrice += (sub.price || 0) * (Number(updatedItem.customVariantsQuantities?.[sub.name]) || 1)
             }
           })
         }
@@ -631,12 +708,12 @@ function FrontPage() {
       id: existingItemIndex !== -1 ? cartItems[existingItemIndex].id : uuidv4(),
       name: updatedItem.item_name || "Unnamed Item",
       item_name: updatedItem.item_name,
-      quantity: updatedItem.quantity || 1,
+      quantity: Number(updatedItem.quantity) || 1, // FIXED: Explicit Number() || 1
       originalBasePrice: hasOffer ? originalBasePrice : null,
       basePrice: finalBasePrice,
-      icePrice: updatedItem.icePrice || 0,
-      spicyPrice: updatedItem.spicyPrice || 0,
-      totalPrice: updatedItem.totalPrice || 0,
+      icePrice: Number(updatedItem.icePrice) || 0, // FIXED: Explicit Number()
+      spicyPrice: Number(updatedItem.spicyPrice) || 0, // FIXED: Explicit Number()
+      totalPrice: Number(updatedItem.totalPrice) || 0, // FIXED: Explicit Number()
       addonQuantities: updatedItem.addonQuantities || {},
       addonVariants,
       addonPrices,
@@ -684,7 +761,6 @@ function FrontPage() {
     setSelectedItem(null)
     setSelectedCartItem(null)
   }
-
   const handleQuantityChange = (itemId, value, type, name) => {
     const newQty = Math.max(1, Number.parseInt(value) || 1)
     const updateItems = (prevItems) =>
@@ -745,52 +821,45 @@ function FrontPage() {
     setCartItems(updateItems)
     setBillCartItems(updateItems)
   }
-
   const getAddonsTotal = (item) => {
     if (!item.addonQuantities || !item.addonPrices) return 0
     return Object.entries(item.addonQuantities).reduce((sum, [addonName, qty]) => {
       const price = item.addonPrices[addonName] || 0
-      return sum + price * qty
+      return sum + price * (Number(qty) || 1) // FIXED: Explicit Number() || 1
     }, 0)
   }
-
   const getCombosTotal = (item) => {
     if (!item.comboQuantities || !item.comboPrices) return 0
     return Object.entries(item.comboQuantities).reduce((sum, [comboName, qty]) => {
       const price = item.comboPrices[comboName] || 0
-      return sum + price * qty
+      return sum + price * (Number(qty) || 1) // FIXED: Explicit Number() || 1
     }, 0)
   }
-
   const getCustomVariantsTotal = (item) => {
     if (!item.customVariantsDetails || !item.customVariantsQuantities) return 0
     return Object.entries(item.customVariantsDetails).reduce((sum, [variantName, variant]) => {
-      const qty = item.customVariantsQuantities[variantName] || 1
+      const qty = Number(item.customVariantsQuantities[variantName]) || 1 // FIXED: Explicit Number() || 1
       return sum + (variant.price || 0) * qty
     }, 0)
   }
-
   const getMainItemTotal = (item) => {
     if (item.isCombo) {
-      return (item.basePrice || 0) * (item.quantity || 1)
+      return (item.basePrice || 0) * (Number(item.quantity) || 1) // FIXED: Explicit Number()
     }
     const mainItemPrice = (item.basePrice || 0) + (item.icePrice || 0) + (item.spicyPrice || 0) + getCustomVariantsTotal(item)
-    return mainItemPrice * (item.quantity || 1)
+    return mainItemPrice * (Number(item.quantity) || 1) // FIXED: Explicit Number()
   }
-
   const getOriginalMainItemTotal = (item) => {
     if (item.originalBasePrice) {
       const mainItemPrice = (item.originalBasePrice || 0) + (item.icePrice || 0) + (item.spicyPrice || 0) + getCustomVariantsTotal(item)
-      return mainItemPrice * (item.quantity || 1)
+      return mainItemPrice * (Number(item.quantity) || 1) // FIXED: Explicit Number()
     }
     return getMainItemTotal(item)
   }
-
   const removeFromCart = (item) => {
     setCartItems((prevItems) => prevItems.filter((cartItem) => cartItem.id !== item.id))
     setBillCartItems((prevItems) => prevItems.filter((cartItem) => cartItem.id !== item.id))
   }
-
   const removeAddonOrCombo = (itemId, type, name) => {
     const updateItems = (prevItems) =>
       prevItems.map((cartItem) => {
@@ -843,7 +912,6 @@ function FrontPage() {
     setCartItems(updateItems)
     setBillCartItems(updateItems)
   }
-
   const removeCustomVariant = (itemId, variantName) => {
     const updateItems = (prevItems) =>
       prevItems.map((cartItem) => {
@@ -870,7 +938,6 @@ function FrontPage() {
     setCartItems(updateItems)
     setBillCartItems(updateItems)
   }
-
   const handleWarningOk = () => {
     if (pendingAction) {
       pendingAction()
@@ -879,12 +946,10 @@ function FrontPage() {
     setWarningMessage("")
     setWarningType("warning")
   }
-
   const handleConfirmYes = () => {
     setShowPaymentModal(true)
     setIsConfirmation(false)
   }
-
   const handleConfirmNo = () => {
     setCartItems([])
     setBillCartItems([])
@@ -893,33 +958,30 @@ function FrontPage() {
     }
     setIsConfirmation(false)
   }
-
   const calculateSubtotal = (items) => {
     return items.reduce((sum, item) => {
       if (item.isCombo) {
-        return sum + (item.totalPrice || 0)
+        return sum + (Number(item.totalPrice) || 0) // FIXED: Explicit Number()
       }
-      const mainItemPrice = (item.basePrice || 0) + (item.icePrice || 0) + (item.spicyPrice || 0) + getCustomVariantsTotal(item)
-      const mainItemTotal = mainItemPrice * (item.quantity || 1)
+      const mainItemPrice = (Number(item.basePrice) || 0) + (Number(item.icePrice) || 0) + (Number(item.spicyPrice) || 0) + getCustomVariantsTotal(item) // FIXED: Explicit Number()
+      const mainItemTotal = mainItemPrice * (Number(item.quantity) || 1) // FIXED: Explicit Number()
       const addonsTotal = getAddonsTotal(item)
       const combosTotal = getCombosTotal(item)
       return sum + mainItemTotal + addonsTotal + combosTotal
     }, 0)
   }
-
   const calculateOriginalSubtotal = (items) => {
     return items.reduce((sum, item) => {
-      let mainItemPrice = (item.basePrice || 0) + (item.icePrice || 0) + (item.spicyPrice || 0) + getCustomVariantsTotal(item)
+      let mainItemPrice = (Number(item.basePrice) || 0) + (Number(item.icePrice) || 0) + (Number(item.spicyPrice) || 0) + getCustomVariantsTotal(item) // FIXED: Explicit Number()
       if (item.originalBasePrice) {
-        mainItemPrice = (item.originalBasePrice || 0) + (item.icePrice || 0) + (item.spicyPrice || 0) + getCustomVariantsTotal(item)
+        mainItemPrice = (Number(item.originalBasePrice) || 0) + (Number(item.icePrice) || 0) + (Number(item.spicyPrice) || 0) + getCustomVariantsTotal(item) // FIXED: Explicit Number()
       }
-      const mainItemTotal = mainItemPrice * (item.quantity || 1)
+      const mainItemTotal = mainItemPrice * (Number(item.quantity) || 1) // FIXED: Explicit Number()
       const addonsTotal = getAddonsTotal(item)
       const combosTotal = getCombosTotal(item)
       return sum + mainItemTotal + addonsTotal + combosTotal
     }, 0)
   }
-
   const handlePaymentSelection = async (method) => {
     if (billCartItems.length === 0) {
       setWarningMessage("Cart is empty. Please add items before proceeding.")
@@ -952,14 +1014,14 @@ function FrontPage() {
       email: email || "N/A",
       items: billCartItems.map((item) => ({
         item_name: item.item_name || item.name,
-        basePrice: item.basePrice || 0,
+        basePrice: Number(item.basePrice) || 0,
         originalBasePrice: item.originalBasePrice || null,
         icePreference: item.icePreference,
-        ice_price: item.icePrice || 0,
+        ice_price: Number(item.icePrice) || 0,
         isSpicy: item.isSpicy,
-        spicy_price: item.spicyPrice || 0,
-        quantity: item.quantity || 1,
-        amount: (item.totalPrice || 0).toFixed(2),
+        spicy_price: Number(item.spicyPrice) || 0,
+        quantity: Number(item.quantity) || 1,
+        amount: Number((item.totalPrice || 0).toFixed(2)) || 0,
         addons: Object.entries(item.addonQuantities || {}).map(([addonName, qty]) => ({
           name1: addonName,
           addon_image: item.addonImages?.[addonName] || "/static/images/default-addon-image.jpg",
@@ -967,7 +1029,7 @@ function FrontPage() {
           addon_ice_price: Number(item.addonIcePrices?.[addonName] || 0),
           addon_spicy_price: Number(item.addonSpicyPrices?.[addonName] || 0),
           addon_price: Number(item.addonPrices?.[addonName] || item.addonVariants?.[addonName]?.price || 0),
-          addon_quantity: qty,
+          addon_quantity: Number(qty) || 1, // FIXED: Explicit Number() || 1
           size: item.addonVariants?.[addonName]?.size || "M",
           cold: item.addonVariants?.[addonName]?.cold || "without_ice",
           isSpicy: item.addonVariants?.[addonName]?.spicy || false,
@@ -987,7 +1049,7 @@ function FrontPage() {
           isSpicy: item.comboVariants?.[comboName]?.spicy || false,
           kitchen: item.comboVariants?.[comboName]?.kitchen || "Main Kitchen",
           sugar: item.comboVariants?.[comboName]?.sugar || "medium",
-          combo_quantity: qty,
+          combo_quantity: Number(qty) || 1, // FIXED: Explicit Number() || 1
           custom_variants: item.comboCustomVariantsDetails?.[comboName] || {},
         })),
         kitchen: item.kitchen,
@@ -1016,7 +1078,8 @@ function FrontPage() {
       // FIXED: Use dynamic baseUrl for order update
       if (orderId) {
         try {
-          await axios.put(`${baseUrl}/api/activeorders/${orderId}`, { paid: true });
+          const apiPath = baseUrl ? `${baseUrl}/api/activeorders/${orderId}` : `/api/activeorders/${orderId}`;
+          await axios.put(apiPath, { paid: true });
           console.log("Order updated with paid status");
         } catch (error) {
           console.error("Error updating order paid status:", error);
@@ -1063,7 +1126,6 @@ function FrontPage() {
       setWarningType("warning")
     }
   }
-
   const handlePaymentCompletion = (tableNumber, chairsBooked) => {
     const savedOrders = JSON.parse(localStorage.getItem("savedOrders")) || [];
     const order = savedOrders.find(o => o.tableNumber === tableNumber && o.chairsBooked.some(c => chairsBooked.includes(c)));
@@ -1079,7 +1141,6 @@ function FrontPage() {
       setPendingAction(() => () => navigate("/table"));
     }
   }
-
   const handleSaveToBackend = async (paymentDetails) => {
     if (billCartItems.length === 0) {
       setWarningMessage("Cart is empty. Please add items before saving.")
@@ -1091,7 +1152,7 @@ function FrontPage() {
       setWarningType("warning")
       throw new Error("User not logged in")
     }
-    const validItems = billCartItems.filter((item) => item.quantity > 0)
+    const validItems = billCartItems.filter((item) => (Number(item.quantity) || 1) > 0) // FIXED: Explicit Number()
     if (validItems.length !== billCartItems.length) {
       setWarningMessage("All items must have a quantity greater than zero.")
       setWarningType("warning")
@@ -1106,58 +1167,62 @@ function FrontPage() {
       deliveryAddress: deliveryAddress,
       whatsappNumber: whatsappNumber || "N/A",
       email: email || "N/A",
-      items: validItems.map((item) => ({
-        item_name: item.item_name || item.name || "Unnamed Item",
-        basePrice: Number(item.basePrice) || 0,
-        originalBasePrice: item.originalBasePrice || null,
-        icePreference: item.icePreference,
-        ice_price: Number(item.icePrice) || 0,
-        isSpicy: item.isSpicy,
-        spicy_price: Number(item.spicyPrice) || 0,
-        quantity: Number(item.quantity) || 1,
-        amount: Number(item.totalPrice.toFixed(2)) || 0,
-        addons: Object.entries(item.addonQuantities || {}).map(([addonName, qty]) => ({
-          name1: addonName,
-          addon_image: item.addonImages?.[addonName] || "/static/images/default-addon-image.jpg",
-          addon_size_price: Number(item.addonSizePrices?.[addonName] || 0),
-          addon_ice_price: Number(item.addonIcePrices?.[addonName] || 0),
-          addon_spicy_price: Number(item.addonSpicyPrices?.[addonName] || 0),
-          addon_price: Number(item.addonPrices?.[addonName] || item.addonVariants?.[addonName]?.price || 0),
-          addon_quantity: qty,
-          size: item.addonVariants?.[addonName]?.size || "M",
-          cold: item.addonVariants?.[addonName]?.cold || "without_ice",
-          isSpicy: item.addonVariants?.[addonName]?.spicy || false,
-          kitchen: item.addonVariants?.[addonName]?.kitchen || "Main Kitchen",
-          sugar: item.addonVariants?.[addonName]?.sugar || "medium",
-          custom_variants: item.addonCustomVariantsDetails?.[addonName] || {},
-        })),
-        selectedCombos: Object.entries(item.comboQuantities || {}).map(([comboName, qty]) => ({
-          name1: comboName,
-          combo_image: item.comboImages?.[comboName] || "/static/images/default-combo-image.jpg",
-          combo_size_price: Number(item.comboSizePrices?.[comboName] || 0),
-          combo_ice_price: Number(item.comboIcePrices?.[comboName] || 0),
-          combo_spicy_price: Number(item.comboSpicyPrices?.[comboName] || 0),
-          combo_price: Number(item.comboPrices?.[comboName] || item.comboVariants?.[comboName]?.price || 0),
-          size: item.comboVariants?.[comboName]?.size || "M",
-          cold: item.comboVariants?.[comboName]?.cold || "without_ice",
-          isSpicy: item.comboVariants?.[comboName]?.spicy || false,
-          kitchen: item.comboVariants?.[comboName]?.kitchen || "Main Kitchen",
-          sugar: item.comboVariants?.[comboName]?.sugar || "medium",
-          combo_quantity: qty,
-          custom_variants: item.comboCustomVariantsDetails?.[comboName] || {},
-        })),
-        kitchen: item.kitchen,
-        selectedSize: item.selectedSize || null,
-        ingredients: item.ingredients || [],
-        selectedCustomVariants: item.selectedCustomVariants || {},
-        customVariantsDetails: item.customVariantsDetails || {},
-        customVariantsQuantities: item.customVariantsQuantities || {},
-        image: item.image || "/static/images/default-item.jpg",
-        // FIXED: Preserve is_combo_offer and offer_description for backend
-        is_combo_offer: item.is_combo_offer || false,
-        offer_description: item.offer_description || null,
-        kitchenStatuses: item.kitchenStatuses || {},
-      })),
+      items: validItems.map((item) => {
+        // NEW: Log item for debugging (remove in prod)
+        console.log(`Payload item: ${item.item_name}, quantity: ${item.quantity}, addons:`, item.addonQuantities, 'combos:', item.comboQuantities);
+        return ({
+          item_name: item.item_name || item.name || "Unnamed Item",
+          basePrice: Number(item.basePrice) || 0,
+          originalBasePrice: item.originalBasePrice || null,
+          icePreference: item.icePreference,
+          ice_price: Number(item.icePrice) || 0,
+          isSpicy: item.isSpicy,
+          spicy_price: Number(item.spicyPrice) || 0,
+          quantity: Number(item.quantity) || 1,
+          amount: Number(item.totalPrice.toFixed(2)) || 0,
+          addons: Object.entries(item.addonQuantities || {}).map(([addonName, qty]) => ({
+            name1: addonName,
+            addon_image: item.addonImages?.[addonName] || "/static/images/default-addon-image.jpg",
+            addon_size_price: Number(item.addonSizePrices?.[addonName] || 0),
+            addon_ice_price: Number(item.addonIcePrices?.[addonName] || 0),
+            addon_spicy_price: Number(item.addonSpicyPrices?.[addonName] || 0),
+            addon_price: Number(item.addonPrices?.[addonName] || item.addonVariants?.[addonName]?.price || 0),
+            addon_quantity: Number(qty) || 1, // FIXED: Explicit Number() || 1
+            size: item.addonVariants?.[addonName]?.size || "M",
+            cold: item.addonVariants?.[addonName]?.cold || "without_ice",
+            isSpicy: item.addonVariants?.[addonName]?.spicy || false,
+            kitchen: item.addonVariants?.[addonName]?.kitchen || "Main Kitchen",
+            sugar: item.addonVariants?.[addonName]?.sugar || "medium",
+            custom_variants: item.addonCustomVariantsDetails?.[addonName] || {},
+          })),
+          selectedCombos: Object.entries(item.comboQuantities || {}).map(([comboName, qty]) => ({
+            name1: comboName,
+            combo_image: item.comboImages?.[comboName] || "/static/images/default-combo-image.jpg",
+            combo_size_price: Number(item.comboSizePrices?.[comboName] || 0),
+            combo_ice_price: Number(item.comboIcePrices?.[comboName] || 0),
+            combo_spicy_price: Number(item.comboSpicyPrices?.[comboName] || 0),
+            combo_price: Number(item.comboPrices?.[comboName] || item.comboVariants?.[comboName]?.price || 0),
+            size: item.comboVariants?.[comboName]?.size || "M",
+            cold: item.comboVariants?.[comboName]?.cold || "without_ice",
+            isSpicy: item.comboVariants?.[comboName]?.spicy || false,
+            kitchen: item.comboVariants?.[comboName]?.kitchen || "Main Kitchen",
+            sugar: item.comboVariants?.[comboName]?.sugar || "medium",
+            combo_quantity: Number(qty) || 1, // FIXED: Explicit Number() || 1
+            custom_variants: item.comboCustomVariantsDetails?.[comboName] || {},
+          })),
+          kitchen: item.kitchen,
+          selectedSize: item.selectedSize || null,
+          ingredients: item.ingredients || [],
+          selectedCustomVariants: item.selectedCustomVariants || {},
+          customVariantsDetails: item.customVariantsDetails || {},
+          customVariantsQuantities: item.customVariantsQuantities || {},
+          image: item.image || "/static/images/default-item.jpg",
+          // FIXED: Preserve is_combo_offer and offer_description for backend
+          is_combo_offer: item.is_combo_offer || false,
+          offer_description: item.offer_description || null,
+          kitchenStatuses: item.kitchenStatuses || {},
+        })
+      }),
       total: Number(subtotal.toFixed(2)),
       userId: user.email,
       payment_terms: [{ due_date: new Date().toISOString().split("T")[0], payment_terms: "Immediate" }],
@@ -1165,9 +1230,12 @@ function FrontPage() {
       orderType: orderType || "Dine In",
       status: "Pending",
     }
+    // NEW: Log full payload for debugging (remove in prod)
+    console.log("Sending sales payload:", payload);
     try {
       // FIXED: Use dynamic baseUrl for sales save
-      const response = await axios.post(`${baseUrl}/api/sales`, payload)
+      const apiPath = baseUrl ? `${baseUrl}/api/sales` : '/api/sales';
+      const response = await axios.post(apiPath, payload)
       setWarningMessage(`Sale saved successfully! Invoice No: ${response.data.invoice_no}`)
       setWarningType("success")
       setPendingAction(() => () => {
@@ -1182,13 +1250,25 @@ function FrontPage() {
       throw error
     }
   }
-
   const handleKeyPress = (e) => {
     if (e.key === " " || e.keyCode === 32) {
       e.preventDefault()
     }
   }
-
+  const handleDeliveryAddressChange = (field, value) => {
+    setDeliveryAddress((p) => ({ ...p, [field]: value }));
+    // If changing country or field1, clear dependent fields
+    if (field === 'country' || field === 'field1') {
+      setDeliveryAddress((p) => ({ ...p, field2: '', field3: '' }));
+    }
+  };
+  // Helper to get filtered values for the selected Field1
+  const getFilteredValues = (field) => {
+    if (!deliveryAddress.country || !deliveryAddress.field1) return [];
+    const links = linkedValues[deliveryAddress.country]?.[deliveryAddress.field1];
+    return links?.[field] || [];
+  };
+  const countryList = Object.keys(addressStructure.countries || {});
   const handleCreateCustomer = async () => {
     if (orderType !== "Dine In" && (!customerName.trim() || !phoneNumber)) {
       setWarningMessage("Customer name and phone number are required for non-Dine In orders.")
@@ -1206,13 +1286,17 @@ function FrontPage() {
         phone_number: `${selectedISDCode}${phoneNumber}`,
         building_name: deliveryAddress.building_name || "",
         flat_villa_no: deliveryAddress.flat_villa_no || "",
-        location: deliveryAddress.location || "",
+        country: deliveryAddress.country || "",
+        field1: deliveryAddress.field1 || "",
+        field2: deliveryAddress.field2 || "",
+        field3: deliveryAddress.field3 || "",
         whatsapp_number: whatsappNumber || "",
         email: email || "",
         customer_group: selectedGroupId || null,
       }
       // FIXED: Use dynamic baseUrl for customer create
-      const response = await axios.post(`${baseUrl}/api/customers`, customerData)
+      const apiPath = baseUrl ? `${baseUrl}/api/customers` : '/api/customers';
+      const response = await axios.post(apiPath, customerData)
       const newCustomer = { ...customerData, _id: response.data.id }
       setCustomers((prev) => [...prev, newCustomer])
       setFilteredCustomers((prev) => [...prev, newCustomer])
@@ -1235,7 +1319,6 @@ function FrontPage() {
       setWarningType("warning")
     }
   }
-
   const handleUpdateCustomer = async (id) => {
     if (orderType !== "Dine In" && (!customerName.trim() || !phoneNumber)) {
       setWarningMessage("Customer name and phone number are required for non-Dine In orders.")
@@ -1253,13 +1336,17 @@ function FrontPage() {
         phone_number: `${selectedISDCode}${phoneNumber}`,
         building_name: deliveryAddress.building_name || "",
         flat_villa_no: deliveryAddress.flat_villa_no || "",
-        location: deliveryAddress.location || "",
+        country: deliveryAddress.country || "",
+        field1: deliveryAddress.field1 || "",
+        field2: deliveryAddress.field2 || "",
+        field3: deliveryAddress.field3 || "",
         whatsapp_number: whatsappNumber || "",
         email: email || "",
         customer_group: selectedGroupId || null,
       }
       // FIXED: Use dynamic baseUrl for customer update
-      await axios.put(`${baseUrl}/api/customers/${id}`, customerData)
+      const apiPath = baseUrl ? `${baseUrl}/api/customers/${id}` : `/api/customers/${id}`;
+      await axios.put(apiPath, customerData)
       const updatedCustomer = { ...customerData, _id: id }
       setCustomers((prev) => prev.map((c) => (c._id === id ? updatedCustomer : c)))
       setFilteredCustomers((prev) => prev.map((c) => (c._id === id ? updatedCustomer : c)))
@@ -1276,14 +1363,13 @@ function FrontPage() {
       setWarningType("warning")
     }
   }
-
   const handleCustomerNameChange = (e) => {
     const value = e.target.value
     setCustomerName(value)
     if (value.trim() === "") {
       setFilteredCustomers(customers)
       setPhoneNumber("")
-      setDeliveryAddress({ building_name: "", flat_villa_no: "", location: "" })
+      setDeliveryAddress({ building_name: "", flat_villa_no: "", country: "", field1: "", field2: "", field3: "" })
       setWhatsappNumber("")
       setEmail("")
       setSelectedGroupId("")
@@ -1295,13 +1381,12 @@ function FrontPage() {
       setFilteredCustomers(filtered)
     }
   }
-
   const handlePhoneNumberChange = (e) => {
     const value = e.target.value.replace(/\D/g, "")
     if (value.length <= 10) setPhoneNumber(value)
     if (value.length === 0) {
       setCustomerName("")
-      setDeliveryAddress({ building_name: "", flat_villa_no: "", location: "" })
+      setDeliveryAddress({ building_name: "", flat_villa_no: "", country: "", field1: "", field2: "", field3: "" })
       setWhatsappNumber("")
       setEmail("")
       setSelectedGroupId("")
@@ -1313,7 +1398,10 @@ function FrontPage() {
         setDeliveryAddress({
           building_name: existingCustomer.building_name || "",
           flat_villa_no: existingCustomer.flat_villa_no || "",
-          location: existingCustomer.location || "",
+          country: existingCustomer.country || "",
+          field1: existingCustomer.field1 || "",
+          field2: existingCustomer.field2 || "",
+          field3: existingCustomer.field3 || "",
         })
         setWhatsappNumber(existingCustomer.whatsapp_number || "")
         setEmail(existingCustomer.email || "")
@@ -1324,12 +1412,10 @@ function FrontPage() {
       }
     }
   }
-
   const handleISDCodeSelect = (code) => {
     setSelectedISDCode(code)
     setShowISDCodeDropdown(false)
   }
-
   const handleCustomerSelect = (customer) => {
     setCustomerName(customer.customer_name)
     const fullPhone = customer.phone_number || ""
@@ -1339,7 +1425,10 @@ function FrontPage() {
     setDeliveryAddress({
       building_name: customer.building_name || "",
       flat_villa_no: customer.flat_villa_no || "",
-      location: customer.location || "",
+      country: customer.country || "",
+      field1: customer.field1 || "",
+      field2: customer.field2 || "",
+      field3: customer.field3 || "",
     })
     setWhatsappNumber(customer.whatsapp_number || "")
     setEmail(customer.email || "")
@@ -1347,7 +1436,6 @@ function FrontPage() {
     setShowCustomerSection(false)
     setIsPhoneNumberSet(true)
   }
-
   const handleCustomerSubmit = async () => {
     if (orderType === "Dine In") {
       setIsPhoneNumberSet(true)
@@ -1360,7 +1448,10 @@ function FrontPage() {
         phone_number: `${selectedISDCode}${phoneNumber}`,
         building_name: deliveryAddress.building_name || "",
         flat_villa_no: deliveryAddress.flat_villa_no || "",
-        location: deliveryAddress.location || "",
+        country: deliveryAddress.country || "",
+        field1: deliveryAddress.field1 || "",
+        field2: deliveryAddress.field2 || "",
+        field3: deliveryAddress.field3 || "",
         whatsapp_number: whatsappNumber || "",
         email: email || "",
         customer_group: selectedGroupId || null,
@@ -1379,7 +1470,6 @@ function FrontPage() {
       }
     }
   }
-
   const handleCreateGroup = async () => {
     if (!newGroupName.trim()) {
       setWarningMessage("Group name is required.")
@@ -1388,7 +1478,8 @@ function FrontPage() {
     }
     try {
       // FIXED: Use dynamic baseUrl for group create
-      const response = await axios.post(`${baseUrl}/api/customer-groups`, { group_name: newGroupName.trim() })
+      const apiPath = baseUrl ? `${baseUrl}/api/customer-groups` : '/api/customer-groups';
+      const response = await axios.post(apiPath, { group_name: newGroupName.trim() })
       setCustomerGroups([response.data, ...customerGroups])
       setSelectedGroupId(response.data._id)
       setNewGroupName("")
@@ -1401,7 +1492,6 @@ function FrontPage() {
       setWarningType("warning")
     }
   }
-
   // FIXED: Updated saveOrder to use generate_order_number without undefined orderNo
   const saveOrder = async () => {
     if (cartItems.length === 0) {
@@ -1423,7 +1513,7 @@ function FrontPage() {
       tableNumber: tableNumber || "N/A",
       chairsBooked: Array.isArray(chairsBooked) ? chairsBooked : [],
       phoneNumber: phoneNumber ? `${selectedISDCode}${phoneNumber}` : "N/A",
-      deliveryAddress: deliveryAddress || { building_name: "", flat_villa_no: "", location: "" },
+      deliveryAddress: deliveryAddress || { building_name: "", flat_villa_no: "", country: "", field1: "", field2: "", field3: "" },
       whatsappNumber: whatsappNumber || "N/A",
       email: email || "N/A",
       cartItems: cartItems.map((item) => ({
@@ -1431,10 +1521,10 @@ function FrontPage() {
         item_name: item.item_name || item.name,
         name: item.name || item.item_name,
         image: item.image || "/static/images/default-item.jpg",
-        quantity: Number(item.quantity) || 1,
-        basePrice: Number(item.basePrice) || 0,
+        quantity: Number(item.quantity) || 1, // FIXED: Explicit Number()
+        basePrice: Number(item.basePrice) || 0, // FIXED: Explicit Number()
         originalBasePrice: item.originalBasePrice || null,
-        totalPrice: Number(item.totalPrice) || (Number(item.basePrice) * (Number(item.quantity) || 1)) || 0,
+        totalPrice: Number(item.totalPrice) || (Number(item.basePrice) * (Number(item.quantity) || 1)) || 0, // FIXED: Explicit Number()
         addonQuantities: item.addonQuantities || {},
         addonVariants: item.addonVariants || {},
         addonPrices: item.addonPrices || {},
@@ -1476,7 +1566,8 @@ function FrontPage() {
     }
     try {
       // FIXED: Use dynamic baseUrl for kitchen save
-      const kitchenResponse = await axios.post(`${baseUrl}/api/kitchen-saved`, newOrder)
+      const apiPathKitchen = baseUrl ? `${baseUrl}/api/kitchen-saved` : '/api/kitchen-saved';
+      const kitchenResponse = await axios.post(apiPathKitchen, newOrder)
       if (!kitchenResponse.data.success) {
         throw new Error(kitchenResponse.data.error || "Failed to notify kitchen")
       }
@@ -1484,14 +1575,16 @@ function FrontPage() {
       let message = "Order saved successfully!";
       if (orderId) {
         // FIXED: Use dynamic baseUrl for order update
-        const updateResponse = await axios.put(`${baseUrl}/api/activeorders/${orderId}`, newOrder)
+        const apiPathUpdate = baseUrl ? `${baseUrl}/api/activeorders/${orderId}` : `/api/activeorders/${orderId}`;
+        const updateResponse = await axios.put(apiPathUpdate, newOrder)
         if (updateResponse.status === 200) {
           console.log("Order updated successfully")
           message = "Order updated successfully!";
         }
       } else {
         // FIXED: Use dynamic baseUrl for order save
-        const response = await axios.post(`${baseUrl}/api/activeorders`, newOrder)
+        const apiPathSave = baseUrl ? `${baseUrl}/api/activeorders` : '/api/activeorders';
+        const response = await axios.post(apiPathSave, newOrder)
         if (response.status === 201) {
           console.log("Order saved successfully")
           setOrderId(response.data.orderId)
@@ -1535,16 +1628,10 @@ function FrontPage() {
       setWarningType("warning")
     }
   }
-
-  const handleDeliveryAddressChange = (field, value) => {
-    setDeliveryAddress((prev) => ({ ...prev, [field]: value.trimStart() }))
-  }
-
   const handleWhatsappNumberChange = (e) => {
     const value = e.target.value.replace(/\D/g, "")
     if (value.length <= 10) setWhatsappNumber(value)
   }
-
   const handleSetPhoneNumber = () => {
     if (orderType === "Dine In") {
       setIsPhoneNumberSet(true)
@@ -1557,39 +1644,31 @@ function FrontPage() {
     }
     handleCustomerSubmit()
   }
-
   const cancelCart = () => {
     setCartItems([])
     setBillCartItems([])
     setWarningMessage("Cart cleared successfully.")
     setWarningType("success")
   }
-
   const handleActiveOrdersClick = () => {
     navigate("/active-orders")
   }
-
   const handleNext = () => {
     setStartIndex((prev) => prev + 1)
   }
-
   const handlePrev = () => {
     setStartIndex((prev) => Math.max(0, prev - 1))
   }
-
   const handleSalesReportNavigation = () => {
     navigate("/sales-reports")
   }
-
   const handleClosingEntryNavigation = () => {
     navigate("/closing-entry")
   }
-
   const handleLogout = () => {
     localStorage.removeItem("user")
     navigate("/")
   }
-
   const totalBookedChairs = bookedChairs[tableNumber]?.length || 0
   const availableChairs = totalChairs - totalBookedChairs
   const subtotal = calculateSubtotal(cartItems)
@@ -1597,7 +1676,6 @@ function FrontPage() {
   const total = subtotal + vat
   const showKitchenColumn = orderType === "Dine In"
   const visibleCategories = categories.slice(startIndex, startIndex + 5)
-
   return (
     <div className="frontpage-container">
       <div className={`frontpage-sidebar ${isSidebarOpen ? "open" : ""}`}>
@@ -1879,6 +1957,65 @@ function FrontPage() {
             </div>
             {orderType !== "Dine In" && (
               <>
+                <div className="frontpage-input-group">
+                  <label>Country</label>
+                  <SearchableSelect
+                    options={countryList}
+                    value={deliveryAddress.country}
+                    onChange={(value) => {
+                      handleDeliveryAddressChange("country", value);
+                      handleDeliveryAddressChange("field1", "");
+                      handleDeliveryAddressChange("field2", "");
+                      handleDeliveryAddressChange("field3", "");
+                    }}
+                    placeholder="Select Country"
+                  />
+                </div>
+                {/* FIELD 1 */}
+                {deliveryAddress.country && addressStructure.countries[deliveryAddress.country]?.field1 && (
+                  <div className="frontpage-input-group">
+                    <label>{addressStructure.countries[deliveryAddress.country].field1.label}</label>
+                    <SearchableSelect
+                      options={addressStructure.countries[deliveryAddress.country].field1.values || []}
+                      value={deliveryAddress.field1}
+                      onChange={(value) => {
+                        handleDeliveryAddressChange("field1", value);
+                        // Clear Field2 and Field3 when Field1 changes
+                        handleDeliveryAddressChange("field2", "");
+                        handleDeliveryAddressChange("field3", "");
+                      }}
+                      placeholder={`Select ${addressStructure.countries[deliveryAddress.country].field1.label}`}
+                    />
+                  </div>
+                )}
+                {/* FIELD 2 (filtered by selected Field1) */}
+                {deliveryAddress.country && addressStructure.countries[deliveryAddress.country]?.field2 && (
+                  <div className="frontpage-input-group">
+                    <label>{addressStructure.countries[deliveryAddress.country].field2.label}</label>
+                    <SearchableSelect
+                      options={getFilteredValues("field2").length > 0
+                        ? getFilteredValues("field2")
+                        : (addressStructure.countries[deliveryAddress.country].field2.values || [])}
+                      value={deliveryAddress.field2}
+                      onChange={(value) => handleDeliveryAddressChange("field2", value)}
+                      placeholder={`Select ${addressStructure.countries[deliveryAddress.country].field2.label}`}
+                    />
+                  </div>
+                )}
+                {/* FIELD 3 (shown always if defined) */}
+                {deliveryAddress.country && addressStructure.countries[deliveryAddress.country]?.field3 && (
+                  <div className="frontpage-input-group">
+                    <label>{addressStructure.countries[deliveryAddress.country].field3.label}</label>
+                    <SearchableSelect
+                      options={getFilteredValues("field3").length > 0
+                        ? getFilteredValues("field3")
+                        : (addressStructure.countries[deliveryAddress.country].field3.values || [])}
+                      value={deliveryAddress.field3}
+                      onChange={(value) => handleDeliveryAddressChange("field3", value)}
+                      placeholder={`Select ${addressStructure.countries[deliveryAddress.country].field3.label}`}
+                    />
+                  </div>
+                )}
                 <input
                   type="text"
                   className="frontpage-customer-input"
@@ -1892,13 +2029,6 @@ function FrontPage() {
                   placeholder="Enter Building Name"
                   value={deliveryAddress.building_name}
                   onChange={(e) => handleDeliveryAddressChange("building_name", e.target.value)}
-                />
-                <input
-                  type="text"
-                  className="frontpage-customer-input"
-                  placeholder="Enter Location"
-                  value={deliveryAddress.location}
-                  onChange={(e) => handleDeliveryAddressChange("location", e.target.value)}
                 />
                 <input
                   type="text"
@@ -2707,8 +2837,90 @@ function FrontPage() {
           onUpdate={handleItemUpdate}
         />
       )}
+      {/* ── STYLES (Add these to your CSS file or inline if needed) ── */}
+      <style jsx>{`
+        /* Searchable Select Styles */
+        .searchable-select {
+          position: relative;
+          width: 100%;
+        }
+        .searchable-select input {
+          width: 100%;
+          height: 42px;
+          padding: 0 12px;
+          border: 1.5px solid #007bff;
+          border-radius: 6px;
+          font-size: 13px;
+          transition: all 0.2s;
+          box-sizing: border-box;
+        }
+        .searchable-select input:focus {
+          outline: none;
+          border-color: #0056b3;
+          box-shadow: 0 0 0 3px rgba(0,123,255,.2);
+        }
+        .searchable-list {
+          position: absolute;
+          top: 100%;
+          left: 0;
+          right: 0;
+          background: #fff;
+          border: 1.5px solid #007bff;
+          border-top: none;
+          border-radius: 0 0 6px 6px;
+          max-height: 200px;
+          overflow-y: auto;
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          z-index: 100;
+          box-shadow: 0 4px 12px rgba(0,0,0,.15);
+        }
+        .searchable-list li {
+          padding: 8px 12px;
+          cursor: pointer;
+          font-size: 13px;
+          border-bottom: 1px solid #f0f0f0;
+        }
+        .searchable-list li:hover {
+          background: #f8f9fa;
+        }
+        .searchable-list .no-options {
+          color: #6c757d;
+          font-style: italic;
+          cursor: default;
+          padding: 12px;
+          text-align: center;
+        }
+        /* Customer Input Group */
+        .frontpage-input-group {
+          position: relative;
+          margin-bottom: 16px;
+        }
+        .frontpage-input-group label {
+          display: block;
+          margin-bottom: 6px;
+          font-size: 13px;
+          font-weight: bold;
+          color: #333;
+        }
+        .frontpage-customer-input {
+          height: 42px;
+          padding: 0 12px;
+          border: 1.5px solid #007bff;
+          border-radius: 6px;
+          font-size: 13px;
+          transition: all 0.2s;
+          width: 100%;
+          box-sizing: border-box;
+        }
+        .frontpage-customer-input:focus {
+          outline: none;
+          border-color: #0056b3;
+          box-shadow: 0 0 0 3px rgba(0,123,255,.2);
+        }
+      `}</style>
     </div>
   )
 }
-
 export default FrontPage;

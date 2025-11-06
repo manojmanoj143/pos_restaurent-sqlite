@@ -12,12 +12,34 @@ function AddKitchenPage() {
   const [message, setMessage] = useState('');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [kitchenToDelete, setKitchenToDelete] = useState(null);
+  const [baseUrl, setBaseUrl] = useState(""); // NEW: Added baseUrl state like in AdminPage
 
-  // Fetch existing kitchens on component mount
-  const fetchKitchens = async () => {
+  // NEW: Fetch config to determine baseUrl (similar to AdminPage)
+  const fetchConfig = async () => {
+    let currentBaseUrl = "";
+    try {
+      const response = await axios.get("http://localhost:8000/api/network_info");
+      const { config: appConfig } = response.data;
+      if (appConfig.mode === "client") {
+        currentBaseUrl = `http://${appConfig.server_ip}:8000`;
+        setBaseUrl(currentBaseUrl);
+      } else {
+        setBaseUrl("");
+      }
+    } catch (error) {
+      console.error("Failed to fetch config:", error);
+      setBaseUrl("");
+    } finally {
+      // Pass the determined baseUrl to fetchKitchens
+      fetchKitchens(currentBaseUrl);
+    }
+  };
+
+  // UPDATED: Fetch existing kitchens with baseUrl parameter
+  const fetchKitchens = async (currentBaseUrl = "") => {
     try {
       setLoading(true);
-      const response = await axios.get('/api/kitchens');
+      const response = await axios.get(`${currentBaseUrl}/api/kitchens`);
       setKitchens(response.data);
     } catch (err) {
       setError(`Failed to fetch kitchens: ${err.message}`);
@@ -26,26 +48,26 @@ function AddKitchenPage() {
     }
   };
 
+  // UPDATED: useEffect to fetch config and kitchens
   useEffect(() => {
-    fetchKitchens();
+    fetchConfig();
   }, []);
 
-  // Handle form submission to save kitchen
+  // UPDATED: Handle form submission to save kitchen with baseUrl
   const handleSaveKitchen = async (e) => {
     e.preventDefault();
     if (!kitchenName.trim()) {
       setError('Kitchen name is required');
       return;
     }
-
     try {
       setLoading(true);
       setError(null);
       setMessage('');
-      const response = await axios.post('/api/kitchens', { kitchen_name: kitchenName });
+      const response = await axios.post(`${baseUrl}/api/kitchens`, { kitchen_name: kitchenName });
       setMessage(response.data.message);
       setKitchenName(''); // Clear input
-      fetchKitchens(); // Refresh kitchen list
+      fetchKitchens(baseUrl); // Refresh kitchen list with baseUrl
     } catch (err) {
       setError(`Failed to save kitchen: ${err.response?.data?.error || err.message}`);
     } finally {
@@ -53,15 +75,15 @@ function AddKitchenPage() {
     }
   };
 
-  // Handle kitchen deletion
+  // UPDATED: Handle kitchen deletion with baseUrl
   const handleDeleteKitchen = async (kitchenId) => {
     try {
       setLoading(true);
       setError(null);
       setMessage('');
-      const response = await axios.delete(`/api/kitchens/${kitchenId}`);
+      const response = await axios.delete(`${baseUrl}/api/kitchens/${kitchenId}`);
       setMessage(response.data.message);
-      fetchKitchens(); // Refresh kitchen list
+      fetchKitchens(baseUrl); // Refresh kitchen list with baseUrl
     } catch (err) {
       setError(`Failed to delete kitchen: ${err.response?.data?.error || err.message}`);
     } finally {
@@ -111,12 +133,10 @@ function AddKitchenPage() {
         >
           <FaArrowLeft style={{ fontSize: '24px' }} />
         </button>
-
         {/* Header */}
         <h2 style={{ textAlign: 'center', marginBottom: '30px', color: '#333', fontSize: '2rem' }}>
           <FaUtensils style={{ marginRight: '10px' }} /> Add Kitchen
         </h2>
-
         {/* Messages */}
         {loading && <div style={{ textAlign: 'center' }}>Loading...</div>}
         {error && (
@@ -129,7 +149,6 @@ function AddKitchenPage() {
             {message}
           </div>
         )}
-
         {/* Kitchen Form */}
         <form onSubmit={handleSaveKitchen} style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', marginBottom: '30px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
@@ -165,7 +184,6 @@ function AddKitchenPage() {
             </button>
           </div>
         </form>
-
         {/* Kitchen List */}
         <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px' }}>
           <h3 style={{ marginBottom: '20px', color: '#333' }}>Kitchen Details</h3>
@@ -211,7 +229,6 @@ function AddKitchenPage() {
             </ul>
           )}
         </div>
-
         {/* Delete Confirmation Modal */}
         {showDeleteModal && (
           <div

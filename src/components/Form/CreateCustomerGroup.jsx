@@ -6,10 +6,36 @@ const CreateCustomerGroup = () => {
   const [warningMessage, setWarningMessage] = useState("");
   const [warningType, setWarningType] = useState("warning");
   const [customerGroups, setCustomerGroups] = useState([]);
+  const [baseUrl, setBaseUrl] = useState("");
   const [editingGroupId, setEditingGroupId] = useState(null);
 
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    const fetchConfig = async () => {
+      let currentBaseUrl = "";
+      try {
+        const response = await axios.get("http://localhost:8000/api/network_info");
+        const { config: appConfig } = response.data;
+        if (appConfig.mode === "client") {
+          currentBaseUrl = `http://${appConfig.server_ip}:8000`;
+          setBaseUrl(currentBaseUrl);
+        } else {
+          setBaseUrl("");
+        }
+      } catch (error) {
+        console.error("Failed to fetch config:", error);
+        setBaseUrl("");
+      } finally {
+        // Pass the determined baseUrl to fetch functions
+        fetchCounts(currentBaseUrl);
+        fetchLogo(currentBaseUrl);
+      }
+    };
+    fetchConfig();
+  }, []);
+
 
   const fetchCustomerGroups = async () => {
     try {

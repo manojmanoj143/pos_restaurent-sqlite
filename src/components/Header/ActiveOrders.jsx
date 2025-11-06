@@ -1,11 +1,10 @@
-// ActiveOrders.jsx (Updated: Added detailed rendering for combo offers, including sub-items with prices, kitchens, ticks.
-// Also updated handleSelectOrder to use is_combo_offer. Full detailed code.)
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
 import axios from "axios";
 import { FaArrowLeft, FaSyncAlt, FaCheck } from "react-icons/fa";
 import "./ActiveOrders.css";
+
 function ActiveOrders() {
   const [savedOrders, setSavedOrders] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -22,6 +21,7 @@ function ActiveOrders() {
   const [baseUrl, setBaseUrl] = useState(""); // Dynamic base URL for client/server mode
   const navigate = useNavigate();
   const vatRate = 0.10;
+
   // Fetch config for baseUrl (client/server mode)
   useEffect(() => {
     const fetchConfig = async () => {
@@ -41,6 +41,7 @@ function ActiveOrders() {
     };
     fetchConfig();
   }, []);
+
   const fetchData = async () => {
     try {
       const ordersResponse = await axios.get(`${baseUrl}/api/activeorders`);
@@ -71,6 +72,7 @@ function ActiveOrders() {
       // Suppressed UI warning message as per request - do not setWarningMessage
     }
   };
+
   const fetchEmployees = async () => {
     try {
       const response = await axios.get(`${baseUrl}/api/employees`);
@@ -80,6 +82,7 @@ function ActiveOrders() {
       // Suppressed UI warning message as per request
     }
   };
+
   const fetchTables = async () => {
     try {
       const response = await axios.get(`${baseUrl}/api/tables`);
@@ -89,6 +92,7 @@ function ActiveOrders() {
       // Suppressed UI warning message as per request
     }
   };
+
   useEffect(() => {
     fetchData();
     fetchEmployees();
@@ -96,16 +100,19 @@ function ActiveOrders() {
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, [baseUrl]); // Re-fetch after baseUrl is set
+
   const getFloor = (tableNumber) => {
     const table = tables.find((t) => String(t.table_number) === String(tableNumber));
     return table ? table.floor : "N/A";
   };
+
   const handleRefresh = () => {
     fetchData();
     // Suppressed UI warning message as per request
     // setWarningMessage("Orders refreshed!");
     // setWarningType("success");
   };
+
   const handleWarningOk = () => {
     if (pendingAction) {
       pendingAction();
@@ -115,6 +122,7 @@ function ActiveOrders() {
     setWarningType("warning");
     setIsConfirmation(false);
   };
+
   const handleConfirmYes = () => {
     if (pendingAction) {
       pendingAction();
@@ -124,12 +132,14 @@ function ActiveOrders() {
     setWarningType("warning");
     setIsConfirmation(false);
   };
+
   const handleConfirmNo = () => {
     setWarningMessage("");
     setWarningType("warning");
     setPendingAction(null);
     setIsConfirmation(false);
   };
+
   const handleDeleteOrder = (orderId, tableNumber, orderNo) => {
     setWarningMessage(`Are you sure you want to delete order ${orderNo || "N/A"}?`);
     setWarningType("warning");
@@ -157,6 +167,7 @@ function ActiveOrders() {
       }
     );
   };
+
   const handleDeleteItem = async (orderId, itemId) => {
     try {
       await axios.delete(`${baseUrl}/api/activeorders/${orderId}/items/${itemId}`);
@@ -167,6 +178,7 @@ function ActiveOrders() {
       // Suppressed UI warning message as per request
     }
   };
+
   const handleDeleteAllCompleted = () => {
     setWarningMessage("Are you sure you want to delete all completed orders?");
     setWarningType("warning");
@@ -193,6 +205,7 @@ function ActiveOrders() {
       }
     );
   };
+
   const handleCompleted = async (orderId) => {
     const order = savedOrders.find((o) => o.orderId === orderId);
     if (!order) return;
@@ -225,6 +238,7 @@ function ActiveOrders() {
       // Suppressed UI warning message as per request
     }
   };
+
   const checkAllItemsPickedUp = (order) => {
     if (!order.cartItems || order.cartItems.length === 0) return false;
     const allPickedUp = order.cartItems.every((item) => {
@@ -236,6 +250,7 @@ function ActiveOrders() {
     console.log(`Check if all items picked up for order ${order.orderNo}: ${allPickedUp}`);
     return allPickedUp;
   };
+
   const handleAssignDeliveryPerson = (orderId, deliveryPersonId) => {
     const order = savedOrders.find((o) => o.orderId === orderId);
     if (!order) {
@@ -257,6 +272,7 @@ function ActiveOrders() {
     setSelectedDeliveryPersonId(deliveryPersonId);
     setShowDeliveryPopup(true);
   };
+
   const confirmDeliveryAssignment = async () => {
     try {
       const order = savedOrders.find((o) => o.orderId === selectedOrderId);
@@ -289,11 +305,13 @@ function ActiveOrders() {
       setShowDeliveryPopup(false);
     }
   };
+
   const cancelDeliveryPopup = () => {
     setShowDeliveryPopup(false);
     setSelectedOrderId(null);
     setSelectedDeliveryPersonId(null);
   };
+
   const updateOrder = async (orderId, updatedOrder) => {
     try {
       const response = await axios.put(`${baseUrl}/api/activeorders/${orderId}`, updatedOrder);
@@ -308,6 +326,7 @@ function ActiveOrders() {
       // Suppressed UI warning message as per request
     }
   };
+
   const inferOrderType = (order) => {
     if (order.tableNumber && order.tableNumber !== "N/A") return "Dine In";
     else if (
@@ -317,6 +336,7 @@ function ActiveOrders() {
       return "Online Delivery";
     else return "Take Away";
   };
+
   const handleSelectOrder = (order) => {
     if (!order.cartItems || order.cartItems.length === 0) {
       console.error("This order has no items.");
@@ -575,12 +595,15 @@ function ActiveOrders() {
       },
     });
   };
+
   const handleBack = () => {
     navigate("/frontpage");
   };
+
   const toggleItems = (index) => {
     setExpandedItems((prev) => ({ ...prev, [index]: !prev[index] }));
   };
+
   const renderIngredients = (ingredients) => {
     if (!ingredients || ingredients.length === 0) return "No ingredients";
     return (
@@ -593,10 +616,12 @@ function ActiveOrders() {
       </ul>
     );
   };
+
   const getPickedUpTick = (item, kitchen) => {
     if (!item.kitchenStatuses || !kitchen) return null;
     return item.kitchenStatuses[kitchen] === "PickedUp" ? <FaCheck style={{ color: 'green', marginLeft: '5px' }} /> : null;
   };
+
   const renderAddons = (addonQuantities, addonVariants, addonPrices, item) => {
     if (!addonQuantities || Object.keys(addonQuantities).length === 0) return null;
     return (
@@ -618,6 +643,7 @@ function ActiveOrders() {
       </ul>
     );
   };
+
   const renderCombos = (comboQuantities, comboVariants, comboPrices, item) => {
     if (!comboQuantities || Object.keys(comboQuantities).length === 0) return null;
     return (
@@ -641,6 +667,7 @@ function ActiveOrders() {
       </ul>
     );
   };
+
   // FIXED: New function to render combo offer sub-items
   const renderComboOfferSubItems = (comboItems, itemQuantity, item) => {
     if (!comboItems || comboItems.length === 0) return null;
@@ -660,16 +687,19 @@ function ActiveOrders() {
       </ul>
     );
   };
+
   const calculateOrderTotal = (cartItems) => {
     if (!Array.isArray(cartItems)) return "0.00";
     return cartItems.reduce((sum, item) => sum + (Number(item.totalPrice) || 0), 0).toFixed(2);
   };
+
   const calculateGrandTotal = (cartItems) => {
     if (!Array.isArray(cartItems)) return "0.00";
     const subtotal = cartItems.reduce((sum, item) => sum + (Number(item.totalPrice) || 0), 0);
     const vat = subtotal * vatRate;
     return (subtotal + vat).toFixed(2);
   };
+
   const getItemStatus = (item) => {
     if (!item.kitchenStatuses) return item.status || "Pending";
     const statuses = Object.values(item.kitchenStatuses);
@@ -678,6 +708,7 @@ function ActiveOrders() {
     else if (statuses.includes("Preparing")) return "Preparing";
     else return "Pending";
   };
+
   const getStatusStyle = (status) => {
     switch (status) {
       case "Pending":
@@ -692,41 +723,57 @@ function ActiveOrders() {
         return {};
     }
   };
+
+  // FIXED: Updated to include country, field1, field2, field3, flat_villa_no, building_name
   const formatDeliveryAddress = (deliveryAddress) => {
     if (!deliveryAddress) return "Not provided";
-    const { building_name, flat_villa_no, location } = deliveryAddress;
-    const parts = [flat_villa_no, building_name, location].filter((part) => part != null && String(part).trim() !== "");
+    const parts = [
+      deliveryAddress.flat_villa_no,
+      deliveryAddress.building_name,
+      deliveryAddress.country,
+      deliveryAddress.field1,
+      deliveryAddress.field2,
+      deliveryAddress.field3,
+    ].filter((part) => part != null && String(part).trim() !== "");
     return parts.length > 0 ? parts.join(", ") : "Not provided";
   };
+
   const formatChairsBooked = (chairsBooked) => {
     if (!Array.isArray(chairsBooked) || chairsBooked.length === 0) return "None";
     return chairsBooked.join(", ");
   };
+
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return "N/A";
     return new Date(timestamp).toLocaleString();
   };
+
   const getDeliveryPersonName = (deliveryPersonId) => {
     const employee = employees.find((emp) => emp.employeeId === deliveryPersonId);
     return employee ? `${employee.name} (ID: ${employee.employeeId})` : "Not assigned";
   };
+
   const orderCounts = {
     "Dine In": savedOrders.filter((order) => (order.orderType || inferOrderType(order)) === "Dine In").length,
     "Take Away": savedOrders.filter((order) => (order.orderType || inferOrderType(order)) === "Take Away").length,
     "Online Delivery": savedOrders.filter((order) => (order.orderType || inferOrderType(order)) === "Online Delivery").length,
   };
+
   const filteredOrders = savedOrders.filter((order) => {
     const orderType = order.orderType || inferOrderType(order);
     return orderType === filterType;
   });
+
   const unservedFiltered = filteredOrders.filter((order) => {
     const allItemsCompleted = order.cartItems.every((item) => (item.servedQuantity || 0) >= (item.quantity || 1));
     return !(order.paid && allItemsCompleted);
   });
+
   const completedFiltered = filteredOrders.filter((order) => {
     const allItemsCompleted = order.cartItems.every((item) => (item.servedQuantity || 0) >= (item.quantity || 1));
     return order.paid && allItemsCompleted;
   });
+
   const handleServiceChange = async (orderId, itemId, isServed) => {
     try {
       const order = savedOrders.find((o) => o.orderId === orderId);
@@ -755,6 +802,7 @@ function ActiveOrders() {
       // Suppressed UI warning message as per request
     }
   };
+
   const handlePaymentChange = async (orderId, isPaid) => {
     try {
       const response = await axios.put(`${baseUrl}/api/activeorders/${orderId}`, { paid: isPaid });
@@ -769,6 +817,7 @@ function ActiveOrders() {
       // Suppressed UI warning message as per request
     }
   };
+
   const renderOrderTable = (orders, tableTitle) => {
     const isOnlineDelivery = filterType === "Online Delivery";
     return (
@@ -1013,10 +1062,12 @@ function ActiveOrders() {
       </div>
     );
   };
+
   function checkAllItemsPickedUpForItem(item) {
     if (!item.kitchenStatuses) return false;
     return Object.values(item.kitchenStatuses).every((status) => status === "PickedUp");
   }
+
   return (
     <div className="active-orders-container">
       {warningMessage && (
@@ -1102,4 +1153,5 @@ function ActiveOrders() {
     </div>
   );
 }
+
 export default ActiveOrders;

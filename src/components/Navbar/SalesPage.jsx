@@ -1,4 +1,4 @@
-// SalesPage.jsx (Updated: Added Offer Name filter dropdown with unique offer descriptions from sales data)
+// SalesPage.jsx (Updated: Added full delivery address handling matching Cash.jsx exactly - UI table display, multi-line print HTML, single-line summary, hasDeliveryAddress check, formatDeliveryAddress, getPrintDeliveryAddressHtml functions. Modal now mirrors Cash.jsx structure with detailed table including delivery address. Print updated for multi-line delivery. Full detailed complete code provided.)
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import {
@@ -166,7 +166,7 @@ const SalesPage = () => {
             currencyPrecision: parseInt(parsed.currencyPrecision) || 2,
             language: parsed.language || 'en-IN',
             dateFormat: parsed.dateFormat || 'yyyy-long-mm-dd',
-            timeFormat: parsed.timeFormat || 'HH:mm:ss',
+            timeFormat: parsed.dateFormat || 'HH:mm:ss',
             timeZone: parsed.timeZone || 'Asia/Dubai',
           }));
         }
@@ -455,6 +455,46 @@ const SalesPage = () => {
     };
     return date.toLocaleTimeString('en-US', options);
   };
+  // NEW: Helper to format delivery address in the specified order (single line for UI) - Matching Cash.jsx
+  const formatDeliveryAddress = (deliveryAddress) => {
+    if (!deliveryAddress) return null;
+    const parts = [
+      deliveryAddress.flat_villa_no || "",
+      deliveryAddress.building_name || "",
+      deliveryAddress.field3 || "",
+      deliveryAddress.field2 || "",
+      deliveryAddress.field1 || "",
+      deliveryAddress.country || ""
+    ].filter(part => part.trim() !== ""); // Filter out empty parts
+    return parts.length > 0 ? parts.join(", ") : null;
+  };
+  // NEW: Helper to format delivery address for print (multi-line HTML) - Matching Cash.jsx
+  const getPrintDeliveryAddressHtml = (deliveryAddress) => {
+    if (!deliveryAddress) return null;
+    const lines = [];
+    // Line 1: flat_villa_no + building_name
+    const line1 = [deliveryAddress.flat_villa_no, deliveryAddress.building_name].filter(Boolean).join(', ');
+    if (line1) lines.push(line1);
+    // Line 2: field3 + field2
+    const line2 = [deliveryAddress.field3, deliveryAddress.field2].filter(Boolean).join(', ');
+    if (line2) lines.push(line2);
+    // Line 3: field1 + country
+    const line3 = [deliveryAddress.field1, deliveryAddress.country].filter(Boolean).join(', ');
+    if (line3) lines.push(line3);
+    return lines.length > 0 ? lines.join('<br>') : null;
+  };
+  // NEW: Check if delivery address is available - Matching Cash.jsx
+  const hasDeliveryAddress = (sale) => {
+    if (!sale?.deliveryAddress) return false;
+    return (
+      sale.deliveryAddress.building_name ||
+      sale.deliveryAddress.flat_villa_no ||
+      sale.deliveryAddress.country ||
+      sale.deliveryAddress.field1 ||
+      sale.deliveryAddress.field2 ||
+      sale.deliveryAddress.field3
+    );
+  };
   const cleanData = (data) => {
     if (!Array.isArray(data)) return [];
     const validOrderTypes = ["Dine In", "Takeaway", "Online Delivery"];
@@ -485,6 +525,15 @@ const SalesPage = () => {
         // FIXED: For historical invoices, ensure invoice_currency defaults to 'INR' if not set (as per old data assumption)
         invoice_currency: sale.invoice_currency || 'INR', // Default to INR for old invoices without currency field
         invoice_currency_precision: sale.invoice_currency_precision || 2, // Default precision
+        // NEW: Ensure deliveryAddress is preserved and structured correctly (fallback to empty object if missing)
+        deliveryAddress: sale.deliveryAddress || {
+          building_name: "",
+          flat_villa_no: "",
+          country: "",
+          field1: "",
+          field2: "",
+          field3: "",
+        },
       }));
     const invoiceNos = cleaned.map((sale) => sale.invoice_no);
     const duplicates = invoiceNos.filter(
@@ -566,6 +615,7 @@ const SalesPage = () => {
   // UPDATED: Generate printable receipt content - Now uses currentTime for date/time (like cash.jsx)
   // CORRECTED: Standardized padding, line-height, font-size to exactly match Cash.jsx for alignment
   // NEW: Handle combo offer display name
+  // UPDATED: Full delivery address handling - multi-line HTML matching Cash.jsx
   const generatePrintableContent = (sale, isPreview = false) => {
     if (!sale) return "";
     const subtotal = calculateSubtotal(sale);
@@ -577,14 +627,9 @@ const SalesPage = () => {
     const invoiceCurrency = sale.invoice_currency || settings.currency || 'INR';
     const invoicePrecision = sale.invoice_currency_precision || settings.currencyPrecision || 2;
     const formatter = getCurrencyFormatter(invoiceCurrency, invoicePrecision);
-    const hasDeliveryAddress =
-      sale.deliveryAddress &&
-      (sale.deliveryAddress.building_name ||
-        sale.deliveryAddress.flat_villa_no ||
-        sale.deliveryAddress.location);
-    const deliveryAddress = hasDeliveryAddress
-      ? `${sale.deliveryAddress.building_name || ""}, ${sale.deliveryAddress.flat_villa_no || ""}, ${sale.deliveryAddress.location || ""}`
-      : null;
+    // UPDATED: Full delivery address handling matching Cash.jsx
+    const deliveryAddressHtml = getPrintDeliveryAddressHtml(sale.deliveryAddress);
+    const hasDeliveryAddressFlag = hasDeliveryAddress(sale);
     const borderStyle = isPreview ? "border: none;" : "border: 1px solid #000000;";
     const effectivePrintSettings = printSettings || defaultPrintSettings;
     const restaurantName = effectivePrintSettings.restaurantName;
@@ -677,12 +722,12 @@ const SalesPage = () => {
                 : ""
             }
             ${
-              hasDeliveryAddress
+              hasDeliveryAddressFlag && deliveryAddressHtml
                 ? `
                   <tr>
-                    <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">Delivery Address</td>
+                    <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; vertical-align: top;">Delivery Address</td>
                     <td style="text-align: center; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">:</td>
-                    <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; word-break: break-all;">${deliveryAddress}</td>
+                    <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; white-space: pre-line; word-break: break-all;">${deliveryAddressHtml}</td>
                   </tr>
                 `
                 : ""
@@ -729,7 +774,7 @@ const SalesPage = () => {
                 const spicyPrice = parseFloat(item.spicy_price) || 0;
                 // NEW: Use updated display name for combo offers
                 const displayName = getItemDisplayName(item);
-     
+    
                 return `
                   <tr>
                     <td style="text-align: left; padding: 4px 8px; border-bottom: 1px solid #000; line-height: 1.2; font-size: 12px; vertical-align: top;">${displayName}</td>
@@ -1120,6 +1165,8 @@ const SalesPage = () => {
   };
   // NEW: Get formatter instance (memoized to avoid recreating on every render)
   const formatter = getCurrencyFormatter();
+  // UPDATED: For modal, compute formatted delivery address
+  const formattedDeliveryAddress = invoiceDetails ? formatDeliveryAddress(invoiceDetails.deliveryAddress) : null;
   if (loading || baseUrl === null) // Show loading while fetching config or data
     return (
       <Container className="text-center mt-5">
@@ -1435,35 +1482,278 @@ const SalesPage = () => {
           </Card>
         </Col>
       </Row>
+      {/* UPDATED: Modal now mirrors Cash.jsx structure - Detailed table with delivery address, items, totals */}
       <Modal
         show={showModal}
         onHide={() => setShowModal(false)}
         size="lg"
-        className="sales-modal"
+        centered
       >
-        <Modal.Header closeButton className="modal-header">
-          <Modal.Title style={{ color: "#000000" }}>Invoice Details</Modal.Title>
-          {invoiceDetails && (
-            <Button
-              variant="primary"
-              onClick={() => handlePrint(invoiceDetails)}
-              className="ms-auto"
-            >
-              <FaPrint /> Print
-            </Button>
-          )}
+        <Modal.Header closeButton className="bg-primary text-white">
+          <Modal.Title>Invoice Details - {invoiceDetails?.invoice_no}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           {invoiceDetails && (
-            <div
-              className="print-preview"
-              dangerouslySetInnerHTML={{
-                __html: generatePrintableContent(invoiceDetails, true),
-              }}
-            />
+            <div>
+              {/* UPDATED: Email input like Cash.jsx (pre-filled, editable) */}
+              <div className="mb-3">
+                <label className="form-label fw-bold">Email Receipt To:</label>
+                <input
+                  type="email"
+                  className="form-control"
+                  value={invoiceDetails.email || ""}
+                  onChange={(e) => {
+                    // Optional: Update local state if needed, but for now just display
+                  }}
+                  placeholder="Enter email address"
+                />
+              </div>
+              {/* UPDATED: Customer info table matching Cash.jsx */}
+              <table className="table table-bordered mb-3">
+                <tbody>
+                  <tr>
+                    <td style={{ width: "50%", textAlign: "left" }}>
+                      <strong>Invoice No:</strong>
+                    </td>
+                    <td style={{ width: "50%", textAlign: "right", whiteSpace: "nowrap" }}>{invoiceDetails.invoice_no}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ textAlign: "left" }}>
+                      <strong>Customer:</strong>
+                    </td>
+                    <td style={{ textAlign: "right" }}>{invoiceDetails.customer}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ textAlign: "left" }}>
+                      <strong>Phone:</strong>
+                    </td>
+                    <td style={{ textAlign: "right" }}>{invoiceDetails.phoneNumber}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ textAlign: "left" }}>
+                      <strong>Email:</strong>
+                    </td>
+                    <td style={{ textAlign: "right" }}>{invoiceDetails.email}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ textAlign: "left" }}>
+                      <strong>WhatsApp:</strong>
+                    </td>
+                    <td style={{ textAlign: "right" }}>{invoiceDetails.whatsappNumber}</td>
+                  </tr>
+                  {invoiceDetails.tableNumber && invoiceDetails.tableNumber !== "N/A" && (
+                    <tr>
+                      <td style={{ textAlign: "left" }}>
+                        <strong>Table:</strong>
+                      </td>
+                      <td style={{ textAlign: "right" }}>{invoiceDetails.tableNumber}</td>
+                    </tr>
+                  )}
+                  {/* NEW: Delivery address row matching Cash.jsx */}
+                  {hasDeliveryAddress(invoiceDetails) && formattedDeliveryAddress && (
+                    <tr>
+                      <td style={{ textAlign: "left" }}>
+                        <strong>Delivery Address:</strong>
+                      </td>
+                      <td style={{ textAlign: "right" }}>{formattedDeliveryAddress}</td>
+                    </tr>
+                  )}
+                  <tr>
+                    <td style={{ textAlign: "left" }}>
+                      <strong>Payment Mode:</strong>
+                    </td>
+                    <td style={{ textAlign: "right" }}>{invoiceDetails.payments?.[0]?.mode_of_payment || "CASH"}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ textAlign: "left" }}>
+                      <strong>Date:</strong>
+                    </td>
+                    <td style={{ textAlign: "right" }}>{getFormattedDate(currentTime, settings.dateFormat)}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ textAlign: "left" }}>
+                      <strong>Time:</strong>
+                    </td>
+                    <td style={{ textAlign: "right" }}>{getFormattedTime(currentTime, settings.timeFormat)}</td>
+                  </tr>
+                </tbody>
+              </table>
+              {/* UPDATED: Items table matching Cash.jsx */}
+              <h5 className="mb-3">Items:</h5>
+              <div className="table-responsive">
+                <table className="table table-striped table-bordered" style={{ fontSize: "13px", color: "black", fontWeight: "bold" }}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: "50px" }}>T.No.</th>
+                      <th>Item Details</th>
+                      <th style={{ width: "80px" }}>Qty</th>
+                      <th style={{ width: "80px" }}>Price</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invoiceDetails.items.map((item, index) => {
+                      const { baseAmount, icePrice = parseFloat(item.ice_price) || 0, spicyPrice = parseFloat(item.spicy_price) || 0 } = calculateItemPrices(item);
+                      return (
+                        <React.Fragment key={index}>
+                          <tr>
+                            <td>{invoiceDetails.tableNumber || "N/A"}</td>
+                            <td>
+                              <strong>{getItemDisplayName(item)}</strong>
+                            </td>
+                            <td>{item.quantity}</td>
+                            <td>
+                              {item.originalBasePrice ? (
+                                <>
+                                  <span style={{ textDecoration: "line-through" }}>{formatCurrency(item.originalBasePrice, invoiceDetails)}</span> {formatCurrency(baseAmount, invoiceDetails)}
+                                </>
+                              ) : (
+                                formatCurrency(baseAmount, invoiceDetails)
+                              )}
+                            </td>
+                          </tr>
+                          {item.isCombo && item.comboItems && item.comboItems.map((comboItem, cIndex) => (
+                            <tr key={`${index}-combo-${cIndex}`}>
+                              <td></td>
+                              <td>
+                                <div style={{ fontSize: "12px", color: "#666" }}>+ {comboItem.name}</div>
+                              </td>
+                              <td>{item.quantity}</td>
+                              <td>{formatCurrency(comboItem.price, invoiceDetails)}</td>
+                            </tr>
+                          ))}
+                          {item.icePreference === "with_ice" && icePrice > 0 && (
+                            <tr>
+                              <td></td>
+                              <td>
+                                <div style={{ fontSize: "12px", color: "#666" }}>+ Ice ({formatCurrency(icePrice, invoiceDetails)})</div>
+                              </td>
+                              <td>{item.quantity}</td>
+                              <td>{formatCurrency(icePrice, invoiceDetails)}</td>
+                            </tr>
+                          )}
+                          {item.isSpicy && spicyPrice > 0 && (
+                            <tr>
+                              <td></td>
+                              <td>
+                                <div style={{ fontSize: "12px", color: "#666" }}>+ Spicy ({formatCurrency(spicyPrice, invoiceDetails)})</div>
+                              </td>
+                              <td>{item.quantity}</td>
+                              <td>{formatCurrency(spicyPrice, invoiceDetails)}</td>
+                            </tr>
+                          )}
+                          {item.customVariantsDetails &&
+                            Object.keys(item.customVariantsDetails).length > 0 &&
+                            Object.entries(item.customVariantsDetails).map(([variantName, variant], idx) => (
+                              <tr key={`${index}-custom-${idx}`}>
+                                <td></td>
+                                <td>
+                                  <div style={{ color: "#888", fontSize: "12px" }}>
+                                    + {variant.heading}: {variant.name} ({formatCurrency(variant.price, invoiceDetails)})
+                                  </div>
+                                </td>
+                                <td>{item.customVariantsQuantities?.[variantName] || 1}</td>
+                                <td>{formatCurrency(variant.price, invoiceDetails)}</td>
+                              </tr>
+                            ))}
+                          {item.addons &&
+                            item.addons.map(
+                              (addon, idx) =>
+                                addon.addon_quantity > 0 && (
+                                  <React.Fragment key={`${index}-addon-${idx}`}>
+                                    <tr>
+                                      <td></td>
+                                      <td>
+                                        <div style={{ color: "#2ecc71", fontSize: "12px" }}>
+                                          + Addon: {addon.addon_name}{addon.size ? ` (${addon.size})` : ""}
+                                        </div>
+                                      </td>
+                                      <td>{addon.addon_quantity}</td>
+                                      <td>{formatCurrency(addon.addon_price, invoiceDetails)}</td>
+                                    </tr>
+                                    {addon.isSpicy && addon.spicyPrice > 0 && (
+                                      <tr>
+                                        <td></td>
+                                        <td>
+                                          <div style={{ color: "#888", fontSize: "12px" }}>
+                                            + Spicy ({formatCurrency(addon.spicyPrice, invoiceDetails)})
+                                          </div>
+                                        </td>
+                                        <td>{addon.addon_quantity}</td>
+                                        <td>{formatCurrency(addon.spicyPrice * addon.addon_quantity, invoiceDetails)}</td>
+                                      </tr>
+                                    )}
+                                  </React.Fragment>
+                                )
+                            )}
+                          {item.combos &&
+                            item.combos.map(
+                              (combo, idx) =>
+                                combo.combo_quantity > 0 && (
+                                  <React.Fragment key={`${index}-combo-${idx}`}>
+                                    <tr>
+                                      <td></td>
+                                      <td>
+                                        <div style={{ color: "#e74c3c", fontSize: "12px" }}>
+                                          + Combo: {combo.name1}{combo.size ? ` (${combo.size})` : ""}
+                                        </div>
+                                      </td>
+                                      <td>{combo.combo_quantity}</td>
+                                      <td>{formatCurrency(combo.combo_price, invoiceDetails)}</td>
+                                    </tr>
+                                    {combo.isSpicy && combo.spicyPrice > 0 && (
+                                      <tr>
+                                        <td></td>
+                                        <td>
+                                          <div style={{ color: "#888", fontSize: "12px" }}>
+                                            + Spicy ({formatCurrency(combo.spicyPrice, invoiceDetails)})
+                                          </div>
+                                        </td>
+                                        <td>{combo.combo_quantity}</td>
+                                        <td>{formatCurrency(combo.spicyPrice * combo.combo_quantity, invoiceDetails)}</td>
+                                      </tr>
+                                    )}
+                                  </React.Fragment>
+                                )
+                            )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {/* UPDATED: Totals matching Cash.jsx */}
+              <div className="mt-3">
+                <p>
+                  <strong>Total Quantity:</strong> {invoiceDetails.items.reduce((sum, item) => sum + item.quantity, 0)}
+                </p>
+                <p>
+                  <strong>Subtotal:</strong> {formatCurrency(calculateSubtotal(invoiceDetails), invoiceDetails)}
+                </p>
+                <p>
+                  <strong>VAT ({(calculateVAT(invoiceDetails) / calculateSubtotal(invoiceDetails) * 100 || 0).toFixed(0)}%):</strong> {formatCurrency(calculateVAT(invoiceDetails), invoiceDetails)}
+                </p>
+                <p>
+                  <strong>Grand Total:</strong> {formatCurrency(calculateGrandTotal(invoiceDetails), invoiceDetails)}
+                </p>
+              </div>
+            </div>
           )}
         </Modal.Body>
-        <Modal.Footer />
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowModal(false)}>
+            Close
+          </Button>
+          {invoiceDetails && (
+            <>
+              <Button variant="info" onClick={() => handleEmail(invoiceDetails)}>
+                <FaEnvelope /> Send Email
+              </Button>
+              <Button variant="primary" onClick={() => handlePrint(invoiceDetails)}>
+                <FaPrint /> Print Preview
+              </Button>
+            </>
+          )}
+        </Modal.Footer>
       </Modal>
     </Container>
   );
