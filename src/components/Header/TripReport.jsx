@@ -1,13 +1,14 @@
+// TripReport.jsx - Full Updated Code with Dynamic VAT Rate and Delivery Person Name
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
 import { FaArrowLeft } from 'react-icons/fa';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './TripReport.css';
-
 function TripReport() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [deliveryPerson, setDeliveryPerson] = useState('');
   const [employees, setEmployees] = useState([]);
   const [filteredEmployees, setFilteredEmployees] = useState([]);
@@ -26,20 +27,32 @@ function TripReport() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const [paymentDetails, setPaymentDetails] = useState({});
+  const [vatRate, setVatRate] = useState(0.10); // UPDATED: Dynamic VAT rate like in FrontPage
   const dropdownRef = useRef(null);
-  const vatRate = 0.10;
-
+  const baseUrl = window.location.hostname === 'localhost' ? '' : `http://${window.location.hostname}:8000`;
+  // UPDATED: Fetch VAT rate dynamically like in FrontPage
+  useEffect(() => {
+    const fetchVat = async () => {
+      try {
+        const apiPath = baseUrl ? `${baseUrl}/api/get-vat` : '/api/get-vat';
+        const response = await axios.get(apiPath);
+        setVatRate(response.data.vat / 100 || 0.10);
+      } catch (error) {
+        console.error('Failed to fetch VAT:', error);
+      }
+    };
+    fetchVat();
+  }, [baseUrl]);
   // Generate short UUID suffix for invoice number
   const generateShortUUID = () => {
     return uuidv4().slice(0, 8);
   };
-
   // Fetch employees on component mount
   const fetchEmployees = async () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await axios.get('http://localhost:8000/api/employees');
+      const response = await axios.get(`${baseUrl}/api/employees`);
       const data = Array.isArray(response.data) ? response.data : [];
       setEmployees(data);
       setFilteredEmployees(data.filter((emp) => emp.role.toLowerCase() === 'delivery boy'));
@@ -51,18 +64,18 @@ function TripReport() {
       setLoading(false);
     }
   };
-
-  // Fetch trip reports for the selected employee
+  // UPDATED: Fetch trip reports for the selected employee from trip_reports
   const fetchTripReports = async (employeeId, date, billNo, custName) => {
     if (!employeeId || !date) return;
     try {
       setLoading(true);
       setError(null);
-      const response = await axios.get(`http://localhost:8000/api/tripreports/${employeeId}`);
+      const response = await axios.get(`${baseUrl}/api/tripreports/${employeeId}`);
       const data = Array.isArray(response.data) ? response.data : [];
       const sanitizedReports = data.map((report) => ({
         ...report,
         orderNo: report.orderNo || 'N/A',
+        tripId: report.orderId || uuidv4(), // Ensure tripId for frontend
         chairsBooked: Array.isArray(report.chairsBooked) ? report.chairsBooked : [],
         cartItems: Array.isArray(report.cartItems) ? report.cartItems.map((item) => ({
           ...item,
@@ -94,6 +107,8 @@ function TripReport() {
         cardDetails: report.cardDetails || '',
         upiDetails: report.upiDetails || '',
         email: report.email || 'N/A',
+        // UPDATED: Ensure deliveryPersonName is always present
+        deliveryPersonName: report.deliveryPersonName || selectedEmployee?.name || 'Unknown',
       }));
       setTripReports(sanitizedReports);
       filterReportsByDate(sanitizedReports, date, billNo, custName);
@@ -105,7 +120,6 @@ function TripReport() {
       setLoading(false);
     }
   };
-
   // Filter reports by date, bill number, and customer name
   const filterReportsByDate = (reports, date, billNo, custName) => {
     if (!date) {
@@ -132,7 +146,6 @@ function TripReport() {
     }
     setFilteredReports(filtered);
   };
-
   // Create sales invoice for a single report
   const createSalesInvoice = async (report) => {
     // Validate payment methods
@@ -162,15 +175,13 @@ function TripReport() {
       setLoading(true);
       setError(null);
       const subtotal = calculateOrderTotal(report.cartItems);
-      const vatAmount = Number(subtotal) * vatRate;
+      const vatAmount = Number(subtotal) * vatRate; // UPDATED: Use dynamic vatRate
       const grandTotal = (Number(subtotal) + vatAmount).toFixed(2);
-
       const payments = report.paymentMethods.map(method => ({
         mode_of_payment: method.toUpperCase(),
         amount: Number(grandTotal),
         reference: method === 'Card' ? report.cardDetails : method === 'UPI' ? report.upiDetails : null,
       }));
-
       const salesData = {
         customer: report.customerName || 'N/A',
         items: report.cartItems.map((item) => ({
@@ -220,12 +231,13 @@ function TripReport() {
         status: 'Draft',
         orderType: 'Online Delivery',
         userId: selectedEmployee.email,
+        // UPDATED: Include delivery person details
+        deliveryPersonId: report.deliveryPersonId,
+        deliveryPersonName: report.deliveryPersonName,
       };
-
-      const response = await axios.post('http://localhost:8000/api/sales', salesData, {
+      const response = await axios.post(`${baseUrl}/api/sales`, salesData, {
         headers: { 'Content-Type': 'application/json' },
       });
-
       setWarningMessage(`Sales invoice created successfully: ${response.data.invoice_no}`);
       setWarningType('success');
       return { success: true, invoice_no: response.data.invoice_no, error: null };
@@ -238,7 +250,21 @@ function TripReport() {
       setLoading(false);
     }
   };
-
+  // UPDATED: Mark order as delivered - No longer needed since done in ActiveOrders, but keep for compatibility
+  const markAsDelivered = async (orderId) => {
+    try {
+      await axios.put(`${baseUrl}/api/activeorders/${orderId}/mark-delivered`);
+      setWarningMessage('Order marked as delivered successfully.');
+      setWarningType('success');
+      // Refresh reports
+      if (selectedEmployee && selectedDate) {
+        fetchTripReports(selectedEmployee.employeeId, selectedDate, billNumber, customerName);
+      }
+    } catch (err) {
+      setError(`Failed to mark as delivered: ${err.message}`);
+      setWarningType('warning');
+    }
+  };
   // Create sales invoices for all filtered reports
   const createAllSalesInvoices = async () => {
     setLoading(true);
@@ -246,7 +272,6 @@ function TripReport() {
     let successCount = 0;
     let errorCount = 0;
     const errorMessages = [];
-
     for (const report of filteredReports) {
       const result = await createSalesInvoice(report);
       if (result.success) {
@@ -256,7 +281,6 @@ function TripReport() {
         errorMessages.push(result.error);
       }
     }
-
     setLoading(false);
     if (successCount > 0 && errorCount === 0) {
       setWarningMessage(`Successfully created ${successCount} sales invoices.`);
@@ -271,31 +295,43 @@ function TripReport() {
       setWarningType('warning');
     }
   };
-
   // Load employees on component mount
   useEffect(() => {
     fetchEmployees();
   }, []);
-
+  // Prefill from URL params
+  useEffect(() => {
+    const empId = searchParams.get('employeeId');
+    const date = searchParams.get('date');
+    if (empId && date && employees.length > 0) {
+      const emp = employees.find(e => e.employeeId === empId);
+      if (emp) {
+        setSelectedEmployee(emp);
+        setDeliveryPerson(emp.name);
+        setSearchTerm(emp.name);
+        setSelectedDate(date);
+        fetchTripReports(empId, date, '', '');
+        setWarningMessage(`Loaded trip report for ${emp.name} on ${date}`);
+        setWarningType('success');
+      }
+    }
+  }, [searchParams, employees]);
   // Handle search input change for delivery person
   const handleSearchChange = (e) => {
     const value = e.target.value;
     setSearchTerm(value);
     setDeliveryPerson(value);
     setShowDropdown(true);
-
     const filtered = employees
       .filter((emp) => emp.role.toLowerCase() === 'delivery boy')
       .filter((emp) => emp.name.toLowerCase().includes(value.toLowerCase()));
     setFilteredEmployees(filtered);
-
     if (!value) {
       setSelectedEmployee(null);
       setTripReports([]);
       setFilteredReports([]);
     }
   };
-
   // Handle employee selection from dropdown
   const handleSelectEmployee = (employee) => {
     setSearchTerm(employee.name);
@@ -307,7 +343,6 @@ function TripReport() {
       fetchTripReports(employee.employeeId, selectedDate, billNumber, customerName);
     }
   };
-
   // Handle date change
   const handleDateChange = (e) => {
     const date = e.target.value;
@@ -317,7 +352,6 @@ function TripReport() {
       fetchTripReports(selectedEmployee.employeeId, date, billNumber, customerName);
     }
   };
-
   // Handle bill number change
   const handleBillNumberChange = (e) => {
     const billNo = e.target.value;
@@ -327,7 +361,6 @@ function TripReport() {
       fetchTripReports(selectedEmployee.employeeId, selectedDate, billNo, customerName);
     }
   };
-
   // Handle customer name change
   const handleCustomerNameChange = (e) => {
     const custName = e.target.value;
@@ -337,7 +370,6 @@ function TripReport() {
       fetchTripReports(selectedEmployee.employeeId, selectedDate, billNumber, custName);
     }
   };
-
   // Handle form submission
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -360,29 +392,24 @@ function TripReport() {
     );
     setWarningType('success');
   };
-
   // Handle action submission for creating sales invoice
   const handleActionSubmit = (report) => {
     createSalesInvoice(report);
   };
-
   // Navigate back to home
   const handleBack = () => {
     navigate('/home');
   };
-
   // Show order details popup
   const handleShowDetails = (report) => {
     setSelectedReport(report);
     setShowPopup(true);
   };
-
   // Close popup
   const handleClosePopup = () => {
     setShowPopup(false);
     setSelectedReport(null);
   };
-
   // Handle payment method selection (mutually exclusive)
   const handlePaymentMethodSelect = (method, reportId) => {
     setFilteredReports((prevReports) =>
@@ -411,7 +438,6 @@ function TripReport() {
     setWarningMessage(`Selected payment method: ${method}`);
     setWarningType('success');
   };
-
   // Handle payment details input
   const handlePaymentDetailsInput = (reportId, field, value) => {
     setFilteredReports((prevReports) =>
@@ -426,39 +452,33 @@ function TripReport() {
       })
     );
   };
-
   // Handle warning message OK button
   const handleWarningOk = () => {
     setWarningMessage('');
     setWarningType('warning');
   };
-
   // Handle warning message Cancel button
   const handleWarningCancel = () => {
     setWarningMessage('');
     setWarningType('warning');
   };
-
   // Format timestamp
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return 'N/A';
     return new Date(timestamp).toLocaleString();
   };
-
   // Calculate order total
   const calculateOrderTotal = (cartItems) => {
     if (!Array.isArray(cartItems)) return '0.00';
     return cartItems.reduce((sum, item) => sum + (Number(item.totalPrice) || 0), 0).toFixed(2);
   };
-
-  // Calculate grand total with VAT
+  // UPDATED: Use dynamic vatRate for grand total calculation
   const calculateGrandTotal = (cartItems) => {
     if (!Array.isArray(cartItems)) return '0.00';
     const subtotal = cartItems.reduce((sum, item) => sum + (Number(item.totalPrice) || 0), 0);
     const vat = subtotal * vatRate;
     return (subtotal + vat).toFixed(2);
   };
-
   // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -471,7 +491,6 @@ function TripReport() {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
-
   return (
     <div className="trip-main">
       {warningMessage && (
@@ -599,11 +618,11 @@ function TripReport() {
             </div>
           </form>
         </div>
-
         {selectedEmployee && (
           <div className="trip-main-card p-4 mb-4 shadow-sm">
             <h3 className="h5">Selected Delivery Person</h3>
             <p><strong>Name:</strong> {selectedEmployee.name}</p>
+            <p><strong>Delivery Person Name in Reports:</strong> {selectedEmployee.name}</p> {/* UPDATED: Show delivery person name */}
             {filteredReports.length > 0 && (
               <button
                 className="trip-main-btn-success"
@@ -614,7 +633,6 @@ function TripReport() {
             )}
           </div>
         )}
-
         {selectedEmployee && filteredReports.length > 0 && (
           <div className="trip-main-card p-4 shadow-sm">
             <h2 className="h4 mb-3">Assigned Delivery Orders</h2>
@@ -626,10 +644,11 @@ function TripReport() {
                     <th>Date</th>
                     <th>Customer</th>
                     <th>Email</th>
-                    <th>Delivery Person</th>
+                    <th>Delivery Person Name</th> {/* UPDATED: Show delivery person name */}
                     <th>Grand Total (₹)</th>
                     <th>Payment Method</th>
                     <th>Actions</th>
+                    <th>Delivered</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -639,7 +658,7 @@ function TripReport() {
                       <td>{formatTimestamp(report.timestamp)}</td>
                       <td>{report.customerName || 'N/A'}</td>
                       <td>{report.email || 'N/A'}</td>
-                      <td>{selectedEmployee.name}</td>
+                      <td>{report.deliveryPersonName || 'Unknown'}</td> {/* UPDATED: Display delivery person name */}
                       <td>{calculateGrandTotal(report.cartItems)}</td>
                       <td>
                         <div className="d-flex flex-column gap-2">
@@ -721,6 +740,14 @@ function TripReport() {
                           Create Invoice
                         </button>
                       </td>
+                      <td>
+                        <button
+                          className="btn btn-success btn-sm"
+                          onClick={() => markAsDelivered(report.orderId)}
+                        >
+                          Mark Delivered
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -737,60 +764,33 @@ function TripReport() {
             </p>
           </div>
         )}
-
         {showPopup && selectedReport && (
           <div className="trip-main-modal modal fade show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
             <div className="modal-dialog modal-dialog-centered modal-lg">
               <div className="trip-main-modal-content modal-content">
                 <div className="trip-main-modal-header modal-header">
                   <h5 className="modal-title">Order Details</h5>
+                  <button type="button" className="btn-close" onClick={handleClosePopup}></button>
                 </div>
                 <div className="trip-main-modal-body modal-body">
-                  <div className="table-responsive">
-                    <table className="trip-main-table table table-striped table-bordered">
-                      <thead className="trip-main-table-primary">
-                        <tr>
-                          <th>Order No</th>
-                          <th>Date</th>
-                          <th>Customer</th>
-                          <th>Email</th>
-                          <th>Delivery Person</th>
-                          <th>Grand Total (₹)</th>
-                          <th>Payment Method</th>
-                          <th>Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr>
-                          <td>{selectedReport.orderNo}</td>
-                          <td>{formatTimestamp(selectedReport.timestamp)}</td>
-                          <td>{selectedReport.customerName || 'N/A'}</td>
-                          <td>{selectedReport.email || 'N/A'}</td>
-                          <td>{selectedEmployee.name}</td>
-                          <td>{calculateGrandTotal(selectedReport.cartItems)}</td>
-                          <td>
-                            {selectedReport.paymentMethods.length > 0
-                              ? selectedReport.paymentMethods.join(', ')
-                              : 'None'}
-                            {selectedReport.cardDetails && (
-                              <div>Card: {selectedReport.cardDetails}</div>
-                            )}
-                            {selectedReport.upiDetails && (
-                              <div>UPI: {selectedReport.upiDetails}</div>
-                            )}
-                          </td>
-                          <td>
-                            <button
-                              className="trip-main-btn-danger"
-                              onClick={handleClosePopup}
-                            >
-                              Close
-                            </button>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
+                  <p><strong>Order No:</strong> {selectedReport.orderNo}</p>
+                  <p><strong>Date:</strong> {formatTimestamp(selectedReport.timestamp)}</p>
+                  <p><strong>Customer:</strong> {selectedReport.customerName || 'N/A'}</p>
+                  <p><strong>Email:</strong> {selectedReport.email || 'N/A'}</p>
+                  <p><strong>Delivery Person Name:</strong> {selectedReport.deliveryPersonName || 'Unknown'}</p> {/* UPDATED: Show delivery person name */}
+                  <p><strong>Grand Total:</strong> {calculateGrandTotal(selectedReport.cartItems)}</p>
+                  <p><strong>Payment Methods:</strong> {selectedReport.paymentMethods.join(', ') || 'None'}</p>
+                  {selectedReport.cardDetails && <p><strong>Card Details:</strong> {selectedReport.cardDetails}</p>}
+                  {selectedReport.upiDetails && <p><strong>UPI Details:</strong> {selectedReport.upiDetails}</p>}
+                  <h6>Items:</h6>
+                  <ul>
+                    {selectedReport.cartItems.map((item, idx) => (
+                      <li key={idx}>{item.name} x{item.quantity} - ₹{item.totalPrice}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="modal-footer">
+                  <button className="btn btn-secondary" onClick={handleClosePopup}>Close</button>
                 </div>
               </div>
             </div>
@@ -800,5 +800,4 @@ function TripReport() {
     </div>
   );
 }
-
 export default TripReport;

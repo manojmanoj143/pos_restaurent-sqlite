@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from "uuid"
 import axios from "axios"
 import { Card, Button } from 'react-bootstrap';
 import "./front.css"
+
 const SearchableSelect = ({ options = [], value = '', onChange, placeholder }) => {
   const [search, setSearch] = useState(value || '');
   const [showList, setShowList] = useState(false);
@@ -78,6 +79,7 @@ const SearchableSelect = ({ options = [], value = '', onChange, placeholder }) =
     </div>
   );
 };
+
 function FrontPage() {
   const [menuItems, setMenuItems] = useState([])
   const [comboList, setComboList] = useState([])
@@ -104,6 +106,8 @@ function FrontPage() {
     field3: "",
   })
   const [whatsappNumber, setWhatsappNumber] = useState("")
+  const [whatsappISDCode, setWhatsappISDCode] = useState("+91") // NEW: Separate ISD for WhatsApp
+  const [showWhatsappISDCodeDropdown, setShowWhatsappISDCodeDropdown] = useState(false) // NEW: Dropdown for WhatsApp ISD
   const [email, setEmail] = useState("")
   const [orderId, setOrderId] = useState(null)
   const [bookedTables, setBookedTables] = useState([])
@@ -295,7 +299,11 @@ function FrontPage() {
         field2: savedAddress.field2 || "",
         field3: savedAddress.field3 || "",
       })
-      setWhatsappNumber(initialWhatsappNumber || existingOrder?.whatsappNumber || "")
+      // UPDATED: Parse full whatsapp number to separate code and digits
+      const fullWhatsapp = initialWhatsappNumber || existingOrder?.whatsappNumber || "";
+      const whatsappCode = isdCodes.find((isd) => fullWhatsapp.startsWith(isd.code))?.code || "+91";
+      setWhatsappISDCode(whatsappCode);
+      setWhatsappNumber(fullWhatsapp.replace(whatsappCode, "") || "");
       setEmail(initialEmail || existingOrder?.email || "")
       setIsPhoneNumberSet(!!(initialPhoneNumber || existingOrder?.phoneNumber))
       setCartItems(initialCartItems || existingOrder?.cartItems || [])
@@ -403,7 +411,8 @@ function FrontPage() {
             id: combo._id,
             name: combo.description || "Combo Offer",
             category: "combos offer",
-            image: combo.items[0]?.data.image ? `${baseUrl}${combo.items[0].data.image}` : "/static/images/default-combo.jpg",
+            images: combo.images || [], // FIXED: Use uploaded images array for combo
+            image: combo.images && combo.images.length > 0 ? `${baseUrl}/api/combo-images/${combo.images[0]}` : "/static/images/default-combo.jpg", // Primary image
             basePrice: Number(combo.total_price) || 0,
             offer_price: Number(combo.offer_price) || 0,
             offer_start_time: combo.offer_start_time,
@@ -416,6 +425,8 @@ function FrontPage() {
               image: citem.data.image ? `${baseUrl}${citem.data.image}` : citem.data.addon_image ? `${baseUrl}${citem.data.addon_image}` : citem.data.combo_image ? `${baseUrl}${citem.data.combo_image}` : "https://via.placeholder.com/80",
               kitchen: citem.data.kitchen || "Main Kitchen",
             })),
+            addons: combo.addons || [], // FIXED: Include addons for rendering
+            combos: combo.combos || [], // FIXED: Include sub-combos
             kitchen: combo.kitchen || "Main Kitchen",
           }));
           setComboList(formattedCombos);
@@ -742,6 +753,7 @@ function FrontPage() {
       served: false,
       image: menuItem?.image || "/static/images/default-item.jpg",
       kitchenStatuses: existingItemIndex !== -1 ? cartItems[existingItemIndex].kitchenStatuses : {}, // FIXED: Preserve statuses on update
+      kitchenNotes: updatedItem.kitchenNotes || {},
     }
     if (existingItemIndex !== -1) {
       setCartItems((prevItems) => {
@@ -1007,10 +1019,10 @@ function FrontPage() {
     const billDetails = {
       customer: customerName.trim() || "N/A",
       phoneNumber: phoneNumber ? `${selectedISDCode}${phoneNumber}` : "N/A",
+      whatsappNumber: whatsappNumber ? `${whatsappISDCode}${whatsappNumber}` : "N/A", // UPDATED: Use full WhatsApp with code
       tableNumber: tableNumber || "N/A",
       chairsBooked: chairsBooked,
       deliveryAddress: deliveryAddress,
-      whatsappNumber: whatsappNumber || "N/A",
       email: email || "N/A",
       items: billCartItems.map((item) => ({
         item_name: item.item_name || item.name,
@@ -1162,10 +1174,10 @@ function FrontPage() {
     const payload = {
       customer: customerName.trim() || "N/A",
       phoneNumber: phoneNumber ? `${selectedISDCode}${phoneNumber}` : "N/A",
+      whatsappNumber: whatsappNumber ? `${whatsappISDCode}${whatsappNumber}` : "N/A", // UPDATED: Full WhatsApp with code
       tableNumber: tableNumber || "N/A",
       chairsBooked: chairsBooked,
       deliveryAddress: deliveryAddress,
-      whatsappNumber: whatsappNumber || "N/A",
       email: email || "N/A",
       items: validItems.map((item) => {
         // NEW: Log item for debugging (remove in prod)
@@ -1284,13 +1296,13 @@ function FrontPage() {
       const customerData = {
         customer_name: customerName.trim(),
         phone_number: `${selectedISDCode}${phoneNumber}`,
+        whatsapp_number: `${whatsappISDCode}${whatsappNumber}`, // UPDATED: Full WhatsApp with code
         building_name: deliveryAddress.building_name || "",
         flat_villa_no: deliveryAddress.flat_villa_no || "",
         country: deliveryAddress.country || "",
         field1: deliveryAddress.field1 || "",
         field2: deliveryAddress.field2 || "",
         field3: deliveryAddress.field3 || "",
-        whatsapp_number: whatsappNumber || "",
         email: email || "",
         customer_group: selectedGroupId || null,
       }
@@ -1334,13 +1346,13 @@ function FrontPage() {
       const customerData = {
         customer_name: customerName.trim(),
         phone_number: `${selectedISDCode}${phoneNumber}`,
+        whatsapp_number: `${whatsappISDCode}${whatsappNumber}`, // UPDATED: Full WhatsApp with code
         building_name: deliveryAddress.building_name || "",
         flat_villa_no: deliveryAddress.flat_villa_no || "",
         country: deliveryAddress.country || "",
         field1: deliveryAddress.field1 || "",
         field2: deliveryAddress.field2 || "",
         field3: deliveryAddress.field3 || "",
-        whatsapp_number: whatsappNumber || "",
         email: email || "",
         customer_group: selectedGroupId || null,
       }
@@ -1369,8 +1381,9 @@ function FrontPage() {
     if (value.trim() === "") {
       setFilteredCustomers(customers)
       setPhoneNumber("")
-      setDeliveryAddress({ building_name: "", flat_villa_no: "", country: "", field1: "", field2: "", field3: "" })
       setWhatsappNumber("")
+      setWhatsappISDCode("+91") // RESET: WhatsApp code
+      setDeliveryAddress({ building_name: "", flat_villa_no: "", country: "", field1: "", field2: "", field3: "" })
       setEmail("")
       setSelectedGroupId("")
       setIsPhoneNumberSet(false)
@@ -1386,8 +1399,9 @@ function FrontPage() {
     if (value.length <= 10) setPhoneNumber(value)
     if (value.length === 0) {
       setCustomerName("")
-      setDeliveryAddress({ building_name: "", flat_villa_no: "", country: "", field1: "", field2: "", field3: "" })
       setWhatsappNumber("")
+      setWhatsappISDCode("+91") // RESET: WhatsApp code
+      setDeliveryAddress({ building_name: "", flat_villa_no: "", country: "", field1: "", field2: "", field3: "" })
       setEmail("")
       setSelectedGroupId("")
       setIsPhoneNumberSet(false)
@@ -1403,18 +1417,37 @@ function FrontPage() {
           field2: existingCustomer.field2 || "",
           field3: existingCustomer.field3 || "",
         })
-        setWhatsappNumber(existingCustomer.whatsapp_number || "")
         setEmail(existingCustomer.email || "")
         setSelectedGroupId(existingCustomer.customer_group || "")
+        // UPDATED: Parse full whatsapp_number for existing customer
+        const fullWhatsapp = existingCustomer.whatsapp_number || ""
+        const whatsappCode = isdCodes.find((isd) => fullWhatsapp.startsWith(isd.code))?.code || "+91"
+        setWhatsappISDCode(whatsappCode)
+        setWhatsappNumber(fullWhatsapp.replace(whatsappCode, ""))
         setIsPhoneNumberSet(true)
       } else {
         setIsPhoneNumberSet(false)
       }
     }
   }
+  // NEW: Handler to copy phone to WhatsApp (triggered by copy message or button)
+  const handleCopyPhoneToWhatsapp = () => {
+    setWhatsappNumber(phoneNumber);
+    setWhatsappISDCode(selectedISDCode);
+  };
+  // UPDATED: WhatsApp number change handler (digits only, up to 10)
+  const handleWhatsappNumberChange = (e) => {
+    const value = e.target.value.replace(/\D/g, "")
+    if (value.length <= 10) setWhatsappNumber(value)
+  };
   const handleISDCodeSelect = (code) => {
     setSelectedISDCode(code)
     setShowISDCodeDropdown(false)
+  }
+  // NEW: Handler for WhatsApp ISD code select
+  const handleWhatsappISDCodeSelect = (code) => {
+    setWhatsappISDCode(code)
+    setShowWhatsappISDCodeDropdown(false)
   }
   const handleCustomerSelect = (customer) => {
     setCustomerName(customer.customer_name)
@@ -1422,6 +1455,11 @@ function FrontPage() {
     const code = isdCodes.find((isd) => fullPhone.startsWith(isd.code))?.code || "+91"
     setSelectedISDCode(code)
     setPhoneNumber(fullPhone.replace(code, ""))
+    // UPDATED: Parse full whatsapp_number
+    const fullWhatsapp = customer.whatsapp_number || ""
+    const whatsappCode = isdCodes.find((isd) => fullWhatsapp.startsWith(isd.code))?.code || "+91"
+    setWhatsappISDCode(whatsappCode)
+    setWhatsappNumber(fullWhatsapp.replace(whatsappCode, ""))
     setDeliveryAddress({
       building_name: customer.building_name || "",
       flat_villa_no: customer.flat_villa_no || "",
@@ -1430,7 +1468,6 @@ function FrontPage() {
       field2: customer.field2 || "",
       field3: customer.field3 || "",
     })
-    setWhatsappNumber(customer.whatsapp_number || "")
     setEmail(customer.email || "")
     setSelectedGroupId(customer.customer_group || "")
     setShowCustomerSection(false)
@@ -1446,13 +1483,13 @@ function FrontPage() {
       const customerData = {
         customer_name: customerName.trim(),
         phone_number: `${selectedISDCode}${phoneNumber}`,
+        whatsapp_number: `${whatsappISDCode}${whatsappNumber}`, // UPDATED: Full with code
         building_name: deliveryAddress.building_name || "",
         flat_villa_no: deliveryAddress.flat_villa_no || "",
         country: deliveryAddress.country || "",
         field1: deliveryAddress.field1 || "",
         field2: deliveryAddress.field2 || "",
         field3: deliveryAddress.field3 || "",
-        whatsapp_number: whatsappNumber || "",
         email: email || "",
         customer_group: selectedGroupId || null,
       }
@@ -1513,8 +1550,8 @@ function FrontPage() {
       tableNumber: tableNumber || "N/A",
       chairsBooked: Array.isArray(chairsBooked) ? chairsBooked : [],
       phoneNumber: phoneNumber ? `${selectedISDCode}${phoneNumber}` : "N/A",
+      whatsappNumber: whatsappNumber ? `${whatsappISDCode}${whatsappNumber}` : "N/A", // UPDATED: Full WhatsApp
       deliveryAddress: deliveryAddress || { building_name: "", flat_villa_no: "", country: "", field1: "", field2: "", field3: "" },
-      whatsappNumber: whatsappNumber || "N/A",
       email: email || "N/A",
       cartItems: cartItems.map((item) => ({
         id: item.id || uuidv4(),
@@ -1558,6 +1595,7 @@ function FrontPage() {
         is_combo_offer: item.is_combo_offer || false,
         offer_description: item.offer_description || null,
         comboItems: item.comboItems || [], // Include comboItems for combo offers
+        kitchenNotes: item.kitchenNotes || {},
       })),
       timestamp: new Date().toISOString(),
       orderType: orderType || "Dine In",
@@ -1628,10 +1666,6 @@ function FrontPage() {
       setWarningType("warning")
     }
   }
-  const handleWhatsappNumberChange = (e) => {
-    const value = e.target.value.replace(/\D/g, "")
-    if (value.length <= 10) setWhatsappNumber(value)
-  }
   const handleSetPhoneNumber = () => {
     if (orderType === "Dine In") {
       setIsPhoneNumberSet(true)
@@ -1676,6 +1710,31 @@ function FrontPage() {
   const total = subtotal + vat
   const showKitchenColumn = orderType === "Dine In"
   const visibleCategories = categories.slice(startIndex, startIndex + 5)
+
+  // FIXED: Function to get all names for combo bullet list (from ItemListPage)
+  const getAllNames = (combo) => {
+    const names = [];
+    // Items
+    if (combo.comboItems && combo.comboItems.length > 0) {
+      combo.comboItems.forEach(comboItem => {
+        names.push(comboItem.name || '');
+      });
+    }
+    // Addons
+    if (combo.addons && combo.addons.length > 0) {
+      combo.addons.forEach(addon => {
+        if (addon.name1) names.push(addon.name1);
+      });
+    }
+    // Combos (sub-combos)
+    if (combo.combos && combo.combos.length > 0) {
+      combo.combos.forEach(subCombo => {
+        if (subCombo.name1) names.push(subCombo.name1);
+      });
+    }
+    return names.filter(name => name.trim() !== '');
+  };
+
   return (
     <div className="frontpage-container">
       <div className={`frontpage-sidebar ${isSidebarOpen ? "open" : ""}`}>
@@ -1842,39 +1901,73 @@ function FrontPage() {
           <div className={`frontpage-menu-grid ${selectedCategory === "Combos Offer" ? "combo-grid" : ""}`}>
             {filteredItems.map((item) => (
               item.isCombo ? (
+                // FIXED: Full poster style rendering for combos matching ItemListPage
                 <div key={item.id} className="combo-offer-wrapper">
-                  <Card className="posterStyle">
-                    <h4 className="restaurantNameStyle">{item.name}</h4>
+                  <Card 
+                    className="posterStyle" 
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = "translateY(-5px) scale(1.01)";
+                      e.currentTarget.style.boxShadow = "0 6px 12px rgba(0, 0, 0, 0.15)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = "translateY(0) scale(1)";
+                      e.currentTarget.style.boxShadow = "0 4px 8px rgba(0, 0, 0, 0.1)";
+                    }}
+                  >
+                    <div style={{ position: "absolute", top: "5px", left: "5px", fontSize: "18px", fontWeight: "bold", color: "#1976d2" }}>K</div>
+                    <h4 style={{ fontSize: "22px", marginBottom: "8px", textShadow: "1px 1px 2px rgba(0,0,0,0.1)", fontFamily: 'ui-sans-serif', color: "#0d47a1", fontWeight: "normal", textAlign: "center" }}>
+                      {item.name}
+                    </h4>
                     {hasActiveOffer(item) && (
-                      <p className="poster-offer-period">
-                        Offer Period: {new Date(item.offer_start_time).toLocaleString()} to {new Date(item.offer_end_time).toLocaleString()}
+                      <p style={{ fontSize: "13px", color: "#1976d2", marginBottom: "8px", fontWeight: "bold", backgroundColor: "rgba(255, 255, 255, 0.7)", padding: "4px 8px", borderRadius: "4px", display: "inline-block", textAlign: "center", width: "100%" }}>
+                        <strong>Offer Period:</strong> {new Date(item.offer_start_time).toLocaleDateString()} {new Date(item.offer_start_time).toLocaleTimeString()} to {new Date(item.offer_end_time).toLocaleDateString()} {new Date(item.offer_end_time).toLocaleTimeString()}
                       </p>
                     )}
-                    <div className="addon-row">
-                      {item.comboItems?.map((comboItem, index) => (
-                        <div className="bubble addon" key={index}>
-                          <div className="circle">
-                            <img className="offerImageStyle" src={comboItem.image} alt={comboItem.name} />
+                    <div className="row" style={{ margin: 0 }}>
+                      <div className="col-4" style={{ padding: 0 }}> {/* Left: Images */}
+                        {item.images && item.images.length > 0 ? (
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: "8px", gap: "5px" }}>
+                            {item.images.slice(0, 4).map((img, idx) => (
+                              <img
+                                key={idx}
+                                src={`${baseUrl}/api/combo-images/${img}`}
+                                alt={`Combo image ${idx + 1}`}
+                                style={{ width: "70px", height: "70px", objectFit: "cover", borderRadius: "8px", border: "2px solid rgba(161, 196, 253, 0.5)", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}
+                                onError={(e) => {
+                                  e.target.src = "https://via.placeholder.com/70?text=No+Img";
+                                }}
+                              />
+                            ))}
+                            {item.images.length > 4 && (
+                              <span style={{ fontSize: "11px", color: "#1976d2", alignSelf: "center" }}>+{item.images.length - 4} more</span>
+                            )}
                           </div>
-                          ₹{comboItem.price}
-                          <br />
-                          {comboItem.name}
-                        </div>
-                      )) || <div>No combo items</div>}
+                        ) : (
+                          <div style={{ height: "280px", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.5)" }}>
+                            <span style={{ color: "#888", fontSize: "12px" }}>No Images</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="col-8" style={{ padding: "0 10px" }}> {/* Right: Single border box with bullet list */}
+                        <ul style={{ backgroundColor: "rgba(255, 255, 255, 0.7)", border: "2px solid rgba(161, 196, 253, 0.5)", borderRadius: "8px", padding: "10px", marginBottom: "8px", textAlign: "left" }}>
+                          {getAllNames(item).map((name, idx) => (
+                            <li key={idx} style={{ fontSize: "14px", color: "#0d47a1", fontWeight: "bold", marginBottom: "4px", listStyleType: "disc", paddingLeft: "20px" }}>{name}</li>
+                          ))}
+                        </ul>
+                      </div>
                     </div>
-                    <p className="offerPriceStylePoster">
-                      Total:
-                      {hasActiveOffer(item) ? (
+                    <p style={{ fontSize: "18px", margin: "12px 0", backgroundColor: "rgba(255, 255, 255, 0.8)", padding: "8px", borderRadius: "8px", color: "#e91e63", fontWeight: "bold", textAlign: "center" }}>
+                      Total Price: {hasActiveOffer(item) ? (
                         <>
-                          <span className="strikethroughStyle">₹{item.basePrice}</span>
-                          <span className="poster-offer-price">₹{item.offer_price}</span>
+                          <span style={{ textDecoration: "line-through", color: "#1976d2", fontSize: "16px", marginRight: "10px" }}>₹{item.basePrice}</span>
+                          <span style={{ color: "#e91e63", fontSize: "18px" }}>₹{item.offer_price}</span>
                         </>
                       ) : (
-                        `₹${item.basePrice}`
+                        <span style={{ color: "#0d47a1", fontSize: "18px" }}>₹{item.basePrice}</span>
                       )}
                     </p>
-                    {hasActiveOffer(item) && <p className="limitedOfferStyle">LIMITED TIME OFFER!</p>}
-                    <Button variant="primary" className="poster-add-to-cart-btn" onClick={() => handleItemUpdate({ ...item, quantity: 1 })}>
+                    {hasActiveOffer(item) && <p style={{ fontSize: "13px", color: "#e91e63", marginTop: "8px", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "1px", textAlign: "center" }}>LIMITED OFFERS! Place Your Order</p>}
+                    <Button variant="primary" className="poster-add-to-cart-btn" onClick={() => handleItemUpdate({ ...item, quantity: 1 })} style={{ marginTop: "8px", backgroundColor: "rgb(161, 196, 253)", borderColor: "rgb(161, 196, 253)", color: "#0d47a1", fontWeight: "bold", padding: "6px 12px", borderRadius: "20px", boxShadow: "0 2px 4px rgba(0,0,0,0.1)", display: "block", margin: "8px auto 0" }}>
                       Add to Cart
                     </Button>
                   </Card>
@@ -1957,6 +2050,38 @@ function FrontPage() {
             </div>
             {orderType !== "Dine In" && (
               <>
+                {/* NEW: Copy suggestion for WhatsApp */}
+                {phoneNumber && !whatsappNumber && (
+                  <div className="copy-suggestion">
+                    <span>Use the same number for WhatsApp?</span>
+                    <button type="button" className="copy-btn" onClick={handleCopyPhoneToWhatsapp}>
+                      Copy
+                    </button>
+                  </div>
+                )}
+                <div className="frontpage-phone-input-group">
+                  <div className="frontpage-phone-prefix">
+                    <button className="frontpage-isd-button" onClick={() => setShowWhatsappISDCodeDropdown(!showWhatsappISDCodeDropdown)}>
+                      {whatsappISDCode} <i className="bi bi-chevron-down"></i>
+                    </button>
+                    {showWhatsappISDCodeDropdown && (
+                      <ul className="frontpage-isd-code-dropdown">
+                        {isdCodes.map((isd, index) => (
+                          <li key={index} onClick={() => handleWhatsappISDCodeSelect(isd.code)}>
+                            {isd.code} ({isd.country})
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    className="frontpage-phone-input"
+                    placeholder="Enter WhatsApp Number"
+                    value={whatsappNumber}
+                    onChange={handleWhatsappNumberChange}
+                  />
+                </div>
                 <div className="frontpage-input-group">
                   <label>Country</label>
                   <SearchableSelect
@@ -2031,13 +2156,6 @@ function FrontPage() {
                   onChange={(e) => handleDeliveryAddressChange("building_name", e.target.value)}
                 />
                 <input
-                  type="text"
-                  className="frontpage-customer-input"
-                  placeholder="Enter WhatsApp Number"
-                  value={whatsappNumber}
-                  onChange={handleWhatsappNumberChange}
-                />
-                <input
                   type="email"
                   className="frontpage-customer-input"
                   placeholder="Enter Email"
@@ -2103,7 +2221,7 @@ function FrontPage() {
               </div>
             </>
           )}
-          {(customerName || phoneNumber) && (
+          {(customerName || phoneNumber || whatsappNumber) && (
             <div className="frontpage-selected-customer">
               {customerName && <p>Customer: {customerName}</p>}
               {phoneNumber && (
@@ -2919,8 +3037,115 @@ function FrontPage() {
           border-color: #0056b3;
           box-shadow: 0 0 0 3px rgba(0,123,255,.2);
         }
+        /* NEW: Copy Suggestion Styles (from CreateCustomerPage) */
+        .copy-suggestion {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 12px;
+          background: #e7f3ff;
+          border: 1px solid #b3d9ff;
+          border-radius: 4px;
+          font-size: 13px;
+          color: #0066cc;
+          margin-top: 4px;
+        }
+        .copy-btn {
+          background: #007bff;
+          color: white;
+          border: none;
+          padding: 4px 12px;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 12px;
+        }
+        .copy-btn:hover {
+          background: #0056b3;
+        }
+        /* Phone Input Group Styles (for WhatsApp too) */
+        .frontpage-phone-input-group {
+          display: flex;
+          height: 42px;
+          border: 1.5px solid #007bff;
+          border-radius: 6px;
+          margin-bottom: 16px;
+        }
+        .frontpage-phone-prefix { position: relative; }
+        .frontpage-isd-button {
+          background: #fff;
+          border: none;
+          border-right: 1.5px solid #007bff;
+          padding: 0 10px;
+          font-size: 13px;
+          height: 100%;
+          width: 58px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+        }
+        .frontpage-isd-button:hover { background: #f1f3f5; }
+        .frontpage-isd-code-dropdown {
+          position: absolute;
+          top: 100%;
+          left: 0;
+          z-index: 1050;
+          background: #fff;
+          border: 1.5px solid #007bff;
+          border-radius: 6px;
+          list-style: none;
+          margin: 2px 0 0;
+          padding: 6px 0;
+          min-width: 140px;
+          max-height: 220px;
+          overflow-y: auto;
+          box-shadow: 0 4px 12px rgba(0,0,0,.15);
+        }
+        .frontpage-isd-code-dropdown li {
+          padding: 8px 14px;
+          cursor: pointer;
+          font-size: 13px;
+        }
+        .frontpage-isd-code-dropdown li:hover { background: #f8f9fa; }
+        .frontpage-phone-input {
+          flex: 1;
+          padding: 0 12px;
+          font-size: 13px;
+          border: none;
+        }
+        .frontpage-phone-input:focus { outline: none; }
+        /* FIXED: Poster Styles for Combo Rendering (matching ItemListPage) */
+        .posterStyle {
+          background: linear-gradient(135deg, rgb(161, 196, 253) 0%, rgb(194, 233, 251) 100%);
+          border-radius: 12px;
+          padding: 12px;
+          text-align: center;
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+          color: #0d47a1;
+          position: relative;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          border: 2px solid rgba(161, 196, 253, 0.5);
+          height: auto;
+        }
+        .poster-add-to-cart-btn {
+          background-color: rgb(161, 196, 253) !important;
+          border-color: rgb(161, 196, 253) !important;
+          color: #0d47a1 !important;
+          font-weight: bold !important;
+          padding: 6px 12px !important;
+          border-radius: 20px !important;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+          display: block !important;
+          margin: 8px auto 0 !important;
+        }
+        .strikethroughStyle {
+          text-decoration: line-through;
+          color: #888;
+        }
       `}</style>
     </div>
   )
 }
+
 export default FrontPage;

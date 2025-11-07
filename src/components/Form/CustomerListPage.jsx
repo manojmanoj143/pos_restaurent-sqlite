@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from 'axios';
 import { FaArrowLeft } from "react-icons/fa";
@@ -16,6 +16,70 @@ const displayValue = (value) => {
 // Default address structure
 const defaultStructure = {
   countries: {},
+};
+// SearchableSelect Component (copied from CreateCustomerPage for consistency)
+const SearchableSelect = ({ options = [], value = '', onChange, placeholder }) => {
+  const [search, setSearch] = useState(value || '');
+  const [showList, setShowList] = useState(false);
+  useEffect(() => {
+    setSearch(value || '');
+  }, [value]);
+  const filteredOptions = options.filter(option =>
+    option.toLowerCase().includes(search.toLowerCase())
+  );
+  const handleInputChange = (e) => {
+    const newSearch = e.target.value;
+    setSearch(newSearch);
+    if (!showList) {
+      setShowList(true);
+    }
+  };
+  const handleSelectOption = (option) => {
+    setSearch(option);
+    if (onChange) {
+      onChange(option);
+    }
+    setShowList(false);
+  };
+  const handleFocus = () => {
+    setShowList(true);
+  };
+  const handleBlur = () => {
+    setTimeout(() => {
+      setShowList(false);
+    }, 200);
+  };
+  return (
+    <div className="searchable-select">
+      <input
+        type="text"
+        value={search}
+        onChange={handleInputChange}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+        placeholder={placeholder}
+      />
+      {showList && (
+        <ul className="searchable-list">
+          {filteredOptions.length > 0 ? (
+            filteredOptions.map((option, index) => (
+              <li
+                key={index}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  handleSelectOption(option);
+                }}
+              >
+                {option}
+              </li>
+            ))
+          ) : (
+            <li className="no-options">No matching options</li>
+          )}
+        </ul>
+      )}
+    </div>
+  );
 };
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
@@ -81,6 +145,11 @@ const CustomerListPage = () => {
   const [selectedISDCode, setSelectedISDCode] = useState("+971");
   const [selectedWhatsappISDCode, setSelectedWhatsappISDCode] = useState("+971");
   const [baseUrl, setBaseUrl] = useState(""); // NEW: Added baseUrl state like in AdminPage
+  // Filter states for dynamic fields
+  const [filterCountry, setFilterCountry] = useState("");
+  const [filterField1, setFilterField1] = useState("");
+  const [filterField2, setFilterField2] = useState("");
+  const [filterField3, setFilterField3] = useState("");
   const navigate = useNavigate();
   const isdCodes = [
     { code: "+91", country: "India" },
@@ -89,6 +158,47 @@ const CustomerListPage = () => {
     { code: "+971", country: "UAE" },
     { code: "+61", country: "Australia" },
   ];
+  // Dynamic field labels based on address structure and filterCountry
+  const field1Label = useMemo(() => {
+    if (filterCountry && addressStructure.countries[filterCountry]?.field1) {
+      return addressStructure.countries[filterCountry].field1.label;
+    }
+    const firstCountryWithField1 = Object.values(addressStructure.countries).find(c => c.field1);
+    return firstCountryWithField1?.field1?.label || 'Emirate/State';
+  }, [addressStructure, filterCountry]);
+  const field2Label = useMemo(() => {
+    if (filterCountry && addressStructure.countries[filterCountry]?.field2) {
+      return addressStructure.countries[filterCountry].field2.label;
+    }
+    const firstCountryWithField2 = Object.values(addressStructure.countries).find(c => c.field2);
+    return firstCountryWithField2?.field2?.label || 'City/District';
+  }, [addressStructure, filterCountry]);
+  const field3Label = useMemo(() => {
+    if (filterCountry && addressStructure.countries[filterCountry]?.field3) {
+      return addressStructure.countries[filterCountry].field3.label;
+    }
+    const firstCountryWithField3 = Object.values(addressStructure.countries).find(c => c.field3);
+    return firstCountryWithField3?.field3?.label || 'Area/Village';
+  }, [addressStructure, filterCountry]);
+  // Whether to show field columns based on structure (dynamic per filterCountry)
+  const hasField1 = useMemo(() => {
+    if (filterCountry) {
+      return !!addressStructure.countries[filterCountry]?.field1;
+    }
+    return Object.values(addressStructure.countries).some(c => c.field1);
+  }, [addressStructure, filterCountry]);
+  const hasField2 = useMemo(() => {
+    if (filterCountry) {
+      return !!addressStructure.countries[filterCountry]?.field2;
+    }
+    return Object.values(addressStructure.countries).some(c => c.field2);
+  }, [addressStructure, filterCountry]);
+  const hasField3 = useMemo(() => {
+    if (filterCountry) {
+      return !!addressStructure.countries[filterCountry]?.field3;
+    }
+    return Object.values(addressStructure.countries).some(c => c.field3);
+  }, [addressStructure, filterCountry]);
   // Fetch config to determine baseUrl (like in AdminPage)
   const fetchConfig = async () => {
     let currentBaseUrl = "";
@@ -173,50 +283,69 @@ const CustomerListPage = () => {
   useEffect(() => {
     fetchConfig();
   }, []);
-  // Format address for display with multi-line (newlines): first line flat/building, second line field1/field2/field3, third line country
-  const formatAddress = (customer) => {
-    const firstLine = [];
-    const secondLine = [];
-    const thirdLine = [];
-    const addIfValid = (val, arr) => {
-      if (val) {
-        const trimmed = String(val).trim();
-        if (trimmed) arr.push(trimmed);
-      }
-    };
-    // First line: flat_villa_no, building_name
-    addIfValid(customer.flat_villa_no, firstLine);
-    addIfValid(customer.building_name, firstLine);
-    // Second line: field1, field2, field3
-    addIfValid(customer.field1, secondLine);
-    addIfValid(customer.field2, secondLine);
-    addIfValid(customer.field3, secondLine);
-    // Third line: country
-    addIfValid(customer.country, thirdLine);
-    const lines = [];
-    if (firstLine.length > 0) {
-      lines.push(firstLine.join(', '));
+  // Compute unique values for filters (dynamic based on filterCountry)
+  const uniqueCountries = useMemo(() =>
+    [...new Set(customerList.map(c => c.country).filter(Boolean))].sort(),
+    [customerList]
+  );
+  const uniqueField1 = useMemo(() => {
+    let fields = customerList.map(c => c.field1).filter(Boolean);
+    if (filterCountry) {
+      fields = customerList
+        .filter(c => c.country === filterCountry)
+        .map(c => c.field1)
+        .filter(Boolean);
     }
-    if (secondLine.length > 0) {
-      lines.push(secondLine.join(', '));
+    return [...new Set(fields)].sort();
+  }, [customerList, filterCountry]);
+  const uniqueField2 = useMemo(() => {
+    let fields = customerList.map(c => c.field2).filter(Boolean);
+    if (filterCountry) {
+      fields = customerList
+        .filter(c => c.country === filterCountry)
+        .map(c => c.field2)
+        .filter(Boolean);
     }
-    if (thirdLine.length > 0) {
-      lines.push(thirdLine.join(', '));
+    return [...new Set(fields)].sort();
+  }, [customerList, filterCountry]);
+  const uniqueField3 = useMemo(() => {
+    let fields = customerList.map(c => c.field3).filter(Boolean);
+    if (filterCountry) {
+      fields = customerList
+        .filter(c => c.country === filterCountry)
+        .map(c => c.field3)
+        .filter(Boolean);
     }
-    return lines.length > 0 ? lines.join('\n') : 'N/A';
-  };
-  // Search functionality
+    return [...new Set(fields)].sort();
+  }, [customerList, filterCountry]);
+  // Enhanced filtering including search and dynamic field filters
   useEffect(() => {
-    if (searchTerm.trim() === "") {
-      setFilteredCustomers(customerList);
-    } else {
-      const filtered = customerList.filter((customer) =>
+    let filtered = customerList;
+    // Search filter
+    if (searchTerm.trim() !== "") {
+      filtered = filtered.filter((customer) =>
         String(customer.phone_number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         String(customer.customer_name || '').toLowerCase().includes(searchTerm.toLowerCase())
       );
-      setFilteredCustomers(filtered);
     }
-  }, [searchTerm, customerList]);
+    // Country filter
+    if (filterCountry) {
+      filtered = filtered.filter((customer) => customer.country === filterCountry);
+    }
+    // Field1 filter
+    if (filterField1) {
+      filtered = filtered.filter((customer) => customer.field1 === filterField1);
+    }
+    // Field2 filter
+    if (filterField2) {
+      filtered = filtered.filter((customer) => customer.field2 === filterField2);
+    }
+    // Field3 filter
+    if (filterField3) {
+      filtered = filtered.filter((customer) => customer.field3 === filterField3);
+    }
+    setFilteredCustomers(filtered);
+  }, [searchTerm, filterCountry, filterField1, filterField2, filterField3, customerList]);
   const handleSearch = (e) => {
     setSearchTerm(e.target.value);
   };
@@ -293,7 +422,10 @@ const CustomerListPage = () => {
   const handleDeliveryAddressChange = (field, value) => {
     setSelectedCustomer((prev) => ({ ...prev, [field]: value }));
     // If changing country or field1, clear dependent fields
-    if (field === 'country' || field === 'field1') {
+    if (field === 'country') {
+      setSelectedCustomer((prev) => ({ ...prev, field1: '', field2: '', field3: '' }));
+    }
+    if (field === 'field1') {
       setSelectedCustomer((prev) => ({ ...prev, field2: '', field3: '' }));
     }
   };
@@ -359,6 +491,11 @@ const CustomerListPage = () => {
       return () => clearTimeout(timer);
     }
   }, [warningMessage]);
+  // Filter clear handlers
+  const clearFilter = (setter) => setter("");
+  // Calculate total field columns for radius adjustment
+  const totalFieldColumns = (hasField1 ? 1 : 0) + (hasField2 ? 1 : 0) + (hasField3 ? 1 : 0);
+  const lastHeaderIndex = 4 + totalFieldColumns + 2; // Country (4), fields, WhatsApp+Email (2), before Actions
   return (
     <ErrorBoundary>
       <div style={{
@@ -368,7 +505,7 @@ const CustomerListPage = () => {
         fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
       }}>
         <div style={{
-          maxWidth: '1400px',
+          maxWidth: '1600px', // Increased from 1400px for wider table
           margin: '0 auto',
           backgroundColor: '#ffffff',
           borderRadius: '12px',
@@ -539,78 +676,235 @@ const CustomerListPage = () => {
           )}
           {!loading && !error && filteredCustomers.length > 0 && (
             <div style={{
-              overflowX: 'auto',
+              maxHeight: '70vh', // Added for vertical scroll
+              overflowY: 'auto', // Vertical scroll on right
+              overflowX: 'hidden',
               borderRadius: '8px',
-              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+              width: '100%'
             }}>
               <table style={{
                 width: '100%',
+                tableLayout: 'fixed', // Fixed layout to fit columns
                 borderCollapse: 'separate',
                 borderSpacing: 0,
                 backgroundColor: '#ffffff'
               }}>
                 <thead style={{
-                  backgroundColor: '#1a73e8',
-                  color: '#ffffff',
+                  background: 'linear-gradient(135deg, rgb(161, 196, 253) 0%, rgb(194, 233, 251) 100%)',
+                  color: '#333333',
                   fontWeight: '600'
                 }}>
                   <tr>
                     {[
-                      'ID',
-                      'Name',
-                      'Phone Number',
-                      'Address',
-                      'WhatsApp Number',
-                      'Email',
-                      'Actions'
-                    ].map((header, index) => (
-                      <th key={index} style={{
-                        padding: '15px',
-                        fontSize: '16px',
-                        textAlign: 'left',
-                        borderBottom: '2px solid #e9ecef',
-                        ...(index === 0 && { borderTopLeftRadius: '8px' }),
-                        ...(index === 6 && { borderTopRightRadius: '8px' })
-                      }}>
-                        {header}
-                      </th>
-                    ))}
+                      { label: 'Name', key: 'name', width: '10%' }, // Adjusted widths
+                      { label: 'Phone Number', key: 'phone', width: '12%' },
+                      { label: 'Flat No', key: 'flatNo', width: '6%' }, // Reduced
+                      { label: 'Building Name', key: 'buildingName', width: '10%' }, // Adjusted
+                      {
+                        label: 'Country',
+                        key: 'country',
+                        width: '8%', // Adjusted
+                        filter: (
+                          <select
+                            value={filterCountry}
+                            onChange={(e) => setFilterCountry(e.target.value)}
+                            style={{
+                              marginLeft: '4px',
+                              padding: '2px 4px',
+                              borderRadius: '3px',
+                              border: '1px solid #a1c4fd',
+                              background: '#ffffff',
+                              color: '#333',
+                              fontSize: '12px',
+                              minWidth: '80px'
+                            }}
+                          >
+                            <option value="">All</option>
+                            {uniqueCountries.map((c) => (
+                              <option key={c} value={c}>{c}</option>
+                            ))}
+                          </select>
+                        )
+                      },
+                      ...(hasField1 ? [{
+                        label: field1Label,
+                        key: 'field1',
+                        width: '8%', // Adjusted for better fit
+                        filter: (
+                          <select
+                            value={filterField1}
+                            onChange={(e) => setFilterField1(e.target.value)}
+                            style={{
+                              marginLeft: '4px',
+                              padding: '2px 4px',
+                              borderRadius: '3px',
+                              border: '1px solid #a1c4fd',
+                              background: '#ffffff',
+                              color: '#333',
+                              fontSize: '12px',
+                              minWidth: '80px'
+                            }}
+                          >
+                            <option value="">All</option>
+                            {uniqueField1.map((f) => (
+                              <option key={f} value={f}>{f}</option>
+                            ))}
+                          </select>
+                        )
+                      }] : []),
+                      ...(hasField2 ? [{
+                        label: field2Label,
+                        key: 'field2',
+                        width: '8%', // Adjusted
+                        filter: (
+                          <select
+                            value={filterField2}
+                            onChange={(e) => setFilterField2(e.target.value)}
+                            style={{
+                              marginLeft: '4px',
+                              padding: '2px 4px',
+                              borderRadius: '3px',
+                              border: '1px solid #a1c4fd',
+                              background: '#ffffff',
+                              color: '#333',
+                              fontSize: '12px',
+                              minWidth: '80px'
+                            }}
+                          >
+                            <option value="">All</option>
+                            {uniqueField2.map((f) => (
+                              <option key={f} value={f}>{f}</option>
+                            ))}
+                          </select>
+                        )
+                      }] : []),
+                      ...(hasField3 ? [{
+                        label: field3Label,
+                        key: 'field3',
+                        width: '8%', // Adjusted
+                        filter: (
+                          <select
+                            value={filterField3}
+                            onChange={(e) => setFilterField3(e.target.value)}
+                            style={{
+                              marginLeft: '4px',
+                              padding: '2px 4px',
+                              borderRadius: '3px',
+                              border: '1px solid #a1c4fd',
+                              background: '#ffffff',
+                              color: '#333',
+                              fontSize: '12px',
+                              minWidth: '80px'
+                            }}
+                          >
+                            <option value="">All</option>
+                            {uniqueField3.map((f) => (
+                              <option key={f} value={f}>{f}</option>
+                            ))}
+                          </select>
+                        )
+                      }] : []),
+                      { label: 'WhatsApp Number', key: 'whatsapp', width: '12%' },
+                      { label: 'Email', key: 'email', width: '10%' },
+                      { label: 'Actions', key: 'actions', width: '8%' } // Increased from 4%
+                    ].map((header, index) => {
+                      let isLastHeader = false;
+                      if (header.key === 'actions') {
+                        isLastHeader = true;
+                      } else if (header.key === 'country') {
+                        isLastHeader = totalFieldColumns === 0;
+                      } else if (['field1', 'field2', 'field3'].includes(header.key)) {
+                        // Logic to check if this is the last field header
+                        const fieldOrder = ['field1', 'field2', 'field3'];
+                        const currentFieldIndex = fieldOrder.indexOf(header.key);
+                        const activeFields = [hasField1, hasField2, hasField3].filter(Boolean);
+                        if (filterCountry) {
+                          // When filtered, check structure order
+                          const countryFields = [addressStructure.countries[filterCountry]?.field1, addressStructure.countries[filterCountry]?.field2, addressStructure.countries[filterCountry]?.field3].filter(Boolean);
+                          isLastHeader = currentFieldIndex === countryFields.length - 1;
+                        } else {
+                          isLastHeader = currentFieldIndex === activeFields.length - 1;
+                        }
+                      }
+                      return (
+                        <th
+                          key={header.key}
+                          style={{
+                            padding: '10px 6px', // Slightly increased padding for better visibility
+                            fontSize: '14px', // Slightly larger font for headers
+                            textAlign: 'left',
+                            borderBottom: '2px solid #e9ecef',
+                            position: 'sticky', // Sticky header
+                            top: 0,
+                            zIndex: 10,
+                            background: 'linear-gradient(135deg, rgb(161, 196, 253) 0%, rgb(194, 233, 251) 100%)', // Ensure background for sticky
+                            width: header.width,
+                            color: '#333333',
+                            ...(index === 0 && { borderTopLeftRadius: '8px' }),
+                            // Adjust last column radius dynamically based on fields
+                            ...(isLastHeader && { borderTopRightRadius: '8px' })
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                            {header.label}
+                            {header.filter && header.filter}
+                            {header.filter && (
+                              <button
+                                onClick={() => {
+                                  if (header.key === 'country') setFilterCountry('');
+                                  if (header.key === 'field1') setFilterField1('');
+                                  if (header.key === 'field2') setFilterField2('');
+                                  if (header.key === 'field3') setFilterField3('');
+                                }}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  fontSize: '12px',
+                                  color: '#333',
+                                  cursor: 'pointer',
+                                  padding: '1px'
+                                }}
+                              >
+                                ×
+                              </button>
+                            )}
+                          </div>
+                        </th>
+                      );
+                    })}
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredCustomers.map((customer, index) => (
-                    <tr key={customer._id} style={{
-                      backgroundColor: index % 2 === 0 ? '#f8f9fa' : '#ffffff',
-                      transition: 'background-color 0.2s ease'
-                    }}
-                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#e8f0fe'}
-                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = index % 2 === 0 ? '#f8f9fa' : '#ffffff'}
-                    >
-                      <td style={{ padding: '15px', fontSize: '15px', color: '#333' }}>{customer._id}</td>
-                      <td style={{ padding: '15px', fontSize: '15px', color: '#333' }}>{displayValue(customer.customer_name)}</td>
-                      <td style={{ padding: '15px', fontSize: '15px', color: '#333' }}>{displayValue(customer.phone_number)}</td>
-                      <td style={{
-                        padding: '15px',
-                        fontSize: '15px',
-                        color: '#333',
-                        whiteSpace: 'pre-line',
-                        verticalAlign: 'top'
-                      }}>{formatAddress(customer)}</td>
-                      <td style={{ padding: '15px', fontSize: '15px', color: '#333' }}>{displayValue(customer.whatsapp_number)}</td>
-                      <td style={{ padding: '15px', fontSize: '15px', color: '#333' }}>{displayValue(customer.email)}</td>
-                      <td style={{ padding: '15px' }}>
+                  {filteredCustomers.map((customer, index) => {
+                    // Dynamic td based on fields
+                    const cells = [
+                      <td key="name" style={{ padding: '10px 6px', fontSize: '13px', color: '#333' }}>{displayValue(customer.customer_name)}</td>,
+                      <td key="phone" style={{ padding: '10px 6px', fontSize: '13px', color: '#333' }}>{displayValue(customer.phone_number)}</td>,
+                      <td key="flatNo" style={{ padding: '10px 6px', fontSize: '13px', color: '#333' }}>{displayValue(customer.flat_villa_no)}</td>,
+                      <td key="buildingName" style={{ padding: '10px 6px', fontSize: '13px', color: '#333' }}>{displayValue(customer.building_name)}</td>,
+                      <td key="country" style={{ padding: '10px 6px', fontSize: '13px', color: '#333' }}>{displayValue(customer.country)}</td>
+                    ];
+                    if (hasField1) cells.push(<td key="field1" style={{ padding: '10px 6px', fontSize: '13px', color: '#333' }}>{displayValue(customer.field1)}</td>);
+                    if (hasField2) cells.push(<td key="field2" style={{ padding: '10px 6px', fontSize: '13px', color: '#333' }}>{displayValue(customer.field2)}</td>);
+                    if (hasField3) cells.push(<td key="field3" style={{ padding: '10px 6px', fontSize: '13px', color: '#333' }}>{displayValue(customer.field3)}</td>);
+                    cells.push(
+                      <td key="whatsapp" style={{ padding: '10px 6px', fontSize: '13px', color: '#333' }}>{displayValue(customer.whatsapp_number)}</td>,
+                      <td key="email" style={{ padding: '10px 6px', fontSize: '13px', color: '#333' }}>{displayValue(customer.email)}</td>,
+                      <td key="actions" style={{ padding: '10px 6px' }}>
                         <button
                           onClick={() => handleEditCustomer(customer)}
                           style={{
-                            padding: '8px 16px',
+                            padding: '6px 10px', // Slightly larger for better visibility
                             backgroundColor: '#28a745',
                             color: '#ffffff',
                             border: 'none',
-                            borderRadius: '20px',
-                            fontSize: '14px',
+                            borderRadius: '10px',
+                            fontSize: '12px',
                             cursor: 'pointer',
-                            marginRight: '10px',
-                            transition: 'background-color 0.3s ease'
+                            marginRight: '5px',
+                            transition: 'background-color 0.3s ease',
+                            whiteSpace: 'nowrap' // Ensure no wrap
                           }}
                           onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#218838'}
                           onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#28a745'}
@@ -620,14 +914,15 @@ const CustomerListPage = () => {
                         <button
                           onClick={() => handleDeleteCustomer(customer._id)}
                           style={{
-                            padding: '8px 16px',
+                            padding: '6px 10px', // Slightly larger for better visibility
                             backgroundColor: '#dc3545',
                             color: '#ffffff',
                             border: 'none',
-                            borderRadius: '20px',
-                            fontSize: '14px',
+                            borderRadius: '10px',
+                            fontSize: '12px',
                             cursor: 'pointer',
-                            transition: 'background-color 0.3s ease'
+                            transition: 'background-color 0.3s ease',
+                            whiteSpace: 'nowrap' // Ensure no wrap
                           }}
                           onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#c82333'}
                           onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#dc3545'}
@@ -635,8 +930,19 @@ const CustomerListPage = () => {
                           Delete
                         </button>
                       </td>
-                    </tr>
-                  ))}
+                    );
+                    return (
+                      <tr key={customer._id} style={{
+                        backgroundColor: index % 2 === 0 ? '#f8f9fa' : '#ffffff',
+                        transition: 'background-color 0.2s ease'
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#e8f0fe'}
+                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = index % 2 === 0 ? '#f8f9fa' : '#ffffff'}
+                      >
+                        {cells}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -792,7 +1098,7 @@ const CustomerListPage = () => {
                           transition: 'border-color 0.3s ease, box-shadow 0.3s ease'
                         }}
                         onFocus={(e) => {
-                          e.currentTarget.style.borderColor = '#1a73e8';
+                          e.currentTarget.style.borderColor = '#1a73e8ff';
                           e.currentTarget.style.boxShadow = '0 0 8px rgba(26, 115, 232, 0.3)';
                         }}
                         onBlur={(e) => {
@@ -986,23 +1292,16 @@ const CustomerListPage = () => {
                     }}>
                       Country
                     </label>
-                    <select
-                      value={selectedCustomer.country || ""}
-                      onChange={(e) => handleDeliveryAddressChange("country", e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '10px',
-                        borderRadius: '8px',
-                        border: '1px solid #ced4da',
-                        fontSize: '15px'
+                    <SearchableSelect
+                      options={countryList}
+                      value={selectedCustomer.country || ''}
+                      onChange={(value) => {
+                        handleDeliveryAddressChange("country", value);
                       }}
-                    >
-                      <option value="">Select Country</option>
-                      {countryList.map((c) => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
+                      placeholder="Select Country"
+                    />
                   </div>
+                  {/* FIELD 1 */}
                   {selectedCustomer.country && addressStructure.countries[selectedCustomer.country]?.field1 && (
                     <div style={{ marginBottom: '20px' }}>
                       <label style={{
@@ -1014,24 +1313,17 @@ const CustomerListPage = () => {
                       }}>
                         {addressStructure.countries[selectedCustomer.country].field1.label}
                       </label>
-                      <select
-                        value={selectedCustomer.field1 || ""}
-                        onChange={(e) => handleDeliveryAddressChange("field1", e.target.value)}
-                        style={{
-                          width: '100%',
-                          padding: '10px',
-                          borderRadius: '8px',
-                          border: '1px solid #ced4da',
-                          fontSize: '15px'
+                      <SearchableSelect
+                        options={addressStructure.countries[selectedCustomer.country].field1.values || []}
+                        value={selectedCustomer.field1 || ''}
+                        onChange={(value) => {
+                          handleDeliveryAddressChange("field1", value);
                         }}
-                      >
-                        <option value="">Select {addressStructure.countries[selectedCustomer.country].field1.label}</option>
-                        {addressStructure.countries[selectedCustomer.country].field1.values.map((v) => (
-                          <option key={v} value={v}>{v}</option>
-                        ))}
-                      </select>
+                        placeholder={`Select ${addressStructure.countries[selectedCustomer.country].field1.label}`}
+                      />
                     </div>
                   )}
+                  {/* FIELD 2 (filtered by selected Field1) */}
                   {selectedCustomer.country && addressStructure.countries[selectedCustomer.country]?.field2 && (
                     <div style={{ marginBottom: '20px' }}>
                       <label style={{
@@ -1043,26 +1335,17 @@ const CustomerListPage = () => {
                       }}>
                         {addressStructure.countries[selectedCustomer.country].field2.label}
                       </label>
-                      <select
-                        value={selectedCustomer.field2 || ""}
-                        onChange={(e) => handleDeliveryAddressChange("field2", e.target.value)}
-                        style={{
-                          width: '100%',
-                          padding: '10px',
-                          borderRadius: '8px',
-                          border: '1px solid #ced4da',
-                          fontSize: '15px'
-                        }}
-                      >
-                        <option value="">Select {addressStructure.countries[selectedCustomer.country].field2.label}</option>
-                        {getFilteredValues("field2").length > 0
-                          ? getFilteredValues("field2").map((v) => <option key={v} value={v}>{v}</option>)
-                          : addressStructure.countries[selectedCustomer.country].field2.values.map((v) => (
-                              <option key={v} value={v}>{v}</option>
-                            ))}
-                      </select>
+                      <SearchableSelect
+                        options={getFilteredValues("field2").length > 0
+                          ? getFilteredValues("field2")
+                          : (addressStructure.countries[selectedCustomer.country].field2.values || [])}
+                        value={selectedCustomer.field2 || ''}
+                        onChange={(value) => handleDeliveryAddressChange("field2", value)}
+                        placeholder={`Select ${addressStructure.countries[selectedCustomer.country].field2.label}`}
+                      />
                     </div>
                   )}
+                  {/* FIELD 3 (shown always if defined) */}
                   {selectedCustomer.country && addressStructure.countries[selectedCustomer.country]?.field3 && (
                     <div style={{ marginBottom: '20px' }}>
                       <label style={{
@@ -1074,24 +1357,14 @@ const CustomerListPage = () => {
                       }}>
                         {addressStructure.countries[selectedCustomer.country].field3.label}
                       </label>
-                      <select
-                        value={selectedCustomer.field3 || ""}
-                        onChange={(e) => handleDeliveryAddressChange("field3", e.target.value)}
-                        style={{
-                          width: '100%',
-                          padding: '10px',
-                          borderRadius: '8px',
-                          border: '1px solid #ced4da',
-                          fontSize: '15px'
-                        }}
-                      >
-                        <option value="">Select {addressStructure.countries[selectedCustomer.country].field3.label}</option>
-                        {getFilteredValues("field3").length > 0
-                          ? getFilteredValues("field3").map((v) => <option key={v} value={v}>{v}</option>)
-                          : addressStructure.countries[selectedCustomer.country].field3.values.map((v) => (
-                              <option key={v} value={v}>{v}</option>
-                            ))}
-                      </select>
+                      <SearchableSelect
+                        options={getFilteredValues("field3").length > 0
+                          ? getFilteredValues("field3")
+                          : (addressStructure.countries[selectedCustomer.country].field3.values || [])}
+                        value={selectedCustomer.field3 || ''}
+                        onChange={(value) => handleDeliveryAddressChange("field3", value)}
+                        placeholder={`Select ${addressStructure.countries[selectedCustomer.country].field3.label}`}
+                      />
                     </div>
                   )}
                   <div style={{ marginBottom: '20px' }}>
@@ -1281,6 +1554,75 @@ const CustomerListPage = () => {
             </div>
           )}
         </div>
+        {/* Inline Styles for SearchableSelect (adapted from CreateCustomerPage) */}
+        <style>{`
+          /* Searchable Select */
+          .searchable-select {
+            position: relative;
+            width: 100%;
+          }
+          .searchable-select input {
+            width: 100%;
+            height: 42px;
+            padding: 0 12px;
+            border: 1.5px solid #ced4da;
+            border-radius: 8px;
+            font-size: 15px;
+            transition: all 0.3s ease;
+            box-sizing: border-box;
+          }
+          .searchable-select input:focus {
+            outline: none;
+            border-color: #1a73e8;
+            box-shadow: 0 0 8px rgba(26, 115, 232, 0.3);
+          }
+          .searchable-list {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: #fff;
+            border: 1.5px solid #ced4da;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            max-height: 200px;
+            overflow-y: auto;
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            z-index: 100;
+            box-shadow: 0 4px 12px rgba(0,0,0,.15);
+          }
+          .searchable-list li {
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 15px;
+            border-bottom: 1px solid #f0f0f0;
+          }
+          .searchable-list li:hover {
+            background: #f8f9fa;
+          }
+          .searchable-list .no-options {
+            color: #6c757d;
+            font-style: italic;
+            cursor: default;
+            padding: 12px;
+            text-align: center;
+          }
+          /* Responsive adjustments for small screens */
+          @media (max-width: 768px) {
+            table { font-size: 11px; }
+            th, td { padding: 6px 4px !important; } /* Adjusted padding */
+            .header-filter select { min-width: 60px !important; font-size: 10px !important; }
+            .actions button {
+              padding: 4px 6px !important;
+              font-size: 11px !important;
+              margin-right: 2px !important;
+              display: inline-block !important; /* Ensure inline display */
+            }
+            .searchable-select input { font-size: 14px; height: 38px; }
+          }
+        `}</style>
       </div>
     </ErrorBoundary>
   );

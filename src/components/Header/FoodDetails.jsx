@@ -1,7 +1,10 @@
+// FoodDetails.jsx - Full Updated Code
 import React, { useState, useEffect, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import './foodDetails.css';
+
 const BASE_URL = 'http://127.0.0.1:8000';
+
 class ErrorBoundary extends React.Component {
   state = { hasError: false };
   static getDerivedStateFromError() {
@@ -17,11 +20,14 @@ class ErrorBoundary extends React.Component {
     return this.props.children;
   }
 }
+
 ErrorBoundary.propTypes = {
   children: PropTypes.node.isRequired,
 };
+
 const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
   if (!item) return null;
+
   const [addonQuantities, setAddonQuantities] = useState(cartItem?.addonQuantities || {});
   const [comboQuantities, setComboQuantities] = useState(cartItem?.comboQuantities || {});
   const [selectedAddonVariants, setSelectedAddonVariants] = useState(cartItem?.addonVariants || {});
@@ -56,6 +62,11 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
       ? cartItem.selectedSize === 'S' ? 'small' : cartItem.selectedSize === 'M' ? 'medium' : 'large'
       : item.variants?.size?.enabled ? 'medium' : null
   );
+
+  // NEW: Kitchen Notes State
+  const [kitchenNotes, setKitchenNotes] = useState(cartItem?.kitchenNotes || {});
+  const [showKitchenNoteModal, setShowKitchenNoteModal] = useState(false);
+
   const hasActiveOffer = () => {
     return (
       fetchedItem?.offer_price !== undefined &&
@@ -66,6 +77,7 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
       new Date(fetchedItem.offer_end_time) > new Date()
     );
   };
+
   const calculateOfferSizePrice = (offerPrice, size) => {
     if (!offerPrice) return 0;
     switch (size) {
@@ -75,6 +87,7 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
       default: return offerPrice;
     }
   };
+
   const calculateItemPrice = () => {
     if (!fetchedItem) return 0;
     if (hasActiveOffer()) {
@@ -90,6 +103,7 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
     }
     return fetchedItem.price_list_rate || 100;
   };
+
   useEffect(() => {
     const fetchItemDetails = async () => {
       try {
@@ -181,6 +195,8 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
           setTotalPrice((initialPrice || 100) * quantity);
           setSelectedPreviewImage(null);
           setCurrentImageIndex(0);
+          // NEW: Load kitchen notes if editing
+          setKitchenNotes(cartItem?.kitchenNotes || {});
         }
       } catch (error) {
         console.error('Error fetching item details:', error);
@@ -234,10 +250,13 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
         setTotalPrice((item.price_list_rate || 100) * quantity);
         setSelectedPreviewImage(null);
         setCurrentImageIndex(0);
+        // NEW: Load kitchen notes if editing
+        setKitchenNotes(cartItem?.kitchenNotes || {});
       }
     };
     fetchItemDetails();
   }, [item, cartItem, quantity]);
+
   useEffect(() => {
     const fetchAddonAndComboIngredients = async () => {
       if (!fetchedItem) return;
@@ -308,6 +327,7 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
     };
     fetchAddonAndComboIngredients();
   }, [fetchedItem, addonQuantities, comboQuantities]);
+
   useEffect(() => {
     if (!fetchedItem) return;
     let itemPrice = calculateItemPrice();
@@ -406,22 +426,26 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
     selectedComboCustomVariants,
     selectedCustomVariants,
   ]);
+
   const getCurrentItemPrice = () => {
     if (!fetchedItem) return item?.price_list_rate || 100;
     return calculateItemPrice();
   };
+
   const handleVariantChange = (type, value) => {
     setSelectedVariants(prev => ({ ...prev, [type]: value }));
     if (type === 'size') {
       setSelectedSizeFilter(value === 'S' ? 'small' : value === 'M' ? 'medium' : value === 'L' ? 'large' : null);
     }
   };
+
   const handleCustomVariantChange = (name) => {
     setSelectedCustomVariants(prev => ({
       ...prev,
       [name]: !prev[name],
     }));
   };
+
   const handleAddonCustomVariantChange = (addonName, subName) => {
     setSelectedAddonCustomVariants(prev => ({
       ...prev,
@@ -431,6 +455,7 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
       },
     }));
   };
+
   const handleComboCustomVariantChange = (comboName, subName) => {
     setSelectedComboCustomVariants(prev => ({
       ...prev,
@@ -440,6 +465,7 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
       },
     }));
   };
+
   const handleAddonCheck = (addon, checked) => {
     setAddonQuantities(prev => ({
       ...prev,
@@ -459,17 +485,25 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
         const { [addon.name1]: _, ...rest } = prev;
         return rest;
       });
+      // NEW: Clear notes for removed addon
+      setKitchenNotes(prev => {
+        const { [addon.name1]: _, ...rest } = prev;
+        return rest;
+      });
     }
   };
+
   const handleAddonVariantChange = (addonName, variantType, value) => {
     setSelectedAddonVariants(prev => {
       const current = prev[addonName] || {};
       return { ...prev, [addonName]: { ...current, [variantType]: value } };
     });
   };
+
   const increaseAddonQuantity = addonName => {
     setAddonQuantities(prev => ({ ...prev, [addonName]: (prev[addonName] || 0) + 1 }));
   };
+
   const decreaseAddonQuantity = addonName => {
     setAddonQuantities(prev => {
       const newQty = Math.max((prev[addonName] || 0) - 1, 0);
@@ -482,10 +516,16 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
           const { [addonName]: _, ...rest } = prev;
           return rest;
         });
+        // NEW: Clear notes for removed addon
+        setKitchenNotes(prev => {
+          const { [addonName]: _, ...rest } = prev;
+          return rest;
+        });
       }
       return { ...prev, [addonName]: newQty };
     });
   };
+
   const handleComboCheck = combo => {
     const isSelected = comboQuantities[combo.name1] > 0;
     if (!isSelected) {
@@ -513,15 +553,18 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
       ]);
     }
   };
+
   const handleComboVariantChange = (comboName, variantType, value) => {
     setSelectedComboVariants(prev => {
       const current = prev[comboName] || {};
       return { ...prev, [comboName]: { ...current, [variantType]: value } };
     });
   };
+
   const increaseComboQuantity = comboName => {
     setComboQuantities(prev => ({ ...prev, [comboName]: (prev[comboName] || 0) + 1 }));
   };
+
   const decreaseComboQuantity = comboName => {
     setComboQuantities(prev => {
       const newQty = Math.max((prev[comboName] || 0) - 1, 0);
@@ -535,10 +578,26 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
           const { [comboName]: _, ...rest } = prev;
           return rest;
         });
+        // NEW: Clear notes for removed combo
+        setKitchenNotes(prev => {
+          const { [comboName]: _, ...rest } = prev;
+          return rest;
+        });
       }
       return { ...prev, [comboName]: newQty };
     });
   };
+
+  // NEW: Handle Kitchen Notes Change
+  const handleKitchenNoteChange = (key, value) => {
+    setKitchenNotes(prev => ({ ...prev, [key]: value }));
+  };
+
+  // NEW: Save Kitchen Notes
+  const saveKitchenNotes = () => {
+    setShowKitchenNoteModal(false);
+  };
+
   const handleAddToCart = () => {
     if (!fetchedItem) return;
     let basePrice = calculateItemPrice();
@@ -715,12 +774,16 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
       isSpicy: selectedVariants.spicy,
       ingredients: fetchedItem.ingredients,
       nutrition: fetchedItem.nutrition,
+      // NEW: Include kitchen notes
+      kitchenNotes,
     };
     onUpdate(customizedItem);
     onClose();
   };
+
   const increaseQuantity = () => setQuantity(prev => prev + 1);
   const decreaseQuantity = () => setQuantity(prev => (prev > 1 ? prev - 1 : 1));
+
   const getCurrentAddonPrice = addon => {
     if (!addon) return 0;
     const variants = selectedAddonVariants[addon.name1] || {};
@@ -751,6 +814,7 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
       : 0;
     return price + customVariantsPrice;
   };
+
   const getCurrentComboPrice = combo => {
     if (!combo) return 0;
     const variants = selectedComboVariants[combo.name1] || {};
@@ -781,6 +845,7 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
       : 0;
     return price + customVariantsPrice;
   };
+
   const handlePrevImage = () => {
     if (!fetchedItem?.images?.length) return;
     const allImages = [fetchedItem.image, ...fetchedItem.images];
@@ -788,6 +853,7 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
     setCurrentImageIndex(newIndex);
     setSelectedPreviewImage(allImages[newIndex]);
   };
+
   const handleNextImage = () => {
     if (!fetchedItem?.images?.length) return;
     const allImages = [fetchedItem.image, ...fetchedItem.images];
@@ -795,12 +861,14 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
     setCurrentImageIndex(newIndex);
     setSelectedPreviewImage(allImages[newIndex]);
   };
+
   const handleClose = () => {
     setSelectedPreviewImage(null);
     setCurrentImageIndex(0);
     setSelectedSizeFilter(null);
     onClose();
   };
+
   const calculateNutrition = (ingredient, sizeKey, isAddon = false, addonName = null, isCombo = false, comboName = null) => {
     if (!ingredient || !Array.isArray(ingredient.nutrition)) {
       console.warn(`Invalid ingredient or nutrition data:`, ingredient);
@@ -835,6 +903,7 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
       return Number.isFinite(scaledValue) ? scaledValue.toFixed(3) : '0.000';
     });
   };
+
   const getAllNutritionNames = useMemo(() => {
     const nutritionNames = new Set();
     const allIngredients = [
@@ -853,6 +922,7 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
     });
     return Array.from(nutritionNames);
   }, [fetchedItem, addonIngredients, comboIngredients]);
+
   const calculateTotalNutritionForSize = (sizeKey, nutritionName) => {
     let total = 0;
     const mainIngredients = Array.isArray(fetchedItem?.ingredients) ? fetchedItem.ingredients : [];
@@ -890,8 +960,10 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
     });
     return Number.isFinite(total) ? total.toFixed(3) : '0.000';
   };
+
   const handleSizeFilterClick = size => setSelectedSizeFilter(size);
   const handleResetFilter = () => setSelectedSizeFilter(null);
+
   const getSelectedCustomVariantsDisplay = (variants, customVariants, type = 'item') => {
     if (!variants?.length) return 'None';
     const selected = [];
@@ -906,10 +978,25 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
     });
     return selected.join(', ') || 'None';
   };
+
   if (!fetchedItem) return <div className="food-detail bg-dark"><p>Loading...</p></div>;
+
   const currentSizeFilter = selectedVariants.size
     ? selectedVariants.size === 'S' ? 'small' : selectedVariants.size === 'M' ? 'medium' : 'large'
     : 'medium';
+
+  // NEW: Get selected components for kitchen notes
+  const getSelectedComponents = () => {
+    const components = [{ key: 'item', name: fetchedItem.item_name, type: 'Item' }];
+    Object.entries(addonQuantities).forEach(([name, qty]) => {
+      if (qty > 0) components.push({ key: name, name, type: 'Addon' });
+    });
+    Object.entries(comboQuantities).forEach(([name, qty]) => {
+      if (qty > 0) components.push({ key: name, name, type: 'Combo' });
+    });
+    return components;
+  };
+
   return (
     <ErrorBoundary>
       <div className="food-detail bg-dark">
@@ -1593,6 +1680,10 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
                 </div>
               </div>
               <div className="modal-footer">
+                {/* NEW: Kitchen Note Button on Left */}
+                <button type="button" className="btn btn-info" onClick={() => setShowKitchenNoteModal(true)}>
+                  Kitchen Note
+                </button>
                 <button type="button" className="btn btn-primary" onClick={handleAddToCart}>
                   {cartItem ? 'Update Cart' : 'Add to Cart'}
                 </button>
@@ -1603,6 +1694,43 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
             </div>
           </div>
         </div>
+
+        {/* NEW: Kitchen Note Modal */}
+        {showKitchenNoteModal && (
+          <div className="modal fade show d-block sec-modal" style={{ zIndex: 1060 }}>
+            <div className="modal-dialog modal-lg">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">Kitchen Notes</h5>
+                  <button type="button" className="btn-close" onClick={() => setShowKitchenNoteModal(false)}></button>
+                </div>
+                <div className="modal-body" style={{ maxHeight: '50vh', overflowY: 'auto' }}>
+                  {getSelectedComponents().map((component) => (
+                    <div key={component.key} className="mb-3 p-2 border rounded">
+                      <h6>{component.type}: {component.name}</h6>
+                      <textarea
+                        className="form-control"
+                        rows="2"
+                        placeholder={`Enter note for ${component.name}...`}
+                        value={kitchenNotes[component.key] || ''}
+                        onChange={(e) => handleKitchenNoteChange(component.key, e.target.value)}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-secondary" onClick={() => setShowKitchenNoteModal(false)}>
+                    Close
+                  </button>
+                  <button type="button" className="btn btn-primary" onClick={saveKitchenNotes}>
+                    Save Notes
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {showModal && (
           <div className="modal-side-content" style={{ zIndex: 1060 }}>
             <div className="modal-side-header">
@@ -1812,6 +1940,7 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
     </ErrorBoundary>
   );
 };
+
 FoodDetails.propTypes = {
   item: PropTypes.shape({
     _id: PropTypes.string,
@@ -1904,8 +2033,11 @@ FoodDetails.propTypes = {
     comboVariants: PropTypes.object,
     selectedCombos: PropTypes.array,
     selectedCustomVariants: PropTypes.object,
+    // NEW: kitchenNotes
+    kitchenNotes: PropTypes.object,
   }),
   onClose: PropTypes.func.isRequired,
   onUpdate: PropTypes.func.isRequired,
 };
+
 export default FoodDetails;

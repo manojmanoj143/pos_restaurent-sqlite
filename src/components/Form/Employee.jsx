@@ -1,7 +1,8 @@
+// EmployeePage.jsx - Full Updated Code
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { FaArrowLeft, FaPlusCircle, FaUsers, FaEdit, FaTrash } from 'react-icons/fa';
+import { FaArrowLeft, FaPlusCircle, FaUsers, FaEdit, FaTrash, FaKey } from 'react-icons/fa';
 
 function EmployeePage() {
   const navigate = useNavigate();
@@ -13,7 +14,8 @@ function EmployeePage() {
     phoneNumber: '',
     vehicleNumber: '',
     role: 'Delivery Boy',
-    email: '', // Added email field
+    email: '',
+    secretKey: '', // New field for secret key (display only for existing, auto-generate for new)
   });
   const [editMode, setEditMode] = useState(false);
   const [editEmployeeId, setEditEmployeeId] = useState(null);
@@ -29,7 +31,6 @@ function EmployeePage() {
     { code: '+44', country: 'UK' },
     { code: '+61', country: 'Australia' },
   ];
-
   // Fetch config to determine baseUrl (similar to AdminPage)
   useEffect(() => {
     const fetchConfig = async () => {
@@ -53,7 +54,6 @@ function EmployeePage() {
     };
     fetchConfig();
   }, []);
-
   // Fetch employees (updated to use baseUrl)
   const fetchEmployees = async (currentBaseUrl = baseUrl) => {
     try {
@@ -70,14 +70,12 @@ function EmployeePage() {
       setLoading(false);
     }
   };
-
   // Handle form input changes
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
   };
-
-  // Handle employee creation (updated to use baseUrl)
+  // Handle employee creation (updated to use baseUrl, auto-generate secret key)
   const handleCreateEmployee = async (e) => {
     e.preventDefault();
     const fullPhoneNumber = `${formData.countryCode}${formData.phoneNumber}`;
@@ -90,15 +88,16 @@ function EmployeePage() {
       setError(null);
       setMessage('');
       const apiUrl = baseUrl ? `${baseUrl}/api/employees` : 'http://localhost:8000/api/employees';
-      await axios.post(apiUrl, {
+      const response = await axios.post(apiUrl, {
         name: formData.name,
         phoneNumber: fullPhoneNumber,
         vehicleNumber: formData.vehicleNumber,
         role: formData.role,
         email: formData.email,
       });
-      setMessage('Employee created successfully');
-      setFormData({ name: '', countryCode: '+91', phoneNumber: '', vehicleNumber: '', role: 'Delivery Boy', email: '' });
+      const newEmployee = response.data.employee; // Backend returns the created employee with secretKey
+      setMessage(`Employee created successfully! Secret Key: ${newEmployee.secretKey}`);
+      setFormData({ name: '', countryCode: '+91', phoneNumber: '', vehicleNumber: '', role: 'Delivery Boy', email: '', secretKey: '' });
       fetchEmployees();
     } catch (err) {
       setError(`Failed to create employee: ${err.response?.data?.error || err.message}`);
@@ -106,7 +105,6 @@ function EmployeePage() {
       setLoading(false);
     }
   };
-
   // Handle employee edit
   const handleEditEmployee = (employee) => {
     setEditMode(true);
@@ -120,11 +118,11 @@ function EmployeePage() {
       vehicleNumber: employee.vehicleNumber,
       role: employee.role,
       email: employee.email || '',
+      secretKey: employee.secretKey || '', // Display existing secret key (read-only)
     });
     setSelectedEmployee(employee);
   };
-
-  // Handle employee update (updated to use baseUrl)
+  // Handle employee update (updated to use baseUrl, regenerate secret key if needed)
   const handleUpdateEmployee = async (e) => {
     e.preventDefault();
     const fullPhoneNumber = `${formData.countryCode}${formData.phoneNumber}`;
@@ -137,15 +135,17 @@ function EmployeePage() {
       setError(null);
       setMessage('');
       const apiUrl = baseUrl ? `${baseUrl}/api/employees/${editEmployeeId}` : `http://localhost:8000/api/employees/${editEmployeeId}`;
-      await axios.put(apiUrl, {
+      const response = await axios.put(apiUrl, {
         name: formData.name,
         phoneNumber: fullPhoneNumber,
         vehicleNumber: formData.vehicleNumber,
         role: formData.role,
         email: formData.email,
+        regenerateSecretKey: true, // Flag to regenerate secret key on update
       });
-      setMessage('Employee updated successfully');
-      setFormData({ name: '', countryCode: '+91', phoneNumber: '', vehicleNumber: '', role: 'Delivery Boy', email: '' });
+      const updatedEmployee = response.data.employee; // Backend returns updated with new secretKey
+      setMessage(`Employee updated successfully! New Secret Key: ${updatedEmployee.secretKey}`);
+      setFormData({ name: '', countryCode: '+91', phoneNumber: '', vehicleNumber: '', role: 'Delivery Boy', email: '', secretKey: '' });
       setEditMode(false);
       setEditEmployeeId(null);
       setSelectedEmployee(null);
@@ -156,7 +156,6 @@ function EmployeePage() {
       setLoading(false);
     }
   };
-
   // Handle employee deletion (updated to use baseUrl)
   const handleDeleteEmployee = async (employeeId) => {
     if (!window.confirm('Are you sure you want to delete this employee?')) return;
@@ -175,14 +174,12 @@ function EmployeePage() {
       setLoading(false);
     }
   };
-
   // Handle employee selection
   const handleSelectEmployee = (employee) => {
     setSelectedEmployee(employee);
     setEditMode(false);
-    setFormData({ name: '', countryCode: '+91', phoneNumber: '', vehicleNumber: '', role: 'Delivery Boy', email: '' });
+    setFormData({ name: '', countryCode: '+91', phoneNumber: '', vehicleNumber: '', role: 'Delivery Boy', email: '', secretKey: '' });
   };
-
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f5f6fa', padding: '20px', marginLeft: '250px' }}>
       <div style={{ maxWidth: '1200px', margin: '40px auto 0' }}>
@@ -349,6 +346,26 @@ function EmployeePage() {
               >
                 <option value="Delivery Boy">Delivery Boy</option>
               </select>
+              {editMode && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <FaKey style={{ color: '#f39c12' }} />
+                  <input
+                    type="text"
+                    value={formData.secretKey}
+                    placeholder="Secret Key (Read-only)"
+                    readOnly
+                    style={{
+                      flex: 1,
+                      padding: '10px',
+                      border: '1px solid #ccc',
+                      borderRadius: '5px',
+                      fontSize: '1rem',
+                      outline: 'none',
+                      backgroundColor: '#f8f9fa',
+                    }}
+                  />
+                </div>
+              )}
               <button
                 onClick={editMode ? handleUpdateEmployee : handleCreateEmployee}
                 disabled={loading}
@@ -374,7 +391,7 @@ function EmployeePage() {
                 <button
                   onClick={() => {
                     setEditMode(false);
-                    setFormData({ name: '', countryCode: '+91', phoneNumber: '', vehicleNumber: '', role: 'Delivery Boy', email: '' });
+                    setFormData({ name: '', countryCode: '+91', phoneNumber: '', vehicleNumber: '', role: 'Delivery Boy', email: '', secretKey: '' });
                     setEditEmployeeId(null);
                   }}
                   style={{
@@ -496,6 +513,7 @@ function EmployeePage() {
             <p style={{ margin: '5px 0' }}><strong>Phone Number:</strong> {selectedEmployee.phoneNumber}</p>
             <p style={{ margin: '5px 0' }}><strong>Vehicle Number:</strong> {selectedEmployee.vehicleNumber}</p>
             <p style={{ margin: '5px 0' }}><strong>Role:</strong> {selectedEmployee.role}</p>
+            <p style={{ margin: '5px 0' }}><strong>Secret Key:</strong> {selectedEmployee.secretKey || 'N/A'}</p>
           </div>
         )}
       </div>

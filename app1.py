@@ -581,6 +581,24 @@ def clean_expired_combo_offers():
     except Exception as e:
         logger.error(f"Error in clean_expired_combo_offers: {str(e)}")
         return False
+def has_associated_sales(item_name):
+    """Check if any sale contains this item_name in its items."""
+    sales = sales_collection.find()
+    for sale in sales:
+        items = sale.get('items', [])
+        if any(sale_item.get('item_name') == item_name for sale_item in items):
+            return True
+    return False
+# NEW: Function to get sales for a specific item
+def get_sales_for_item(item_name):
+    """Get all sales containing the specified item_name."""
+    sales = sales_collection.find()
+    relevant_sales = []
+    for sale in sales:
+        items = sale.get('items', [])
+        if any(sale_item.get('item_name') == item_name for sale_item in items):
+            relevant_sales.append(sale)
+    return relevant_sales
 # --- Local Routes (available in both modes) ---
 @app.route('/api/test', methods=['GET'])
 def test_endpoint():
@@ -1376,6 +1394,90 @@ def shutdown():
     except Exception as e:
         logger.error(f"Shutdown error: {str(e)}")
         return jsonify({"message": "Error during shutdown", "error": str(e)}), 500
+# NEW: Endpoint to get hidden items with sales details
+@app.route('/api/hidden-items', methods=['GET'])
+@db_required
+def get_hidden_items():
+    try:
+        hidden_items = items_collection.find({'is_hidden': True})
+        enhanced_items = []
+        for item in hidden_items:
+            item_name = item.get('item_name')
+            sales = get_sales_for_item(item_name)
+            enhanced_item = convert_objectid_to_str(item)
+            if sales:
+                enhanced_item['sales'] = [convert_objectid_to_str(sale) for sale in sales]
+                total_records = len(sales)
+                total_qty_sold = sum(sum(item_obj.get('quantity', 0) for item_obj in sale.get('items', []) if item_obj.get('item_name') == item_name) for sale in sales)
+                subtotal = sum(float(sale.get('total', 0)) for sale in sales)
+                vat_total = sum(float(sale.get('vat_amount', 0)) for sale in sales)
+                grand_total = sum(float(sale.get('grand_total', 0)) for sale in sales)
+                currency = sales[0].get('invoice_currency', 'AED')
+            else:
+                enhanced_item['sales'] = []
+                total_records = 0
+                total_qty_sold = 0
+                subtotal = 0
+                vat_total = 0
+                grand_total = 0
+                currency = 'AED'
+            enhanced_item['summary'] = {
+                'total_records': total_records,
+                'total_qty_sold': total_qty_sold,
+                'currency': currency,
+                'subtotal': round(subtotal, 2),
+                'vat': round(vat_total, 2),
+                'grand_total': round(grand_total, 2)
+            }
+            enhanced_items.append(enhanced_item)
+        return jsonify(enhanced_items), 200
+    except Exception as e:
+        logger.error(f"Error fetching hidden items: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+# NEW: Endpoint to get sales for an item
+@app.route('/api/items/<item_id>/sales', methods=['GET'])
+@db_required
+def get_item_sales(item_id):
+    try:
+        item = items_collection.find_one({'_id': item_id})
+        if not item:
+            return jsonify({"error": "Item not found"}), 404
+        item_name = item.get('item_name')
+        sales = get_sales_for_item(item_name)
+        sales = [convert_objectid_to_str(sale) for sale in sales]
+        return jsonify(sales), 200
+    except Exception as e:
+        logger.error(f"Error fetching sales for item {item_id}: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+# NEW: Endpoint to delete a sale by invoice_no
+@app.route('/api/sales/<invoice_no>', methods=['DELETE'])
+@db_required
+def delete_sale(invoice_no):
+    try:
+        result = sales_collection.delete_one({'invoice_no': invoice_no.strip()})
+        if result.deleted_count == 0:
+            return jsonify({"error": "Sale not found"}), 404
+        logger.info(f"Sale deleted: {invoice_no}")
+        return jsonify({"message": "Sale deleted successfully"}), 200
+    except Exception as e:
+        logger.error(f"Error deleting sale {invoice_no}: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+# NEW: Force delete item endpoint (deletes regardless of sales)
+@app.route('/api/items/<item_id>/force-delete', methods=['DELETE'])
+@db_required
+def force_delete_item(item_id):
+    try:
+        item = items_collection.find_one({'_id': item_id})
+        if not item:
+            return jsonify({"error": "Item not found"}), 404
+        result = items_collection.delete_one({'_id': item_id})
+        if result.deleted_count == 0:
+            return jsonify({"error": "Item not found"}), 404
+        logger.info(f"Item force deleted: {item_id} ({item.get('item_name', 'Unknown')})")
+        return jsonify({"message": "Item deleted successfully"}), 200
+    except Exception as e:
+        logger.error(f"Error force deleting item {item_id}: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 # --- Data Routes (only in server mode) ---
 if config.get('mode') == 'server':
     @app.route('/api/login', methods=['POST'])
@@ -1532,6 +1634,8 @@ if config.get('mode') == 'server':
             current_time = datetime.now(ZoneInfo("UTC"))
             placeholder_url = 'https://placehold.co/100x100/EFEFEF/AAAAAA?text=No+Image'
             for item in items:
+                if item.get('is_hidden', False):
+                    continue # Skip hidden items in main list
                 item = convert_objectid_to_str(item)
                 is_offer_active = False
                 if 'offer_start_time' in item and item['offer_start_time'] and 'offer_end_time' in item and item['offer_end_time']:
@@ -1709,39 +1813,51 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error updating item {item_id}: {str(e)}")
             return jsonify({"error": str(e)}), 500
-    @app.route('/api/items/<item_id>', methods=['PATCH'])
+    # NEW: Unhide item endpoint
+    @app.route('/api/items/<item_id>/unhide', methods=['PATCH'])
     @db_required
-    def patch_item(item_id):
+    def unhide_item(item_id):
         try:
-            data = request.json
-            if not data:
-                logger.error("No data provided for item patch")
-                return jsonify({"error": "No data provided"}), 400
-            if '_id' in data:
-                del data['_id']
-            data = sanitize_image_fields(data)
-            data['modified_at'] = datetime.now(ZoneInfo("UTC")).isoformat()
-            result = items_collection.update_one({'_id': item_id}, {'$set': data})
+            result = items_collection.update_one(
+                {'_id': item_id},
+                {'$set': {'is_hidden': False, 'modified_at': datetime.now(ZoneInfo("UTC")).isoformat()}}
+            )
             if result.matched_count == 0:
-                logger.warning(f"Item not found for patch: {item_id}")
                 return jsonify({"error": "Item not found"}), 404
-            logger.info(f"Item patched: {item_id}")
-            return jsonify({"message": "Item updated successfully"}), 200
+            logger.info(f"Item unhidden: {item_id}")
+            return jsonify({"message": "Item unhidden successfully"}), 200
         except Exception as e:
-            logger.error(f"Error patching item {item_id}: {str(e)}")
+            logger.error(f"Error unhiding item {item_id}: {str(e)}")
             return jsonify({"error": str(e)}), 500
+    # Modified: Delete item - hide if has sales
     @app.route('/api/items/<item_id>', methods=['DELETE'])
     @db_required
     def delete_item(item_id):
         try:
-            result = items_collection.delete_one({'_id': item_id})
-            if result.deleted_count == 0:
+            item = items_collection.find_one({'_id': item_id})
+            if not item:
                 logger.warning(f"Item not found for deletion: {item_id}")
                 return jsonify({"error": "Item not found"}), 404
-            logger.info(f"Item deleted: {item_id}")
-            return jsonify({"message": "Item deleted successfully"}), 200
+            item_name = item.get('item_name')
+            has_sales = has_associated_sales(item_name)
+            if has_sales:
+                # Hide instead of delete
+                result = items_collection.update_one(
+                    {'_id': item_id},
+                    {'$set': {'is_hidden': True, 'modified_at': datetime.now(ZoneInfo("UTC")).isoformat()}}
+                )
+                logger.info(f"Item hidden due to associated sales: {item_id} ({item_name})")
+                return jsonify({"message": f"Item hidden because it has associated sales. (Item: {item_name})"}), 200
+            else:
+                # Delete if no sales
+                result = items_collection.delete_one({'_id': item_id})
+                if result.deleted_count == 0:
+                    logger.warning(f"Item not found for deletion: {item_id}")
+                    return jsonify({"error": "Item not found"}), 404
+                logger.info(f"Item deleted: {item_id} ({item_name})")
+                return jsonify({"message": "Item deleted successfully"}), 200
         except Exception as e:
-            logger.error(f"Error deleting item {item_id}: {str(e)}")
+            logger.error(f"Error handling item {item_id}: {str(e)}")
             return jsonify({"error": str(e)}), 500
     @app.route('/api/items/<item_id>/offer', methods=['PUT'])
     @db_required
@@ -1985,15 +2101,15 @@ if config.get('mode') == 'server':
                 error_msg = f"Missing required fields: {', '.join(missing_fields)}"
                 logger.error(error_msg)
                 return jsonify({"error": error_msg}), 400
-            
+        
             # Log full raw payload for debugging (remove in prod)
             logger.info(f"Raw payload received: {json.dumps(sales_data, default=str)}")
-            
+        
             user = users_collection.find_one({"email": sales_data['userId']})
             if not user:
                 logger.error(f"Invalid userId: {sales_data['userId']}")
                 return jsonify({"error": "Invalid userId"}), 400
-            
+        
             sales_data['date'] = sales_data.get('date', datetime.now().strftime("%Y-%m-%d"))
             sales_data['time'] = sales_data.get('time', datetime.now().strftime("%H:%M:%S"))
             net_total = float(sales_data['total']) if sales_data['total'] and str(sales_data['total']).strip() != '' else 0.0
@@ -2007,34 +2123,34 @@ if config.get('mode') == 'server':
             sales_data['grand_total'] = round(grand_total, 2)
             sales_data['invoice_no'] = sales_data.get('invoice_no', f"INV-{int(datetime.now().timestamp())}")
             sales_data['status'] = sales_data.get('status', 'Draft')
-            
+        
             # Store current currency and precision
             current_settings = get_system_settings()
             sales_data['invoice_currency'] = current_settings.get('currency', 'INR')
             sales_data['invoice_currency_precision'] = int(current_settings.get('currencyPrecision', 2)) if current_settings.get('currencyPrecision') and str(current_settings.get('currencyPrecision')).strip() != '' else 2
-            
+        
             processed_items = []
             for item_idx, item in enumerate(sales_data.get('items', [])):
                 if not all(key in item for key in ['item_name', 'basePrice', 'quantity']):
                     logger.error(f"Invalid item structure at index {item_idx}: {item}")
                     return jsonify({"error": "Each item must include item_name, basePrice, and quantity"}), 400
-                
+            
                 # Safe conversion for item quantity and price
                 qty_val = item.get('quantity')
                 item['quantity'] = int(qty_val) if qty_val is not None and str(qty_val).strip() != '' and str(qty_val).isdigit() else 1
                 price_val = item.get('basePrice')
                 item['basePrice'] = float(price_val) if price_val is not None and str(price_val).strip() != '' else 0.0
                 logger.info(f"Processed item {item_idx}: {item['item_name']} - Raw Qty: '{qty_val}', Processed Qty: {item['quantity']}, Raw Price: '{price_val}', Processed Price: {item['basePrice']}")
-                
+            
                 if item.get('is_combo_offer'):
                     item['offer_description'] = item.get('offer_description', item['item_name'])
-                
+            
                 processed_addons = []
                 for addon_idx, addon in enumerate(item.get('addons', [])):
                     if not all(key in addon for key in ['name1', 'addon_price', 'addon_quantity']):
                         logger.error(f"Invalid addon structure at item {item_idx}, addon {addon_idx}: {addon}")
                         return jsonify({"error": "Each addon must include name1, addon_price, and addon_quantity"}), 400
-                    
+                
                     # FIXED: Safe int() for addon_quantity (handles '', None, non-numeric)
                     addon_qty_raw = addon.get('addon_quantity')
                     addon_qty = int(addon_qty_raw) if addon_qty_raw is not None and str(addon_qty_raw).strip() != '' and str(addon_qty_raw).isdigit() else 1
@@ -2042,7 +2158,7 @@ if config.get('mode') == 'server':
                     addon_price_raw = addon.get('addon_price')
                     addon_price = float(addon_price_raw) if addon_price_raw is not None and str(addon_price_raw).strip() != '' else 0.0
                     logger.info(f"Processed addon {addon_idx} for item {item_idx}: {addon['name1']} - Raw Qty: '{addon_qty_raw}', Processed Qty: {addon_qty}, Raw Price: '{addon_price_raw}', Processed Price: {addon_price}")
-                    
+                
                     processed_addons.append({
                         "addon_name": addon['name1'],
                         "addon_price": addon_price,
@@ -2051,21 +2167,21 @@ if config.get('mode') == 'server':
                         "size": addon.get('size', 'M'),
                         "kitchen": addon.get('kitchen', 'Main Kitchen'),
                     })
-                
+            
                 processed_combos = []
                 for combo_idx, combo in enumerate(item.get('selectedCombos', [])):
                     if not all(key in combo for key in ['name1', 'combo_price']):
                         logger.error(f"Invalid combo structure at item {item_idx}, combo {combo_idx}: {combo}")
                         return jsonify({"error": "Each combo must include name1 and combo_price"}), 400
-                    
+                
                     # FIXED: Safe int() for combo_quantity (handles '', None, non-numeric; defaults to 1 even if missing)
-                    combo_qty_raw = combo.get('combo_quantity', 1)  # Default 1 if missing key
+                    combo_qty_raw = combo.get('combo_quantity', 1) # Default 1 if missing key
                     combo_qty = int(combo_qty_raw) if combo_qty_raw is not None and str(combo_qty_raw).strip() != '' and str(combo_qty_raw).isdigit() else 1
                     # FIXED: Safe float() for combo_price
                     combo_price_raw = combo.get('combo_price')
                     combo_price = float(combo_price_raw) if combo_price_raw is not None and str(combo_price_raw).strip() != '' else 0.0
                     logger.info(f"Processed combo {combo_idx} for item {item_idx}: {combo['name1']} - Raw Qty: '{combo_qty_raw}', Processed Qty: {combo_qty}, Raw Price: '{combo_price_raw}', Processed Price: {combo_price}")
-                    
+                
                     processed_combos.append({
                         "name1": combo['name1'],
                         "combo_price": combo_price,
@@ -2075,7 +2191,7 @@ if config.get('mode') == 'server':
                         "spicy": combo.get('spicy', False),
                         "kitchen": combo.get('kitchen', 'Main Kitchen'),
                     })
-                
+            
                 processed_items.append({
                     "item_name": item['item_name'],
                     "basePrice": item['basePrice'],
@@ -2091,12 +2207,12 @@ if config.get('mode') == 'server':
                     "is_combo_offer": item.get('is_combo_offer', False),
                     "offer_description": item.get('offer_description'),
                 })
-            
+        
             sales_data['items'] = processed_items
             sales_data['created_at'] = datetime.now(ZoneInfo("UTC")).isoformat()
             sales_id = sales_collection.insert_one(sales_data).inserted_id
             logger.info(f"Sale saved successfully: {sales_data['invoice_no']} (ID: {sales_id})")
-            
+        
             return jsonify({
                 "id": sales_id,
                 "invoice_no": sales_data['invoice_no'],
@@ -2105,7 +2221,7 @@ if config.get('mode') == 'server':
                 "grand_total": sales_data['grand_total'],
                 "userId": sales_data['userId']
             }), 201
-            
+        
         except ValueError as ve:
             logger.error(f"ValueError in sales invoice (likely qty/price conversion): {str(ve)}\nFull traceback: {traceback.format_exc()}")
             return jsonify({"error": f"Invalid data conversion: {str(ve)}. Check quantities/prices."}), 400
@@ -2124,7 +2240,6 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error fetching sales: {str(e)}")
             return jsonify({"error": str(e)}), 500
-
     @app.route('/api/sales/<invoice_no>', methods=['GET'])
     @db_required
     def get_sale_by_invoice_no(invoice_no):
@@ -2139,7 +2254,6 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error fetching sale {invoice_no}: {str(e)}")
             return jsonify({"error": str(e)}), 500
-
     @app.route('/api/sales/<invoice_no>/status', methods=['PUT'])
     @db_required
     def update_sale_status(invoice_no):
@@ -2870,11 +2984,15 @@ if config.get('mode') == 'server':
     def generate_employee_id():
         """Generate a unique employee ID."""
         return str(uuid.uuid4())[:8]
+    def generate_secret_key():
+        """Generate a unique secret key for employee."""
+        return secrets.token_hex(16) # 32-character hex string
     def validate_email(email):
         """Validate email format."""
         import re
         pattern = r'^[\w\.-]+@[\w\.-]+\.\w+$'
         return re.match(pattern, email) is not None
+    VALID_COUNTRY_CODES = ['+91', '+1', '+971', '+44', '+61'] # Add more as needed
     @app.route('/api/employees', methods=['GET'])
     @db_required
     def get_employees():
@@ -2904,13 +3022,16 @@ if config.get('mode') == 'server':
             if employees_collection.find_one({'email': email}):
                 return jsonify({'error': 'Email already exists'}), 400
             employee_id = generate_employee_id()
+            secret_key = generate_secret_key() # Generate unique secret key
             employee = {
                 'employeeId': employee_id,
                 'name': data['name'],
                 'phoneNumber': phone_number,
                 'vehicleNumber': data['vehicleNumber'],
                 'role': data['role'],
-                'email': email
+                'email': email,
+                'secretKey': secret_key, # Store secret key
+                'created_at': datetime.now(ZoneInfo("UTC")).isoformat()
             }
             employees_collection.insert_one(employee)
             if not users_collection.find_one({'email': email}):
@@ -2920,7 +3041,7 @@ if config.get('mode') == 'server':
                     'role': data['role'],
                     'created_at': datetime.now(ZoneInfo("UTC")).isoformat()
                 })
-            logger.info(f"Created employee: {employee_id} with email: {email}")
+            logger.info(f"Created employee: {employee_id} with email: {email} and secret key: {secret_key}")
             return jsonify({'message': 'Employee created successfully', 'employee': employee}), 201
         except Exception as e:
             logger.error(f"Error creating employee: {str(e)}")
@@ -2945,13 +3066,17 @@ if config.get('mode') == 'server':
             existing_employee = employees_collection.find_one({'email': email, 'employeeId': {'$ne': employee_id}})
             if existing_employee:
                 return jsonify({'error': 'Email already exists'}), 400
+            regenerate_secret_key = data.get('regenerateSecretKey', False)
             updated_employee = {
                 'name': data['name'],
                 'phoneNumber': phone_number,
                 'vehicleNumber': data['vehicleNumber'],
                 'role': data['role'],
-                'email': email
+                'email': email,
+                'updated_at': datetime.now(ZoneInfo("UTC")).isoformat()
             }
+            if regenerate_secret_key:
+                updated_employee['secretKey'] = generate_secret_key() # Regenerate unique secret key
             result = employees_collection.update_one(
                 {'employeeId': employee_id},
                 {'$set': updated_employee}
@@ -2968,10 +3093,28 @@ if config.get('mode') == 'server':
                 }},
                 upsert=True
             )
+            # Fetch updated employee to return
+            updated_full = employees_collection.find_one({'employeeId': employee_id})
             logger.info(f"Updated employee: {employee_id} with email: {email}")
-            return jsonify({'message': 'Employee updated successfully'}), 200
+            return jsonify({'message': 'Employee updated successfully', 'employee': updated_full}), 200
         except Exception as e:
             logger.error(f"Error updating employee: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+    # New: Validate secret key endpoint
+    @app.route('/api/employees/validate-secret-key', methods=['POST'])
+    @db_required
+    def validate_secret_key():
+        try:
+            data = request.get_json()
+            secret_key = data.get('secretKey')
+            if not secret_key:
+                return jsonify({'error': 'Secret key required'}), 400
+            employee = employees_collection.find_one({'secretKey': secret_key})
+            if not employee:
+                return jsonify({'error': 'Invalid secret key'}), 400
+            return jsonify({'employeeId': employee['employeeId'], 'name': employee['name']}), 200
+        except Exception as e:
+            logger.error(f"Error validating secret key: {str(e)}")
             return jsonify({'error': str(e)}), 500
     @app.route('/api/employees/<employee_id>', methods=['DELETE'])
     @db_required
@@ -2990,17 +3133,26 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error deleting employee: {str(e)}")
             return jsonify({"error": str(e)}), 500
- 
+    # UPDATED: Endpoint to get trip reports - now fetches from active_orders with status 'assigned'
     @app.route('/api/tripreports/<employee_id>', methods=['GET'])
     @db_required
     def get_trip_reports(employee_id):
         try:
-            trip_reports = tripreports_collection.find({'deliveryPersonId': employee_id})
-            return jsonify(convert_objectid_to_str(trip_reports)), 200
+            # Fetch from trip_reports where deliveryPersonId == employee_id
+            trip_reports = tripreports_collection.find({
+                'deliveryPersonId': employee_id
+            })
+            reports = list(trip_reports)
+            # Ensure deliveryPersonName is set if missing
+            for report in reports:
+                if not report.get('deliveryPersonName'):
+                    employee = employees_collection.find_one({'employeeId': employee_id})
+                    if employee:
+                        report['deliveryPersonName'] = employee.get('name', 'Unknown')
+            return jsonify(convert_objectid_to_str(reports)), 200
         except Exception as e:
             logger.error(f"Error fetching trip reports: {str(e)}")
             logger.error(traceback.format_exc())
-            return jsonify({'error': str(e)}), 500
     @app.route('/api/uoms', methods=['GET'])
     @db_required
     def get_uoms():
@@ -3865,6 +4017,40 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error setting active print settings: {str(e)}")
             return jsonify({"error": "Internal server error"}), 500
+    @app.route('/api/upload-combo-image', methods=['POST'])
+    @db_required
+    def upload_combo_image():
+        try:
+            if 'file' not in request.files:
+                logger.error("No file provided for combo image upload")
+                return jsonify({"error": "No file provided"}), 400
+            file = request.files['file']
+            if file.filename == '':
+                logger.error("No file selected for combo image upload")
+                return jsonify({"error": "No file selected"}), 400
+            if file:
+                filename = secure_filename(file.filename)
+                if not filename:
+                    return jsonify({"error": "Invalid filename"}), 400
+                # Ensure directory exists
+                upload_dir = 'static/combo_images'
+                os.makedirs(upload_dir, exist_ok=True)
+                filepath = os.path.join(upload_dir, filename)
+                file.save(filepath)
+                logger.info(f"Combo image uploaded: {filename}")
+                return jsonify({"filename": filename}), 200
+            return jsonify({"error": "Upload failed"}), 500
+        except Exception as e:
+            logger.error(f"Error uploading combo image: {str(e)}\n{traceback.format_exc()}")
+            return jsonify({"error": str(e)}), 500
+    # NEW: Serve combo images
+    @app.route('/api/combo-images/<filename>')
+    def serve_combo_image(filename):
+        try:
+            return send_from_directory('static/combo_images', filename)
+        except Exception as e:
+            logger.error(f"Error serving combo image {filename}: {str(e)}")
+            return "Image not found", 404
     @app.route('/api/combo-offer', methods=['GET'])
     @db_required
     def get_combo_offers():
@@ -3872,7 +4058,7 @@ if config.get('mode') == 'server':
             # NEW: Run cleanup before fetching (in addition to scheduler)
             clean_expired_combo_offers()
             offers = combo_offers_collection.find()
-            current_time = datetime.now(timezone.utc)  # FIXED: Use timezone.utc for awareness
+            current_time = datetime.now(timezone.utc) # FIXED: Use timezone.utc for awareness
             offers_list = []
             for offer in offers:
                 if 'offer_end_time' in offer and offer['offer_end_time']:
@@ -3905,7 +4091,7 @@ if config.get('mode') == 'server':
             if not offer:
                 logger.warning(f"Combo offer not found: {offer_id}")
                 return jsonify({"error": "Combo offer not found"}), 404
-            current_time = datetime.now(timezone.utc)  # FIXED: Use timezone.utc
+            current_time = datetime.now(timezone.utc) # FIXED: Use timezone.utc
             if 'offer_end_time' in offer and offer['offer_end_time']:
                 try:
                     end_time_str = str(offer['offer_end_time'])
@@ -3958,6 +4144,15 @@ if config.get('mode') == 'server':
                 if not isinstance(value, (int, float)) or value < 0:
                     logger.error(f"Invalid offer_price: {value}")
                     return jsonify({"error": "Field 'offer_price' must be a non-negative number"}), 400
+            # NEW: Validate images field
+            if 'images' in data:
+                if not isinstance(data['images'], list):
+                    logger.error("Invalid images field: must be a list")
+                    return jsonify({"error": "Field 'images' must be a list of strings"}), 400
+                for img in data['images']:
+                    if not isinstance(img, str):
+                        logger.error("Invalid image filename in images list")
+                        return jsonify({"error": "Images must be a list of string filenames"}), 400
             if 'offer_start_time' in data and data['offer_start_time'] and 'offer_end_time' in data and data['offer_end_time']:
                 try:
                     offer_start_time = datetime.fromisoformat(str(data['offer_start_time']).replace('Z', '+00:00'))
@@ -3968,7 +4163,7 @@ if config.get('mode') == 'server':
                 except (ValueError, TypeError) as e:
                     logger.error(f"Invalid offer time format: {str(e)}")
                     return jsonify({"error": f"Invalid offer time format: {str(e)}"}), 400
-            data['created_at'] = datetime.now(timezone.utc).isoformat()  # FIXED: Use timezone.utc
+            data['created_at'] = datetime.now(timezone.utc).isoformat() # FIXED: Use timezone.utc
             offer_id = combo_offers_collection.insert_one(data).inserted_id
             logger.info(f"Combo offer created with ID: {offer_id}")
             return jsonify({'message': 'Combo offer created successfully!', 'id': offer_id}), 201
@@ -3999,6 +4194,15 @@ if config.get('mode') == 'server':
                     if not isinstance(value, list) or not value:
                         logger.error(f"Empty or invalid items list")
                         return jsonify({"error": "Field 'items' must be a non-empty list"}), 400
+                # NEW: Validate images if present
+                if field == 'images':
+                    if not isinstance(value, list):
+                        logger.error("Invalid images field: must be a list")
+                        return jsonify({"error": "Field 'images' must be a list of strings"}), 400
+                    for img in value:
+                        if not isinstance(img, str):
+                            logger.error("Invalid image filename in images list")
+                            return jsonify({"error": "Images must be a list of string filenames"}), 400
             if 'offer_start_time' in data and data['offer_start_time'] and 'offer_end_time' in data and data['offer_end_time']:
                 try:
                     offer_start_time = datetime.fromisoformat(str(data['offer_start_time']).replace('Z', '+00:00'))
@@ -4009,7 +4213,7 @@ if config.get('mode') == 'server':
                 except (ValueError, TypeError) as e:
                     logger.error(f"Invalid offer time format: {str(e)}")
                     return jsonify({"error": f"Invalid offer time format: {str(e)}"}), 400
-            data['modified_at'] = datetime.now(timezone.utc).isoformat()  # FIXED: Use timezone.utc
+            data['modified_at'] = datetime.now(timezone.utc).isoformat() # FIXED: Use timezone.utc
             result = combo_offers_collection.update_one({'_id': offer_id}, {'$set': data})
             if result.matched_count == 0:
                 logger.warning(f"Combo offer not found for update: {offer_id}")
@@ -4231,7 +4435,6 @@ def generate_order_number(order_type):
         return_document=True
     )
     return f"{order_type}-{counter_doc['count']:04d}"
-
 @app.route('/api/activeorders', methods=['POST'])
 @db_required
 def save_active_order():
@@ -4268,7 +4471,7 @@ def save_active_order():
             'cartItems': cart_items,
             'timestamp': data.get('timestamp', datetime.now(timezone.utc).isoformat()),
             'orderType': order_type,
-            'status': 'Pending',
+            'status': 'Pending', # New status field
             'paid': False,
             'created_at': datetime.now(timezone.utc),
             'deliveryPersonId': data.get('deliveryPersonId', ''),
@@ -4283,7 +4486,6 @@ def save_active_order():
         logger.error(f"Error saving active order: {str(e)}")
         logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
-
 @app.route('/api/activeorders', methods=['GET'])
 @db_required
 def get_active_orders():
@@ -4294,7 +4496,6 @@ def get_active_orders():
         logger.error(f"Error fetching active orders: {str(e)}")
         logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
-
 @app.route('/api/activeorders/<order_id>/items/<item_id>/mark-prepared', methods=['POST'])
 @db_required
 def mark_item_prepared_active(order_id, item_id):
@@ -4326,7 +4527,6 @@ def mark_item_prepared_active(order_id, item_id):
         logger.error(f"Error in mark-prepared: {str(e)}")
         logger.error(traceback.format_exc())
         return jsonify({'success': False, 'error': str(e)}), 500
-
 @app.route('/api/activeorders/<order_id>/items/<item_id>/mark-pickedup', methods=['POST'])
 @db_required
 def mark_item_pickedup_active(order_id, item_id):
@@ -4371,7 +4571,6 @@ def mark_item_pickedup_active(order_id, item_id):
         logger.error(f"Error in mark-pickedup: {str(e)}")
         logger.error(traceback.format_exc())
         return jsonify({'success': False, 'error': str(e)}), 500
-
 @app.route('/api/activeorders/<order_id>/items/<item_id>/mark-served', methods=['POST'])
 @db_required
 def mark_item_served(order_id, item_id):
@@ -4401,7 +4600,6 @@ def mark_item_served(order_id, item_id):
         logger.error(f"Error in mark-served: {str(e)}")
         logger.error(traceback.format_exc())
         return jsonify({'success': False, 'error': str(e)}), 500
-
 @app.route('/api/activeorders/<order_id>/items/<item_id>', methods=['DELETE'])
 @db_required
 def delete_order_item(order_id, item_id):
@@ -4421,7 +4619,6 @@ def delete_order_item(order_id, item_id):
         logger.error(f"Error deleting item: {str(e)}")
         logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
-
 @app.route('/api/activeorders/<order_id>', methods=['PUT'])
 @db_required
 def update_active_order(order_id):
@@ -4470,35 +4667,10 @@ def update_active_order(order_id):
             if not employee:
                 logger.warning(f"Delivery person not found: {updated_order['deliveryPersonId']}")
                 return jsonify({'error': 'Delivery person not found'}), 404
-            trip_report = {
-                'tripId': str(uuid.uuid4()),
-                'orderId': updated_order['orderId'],
-                'orderNo': updated_order['orderNo'],
-                'customerName': updated_order.get('customerName', 'N/A'),
-                'tableNumber': updated_order.get('tableNumber', 'N/A'),
-                'chairsBooked': updated_order.get('chairsBooked', []),
-                'phoneNumber': updated_order.get('phoneNumber', ''),
-                'deliveryAddress': updated_order.get('deliveryAddress', {}),
-                'whatsappNumber': updated_order.get('whatsappNumber', ''),
-                'email': updated_order.get('email', ''),
-                'cartItems': updated_order.get('cartItems', []),
-                'timestamp': updated_order.get('timestamp', datetime.now(timezone.utc).isoformat()),
-                'orderType': updated_order.get('orderType', 'Dine In'),
-                'status': updated_order.get('status', 'Pending'),
-                'deliveryPersonId': updated_order['deliveryPersonId'],
-                'deliveryPersonName': updated_order.get('deliveryPersonName', employee.get('name', 'N/A')),
-                'pickedUpTime': updated_order.get('pickedUpTime', None),
-                'paymentMethods': updated_order.get('paymentMethods', []),
-                'cardDetails': updated_order.get('cardDetails', ''),
-                'upiDetails': updated_order.get('upiDetails', ''),
-                'created_at': datetime.now(timezone.utc)
-            }
-            tripreports_collection.insert_one(trip_report)
-            logger.info(f"Saved trip report for order {order_id} with delivery person {updated_order['deliveryPersonId']}")
-            activeorders_collection.delete_one({'orderId': order_id})
-            kitchen_saved_collection.delete_one({'orderId': order_id})
-            logger.info(f"Deleted order {order_id} from active orders after delivery person assignment")
-            return jsonify({'success': True, 'message': 'Delivery person assigned and order moved to trip reports', 'order': convert_objectid_to_str(updated_order)}), 200
+            updated_order['status'] = 'assigned' # Set to assigned instead of deleting
+            updated_order['deliveryPersonName'] = employee.get('name', 'N/A')
+            # Optional: Move to tripreports if needed, but per requirement, keep in activeorders with status
+            logger.info(f"Assigned delivery person {updated_order['deliveryPersonId']} to order {order_id}")
         if updated_order.get('paid', False) and all(item.get('served', False) for item in updated_order.get('cartItems', [])) and updated_order.get('orderType') != 'Online Delivery':
             updated_order['status'] = 'Completed'
         result = activeorders_collection.replace_one({'orderId': order_id}, updated_order)
@@ -4513,7 +4685,6 @@ def update_active_order(order_id):
         logger.error(f"Error updating active order: {str(e)}")
         logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
-
 @app.route('/api/activeorders/<order_id>', methods=['DELETE'])
 @db_required
 def delete_order(order_id):
@@ -4529,6 +4700,27 @@ def delete_order(order_id):
         logger.error(f"Error deleting order: {str(e)}")
         logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
+@app.route('/api/activeorders/<order_id>/mark-delivered', methods=['PUT'])
+@db_required
+def mark_order_delivered(order_id):
+    try:
+        # Find order in activeorders with status 'assigned'
+        order = activeorders_collection.find_one({'orderId': order_id, 'status': 'assigned'})
+        if not order:
+            return jsonify({'success': False, 'error': 'Order not found or not assigned'}), 404
+        # Insert a copy to trip_reports
+        trip_report = order.copy()
+        trip_report['delivered_at'] = datetime.now(timezone.utc).isoformat()
+        trip_report['_id'] = str(uuid.uuid4())  # New ID for trip report
+        tripreports_collection.insert_one(trip_report)
+        # Delete from activeorders and kitchen_saved
+        activeorders_collection.delete_one({'orderId': order_id})
+        kitchen_saved_collection.delete_one({'orderId': order_id})
+        logger.info(f"Order {order_id} marked as delivered and moved to trip_reports")
+        return jsonify({'success': True, 'message': 'Order marked as delivered'}), 200
+    except Exception as e:
+        logger.error(f"Error marking order delivered: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/kitchen-saved', methods=['POST'])
 @db_required

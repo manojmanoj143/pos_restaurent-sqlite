@@ -47,6 +47,7 @@ function AdminPage() {
   const [baseUrl, setBaseUrl] = useState("");
   const [logoUrl, setLogoUrl] = useState(null);
   const [logoFile, setLogoFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false); // NEW: State for logout modal
 
@@ -55,20 +56,16 @@ function AdminPage() {
   const handleLogoutClick = () => {
     setShowLogoutConfirm(true);
   };
-
   // NEW: Handle confirmed logout
   const confirmLogout = () => {
     setShowLogoutConfirm(false);
     navigate('/');
   };
-
   // NEW: Handle canceled logout
   const cancelLogout = () => {
     setShowLogoutConfirm(false);
   };
-
   const handleNavigation = (path) => navigate(path);
-
   const toggleMasterMenu = () => setIsMasterOpen(!isMasterOpen);
 
   // Fetch logo
@@ -88,11 +85,14 @@ function AdminPage() {
     const file = e.target.files[0];
     if (file && allowedFile(file.name)) {
       setLogoFile(file);
+      const preview = URL.createObjectURL(file);
+      setPreviewUrl(preview);
       setMessage('');
       setError(null);
       console.log('Selected logo file:', file.name);
     } else {
       setLogoFile(null);
+      setPreviewUrl(null);
       setError('Please select a valid image file (PNG, JPG, JPEG, GIF, WebP)');
     }
   };
@@ -124,6 +124,7 @@ function AdminPage() {
       console.log('Logo upload successful. Response:', response.data);
       setMessage(response.data.message);
       setLogoFile(null);
+      setPreviewUrl(null);
       // Ensure logo URL is prefixed with baseUrl
       setLogoUrl(baseUrl + response.data.logo.replace(baseUrl, ''));
       // Reset input
@@ -141,14 +142,14 @@ function AdminPage() {
 
   // Delete logo
   const handleDeleteLogo = async () => {
-    // Replaced window.confirm with a simple browser confirm for this specific action
-    // Note: This is different from the custom modal for logout.
-    if (!window.confirm('Are you sure you want to delete the logo?')) return;
+    // Removed window.confirm - no alert, direct action with message feedback
     try {
       const response = await axios.delete(`${baseUrl}/api/delete-logo`);
       console.log('Logo delete successful:', response.data);
       setMessage(response.data.message);
       setLogoUrl(null);
+      setPreviewUrl(null);
+      setLogoFile(null);
     } catch (err) {
       console.error('Logo delete failed:', err);
       setError(`Failed to delete logo: ${err.message}`);
@@ -195,6 +196,15 @@ function AdminPage() {
     };
     fetchConfig();
   }, []);
+
+  // Clean up preview URL
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
 
   // File import handlers
   const handleFileChange = (e) => {
@@ -398,98 +408,110 @@ function AdminPage() {
           backgroundColor: 'rgba(255, 255, 255, 0.8)',
           borderRadius: '10px'
         }}>
-          {logoUrl ? (
-            <>
-              <img
-                src={logoUrl}
-                alt="Logo"
+          {/* Logo Display - Show preview if selected, or saved logo, or placeholder */}
+          {(logoUrl || previewUrl) ? (
+            <img
+              src={previewUrl || logoUrl}
+              alt="Logo"
+              style={{
+                width: '80px',
+                height: '80px',
+                borderRadius: '50%',
+                objectFit: 'cover',
+                marginBottom: '10px',
+                border: '2px solid #3498db'
+              }}
+            />
+          ) : (
+            <div style={{
+              width: '80px',
+              height: '80px',
+              borderRadius: '50%',
+              backgroundColor: '#ddd',
+              margin: '0 auto 10px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#999',
+              fontSize: '2rem'
+            }}>
+              Logo
+            </div>
+          )}
+          {/* Buttons Row - Show upload only if no logo, delete only if logo present */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: '10px',
+            flexWrap: 'wrap',
+            marginBottom: '5px'
+          }}>
+            <input
+              id="logo-input"
+              type="file"
+              accept="image/*"
+              onChange={handleLogoChange}
+              style={{ display: 'none' }}
+            />
+            {!logoUrl && (
+              <label
+                htmlFor="logo-input"
                 style={{
-                  width: '80px',
-                  height: '80px',
-                  borderRadius: '50%',
-                  objectFit: 'cover',
-                  marginBottom: '10px',
-                  border: '2px solid #3498db'
+                  padding: '8px 15px',
+                  backgroundColor: '#3498db',
+                  color: 'white',
+                  borderRadius: '5px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  display: 'inline-block',
+                  margin: 0
                 }}
-              />
+              >
+                <FaCamera /> Upload Logo
+              </label>
+            )}
+            {logoUrl && (
               <button
                 onClick={handleDeleteLogo}
                 style={{
-                  padding: '5px 10px',
+                  padding: '8px 15px',
                   backgroundColor: '#e74c3c',
                   color: 'white',
                   border: 'none',
                   borderRadius: '5px',
                   cursor: 'pointer',
-                  fontSize: '0.8rem'
+                  fontSize: '0.9rem'
                 }}
               >
                 <FaTrash /> Delete
               </button>
-            </>
-          ) : (
-            <>
-              <div style={{
-                width: '80px',
-                height: '80px',
-                borderRadius: '50%',
-                backgroundColor: '#ddd',
-                margin: '0 auto 10px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#999',
-                fontSize: '2rem'
-              }}>
-                Logo
-              </div>
-            </>
-          )}
-          <input
-            id="logo-input"
-            type="file"
-            accept="image/*"
-            onChange={handleLogoChange}
-            style={{ display: 'none' }}
-          />
-          <label
-            htmlFor="logo-input"
-            style={{
-              padding: '8px 15px',
-              backgroundColor: '#3498db',
-              color: 'white',
-              borderRadius: '5px',
-              cursor: 'pointer',
-              fontSize: '0.9rem',
-              display: 'inline-block'
-            }}
-          >
-            <FaCamera /> Upload Logo
-          </label>
+            )}
+          </div>
+          {/* Selected File Info and Save Button - Shown if file selected (only possible when no logo) */}
           {logoFile && (
             <div style={{ marginTop: '5px', fontSize: '0.8rem', color: '#27ae60' }}>
               Selected: {logoFile.name}
+              <button
+                onClick={handleUploadLogo}
+                disabled={uploadingLogo}
+                style={{
+                  marginLeft: '10px',
+                  padding: '5px 10px',
+                  backgroundColor: uploadingLogo ? '#bdc3c7' : '#27ae60',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '5px',
+                  cursor: uploadingLogo ? 'not-allowed' : 'pointer',
+                  fontSize: '0.8rem'
+                }}
+              >
+                {uploadingLogo ? 'Uploading...' : 'Save Logo'}
+              </button>
             </div>
           )}
-          {logoFile && (
-            <button
-              onClick={handleUploadLogo}
-              disabled={uploadingLogo}
-              style={{
-                marginTop: '5px',
-                padding: '5px 10px',
-                backgroundColor: uploadingLogo ? '#bdc3c7' : '#27ae60',
-                color: 'white',
-                border: 'none',
-                borderRadius: '5px',
-                cursor: uploadingLogo ? 'not-allowed' : 'pointer',
-                fontSize: '0.8rem'
-              }}
-            >
-              {uploadingLogo ? 'Uploading...' : 'Save Logo'}
-            </button>
-          )}
         </div>
+
         {/* Search Box */}
         <div style={{
           position: 'relative',

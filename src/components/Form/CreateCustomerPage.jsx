@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import axios from 'axios';
+
 const SearchableSelect = ({ options = [], value = '', onChange, placeholder }) => {
   const [search, setSearch] = useState(value || '');
   const [showList, setShowList] = useState(false);
@@ -64,6 +65,7 @@ const SearchableSelect = ({ options = [], value = '', onChange, placeholder }) =
     </div>
   );
 };
+
 const CreateCustomerPage = () => {
   /* ────────────────────── BASIC STATE ────────────────────── */
   const [activeTab, setActiveTab] = useState("details");
@@ -107,6 +109,16 @@ const CreateCustomerPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [baseUrl, setBaseUrl] = useState(""); // NEW: Added baseUrl state from AdminPage
+  
+  // UPDATED: Digit lengths per country for dynamic validation
+  const digitLengths = {
+    '+91': 10,    // India
+    '+1': 10,     // USA/Canada
+    '+44': 10,    // UK
+    '+971': 9,    // UAE
+    '+61': 9,     // Australia
+  };
+  
   const isdCodes = [
     { code: "+91", country: "India" },
     { code: "+1", country: "USA" },
@@ -181,27 +193,53 @@ const CreateCustomerPage = () => {
       setSelectedGroup(id);
     }
   };
+  
+  // UPDATED: Dynamic max digits based on selected ISD code
+  const getMaxDigits = (isdCode) => digitLengths[isdCode] || 10;
+  
+  // UPDATED: Phone number change with dynamic limit
   const handlePhoneNumberChange = (e) => {
     const v = e.target.value.replace(/\D/g, "");
-    if (v.length <= 10) setPhoneNumber(v);
+    const maxDigits = getMaxDigits(selectedISDCode);
+    if (v.length <= maxDigits) setPhoneNumber(v);
   };
+  
+  // UPDATED: WhatsApp number change with dynamic limit
   const handleWhatsappNumberChange = (e) => {
     const v = e.target.value.replace(/\D/g, "");
-    if (v.length <= 10) setWhatsappNumber(v);
+    const maxDigits = getMaxDigits(selectedWhatsappISDCode);
+    if (v.length <= maxDigits) setWhatsappNumber(v);
+  };
+  
+  // NEW: Handler to copy phone to WhatsApp
+  const handleCopyToWhatsapp = () => {
+    setWhatsappNumber(phoneNumber);
+    setSelectedWhatsappISDCode(selectedISDCode);
   };
   const handleDeliveryAddressChange = (field, value) => {
     setDeliveryAddress((p) => ({ ...p, [field]: value }));
   };
+  
+  // UPDATED: Validation with dynamic exact length per country
   const handleCreateCustomer = async () => {
-    if (!customerName.trim() || phoneNumber.length !== 10) {
-      setWarningMessage("Customer name and 10-digit phone number are required.");
+    if (!customerName.trim()) {
+      setWarningMessage("Customer name is required.");
       setWarningType("warning");
       return;
     }
-    if (whatsappNumber && whatsappNumber.length !== 10) {
-      setWarningMessage("WhatsApp number must be 10 digits if provided.");
+    const phoneMaxDigits = getMaxDigits(selectedISDCode);
+    if (phoneNumber.length !== phoneMaxDigits) {
+      setWarningMessage(`Phone number must be exactly ${phoneMaxDigits} digits for ${isdCodes.find(c => c.code === selectedISDCode)?.country || 'this country'}.`);
       setWarningType("warning");
       return;
+    }
+    if (whatsappNumber) {
+      const whatsappMaxDigits = getMaxDigits(selectedWhatsappISDCode);
+      if (whatsappNumber.length !== whatsappMaxDigits) {
+        setWarningMessage(`WhatsApp number must be exactly ${whatsappMaxDigits} digits for ${isdCodes.find(c => c.code === selectedWhatsappISDCode)?.country || 'this country'}.`);
+        setWarningType("warning");
+        return;
+      }
     }
     const payload = {
       customer_name: customerName.trim(),
@@ -439,9 +477,10 @@ const CreateCustomerPage = () => {
                       </ul>
                     )}
                   </div>
+                  {/* UPDATED: Dynamic placeholder based on digits */}
                   <input
                     type="text"
-                    placeholder="10-digit WhatsApp Number"
+                    placeholder={`${getMaxDigits(selectedWhatsappISDCode)}-digit WhatsApp Number`}
                     value={whatsappNumber}
                     onChange={handleWhatsappNumberChange}
                   />
@@ -494,13 +533,23 @@ const CreateCustomerPage = () => {
                       </ul>
                     )}
                   </div>
+                  {/* UPDATED: Dynamic placeholder based on digits */}
                   <input
                     type="text"
-                    placeholder="10-digit Phone Number"
+                    placeholder={`${getMaxDigits(selectedISDCode)}-digit Phone Number`}
                     value={phoneNumber}
                     onChange={handlePhoneNumberChange}
                   />
                 </div>
+                {/* NEW: Copy to WhatsApp Suggestion */}
+                {phoneNumber && !whatsappNumber && (
+                  <div className="copy-suggestion">
+                    <span>Use the same number for WhatsApp?</span>
+                    <button type="button" className="copy-btn" onClick={handleCopyToWhatsapp}>
+                      Copy
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="form-group">
                 <label>Email</label>
@@ -836,6 +885,31 @@ const CreateCustomerPage = () => {
           border-color: #0056b3;
           box-shadow: 0 0 0 3px rgba(0,123,255,.2);
         }
+        /* NEW: Copy Suggestion Styles */
+        .copy-suggestion {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 12px;
+          background: #e7f3ff;
+          border: 1px solid #b3d9ff;
+          border-radius: 4px;
+          font-size: 13px;
+          color: #0066cc;
+          margin-top: 4px;
+        }
+        .copy-btn {
+          background: #007bff;
+          color: white;
+          border: none;
+          padding: 4px 12px;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 12px;
+        }
+        .copy-btn:hover {
+          background: #0056b3;
+        }
         /* Searchable Select */
         .searchable-select {
           position: relative;
@@ -906,7 +980,7 @@ const CreateCustomerPage = () => {
           height: 100%;
           width: 58px;
           display: flex;
-          align-items:  center;
+          align-items: center;
           justify-content: center;
           cursor: pointer;
         }
@@ -1077,9 +1151,11 @@ const CreateCustomerPage = () => {
           .form-grid { grid-template-columns: 1fr; }
           .structure-builder-modal { padding: 24px; max-width: 95%; }
           .tabs-container { min-width: auto; }
+          .copy-suggestion { flex-direction: column; align-items: flex-start; gap: 6px; }
         }
       `}</style>
     </div>
   );
 };
+
 export default CreateCustomerPage;

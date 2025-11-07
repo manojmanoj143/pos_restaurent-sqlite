@@ -1,3 +1,4 @@
+// src/components/Form/Hiddenitems.jsx import React from "react"; ... wait, this is UserRouter.jsx
 import React from "react";
 import { Route, Routes } from "react-router-dom";
 // Import Pages
@@ -44,6 +45,7 @@ import VatPage from "../components/Form/VatPage";
 import CreateCustomerPage from "../components/Form/CreateCustomerPage";
 import CreateCustomerGroup from "../components/Form/CreateCustomerGroup";
 import CompanyDetails from "../components/Form/companydetails"; // Corrected import with proper capitalization
+import Hiddenitems from "../components/Form/Hiddenitems"; // Added import for Hiddenitems
 
 const UserRouter = () => {
   return (
@@ -67,6 +69,7 @@ const UserRouter = () => {
         <Route path="/main" element={<MainPage />} />
         <Route path="/customers" element={<CustomerListPage />} />
         <Route path="/items" element={<ItemListPage />} />
+        <Route path="/hidden-items" element={<Hiddenitems />} /> {/* Added route for Hidden Items */}
         <Route path="/create-item" element={<CreateItemsPage />} />
         <Route path="/add-table" element={<AddTablePage />} />
         <Route path="/record" element={<RecordPage />} />
@@ -102,5 +105,4 @@ const UserRouter = () => {
     </div>
   );
 };
-
 export default UserRouter;

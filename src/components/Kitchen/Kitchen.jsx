@@ -4,9 +4,11 @@ import { useNavigate } from "react-router-dom";
 
 class ErrorBoundary extends React.Component {
   state = { hasError: false, error: null };
+
   static getDerivedStateFromError(error) {
     return { hasError: true, error };
   }
+
   render() {
     if (this.state.hasError) {
       return (
@@ -131,6 +133,7 @@ function Kitchen() {
         } else if (error.code === "ECONNABORTED") {
           message = "Request timed out. Check your network or try again.";
         }
+        setErrorMessage(message);
       } finally {
         setLoading(false);
       }
@@ -162,10 +165,12 @@ function Kitchen() {
       } else if (error.code === "ECONNABORTED") {
         message = "Request timed out. Check your network or try again.";
       }
+      setErrorMessage(message);
     } finally {
       setLoading(false);
     }
   };
+
   React.useEffect(() => {
     fetchPickedUpItems();
   }, [baseUrl]);
@@ -429,8 +434,13 @@ function Kitchen() {
     return custom ? `Custom: ${custom}` : "";
   };
 
-  // FIXED: New helper to render combo offer sub-items in kitchen table
-  const renderComboOfferSubItems = (filteredComboOfferSubItems, itemQuantity) => {
+  // NEW: Format notes for display
+  const formatNotes = (notes, key) => {
+    return notes?.[key] ? notes[key].trim() : '';
+  };
+
+  // FIXED: Updated helper to render combo offer sub-items in kitchen table (pass parent 'item' to access kitchenNotes)
+  const renderComboOfferSubItems = (filteredComboOfferSubItems, itemQuantity, item) => {
     if (!filteredComboOfferSubItems || filteredComboOfferSubItems.length === 0) return null;
     return filteredComboOfferSubItems.map((subItem, idx) => (
       <div
@@ -439,6 +449,12 @@ function Kitchen() {
       >
         - Sub-Item: {subItem.name} x{itemQuantity} (Kitchen: {subItem.kitchen})
         <div>Status: {subItem.status || "Pending"}</div>
+        {/* NEW: Kitchen Note for Sub-Item if available */}
+        {formatNotes(item.kitchenNotes, subItem.name) && (
+          <div style={{ fontSize: "11px", color: "#007bff", marginTop: "2px" }}>
+            Note: {formatNotes(item.kitchenNotes, subItem.name)}
+          </div>
+        )}
       </div>
     ));
   };
@@ -920,6 +936,8 @@ function Kitchen() {
                   <th style={{ border: "1px solid #ddd", padding: "8px" }}>Quantity</th>
                   <th style={{ border: "1px solid #ddd", padding: "8px" }}>Category</th>
                   <th style={{ border: "1px solid #ddd", padding: "8px" }}>Status</th>
+                  {/* NEW: Kitchen Note Column */}
+                  <th style={{ border: "1px solid #ddd", padding: "8px" }}>Kitchen Note</th>
                   <th style={{ border: "1px solid #ddd", padding: "8px" }}>Action</th>
                 </tr>
               </thead>
@@ -969,6 +987,12 @@ function Kitchen() {
                           <div>
                             <strong>{item.name}</strong> {formatItemVariants(item)}{" "}
                             {formatCustomVariants(item.customVariantsDetails)}
+                            {/* NEW: Kitchen Note for Item */}
+                            {formatNotes(item.kitchenNotes, 'item') && (
+                              <div style={{ fontSize: "11px", color: "#007bff", marginTop: "4px" }}>
+                                Note: {formatNotes(item.kitchenNotes, 'item')}
+                              </div>
+                            )}
                           </div>
                         )}
                         {Object.entries(item.addonQuantities || {}).map(([addonName, qty]) => (
@@ -979,6 +1003,12 @@ function Kitchen() {
                             >
                               + Addon: {addonName} {formatAddonVariants(item.addonVariants[addonName])}{" "}
                               {formatAddonCustomVariants(item.addonCustomVariantsDetails?.[addonName])} x{qty}
+                              {/* NEW: Kitchen Note for Addon */}
+                              {formatNotes(item.kitchenNotes, addonName) && (
+                                <div style={{ fontSize: "11px", color: "#007bff", marginTop: "2px" }}>
+                                  Note: {formatNotes(item.kitchenNotes, addonName)}
+                                </div>
+                              )}
                             </div>
                           )
                         ))}
@@ -992,13 +1022,19 @@ function Kitchen() {
                             >
                               + Combo: {comboName} {formatComboVariants(item.comboVariants[comboName])}{" "}
                               {formatComboCustomVariants(item.comboCustomVariantsDetails?.[comboName])} x{qty}
+                              {/* NEW: Kitchen Note for Combo */}
+                              {formatNotes(item.kitchenNotes, comboName) && (
+                                <div style={{ fontSize: "11px", color: "#007bff", marginTop: "2px" }}>
+                                  Note: {formatNotes(item.kitchenNotes, comboName)}
+                                </div>
+                              )}
                             </div>
                           )
                         ))}
                       </td>
-                      {/* FIXED: New column to display combo offer sub-items */}
+                      {/* FIXED: New column to display combo offer sub-items (pass item as third arg) */}
                       <td style={{ border: "1px solid #ddd", padding: "8px" }}>
-                        {item.is_combo_offer && renderComboOfferSubItems(item.filteredComboOfferSubItems, item.quantity)}
+                        {item.is_combo_offer && renderComboOfferSubItems(item.filteredComboOfferSubItems, item.quantity, item)}
                       </td>
                       <td style={{ border: "1px solid #ddd", padding: "8px" }}>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>
@@ -1060,6 +1096,18 @@ function Kitchen() {
                       </td>
                       <td style={{ border: "1px solid #ddd", padding: "8px" }}>
                         {item.kitchenStatuses?.[selectedKitchen] || "Pending"}
+                      </td>
+                      {/* NEW: Dedicated Kitchen Note Column */}
+                      <td style={{ border: "1px solid #ddd", padding: "8px" }}>
+                        <strong>Kitchen Notes:</strong><br />
+                        {Object.entries(item.kitchenNotes || {}).map(([key, note]) => (
+                          note?.trim() ? (
+                            <div key={key} style={{ fontSize: "11px", color: "#007bff", marginTop: "2px" }}>
+                              {key}: {note.trim()}
+                            </div>
+                          ) : null
+                        ))}
+                        {Object.values(item.kitchenNotes || {}).every(n => !n?.trim()) && <em>No notes</em>}
                       </td>
                       <td style={{ border: "1px solid #ddd", padding: "8px" }}>
                         {item.displayInKitchen &&

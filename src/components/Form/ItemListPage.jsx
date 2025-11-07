@@ -1,6 +1,7 @@
+// src/components/Form/ItemListPage.jsx
 import React, { useState, useEffect } from "react";
-import { Modal, Button, Card, Form, Badge, ListGroup } from "react-bootstrap";
-import { FaArrowLeft, FaPlusCircle } from "react-icons/fa";
+import { Modal, Button, Card, Form, Badge, ListGroup, Table } from "react-bootstrap";
+import { FaArrowLeft, FaPlusCircle, FaEye, FaEyeSlash, FaTrash } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import 'bootstrap/dist/css/bootstrap.min.css';
@@ -10,6 +11,8 @@ const ItemListPage = () => {
   const [comboList, setComboList] = useState([]);
   const [selectedItem, setSelectedItem] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [showSaleModal, setShowSaleModal] = useState(false);
+  const [selectedSale, setSelectedSale] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState("All Items");
   const [showOfferModal, setShowOfferModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -20,6 +23,7 @@ const ItemListPage = () => {
   const [warningMessage, setWarningMessage] = useState("");
   const [showNutritionModal, setShowNutritionModal] = useState(false);
   const [nutritionData, setNutritionData] = useState({ ingredients: [], nutrition: {} });
+  const [itemSales, setItemSales] = useState([]);
   const [baseUrl, setBaseUrl] = useState("");
   const navigate = useNavigate();
 
@@ -41,11 +45,11 @@ const ItemListPage = () => {
     fetchConfig();
   }, []);
 
-  // Fetch all items
+  // Fetch all items (excluding hidden)
   const handleViewItems = async () => {
     try {
       const response = await axios.get(`${baseUrl}/api/items`);
-      setItemList(response.data);
+      setItemList(response.data); // Backend already filters hidden
     } catch (error) {
       console.error("Error:", error);
       setWarningMessage("Error while fetching items");
@@ -63,48 +67,72 @@ const ItemListPage = () => {
     }
   };
 
-  // Get unique categories from items, including Combos Offer
-  const getCategories = () => {
-    const categories = [...new Set(itemList.map(item => item.item_group))];
-    const filteredCategories = categories.filter(category => category);
-    return ["All Items", ...filteredCategories, `Combos Offer (${comboList.length})`];
-  };
-
-  // Handle category selection
-  const handleCategoryClick = (category) => {
-    const cleanCategory = category.replace(/\s*\(\d+\)\s*$/, ''); // Remove count if present
-    setSelectedCategory(cleanCategory);
-  };
-
-  // Normalize ingredients to always be an array
-  const normalizeIngredients = (ingredients) => {
-    if (Array.isArray(ingredients)) {
-      return ingredients;
+  // Fetch sales for selected item
+  const fetchItemSales = async (itemId) => {
+    try {
+      const response = await axios.get(`${baseUrl}/api/items/${itemId}/sales`);
+      setItemSales(response.data);
+    } catch (error) {
+      console.error("Error fetching item sales:", error);
+      setWarningMessage("Error while fetching sales for this item");
     }
-    if (typeof ingredients === 'string' && ingredients.trim() !== '') {
-      return [{ name: ingredients }];
-    }
-    if (typeof ingredients === 'object' && ingredients !== null && Object.keys(ingredients).length > 0) {
-      return [ingredients];
-    }
-    return [];
   };
 
   // Handle item or combo click to view details
-  const handleItemClick = (item, isCombo = false) => {
+  const handleItemClick = async (item, isCombo = false) => {
     const normalizedIngredients = normalizeIngredients(item.ingredients);
     setSelectedItem({ ...item, isCombo });
     setNutritionData({
       ingredients: normalizedIngredients,
       nutrition: item.nutrition || {},
     });
+    if (!isCombo) {
+      await fetchItemSales(item._id); // Fetch sales only for non-combo items
+    }
     setShowModal(true);
+  };
+
+  // Handle sale click to view details
+  const handleSaleClick = (sale) => {
+    setSelectedSale(sale);
+    setShowSaleModal(true);
+  };
+
+  // Delete sale
+  const handleDeleteSale = async () => {
+    if (selectedSale) {
+      try {
+        const response = await axios.delete(`${baseUrl}/api/sales/${selectedSale.invoice_no}`);
+        if (response.status === 200) {
+          setItemSales(itemSales.filter(sale => sale.invoice_no !== selectedSale.invoice_no));
+          setShowSaleModal(false);
+          setSelectedSale(null);
+          setWarningMessage("Sale deleted successfully!");
+          // Refresh item sales
+          if (selectedItem) {
+            await fetchItemSales(selectedItem._id);
+          }
+        } else {
+          setWarningMessage(`Failed to delete sale: ${response.data.error || 'Unknown error'}`);
+        }
+      } catch (error) {
+        console.error('Error deleting sale:', error);
+        setWarningMessage(error.response?.data?.error || 'Error while deleting sale');
+      }
+    }
   };
 
   // Close the item details modal
   const handleCloseModal = () => {
     setShowModal(false);
     setSelectedItem(null);
+    setItemSales([]);
+  };
+
+  // Close the sale details modal
+  const handleCloseSaleModal = () => {
+    setShowSaleModal(false);
+    setSelectedSale(null);
   };
 
   // Close the offer modal
@@ -124,10 +152,10 @@ const ItemListPage = () => {
 
   // Go back to the previous page
   const goBack = () => {
-    navigate(-1);
+    navigate('/admin');
   };
 
-  // Delete item or combo
+  // Delete item or combo - Modified to hide if has sales
   const handleDeleteItem = async () => {
     if (selectedItem) {
       try {
@@ -139,17 +167,18 @@ const ItemListPage = () => {
           if (selectedItem.isCombo) {
             setComboList(comboList.filter(combo => combo._id !== selectedItem._id));
           } else {
-            setItemList(itemList.filter(item => item._id !== selectedItem._id));
+            // Refresh items to reflect hide/delete
+            await handleViewItems();
           }
           handleCloseModal();
-          setWarningMessage(selectedItem.isCombo ? "Combo offer deleted successfully!" : "Item deleted successfully!");
+          setWarningMessage(response.data.message || (selectedItem.isCombo ? "Combo offer deleted successfully!" : "Item handled successfully!"));
         } else {
           const errorData = response.data;
-          setWarningMessage(`Failed to delete: ${errorData.error || 'Unknown error'}`);
+          setWarningMessage(`Failed to handle: ${errorData.error || 'Unknown error'}`);
         }
       } catch (error) {
         console.error('Error:', error);
-        setWarningMessage('Error while deleting');
+        setWarningMessage(error.response?.data?.error || 'Error while handling item');
       }
     }
   };
@@ -223,6 +252,25 @@ const ItemListPage = () => {
     navigate('/create-item');
   };
 
+  // Handle Hidden Items button click - Now navigates to separate page
+  const handleHiddenItemsClick = () => {
+    navigate('/hidden-items');
+  };
+
+  // Normalize ingredients to always be an array
+  const normalizeIngredients = (ingredients) => {
+    if (Array.isArray(ingredients)) {
+      return ingredients;
+    }
+    if (typeof ingredients === 'string' && ingredients.trim() !== '') {
+      return [{ name: ingredients }];
+    }
+    if (typeof ingredients === 'object' && ingredients !== null && Object.keys(ingredients).length > 0) {
+      return [ingredients];
+    }
+    return [];
+  };
+
   // Initial fetch and refresh on popstate
   useEffect(() => {
     if (baseUrl !== null) {
@@ -252,6 +300,7 @@ const ItemListPage = () => {
     overflowY: "auto",
     borderRight: "1px solid #ddd",
   };
+
   const categoryBoxStyle = {
     padding: "10px",
     marginBottom: "10px",
@@ -262,12 +311,14 @@ const ItemListPage = () => {
     textAlign: "center",
     transition: "all 0.3s ease",
   };
+
   const selectedCategoryBoxStyle = {
     ...categoryBoxStyle,
     backgroundColor: "#28a745",
     color: "white",
     borderColor: "#28a745",
   };
+
   const cardStyle = {
     border: "1px solid #ddd",
     padding: "10px",
@@ -275,33 +326,40 @@ const ItemListPage = () => {
     borderRadius: "8px",
     transition: "all 0.3s ease",
   };
+
   const cardHoverStyle = {
     transform: "translateY(-5px)",
     boxShadow: "0 4px 6px rgba(0, 0, 0, 0.2)",
   };
+
   const imgStyle = {
     width: "100%",
     height: "200px",
     objectFit: "cover",
     borderRadius: "8px",
   };
+
   const contentStyle = {
     marginLeft: "220px",
     padding: "20px",
   };
+
   const priceStyle = {
     fontSize: "1rem",
     marginTop: "5px",
   };
+
   const strikethroughStyle = {
     textDecoration: "line-through",
     color: "#888",
     marginRight: "10px",
   };
+
   const offerPriceStyle = {
     color: "#ff4500",
     fontWeight: "bold",
   };
+
   const warningBoxStyle = {
     backgroundColor: "#fff3cd",
     border: "1px solid #ffeeba",
@@ -314,10 +372,12 @@ const ItemListPage = () => {
     alignItems: "center",
     marginTop: "60px",
   };
+
   const warningTextStyle = {
     margin: 0,
     fontSize: "14px",
   };
+
   const closeWarningStyle = {
     background: "none",
     border: "none",
@@ -325,19 +385,23 @@ const ItemListPage = () => {
     cursor: "pointer",
     fontSize: "16px",
   };
+
   const multipleImagesStyle = {
     display: "flex",
     flexWrap: "wrap",
     gap: "10px",
     marginTop: "10px",
   };
+
   const nutritionModalStyle = {
     padding: "20px",
   };
+
   const nutritionItemStyle = {
     marginBottom: "10px",
     fontSize: "1rem",
   };
+
   // Style for the fixed back button
   const backButtonStyle = {
     position: "fixed",
@@ -349,66 +413,153 @@ const ItemListPage = () => {
     borderRadius: "5px",
     padding: "10px",
     cursor: "pointer",
-    zIndex: 1000, // Ensures the button stays above other elements
+    zIndex: 1000,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     transition: "all 0.3s ease",
   };
+
   // Poster style for combo offers
   const posterStyle = {
-    background: "linear-gradient(135deg, #ff69b4, #ffffff)",
-    borderRadius: "10px",
-    padding: "20px",
+    background: "linear-gradient(135deg, rgb(161, 196, 253) 0%, rgb(194, 233, 251) 100%)",
+    borderRadius: "12px",
+    padding: "12px",
     textAlign: "center",
-    boxShadow: "0 4px 8px rgba(0, 0, 0, 0.2)",
-    color: "#333",
+    boxShadow: "0 4px 8px rgba(0, 0, 0, 0.1)",
+    color: "#0d47a1",
     position: "relative",
     cursor: "pointer",
+    transition: "all 0.3s ease",
+    border: "2px solid rgba(161, 196, 253, 0.5)",
+    height: "auto",
   };
+
   const logoStyle = {
     position: "absolute",
-    top: "10px",
-    left: "10px",
-    fontSize: "24px",
-    fontWeight: "bold",
-  };
-  const restaurantNameStyle = {
-    fontSize: "28px",
-    marginBottom: "10px",
-  };
-  const offerItemStyle = {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: "15px",
-  };
-  const offerImageStyle = {
-    width: "80px",
-    height: "80px",
-    objectFit: "cover",
-    borderRadius: "8px",
-  };
-  const offerDetailsStyle = {
-    flex: 1,
-    marginLeft: "10px",
-  };
-  const offerPriceStylePoster = {
+    top: "5px",
+    left: "5px",
     fontSize: "18px",
     fontWeight: "bold",
-    color: "#ff4500",
+    color: "#1976d2",
   };
-  const limitedOfferStyle = {
+
+  // Offer name at top center
+  const offerNameStyle = {
+    fontSize: "22px",
+    marginBottom: "8px",
+    textShadow: "1px 1px 2px rgba(0,0,0,0.1)",
+    fontFamily: 'ui-sans-serif',
+    color: "#0d47a1",
+    fontWeight: "normal",
+  };
+
+  // Offer period in one line
+  const offerPeriodStyle = {
+    fontSize: "13px",
+    color: "#1976d2",
+    marginBottom: "8px",
+    fontWeight: "bold",
+    backgroundColor: "rgba(255, 255, 255, 0.7)",
+    padding: "4px 8px",
+    borderRadius: "4px",
+    display: "inline-block",
+  };
+
+  // Images left side, vertical stack
+  const comboImagesLeftStyle = {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    marginBottom: "8px",
+    gap: "5px",
+  };
+
+  const comboImageThumbStyle = {
+    width: "70px",
+    height: "70px",
+    objectFit: "cover",
+    borderRadius: "8px",
+    border: "2px solid rgba(161, 196, 253, 0.5)",
+    boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+  };
+
+  // Right side: Single border box with bullet list of names (items, addons, combos combined)
+  const itemsListStyle = {
+    backgroundColor: "rgba(255, 255, 255, 0.7)",
+    border: "2px solid rgba(161, 196, 253, 0.5)",
+    borderRadius: "8px",
+    padding: "10px",
+    marginBottom: "8px",
+    textAlign: "left",
+  };
+
+  const itemsListItemStyle = {
     fontSize: "14px",
-    color: "#ff4500",
-    marginTop: "20px",
+    color: "#0d47a1",
+    fontWeight: "bold",
+    marginBottom: "4px",
+    listStyleType: "disc",
+    paddingLeft: "20px",
   };
+
+  // Total price center bottom
+  const totalPriceStyle = {
+    fontSize: "18px",
+    margin: "12px 0",
+    backgroundColor: "rgba(255, 255, 255, 0.8)",
+    padding: "8px",
+    borderRadius: "8px",
+    color: "#e91e63",
+    fontWeight: "bold",
+    textAlign: "center",
+  };
+
+  // Limited offer center
+  const limitedOfferStyle = {
+    fontSize: "13px",
+    color: "#e91e63",
+    marginTop: "8px",
+    fontWeight: "bold",
+    textTransform: "uppercase",
+    letterSpacing: "1px",
+    textAlign: "center",
+  };
+
+  // View button center
+  const viewButtonStyle = {
+    marginTop: "8px",
+    backgroundColor: "rgb(161, 196, 253)",
+    borderColor: "rgb(161, 196, 253)",
+    color: "#0d47a1",
+    fontWeight: "bold",
+    padding: "6px 12px",
+    borderRadius: "20px",
+    boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+    display: "block",
+    margin: "8px auto 0",
+  };
+
+  // Get unique categories from items, including Combos Offer
+  const getCategories = () => {
+    const categories = [...new Set(itemList.map(item => item.item_group))];
+    const filteredCategories = categories.filter(category => category);
+    return ["All Items", ...filteredCategories, `Combos Offer (${comboList.length})`];
+  };
+
+  // Handle category selection
+  const handleCategoryClick = (category) => {
+    const cleanCategory = category.replace(/\s*\(\d+\)\s*$/, '');
+    setSelectedCategory(cleanCategory);
+  };
+
   // Filter items based on selected category
   const filteredItems = selectedCategory === "All Items"
     ? itemList
     : selectedCategory === "Combos Offer"
     ? comboList
     : itemList.filter(item => item.item_group === selectedCategory);
+
   // Check if item has an active offer
   const hasActiveOffer = (item) => {
     if (item.offer_price === undefined || !item.offer_start_time || !item.offer_end_time) {
@@ -419,10 +570,12 @@ const ItemListPage = () => {
     const endTime = new Date(item.offer_end_time);
     return startTime <= currentTime && currentTime <= endTime;
   };
+
   // Format nutrition field names for display
   const formatNutritionLabel = (key) => {
     return key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' ');
   };
+
   // Render ingredients based on their type
   const renderIngredients = (ingredients) => {
     if (!ingredients) {
@@ -461,6 +614,7 @@ const ItemListPage = () => {
     }
     return null;
   };
+
   // Check if there's valid data to display
   const hasValidData = () => {
     const hasIngredients =
@@ -473,8 +627,34 @@ const ItemListPage = () => {
       Object.entries(nutritionData.nutrition).some(([_, value]) => value !== '' && value !== null && value !== undefined);
     return hasIngredients || hasNutrition;
   };
+
   // Searched items for offer modal
   const searchedItems = itemList.filter(item => item.item_name.toLowerCase().includes(searchTerm.toLowerCase()));
+
+  // Function to get all names (items + addons + combos) for bullet list
+  const getAllNames = (combo) => {
+    const names = [];
+    // Items
+    if (combo.items && combo.items.length > 0) {
+      combo.items.forEach(comboItem => {
+        names.push(comboItem.data.item_name || comboItem.data.name1 || '');
+      });
+    }
+    // Addons
+    if (combo.addons && combo.addons.length > 0) {
+      combo.addons.forEach(addon => {
+        if (addon.name1) names.push(addon.name1);
+      });
+    }
+    // Combos (sub-combos?)
+    if (combo.combos && combo.combos.length > 0) {
+      combo.combos.forEach(subCombo => {
+        if (subCombo.name1) names.push(subCombo.name1);
+      });
+    }
+    return names.filter(name => name.trim() !== '');
+  };
+
   return (
     <div className="container-fluid mt-5">
       <button
@@ -543,6 +723,32 @@ const ItemListPage = () => {
       >
         <FaPlusCircle style={{ marginRight: "5px" }} /> Add New Item
       </button>
+      <button
+        onClick={handleHiddenItemsClick}
+        style={{
+          position: "fixed",
+          top: "20px",
+          right: "320px",
+          backgroundColor: "#6c757d",
+          border: "none",
+          color: "white",
+          borderRadius: "5px",
+          padding: "10px 20px",
+          cursor: "pointer",
+          fontSize: "16px",
+          fontWeight: "bold",
+          transition: "all 0.3s ease",
+          zIndex: 1000,
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = "#5a6268";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = "#6c757d";
+        }}
+      >
+        <FaEyeSlash style={{ marginRight: "5px" }} /> Hidden Items
+      </button>
       {warningMessage && (
         <div style={warningBoxStyle}>
           <p style={warningTextStyle}>{warningMessage}</p>
@@ -589,46 +795,79 @@ const ItemListPage = () => {
             <p>Please select a category from the sidebar.</p>
           ) : selectedCategory === "Combos Offer" ? (
             filteredItems.map((combo) => (
-              <div key={combo._id} className="col-md-4 mb-4">
-                <Card style={posterStyle}>
+              <div key={combo._id} className="col-md-3 mb-4">
+                <Card
+                  style={posterStyle}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = "translateY(-5px) scale(1.01)";
+                    e.currentTarget.style.boxShadow = "0 6px 12px rgba(0, 0, 0, 0.15)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "translateY(0) scale(1)";
+                    e.currentTarget.style.boxShadow = "0 4px 8px rgba(0, 0, 0, 0.1)";
+                  }}
+                >
                   <div style={logoStyle}>K</div>
-                  <h4 style={restaurantNameStyle}>{combo.description}</h4>
+                  {/* Top: Offer name center */}
+                  <h4 style={offerNameStyle}>{combo.description}</h4>
+                  {/* Offer period in one line if active */}
                   {hasActiveOffer(combo) && (
-                    <p style={{ fontSize: "16px", color: "#ff4500" }}>
-                      Offer Period: {new Date(combo.offer_start_time).toLocaleString()} to {new Date(combo.offer_end_time).toLocaleString()}
+                    <p style={offerPeriodStyle}>
+                      <strong>Offer Period:</strong> {new Date(combo.offer_start_time).toLocaleDateString()} {new Date(combo.offer_start_time).toLocaleTimeString()} to {new Date(combo.offer_end_time).toLocaleDateString()} {new Date(combo.offer_end_time).toLocaleTimeString()}
                     </p>
                   )}
-                  <ListGroup variant="flush">
-                    {combo.items.map((comboItem, idx) => (
-                      <ListGroup.Item key={idx} style={offerItemStyle}>
-                        <img
-                          src={`${baseUrl}${comboItem.data.image || comboItem.data.addon_image || comboItem.data.combo_image || "https://via.placeholder.com/80"}`}
-                          alt={comboItem.data.item_name || comboItem.data.name1}
-                          style={offerImageStyle}
-                        />
-                        <div style={offerDetailsStyle}>
-                          <strong>{comboItem.data.item_name || comboItem.data.name1}</strong><br />
-                          {comboItem.data.description || ''}
+                  {/* Two-column layout: left images, right list */}
+                  <div className="row" style={{ margin: 0 }}>
+                    <div className="col-4" style={{ padding: 0 }}> {/* Left: Images */}
+                      {combo.images && combo.images.length > 0 ? (
+                        <div style={comboImagesLeftStyle}>
+                          {combo.images.slice(0, 4).map((img, idx) => (
+                            <img
+                              key={idx}
+                              src={`${baseUrl}/api/combo-images/${img}`}
+                              alt={`Combo image ${idx + 1}`}
+                              style={comboImageThumbStyle}
+                              onError={(e) => {
+                                e.target.src = "https://via.placeholder.com/70?text=No+Img";
+                              }}
+                            />
+                          ))}
+                          {combo.images.length > 4 && (
+                            <span style={{ fontSize: "11px", color: "#1976d2", alignSelf: "center" }}>+{combo.images.length - 4} more</span>
+                          )}
                         </div>
-                        <span style={offerPriceStylePoster}>₹{comboItem.price}</span>
-                      </ListGroup.Item>
-                    ))}
-                  </ListGroup>
-                  <p style={offerPriceStylePoster}>
+                      ) : (
+                        <div style={{ height: "280px", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.5)" }}>
+                          <span style={{ color: "#888", fontSize: "12px" }}>No Images</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="col-8" style={{ padding: "0 10px" }}> {/* Right: Single border box with bullet list */}
+                      <ul style={itemsListStyle}>
+                        {getAllNames(combo).map((name, idx) => (
+                          <li key={idx} style={itemsListItemStyle}>{name}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                  {/* Bottom center: Total price with strikeout if offer */}
+                  <p style={totalPriceStyle}>
                     Total Price: {hasActiveOffer(combo) ? (
                       <>
-                        <span style={strikethroughStyle}>₹{combo.total_price}</span>
-                        <span>₹{combo.offer_price}</span>
+                        <span style={{ ...strikethroughStyle, color: "#1976d2", fontSize: "16px" }}>₹{combo.total_price}</span>
+                        <span style={{ color: "#e91e63", fontSize: "18px" }}>₹{combo.offer_price}</span>
                       </>
                     ) : (
-                      `₹${combo.total_price}`
+                      <span style={{ color: "#0d47a1", fontSize: "18px" }}>₹{combo.total_price}</span>
                     )}
                   </p>
+                  {/* Limited offer center if active */}
                   {hasActiveOffer(combo) && <p style={limitedOfferStyle}>LIMITED OFFERS! Place Your Order</p>}
+                  {/* View button center */}
                   <Button
                     variant="success"
                     onClick={() => handleItemClick(combo, true)}
-                    style={{ marginTop: "10px", backgroundColor: "#28a745", borderColor: "#28a745" }}
+                    style={viewButtonStyle}
                   >
                     View
                   </Button>
@@ -675,8 +914,9 @@ const ItemListPage = () => {
           )}
         </div>
       </div>
+      {/* Item Details Modal */}
       {selectedItem && (
-        <Modal show={showModal} onHide={handleCloseModal}>
+        <Modal show={showModal} onHide={handleCloseModal} size="lg">
           <Modal.Header closeButton>
             <Modal.Title>{selectedItem.item_name || selectedItem.description}</Modal.Title>
           </Modal.Header>
@@ -784,11 +1024,6 @@ const ItemListPage = () => {
                     {selectedItem.items.map((comboItem, idx) => (
                       <li key={idx}>
                         {comboItem.data.item_name || comboItem.data.name1} - ₹{comboItem.price}
-                        <img
-                          src={`${baseUrl}${comboItem.data.image || comboItem.data.addon_image || comboItem.data.combo_image || "https://via.placeholder.com/50"}`}
-                          alt={comboItem.data.item_name || comboItem.data.name1}
-                          style={{ width: "50px", height: "50px", marginLeft: "10px", objectFit: "cover" }}
-                        />
                       </li>
                     ))}
                   </ul>
@@ -844,9 +1079,55 @@ const ItemListPage = () => {
           </Modal.Body>
           <Modal.Footer>
             <Button variant="secondary" onClick={handleCloseModal}>Close</Button>
-            <Button variant="danger" onClick={handleDeleteItem}>Delete</Button>
+            <Button variant="danger" onClick={handleDeleteItem}>Delete/Hide</Button>
             <Button variant="success" onClick={handleEditItem}>Edit</Button>
             {!selectedItem.isCombo && <Button variant="primary" onClick={handleNutritionClick}>Ingredients & Nutrition</Button>}
+          </Modal.Footer>
+        </Modal>
+      )}
+      {/* Sale Details Modal */}
+      {selectedSale && (
+        <Modal show={showSaleModal} onHide={handleCloseSaleModal} size="xl">
+          <Modal.Header closeButton>
+            <Modal.Title>Sale Details - {selectedSale.invoice_no}</Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            <div className="container">
+              <h5>Customer: {selectedSale.customer || 'N/A'}</h5>
+              <h5>Date: {selectedSale.date}</h5>
+              <h5>Time: {selectedSale.time}</h5>
+              <h5>Payment Method: {selectedSale.payment_method || 'CASH'}</h5>
+              <h5>Subtotal: {selectedSale.invoice_currency} {selectedSale.total}</h5>
+              <h5>VAT: {selectedSale.invoice_currency} {selectedSale.vat_amount}</h5>
+              <h5>Grand Total: {selectedSale.invoice_currency} {selectedSale.grand_total}</h5>
+              <h6>Items:</h6>
+              <Table striped bordered hover>
+                <thead>
+                  <tr>
+                    <th>Item Name</th>
+                    <th>Quantity</th>
+                    <th>Price</th>
+                    <th>Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedSale.items.map((item, idx) => (
+                    <tr key={idx}>
+                      <td>{item.item_name}</td>
+                      <td>{item.quantity}</td>
+                      <td>{selectedSale.invoice_currency} {item.basePrice}</td>
+                      <td>{selectedSale.invoice_currency} {item.amount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </div>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="secondary" onClick={handleCloseSaleModal}>Close</Button>
+            <Button variant="danger" onClick={handleDeleteSale}>
+              <FaTrash /> Delete Sale
+            </Button>
           </Modal.Footer>
         </Modal>
       )}
