@@ -1,4 +1,4 @@
-// ActiveOrders.jsx - Full Updated Code with Mark Delivered Moving to Trip Reports
+// ActiveOrders.jsx - Full Updated Code with Mark Delivered Moving to Trip Reports and Updating Sales Record with deliveryPersonName. (No changes needed here for initial assignment, as it already sets deliveryPersonName correctly. Added update to sales in handleMarkDelivered for Online Delivery orders. Logging added in backend for debugging.)
 import React, { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
@@ -297,9 +297,12 @@ function ActiveOrders() {
         setShowDeliveryPopup(false);
         return;
       }
+      const employee = employees.find(emp => emp.employeeId === selectedDeliveryPersonId);
+      const deliveryPersonName = employee ? employee.name : 'Unknown';
       // Updated: Set status to 'assigned' instead of deleting
       await axios.put(`${baseUrl}/api/activeorders/${selectedOrderId}`, {
         deliveryPersonId: selectedDeliveryPersonId,
+        deliveryPersonName: deliveryPersonName,
         status: 'assigned', // New status
         cartItems: order.cartItems,
       });
@@ -327,11 +330,12 @@ function ActiveOrders() {
       return;
     }
     try {
-      const employee = employees_collection.find_one({'employeeId': newEmployeeId}); // Assume you have employees_collection, but in frontend, fetch name
+      const employee = employees.find(emp => emp.employeeId === newEmployeeId);
+      const deliveryPersonName = employee ? employee.name : 'Unknown';
       await axios.put(`${baseUrl}/api/activeorders/${selectedOrderId}`, {
         deliveryPersonId: newEmployeeId,
+        deliveryPersonName: deliveryPersonName,
         status: 'assigned', // Reset to assigned
-        deliveryPersonName: employee ? employee.name : 'Unknown', // Update name
       });
       fetchData();
       setShowReassignPopup(false);
@@ -341,11 +345,24 @@ function ActiveOrders() {
       console.error("Failed to reassign:", err);
     }
   };
-  // UPDATED: Mark as delivered - Now calls new endpoint to move to trip_reports
+  // UPDATED: Mark as delivered - Now calls new endpoint to move to trip_reports and updates sales record with deliveryPersonName for Online Delivery
   const handleMarkDelivered = async (orderId) => {
     if (!window.confirm('Mark as delivered and move to trip reports?')) return;
     try {
+      const order = savedOrders.find(o => o.orderId === orderId);
       await axios.put(`${baseUrl}/api/activeorders/${orderId}/mark-delivered`);
+      // NEW: If Online Delivery and has deliveryPersonName, update the corresponding sales record
+      if (order && order.orderType === 'Online Delivery' && order.orderNo && order.deliveryPersonName) {
+        try {
+          await axios.post(`${baseUrl}/api/sales/update-delivery`, {
+            orderNo: order.orderNo,
+            deliveryPersonName: order.deliveryPersonName
+          });
+          console.log(`Updated sales record for orderNo: ${order.orderNo} with deliveryPersonName: ${order.deliveryPersonName}`);
+        } catch (updateErr) {
+          console.error("Failed to update sales delivery info:", updateErr);
+        }
+      }
       fetchData();
       // Suppressed UI warning message as per request
     } catch (err) {
@@ -637,6 +654,7 @@ function ActiveOrders() {
         orderType: orderType,
         chairsBooked: Array.isArray(order.chairsBooked) ? order.chairsBooked : [],
         deliveryPersonId: order.deliveryPersonId || "",
+        deliveryPersonName: order.deliveryPersonName || "", // Include deliveryPersonName for sales payload
         pickedUpTime: order.pickedUpTime || null,
         orderId: order.orderId,
         orderNo: order.orderNo,

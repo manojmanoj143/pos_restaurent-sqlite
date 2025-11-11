@@ -1,4 +1,6 @@
-// TripReport.jsx - Full Updated Code with Dynamic VAT Rate and Delivery Person Name
+// TripReport.jsx - Full Updated Code: Enhanced with overall totals (Total Grand Total, Total Collected, Total Pending) displayed in the Selected Delivery Person section.
+// All previous features preserved: payment amounts for Cash/Card/UPI, balance calculation, Pending Grand Total (sum of outstanding balances), Mark Delivered with full payment check,
+// inputs disabled for delivered orders, popup with details, dynamic VAT, etc.
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
@@ -6,6 +8,7 @@ import axios from 'axios';
 import { FaArrowLeft } from 'react-icons/fa';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './TripReport.css';
+
 function TripReport() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -26,10 +29,10 @@ function TripReport() {
   const [warningType, setWarningType] = useState('warning');
   const [searchTerm, setSearchTerm] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
-  const [paymentDetails, setPaymentDetails] = useState({});
   const [vatRate, setVatRate] = useState(0.10); // UPDATED: Dynamic VAT rate like in FrontPage
   const dropdownRef = useRef(null);
   const baseUrl = window.location.hostname === 'localhost' ? '' : `http://${window.location.hostname}:8000`;
+
   // UPDATED: Fetch VAT rate dynamically like in FrontPage
   useEffect(() => {
     const fetchVat = async () => {
@@ -43,10 +46,12 @@ function TripReport() {
     };
     fetchVat();
   }, [baseUrl]);
+
   // Generate short UUID suffix for invoice number
   const generateShortUUID = () => {
     return uuidv4().slice(0, 8);
   };
+
   // Fetch employees on component mount
   const fetchEmployees = async () => {
     try {
@@ -64,7 +69,8 @@ function TripReport() {
       setLoading(false);
     }
   };
-  // UPDATED: Fetch trip reports for the selected employee from trip_reports
+
+  // UPDATED: Fetch trip reports (now sales) for the selected employee from sales collection via backend
   const fetchTripReports = async (employeeId, date, billNo, custName) => {
     if (!employeeId || !date) return;
     try {
@@ -72,44 +78,79 @@ function TripReport() {
       setError(null);
       const response = await axios.get(`${baseUrl}/api/tripreports/${employeeId}`);
       const data = Array.isArray(response.data) ? response.data : [];
-      const sanitizedReports = data.map((report) => ({
-        ...report,
-        orderNo: report.orderNo || 'N/A',
-        tripId: report.orderId || uuidv4(), // Ensure tripId for frontend
-        chairsBooked: Array.isArray(report.chairsBooked) ? report.chairsBooked : [],
-        cartItems: Array.isArray(report.cartItems) ? report.cartItems.map((item) => ({
-          ...item,
-          id: item.id || uuidv4(),
-          item_name: item.item_name || item.name || 'Unknown',
-          name: item.name || item.item_name || 'Unknown',
-          quantity: Number(item.quantity) || 1,
-          basePrice: Number(item.basePrice) || (Number(item.totalPrice) / (Number(item.quantity) || 1)) || 0,
-          totalPrice: Number(item.totalPrice) || (Number(item.basePrice) * (Number(item.quantity) || 1)) || 0,
-          selectedSize: item.selectedSize || 'M',
-          icePreference: item.icePreference || 'without_ice',
-          icePrice: Number(item.icePrice) || 0,
-          isSpicy: item.isSpicy || false,
-          spicyPrice: Number(item.spicyPrice) || 0,
-          kitchen: item.kitchen || 'Main Kitchen',
-          addonQuantities: item.addonQuantities || {},
-          addonVariants: item.addonVariants || {},
-          addonPrices: item.addonPrices || {},
-          comboQuantities: item.comboQuantities || {},
-          comboVariants: item.comboVariants || {},
-          comboPrices: item.comboPrices || {},
-          selectedCombos: Array.isArray(item.selectedCombos) ? item.selectedCombos : [],
-          ingredients: Array.isArray(item.ingredients) ? item.ingredients : [],
-          requiredKitchens: Array.isArray(item.requiredKitchens) ? item.requiredKitchens : [],
-          kitchenStatuses: item.kitchenStatuses || {},
-        })) : [],
-        pickedUpTime: report.pickedUpTime || null,
-        paymentMethods: Array.isArray(report.paymentMethods) ? report.paymentMethods : [],
-        cardDetails: report.cardDetails || '',
-        upiDetails: report.upiDetails || '',
-        email: report.email || 'N/A',
-        // UPDATED: Ensure deliveryPersonName is always present
-        deliveryPersonName: report.deliveryPersonName || selectedEmployee?.name || 'Unknown',
-      }));
+      const sanitizedReports = data.map((report) => {
+        let paymentAmounts = { Cash: 0, Card: 0, UPI: 0 };
+        let tenderedAmount = report.tenderedAmount || '';
+        let changeAmount = report.change || 0;
+        let cardDetails = report.cardDetails || '';
+        let upiDetails = report.upiDetails || '';
+        let paymentMethods = [];
+        if (Array.isArray(report.payments)) {
+          report.payments.forEach((p) => {
+            const method = p.mode_of_payment;
+            if (['Cash', 'Card', 'UPI'].includes(method)) {
+              paymentAmounts[method] = Number(p.amount) || 0;
+              if (method === 'Cash') {
+                tenderedAmount = p.tenderedAmount || '';
+                changeAmount = Number(p.change) || 0;
+              } else if (method === 'Card') {
+                cardDetails = p.cardNumber || p.cardDetails || '';
+              } else if (method === 'UPI') {
+                upiDetails = p.upiId || p.upiDetails || '';
+              }
+              if (Number(p.amount) > 0) paymentMethods.push(method);
+            }
+          });
+        }
+        return {
+          ...report,
+          orderNo: report.orderNo || report.invoice_no || 'N/A', // Fallback to invoice_no
+          tripId: report._id || uuidv4(), // Ensure tripId for frontend
+          status: report.status || 'Pending', // UPDATED: Include status for filtering/delivered check
+          chairsBooked: Array.isArray(report.chairsBooked) ? report.chairsBooked : [],
+          cartItems: Array.isArray(report.cartItems)
+            ? report.cartItems.map((item) => ({
+                ...item,
+                id: item.id || uuidv4(),
+                item_name: item.item_name || item.name || 'Unknown',
+                name: item.name || item.item_name || 'Unknown',
+                quantity: Number(item.quantity) || 1,
+                basePrice: Number(item.basePrice) || (Number(item.amount) / (Number(item.quantity) || 1)) || 0,
+                totalPrice: Number(item.amount) || (Number(item.basePrice) * (Number(item.quantity) || 1)) || 0,
+                selectedSize: item.selectedSize || 'M',
+                icePreference: item.icePreference || 'without_ice',
+                icePrice: Number(item.icePrice) || 0,
+                isSpicy: item.isSpicy || false,
+                spicyPrice: Number(item.spicyPrice) || 0,
+                kitchen: item.kitchen || 'Main Kitchen',
+                addonQuantities: item.addonQuantities || {},
+                addonVariants: item.addonVariants || {},
+                addonPrices: item.addonPrices || {},
+                comboQuantities: item.comboQuantities || {},
+                comboVariants: item.comboVariants || {},
+                comboPrices: item.comboPrices || {},
+                addons: Array.isArray(item.addons) ? item.addons : [], // Ensure addons array
+                selectedCombos: Array.isArray(item.selectedCombos) ? item.selectedCombos : [], // Ensure selectedCombos array
+                ingredients: Array.isArray(item.ingredients) ? item.ingredients : [],
+                requiredKitchens: Array.isArray(item.requiredKitchens) ? item.requiredKitchens : [],
+                kitchenStatuses: item.kitchenStatuses || {},
+              }))
+            : [],
+          pickedUpTime: report.pickedUpTime || null,
+          paymentMethods, // Derived from payments
+          paymentAmounts, // NEW: Payment amounts per method
+          tenderedAmount, // NEW: For cash tendered
+          change: changeAmount, // NEW: For cash change
+          cardDetails, // From payments
+          upiDetails, // From payments
+          email: report.email || 'N/A',
+          customerName: report.customer || 'N/A', // UPDATED: From sales.customer
+          timestamp: report.date, // UPDATED: Use report.date for filtering (string match)
+          // UPDATED: Ensure deliveryPersonName is always present
+          deliveryPersonName: report.deliveryPersonName || selectedEmployee?.name || 'Unknown',
+        };
+      });
+      console.log('Sanitized reports:', sanitizedReports); // Debug log
       setTripReports(sanitizedReports);
       filterReportsByDate(sanitizedReports, date, billNo, custName);
     } catch (err) {
@@ -120,21 +161,17 @@ function TripReport() {
       setLoading(false);
     }
   };
-  // Filter reports by date, bill number, and customer name
+
+  // UPDATED: Filter reports by date (string match on report.date === date), bill number (orderNo), and customer name
   const filterReportsByDate = (reports, date, billNo, custName) => {
+    console.log('Filtering reports by date:', date, 'billNo:', billNo, 'custName:', custName); // Debug log
     if (!date) {
       setFilteredReports([]);
       return;
     }
-    const selectedDateObj = new Date(date);
     let filtered = reports.filter((report) => {
-      if (!report.timestamp) return false;
-      const reportDate = new Date(report.timestamp);
-      return (
-        reportDate.getFullYear() === selectedDateObj.getFullYear() &&
-        reportDate.getMonth() === selectedDateObj.getMonth() &&
-        reportDate.getDate() === selectedDateObj.getDate()
-      );
+      // UPDATED: String match on report.date === date (both YYYY-MM-DD)
+      return report.date === date;
     });
     if (billNo) {
       filtered = filtered.filter((report) => report.orderNo.toLowerCase().includes(billNo.toLowerCase()));
@@ -144,117 +181,70 @@ function TripReport() {
         report.customerName && report.customerName.toLowerCase().includes(custName.toLowerCase())
       );
     }
+    console.log('Filtered reports:', filtered); // Debug log
     setFilteredReports(filtered);
   };
-  // Create sales invoice for a single report
-  const createSalesInvoice = async (report) => {
-    // Validate payment methods
-    if (!report.paymentMethods.length || !['Cash', 'Card', 'UPI'].some(method => report.paymentMethods.includes(method))) {
-      setWarningMessage('Please select at least one payment method (Cash, Card, or UPI) to create a sales invoice.');
-      setWarningType('warning');
-      return { success: false, invoice_no: null, error: 'Invalid payment method' };
-    }
-    if (report.paymentMethods.includes('Card') && !report.cardDetails) {
-      setWarningMessage('Please enter a card reference number for Card payment.');
-      setWarningType('warning');
-      return { success: false, invoice_no: null, error: 'Missing card details' };
-    }
-    if (report.paymentMethods.includes('UPI') && !report.upiDetails) {
-      setWarningMessage('Please enter a UPI reference number for UPI payment.');
-      setWarningType('warning');
-      return { success: false, invoice_no: null, error: 'Missing UPI details' };
-    }
-    // Validate selectedEmployee and email
-    if (!selectedEmployee || !selectedEmployee.email) {
-      const errorMsg = 'Selected employee or employee email is missing.';
-      setWarningMessage(errorMsg);
-      setWarningType('warning');
-      return { success: false, invoice_no: null, error: errorMsg };
-    }
-    try {
-      setLoading(true);
-      setError(null);
-      const subtotal = calculateOrderTotal(report.cartItems);
-      const vatAmount = Number(subtotal) * vatRate; // UPDATED: Use dynamic vatRate
-      const grandTotal = (Number(subtotal) + vatAmount).toFixed(2);
-      const payments = report.paymentMethods.map(method => ({
-        mode_of_payment: method.toUpperCase(),
-        amount: Number(grandTotal),
-        reference: method === 'Card' ? report.cardDetails : method === 'UPI' ? report.upiDetails : null,
-      }));
-      const salesData = {
-        customer: report.customerName || 'N/A',
-        items: report.cartItems.map((item) => ({
-          item_name: item.name || item.item_name || 'Unknown',
-          basePrice: Number(item.basePrice) || (Number(item.totalPrice) / (item.quantity || 1)) || 0,
-          quantity: item.quantity || 1,
-          amount: Number(item.totalPrice) || 0,
-          addons: Object.entries(item.addonQuantities || {})
-            .filter(([_, qty]) => qty > 0)
-            .map(([addonName, qty]) => ({
-              name1: addonName,
-              addon_price: item.addonPrices?.[addonName] || 0,
-              addon_quantity: qty,
-              kitchen: item.addonVariants?.[addonName]?.kitchen || 'Unknown',
-              addon_image: '',
-              size: item.addonVariants?.[addonName]?.size || 'S',
-            })),
-          selectedCombos: Object.entries(item.comboQuantities || {})
-            .filter(([_, qty]) => qty > 0)
-            .map(([comboName, qty]) => ({
-              name1: comboName,
-              combo_price: item.comboPrices?.[comboName] || 0,
-              combo_quantity: qty,
-              combo_image: '',
-              size: item.comboVariants?.[comboName]?.size || 'M',
-              spicy: item.comboVariants?.[comboName]?.spicy || false,
-              kitchen: item.comboVariants?.[comboName]?.kitchen || 'Unknown',
-              selectedVariant: null,
-            })),
-          ingredients: item.ingredients || [],
-          kitchen: item.kitchen || 'Main Kitchen',
-          selectedSize: item.selectedSize || 'M',
-          icePreference: item.icePreference || 'without_ice',
-          isSpicy: item.isSpicy || false,
-        })),
-        total: Number(subtotal),
-        vat_amount: Number(vatAmount.toFixed(2)),
-        grand_total: Number(grandTotal),
-        date: new Date().toISOString().split('T')[0],
-        time: new Date().toTimeString().split(' ')[0],
-        invoice_no: `INV-${report.orderNo}-${generateShortUUID()}`,
-        payments: payments,
-        deliveryAddress: report.deliveryAddress || null,
-        phoneNumber: report.phoneNumber || 'N/A',
-        email: report.email || 'N/A',
-        whatsappNumber: report.whatsappNumber || 'N/A',
-        status: 'Draft',
-        orderType: 'Online Delivery',
-        userId: selectedEmployee.email,
-        // UPDATED: Include delivery person details
-        deliveryPersonId: report.deliveryPersonId,
-        deliveryPersonName: report.deliveryPersonName,
-      };
-      const response = await axios.post(`${baseUrl}/api/sales`, salesData, {
-        headers: { 'Content-Type': 'application/json' },
-      });
-      setWarningMessage(`Sales invoice created successfully: ${response.data.invoice_no}`);
-      setWarningType('success');
-      return { success: true, invoice_no: response.data.invoice_no, error: null };
-    } catch (err) {
-      const errorMsg = `Failed to create sales invoice for order ${report.orderNo}: ${err.response?.data?.error || err.message}`;
-      setError(errorMsg);
-      setWarningType('warning');
-      return { success: false, invoice_no: null, error: errorMsg };
-    } finally {
-      setLoading(false);
-    }
+
+  // NEW: Helper to calculate total paid
+  const calculateTotalPaid = (paymentAmounts) => {
+    return Object.values(paymentAmounts).reduce((sum, amt) => sum + (Number(amt) || 0), 0);
   };
-  // UPDATED: Mark order as delivered - No longer needed since done in ActiveOrders, but keep for compatibility
-  const markAsDelivered = async (orderId) => {
+
+  // NEW: Helper to get balance
+  const getBalance = (report) => {
+    const grandTotal = parseFloat(calculateGrandTotal(report.cartItems));
+    const totalPaid = calculateTotalPaid(report.paymentAmounts);
+    return Math.max(0, grandTotal - totalPaid).toFixed(2);
+  };
+
+  // UPDATED: Mark order as delivered - Requires full payment, constructs payments array with amounts/details
+  // One-time only: Only allow if status !== 'Delivered'
+  const markAsDelivered = async (report) => {
+    if (report.status === 'Delivered') {
+      setWarningMessage('Order is already delivered.');
+      setWarningType('warning');
+      return;
+    }
+    const grandTotalNum = parseFloat(calculateGrandTotal(report.cartItems));
+    const totalPaid = calculateTotalPaid(report.paymentAmounts);
+    if (totalPaid < grandTotalNum - 0.01) { // Tolerance for floating point
+      setWarningMessage(`Insufficient payment. Total Paid: ₹${totalPaid.toFixed(2)}, Required: ₹${grandTotalNum.toFixed(2)}`);
+      setWarningType('warning');
+      return;
+    }
     try {
-      await axios.put(`${baseUrl}/api/activeorders/${orderId}/mark-delivered`);
-      setWarningMessage('Order marked as delivered successfully.');
+      const payments = [];
+      ['Cash', 'Card', 'UPI'].forEach((method) => {
+        const amount = Number(report.paymentAmounts[method]) || 0;
+        if (amount > 0) {
+          let payObj = {
+            mode_of_payment: method,
+            amount: amount,
+          };
+          if (method === 'Cash') {
+            const tendered = parseFloat(report.tenderedAmount) || amount;
+            payObj.tenderedAmount = tendered;
+            payObj.change = Math.max(0, tendered - amount);
+          } else if (method === 'Card' && report.cardDetails) {
+            payObj.cardNumber = report.cardDetails;
+          } else if (method === 'UPI' && report.upiDetails) {
+            payObj.upiId = report.upiDetails;
+          }
+          payments.push(payObj);
+        }
+      });
+      if (payments.length === 0) {
+        setWarningMessage('No payment entered.');
+        setWarningType('warning');
+        return;
+      }
+      const payload = {
+        orderNo: report.orderNo,
+        status: 'Delivered',
+        payments: payments,
+      };
+      await axios.post(`${baseUrl}/api/sales/deliver-order`, payload);
+      setWarningMessage('Order marked as delivered successfully with payment details.');
       setWarningType('success');
       // Refresh reports
       if (selectedEmployee && selectedDate) {
@@ -265,46 +255,92 @@ function TripReport() {
       setWarningType('warning');
     }
   };
-  // Create sales invoices for all filtered reports
-  const createAllSalesInvoices = async () => {
-    setLoading(true);
-    setError(null);
-    let successCount = 0;
-    let errorCount = 0;
-    const errorMessages = [];
-    for (const report of filteredReports) {
-      const result = await createSalesInvoice(report);
-      if (result.success) {
-        successCount++;
-      } else {
-        errorCount++;
-        errorMessages.push(result.error);
-      }
-    }
-    setLoading(false);
-    if (successCount > 0 && errorCount === 0) {
-      setWarningMessage(`Successfully created ${successCount} sales invoices.`);
-      setWarningType('success');
-    } else if (successCount > 0) {
-      setWarningMessage(
-        `Created ${successCount} sales invoices successfully, but ${errorCount} failed: ${errorMessages.join('; ')}`
-      );
+
+  // NEW: Handle payment amount change
+  const handlePaymentAmountChange = (reportId, method, value) => {
+    const report = filteredReports.find((r) => r.tripId === reportId);
+    if (report?.status === 'Delivered') {
+      setWarningMessage('Cannot edit payments for delivered order.');
       setWarningType('warning');
-    } else {
-      setWarningMessage(`Failed to create any sales invoices: ${errorMessages.join('; ')}`);
-      setWarningType('warning');
+      return;
     }
+    const numValue = value === '' ? 0 : parseFloat(value);
+    setFilteredReports((prevReports) =>
+      prevReports.map((r) => {
+        if (r.tripId === reportId) {
+          const newAmounts = { ...r.paymentAmounts, [method]: numValue };
+          let newTendered = r.tenderedAmount;
+          let newChange = r.change;
+          let newCardDetails = r.cardDetails;
+          let newUpiDetails = r.upiDetails;
+          if (numValue === 0) {
+            if (method === 'Cash') newTendered = '';
+            if (method === 'Card') newCardDetails = '';
+            if (method === 'UPI') newUpiDetails = '';
+          }
+          return {
+            ...r,
+            paymentAmounts: newAmounts,
+            ...(method === 'Cash' ? { tenderedAmount: newTendered, change: newChange } : {}),
+            ...(method === 'Card' ? { cardDetails: newCardDetails } : {}),
+            ...(method === 'UPI' ? { upiDetails: newUpiDetails } : {}),
+          };
+        }
+        return r;
+      })
+    );
   };
+
+  // NEW: Handle tendered amount change for cash
+  const handleTenderedChange = (reportId, value) => {
+    const report = filteredReports.find((r) => r.tripId === reportId);
+    if (report?.status === 'Delivered') {
+      setWarningMessage('Cannot edit details for delivered order.');
+      setWarningType('warning');
+      return;
+    }
+    const cashAmt = Number(report.paymentAmounts.Cash) || 0;
+    const tendered = value === '' ? 0 : parseFloat(value);
+    const ch = Math.max(0, tendered - cashAmt);
+    setFilteredReports((prevReports) =>
+      prevReports.map((r) =>
+        r.tripId === reportId ? { ...r, tenderedAmount: value, change: ch } : r
+      )
+    );
+  };
+
+  // UPDATED: Handle payment details input (card/upi) - One-time only if not Delivered
+  const handlePaymentDetailsInput = (reportId, field, value) => {
+    const report = filteredReports.find((r) => r.tripId === reportId);
+    if (report?.status === 'Delivered') {
+      setWarningMessage('Cannot edit details for delivered order.');
+      setWarningType('warning');
+      return;
+    }
+    setFilteredReports((prevReports) =>
+      prevReports.map((report) => {
+        if (report.tripId === reportId) {
+          return {
+            ...report,
+            [field]: value,
+          };
+        }
+        return report;
+      })
+    );
+  };
+
   // Load employees on component mount
   useEffect(() => {
     fetchEmployees();
   }, []);
+
   // Prefill from URL params
   useEffect(() => {
     const empId = searchParams.get('employeeId');
     const date = searchParams.get('date');
     if (empId && date && employees.length > 0) {
-      const emp = employees.find(e => e.employeeId === empId);
+      const emp = employees.find((e) => e.employeeId === empId);
       if (emp) {
         setSelectedEmployee(emp);
         setDeliveryPerson(emp.name);
@@ -316,6 +352,7 @@ function TripReport() {
       }
     }
   }, [searchParams, employees]);
+
   // Handle search input change for delivery person
   const handleSearchChange = (e) => {
     const value = e.target.value;
@@ -332,6 +369,7 @@ function TripReport() {
       setFilteredReports([]);
     }
   };
+
   // Handle employee selection from dropdown
   const handleSelectEmployee = (employee) => {
     setSearchTerm(employee.name);
@@ -343,6 +381,7 @@ function TripReport() {
       fetchTripReports(employee.employeeId, selectedDate, billNumber, customerName);
     }
   };
+
   // Handle date change
   const handleDateChange = (e) => {
     const date = e.target.value;
@@ -352,6 +391,7 @@ function TripReport() {
       fetchTripReports(selectedEmployee.employeeId, date, billNumber, customerName);
     }
   };
+
   // Handle bill number change
   const handleBillNumberChange = (e) => {
     const billNo = e.target.value;
@@ -361,6 +401,7 @@ function TripReport() {
       fetchTripReports(selectedEmployee.employeeId, selectedDate, billNo, customerName);
     }
   };
+
   // Handle customer name change
   const handleCustomerNameChange = (e) => {
     const custName = e.target.value;
@@ -370,6 +411,7 @@ function TripReport() {
       fetchTripReports(selectedEmployee.employeeId, selectedDate, billNumber, custName);
     }
   };
+
   // Handle form submission
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -392,86 +434,48 @@ function TripReport() {
     );
     setWarningType('success');
   };
-  // Handle action submission for creating sales invoice
-  const handleActionSubmit = (report) => {
-    createSalesInvoice(report);
-  };
+
   // Navigate back to home
   const handleBack = () => {
     navigate('/home');
   };
+
   // Show order details popup
   const handleShowDetails = (report) => {
     setSelectedReport(report);
     setShowPopup(true);
   };
+
   // Close popup
   const handleClosePopup = () => {
     setShowPopup(false);
     setSelectedReport(null);
   };
-  // Handle payment method selection (mutually exclusive)
-  const handlePaymentMethodSelect = (method, reportId) => {
-    setFilteredReports((prevReports) =>
-      prevReports.map((report) => {
-        if (report.tripId === reportId) {
-          const paymentMethods = report.paymentMethods.includes(method)
-            ? []
-            : [method];
-          return {
-            ...report,
-            paymentMethods,
-            cardDetails: method === 'Card' ? report.cardDetails : '',
-            upiDetails: method === 'UPI' ? report.upiDetails : '',
-          };
-        }
-        return report;
-      })
-    );
-    setPaymentDetails((prev) => ({
-      ...prev,
-      [reportId]: {
-        ...prev[reportId],
-        showDetailsInput: method === 'Cash' ? null : method,
-      },
-    }));
-    setWarningMessage(`Selected payment method: ${method}`);
-    setWarningType('success');
-  };
-  // Handle payment details input
-  const handlePaymentDetailsInput = (reportId, field, value) => {
-    setFilteredReports((prevReports) =>
-      prevReports.map((report) => {
-        if (report.tripId === reportId) {
-          return {
-            ...report,
-            [field]: value,
-          };
-        }
-        return report;
-      })
-    );
-  };
+
   // Handle warning message OK button
   const handleWarningOk = () => {
     setWarningMessage('');
     setWarningType('warning');
   };
+
   // Handle warning message Cancel button
   const handleWarningCancel = () => {
     setWarningMessage('');
     setWarningType('warning');
   };
-  // Format timestamp
+
+  // UPDATED: Format timestamp - Use report.date if timestamp not available
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return 'N/A';
     return new Date(timestamp).toLocaleString();
   };
+
   // Calculate order total
   const calculateOrderTotal = (cartItems) => {
     if (!Array.isArray(cartItems)) return '0.00';
     return cartItems.reduce((sum, item) => sum + (Number(item.totalPrice) || 0), 0).toFixed(2);
   };
+
   // UPDATED: Use dynamic vatRate for grand total calculation
   const calculateGrandTotal = (cartItems) => {
     if (!Array.isArray(cartItems)) return '0.00';
@@ -479,6 +483,33 @@ function TripReport() {
     const vat = subtotal * vatRate;
     return (subtotal + vat).toFixed(2);
   };
+
+  // UPDATED: Calculate pending grand total as sum of balances for undelivered orders only
+  const calculatePendingGrandTotal = () => {
+    return filteredReports
+      .filter((report) => report.status !== 'Delivered')
+      .reduce((sum, report) => {
+        const gt = parseFloat(calculateGrandTotal(report.cartItems));
+        const paid = calculateTotalPaid(report.paymentAmounts);
+        return sum + Math.max(0, gt - paid);
+      }, 0)
+      .toFixed(2);
+  };
+
+  // NEW: Calculate overall grand total (sum of all grand totals for filtered reports)
+  const calculateOverallGrandTotal = () => {
+    return filteredReports.reduce((sum, report) => {
+      return sum + parseFloat(calculateGrandTotal(report.cartItems));
+    }, 0).toFixed(2);
+  };
+
+  // NEW: Calculate total collected (sum of all paid amounts for filtered reports)
+  const calculateTotalCollected = () => {
+    return filteredReports.reduce((sum, report) => {
+      return sum + calculateTotalPaid(report.paymentAmounts);
+    }, 0).toFixed(2);
+  };
+
   // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -491,6 +522,7 @@ function TripReport() {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
   return (
     <div className="trip-main">
       {warningMessage && (
@@ -500,16 +532,10 @@ function TripReport() {
         >
           {warningMessage}
           <div className="d-flex justify-content-center gap-2 mt-3">
-            <button
-              className="btn btn-success"
-              onClick={handleWarningOk}
-            >
+            <button className="btn btn-success" onClick={handleWarningOk}>
               OK
             </button>
-            <button
-              className="btn btn-danger"
-              onClick={handleWarningCancel}
-            >
+            <button className="btn btn-danger" onClick={handleWarningCancel}>
               Cancel
             </button>
           </div>
@@ -621,15 +647,25 @@ function TripReport() {
         {selectedEmployee && (
           <div className="trip-main-card p-4 mb-4 shadow-sm">
             <h3 className="h5">Selected Delivery Person</h3>
-            <p><strong>Name:</strong> {selectedEmployee.name}</p>
-            <p><strong>Delivery Person Name in Reports:</strong> {selectedEmployee.name}</p> {/* UPDATED: Show delivery person name */}
+            <p>
+              <strong>Name:</strong> {selectedEmployee.name}
+            </p>
+            <p>
+              <strong>Delivery Person Name in Reports:</strong> {selectedEmployee.name}
+            </p>{/* UPDATED: Show delivery person name */}
+            {/* UPDATED: Overall totals (Total Grand Total, Total Collected, Total Pending) shown here for visibility at the top */}
             {filteredReports.length > 0 && (
-              <button
-                className="trip-main-btn-success"
-                onClick={createAllSalesInvoices}
-              >
-                Submit All
-              </button>
+              <div className="mt-3">
+                <p>
+                  <strong>Total Grand Total:</strong> ₹{calculateOverallGrandTotal()}
+                </p>
+                <p>
+                  <strong>Total Collected:</strong> ₹{calculateTotalCollected()}
+                </p>
+                <p>
+                  <strong>Total Pending:</strong> ₹{calculatePendingGrandTotal()}
+                </p>
+              </div>
             )}
           </div>
         )}
@@ -644,114 +680,168 @@ function TripReport() {
                     <th>Date</th>
                     <th>Customer</th>
                     <th>Email</th>
-                    <th>Delivery Person Name</th> {/* UPDATED: Show delivery person name */}
+                    <th>Delivery Person Name</th>{/* UPDATED: Show delivery person name */}
                     <th>Grand Total (₹)</th>
+                    <th>Balance (₹)</th> {/* NEW: Balance column */}
                     <th>Payment Method</th>
                     <th>Actions</th>
-                    <th>Delivered</th>
+                    <th>Status</th>{/* UPDATED: Status column instead of Delivered */}
                   </tr>
                 </thead>
                 <tbody>
                   {filteredReports.map((report) => (
                     <tr key={report.tripId}>
                       <td>{report.orderNo}</td>
-                      <td>{formatTimestamp(report.timestamp)}</td>
+                      <td>{formatTimestamp(report.date)}</td>{/* UPDATED: Use report.date */}
                       <td>{report.customerName || 'N/A'}</td>
                       <td>{report.email || 'N/A'}</td>
-                      <td>{report.deliveryPersonName || 'Unknown'}</td> {/* UPDATED: Display delivery person name */}
+                      <td>{report.deliveryPersonName || 'Unknown'}</td>{/* UPDATED: Display delivery person name */}
                       <td>{calculateGrandTotal(report.cartItems)}</td>
+                      <td>₹{getBalance(report)}</td> {/* NEW: Balance */}
                       <td>
-                        <div className="d-flex flex-column gap-2">
-                          <div className="form-check">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              checked={report.paymentMethods.includes('Cash')}
-                              onChange={() => handlePaymentMethodSelect('Cash', report.tripId)}
-                              id={`cash-${report.tripId}`}
-                            />
-                            <label className="form-check-label" htmlFor={`cash-${report.tripId}`}>
-                              Cash
-                            </label>
+                        {report.status === 'Delivered' ? (
+                          <div className="d-flex flex-column gap-1 small">
+                            {Object.entries(report.paymentAmounts)
+                              .filter(([, amt]) => Number(amt) > 0)
+                              .map(([method, amt]) => (
+                                <div key={method}>
+                                  <strong>{method}:</strong> ₹{amt.toFixed(2)}
+                                  {method === 'Cash' && report.tenderedAmount && (
+                                    <span>
+                                      {' '}
+                                      (Tendered: ₹{report.tenderedAmount}, Change: ₹{report.change.toFixed(2)})
+                                    </span>
+                                  )}
+                                  {method === 'Card' && report.cardDetails && (
+                                    <span> (****{report.cardDetails.slice(-4)})</span>
+                                  )}
+                                  {method === 'UPI' && report.upiDetails && (
+                                    <span> ({report.upiDetails.split('@')[0]})</span>
+                                  )}
+                                </div>
+                              ))}
+                            <div className="mt-1">
+                              <strong>Total Paid: ₹{calculateTotalPaid(report.paymentAmounts).toFixed(2)}</strong>
+                            </div>
+                            <div>
+                              <strong>Balance: ₹0.00</strong>
+                            </div>
                           </div>
-                          <div className="form-check">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              checked={report.paymentMethods.includes('Card')}
-                              onChange={() => handlePaymentMethodSelect('Card', report.tripId)}
-                              id={`card-${report.tripId}`}
-                            />
-                            <label className="form-check-label" htmlFor={`card-${report.tripId}`}>
-                              Card
-                            </label>
-                          </div>
-                          <div className="form-check">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              checked={report.paymentMethods.includes('UPI')}
-                              onChange={() => handlePaymentMethodSelect('UPI', report.tripId)}
-                              id={`upi-${report.tripId}`}
-                            />
-                            <label className="form-check-label" htmlFor={`upi-${report.tripId}`}>
-                              UPI
-                            </label>
-                          </div>
-                        </div>
-                        {paymentDetails[report.tripId]?.showDetailsInput === 'Card' && (
-                          <div className="mt-2">
-                            <input
-                              type="text"
-                              className="trip-main-form-control"
-                              placeholder="Enter Card Number"
-                              value={report.cardDetails || ''}
-                              onChange={(e) =>
-                                handlePaymentDetailsInput(report.tripId, 'cardDetails', e.target.value)
-                              }
-                            />
-                          </div>
-                        )}
-                        {paymentDetails[report.tripId]?.showDetailsInput === 'UPI' && (
-                          <div className="mt-2">
-                            <input
-                              type="text"
-                              className="trip-main-form-control"
-                              placeholder="Enter UPI ID"
-                              value={report.upiDetails || ''}
-                              onChange={(e) =>
-                                handlePaymentDetailsInput(report.tripId, 'upiDetails', e.target.value)
-                              }
-                            />
+                        ) : (
+                          <div className="d-flex flex-column gap-2">
+                            <div className="d-flex align-items-center gap-2">
+                              <label className="form-label small mb-0">Cash:</label>
+                              <input
+                                type="number"
+                                className="form-control form-control-sm"
+                                style={{ width: '80px' }}
+                                value={report.paymentAmounts.Cash || ''}
+                                onChange={(e) => handlePaymentAmountChange(report.tripId, 'Cash', e.target.value)}
+                                min="0"
+                                step="0.01"
+                              />
+                            </div>
+                            {Number(report.paymentAmounts.Cash) > 0 && (
+                              <div className="d-flex align-items-center gap-2 ps-3">
+                                <label className="form-label small mb-0">Tendered:</label>
+                                <input
+                                  type="number"
+                                  className="form-control form-control-sm"
+                                  style={{ width: '80px' }}
+                                  value={report.tenderedAmount || ''}
+                                  onChange={(e) => handleTenderedChange(report.tripId, e.target.value)}
+                                  min={report.paymentAmounts.Cash || 0}
+                                  step="0.01"
+                                />
+                                <small className="text-success">Change: ₹{report.change.toFixed(2)}</small>
+                              </div>
+                            )}
+                            <div className="d-flex align-items-center gap-2">
+                              <label className="form-label small mb-0">Card:</label>
+                              <input
+                                type="number"
+                                className="form-control form-control-sm"
+                                style={{ width: '80px' }}
+                                value={report.paymentAmounts.Card || ''}
+                                onChange={(e) => handlePaymentAmountChange(report.tripId, 'Card', e.target.value)}
+                                min="0"
+                                step="0.01"
+                              />
+                            </div>
+                            {Number(report.paymentAmounts.Card) > 0 && (
+                              <div className="ps-3">
+                                <input
+                                  type="text"
+                                  className="form-control form-control-sm"
+                                  placeholder="Card Number"
+                                  value={report.cardDetails || ''}
+                                  onChange={(e) =>
+                                    handlePaymentDetailsInput(report.tripId, 'cardDetails', e.target.value)
+                                  }
+                                />
+                              </div>
+                            )}
+                            <div className="d-flex align-items-center gap-2">
+                              <label className="form-label small mb-0">UPI:</label>
+                              <input
+                                type="number"
+                                className="form-control form-control-sm"
+                                style={{ width: '80px' }}
+                                value={report.paymentAmounts.UPI || ''}
+                                onChange={(e) => handlePaymentAmountChange(report.tripId, 'UPI', e.target.value)}
+                                min="0"
+                                step="0.01"
+                              />
+                            </div>
+                            {Number(report.paymentAmounts.UPI) > 0 && (
+                              <div className="ps-3">
+                                <input
+                                  type="text"
+                                  className="form-control form-control-sm"
+                                  placeholder="UPI ID"
+                                  value={report.upiDetails || ''}
+                                  onChange={(e) =>
+                                    handlePaymentDetailsInput(report.tripId, 'upiDetails', e.target.value)
+                                  }
+                                />
+                              </div>
+                            )}
+                            <hr className="my-2" />
+                            <div className="text-end">
+                              <strong>Total Paid: ₹{calculateTotalPaid(report.paymentAmounts).toFixed(2)}</strong>
+                            </div>
+                            <div className="text-end">
+                              <strong
+                                className={getBalance(report) > 0 ? 'text-warning' : 'text-success'}
+                              >
+                                Balance: ₹{getBalance(report)}
+                              </strong>
+                            </div>
                           </div>
                         )}
                       </td>
                       <td>
-                        <button
-                          className="trip-main-btn-action-details btn-sm me-2"
-                          onClick={() => handleShowDetails(report)}
-                        >
+                        <button className="trip-main-btn-action-details btn-sm me-2" onClick={() => handleShowDetails(report)}>
                           Details
                         </button>
-                        <button
-                          className="trip-main-btn-action-invoice btn-sm"
-                          onClick={() => handleActionSubmit(report)}
-                        >
-                          Create Invoice
-                        </button>
                       </td>
                       <td>
-                        <button
-                          className="btn btn-success btn-sm"
-                          onClick={() => markAsDelivered(report.orderId)}
-                        >
-                          Mark Delivered
-                        </button>
+                        {report.status === 'Delivered' ? (
+                          <span className="badge bg-success">Delivered</span>
+                        ) : (
+                          <button className="btn btn-success btn-sm" onClick={() => markAsDelivered(report)}>
+                            Mark Delivered
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+            </div>
+            {/* UPDATED: Footer now uses Pending Grand Total (sum of balances) */}
+            <div className="mt-3 text-end">
+              <h5 className="text-success">Total Pending Orders: ₹{calculatePendingGrandTotal()}</h5>
             </div>
           </div>
         )}
@@ -773,24 +863,116 @@ function TripReport() {
                   <button type="button" className="btn-close" onClick={handleClosePopup}></button>
                 </div>
                 <div className="trip-main-modal-body modal-body">
-                  <p><strong>Order No:</strong> {selectedReport.orderNo}</p>
-                  <p><strong>Date:</strong> {formatTimestamp(selectedReport.timestamp)}</p>
-                  <p><strong>Customer:</strong> {selectedReport.customerName || 'N/A'}</p>
-                  <p><strong>Email:</strong> {selectedReport.email || 'N/A'}</p>
-                  <p><strong>Delivery Person Name:</strong> {selectedReport.deliveryPersonName || 'Unknown'}</p> {/* UPDATED: Show delivery person name */}
-                  <p><strong>Grand Total:</strong> {calculateGrandTotal(selectedReport.cartItems)}</p>
-                  <p><strong>Payment Methods:</strong> {selectedReport.paymentMethods.join(', ') || 'None'}</p>
-                  {selectedReport.cardDetails && <p><strong>Card Details:</strong> {selectedReport.cardDetails}</p>}
-                  {selectedReport.upiDetails && <p><strong>UPI Details:</strong> {selectedReport.upiDetails}</p>}
+                  <p>
+                    <strong>Order No:</strong> {selectedReport.orderNo}
+                  </p>
+                  <p>
+                    <strong>Date:</strong> {formatTimestamp(selectedReport.date)}
+                  </p>{/* UPDATED: Use date */}
+                  <p>
+                    <strong>Customer:</strong> {selectedReport.customerName || 'N/A'}
+                  </p>
+                  <p>
+                    <strong>Email:</strong> {selectedReport.email || 'N/A'}
+                  </p>
+                  <p>
+                    <strong>Delivery Person Name:</strong> {selectedReport.deliveryPersonName || 'Unknown'}
+                  </p>{/* UPDATED: Show delivery person name */}
+                  <p>
+                    <strong>Status:</strong>{' '}
+                    <span className={selectedReport.status === 'Delivered' ? 'badge bg-success' : 'badge bg-warning'}>
+                      {selectedReport.status}
+                    </span>
+                  </p>
+                  <p>
+                    <strong>Grand Total:</strong> ₹{calculateGrandTotal(selectedReport.cartItems)}
+                  </p>
+                  {/* NEW: Show total, paid, balance in popup */}
+                  <p>
+                    <strong>Total Paid:</strong> ₹{calculateTotalPaid(selectedReport.paymentAmounts).toFixed(2)}
+                  </p>
+                  <p>
+                    <strong>Balance:</strong>{' '}
+                    <span className={getBalance(selectedReport) > 0 ? 'text-warning' : 'text-success'}>
+                      ₹{getBalance(selectedReport)}
+                    </span>
+                  </p>
+                  {/* NEW: Detailed payments */}
+                  {Object.entries(selectedReport.paymentAmounts).some(([, amt]) => Number(amt) > 0) && (
+                    <>
+                      <h6>Payments:</h6>
+                      <ul className="list-unstyled">
+                        {Object.entries(selectedReport.paymentAmounts)
+                          .filter(([, amt]) => Number(amt) > 0)
+                          .map(([method, amt]) => (
+                            <li key={method} className="mb-1">
+                              <strong>{method}:</strong> ₹{amt.toFixed(2)}
+                              {method === 'Cash' && selectedReport.tenderedAmount && (
+                                <span>
+                                  {' '}
+                                  (Tendered: ₹{selectedReport.tenderedAmount}, Change: ₹{selectedReport.change.toFixed(2)})
+                                </span>
+                              )}
+                              {method === 'Card' && selectedReport.cardDetails && (
+                                <span> (Card: ****{selectedReport.cardDetails.slice(-4)})</span>
+                              )}
+                              {method === 'UPI' && selectedReport.upiDetails && (
+                                <span> (UPI: {selectedReport.upiDetails})</span>
+                              )}
+                            </li>
+                          ))}
+                      </ul>
+                    </>
+                  )}
+                  {/* UPDATED: Enhanced Items list with addons and combos */}
                   <h6>Items:</h6>
-                  <ul>
+                  <ul className="list-unstyled">
                     {selectedReport.cartItems.map((item, idx) => (
-                      <li key={idx}>{item.name} x{item.quantity} - ₹{item.totalPrice}</li>
+                      <li key={idx} className="mb-3">
+                        <strong>
+                          {item.name} x{item.quantity} - ₹{(item.basePrice * item.quantity).toFixed(2)}
+                        </strong>
+                        {/* Addons */}
+                        {item.addons && item.addons.length > 0 && (
+                          <ul className="list-unstyled ms-3 mt-1">
+                            {item.addons.map((addon, aIdx) => (
+                              <li key={aIdx} className="text-muted small">
+                                + {addon.addon_name} {addon.size ? `(${addon.size})` : ''} x{addon.addon_quantity} - ₹
+                                {(addon.addon_price * addon.addon_quantity).toFixed(2)}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {/* Combos */}
+                        {item.selectedCombos && item.selectedCombos.length > 0 && (
+                          <ul className="list-unstyled ms-3 mt-1">
+                            {item.selectedCombos.map((combo, cIdx) => (
+                              <li key={cIdx} className="text-info small">
+                                + {combo.name1} {combo.size ? `(${combo.size})` : ''} x{combo.combo_quantity} - ₹
+                                {(combo.combo_price * combo.combo_quantity).toFixed(2)}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {/* Ice/Spicy if applicable */}
+                        {item.icePreference === 'with_ice' && item.icePrice > 0 && (
+                          <div className="text-muted small ms-3">
+                            + Ice x{item.quantity} - ₹{(item.icePrice * item.quantity).toFixed(2)}
+                          </div>
+                        )}
+                        {item.isSpicy && item.spicyPrice > 0 && (
+                          <div className="text-danger small ms-3">
+                            + Spicy x{item.quantity} - ₹{(item.spicyPrice * item.quantity).toFixed(2)}
+                          </div>
+                        )}
+                      </li>
                     ))}
                   </ul>
                 </div>
                 <div className="modal-footer">
-                  <button className="btn btn-secondary" onClick={handleClosePopup}>Close</button>
+                  <button className="btn btn-secondary" onClick={handleClosePopup}>
+                    Close
+                  </button>
                 </div>
               </div>
             </div>
@@ -800,4 +982,5 @@ function TripReport() {
     </div>
   );
 }
+
 export default TripReport;

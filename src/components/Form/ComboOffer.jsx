@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import { FaArrowLeft } from "react-icons/fa";
 import { toast } from "react-toastify"; // Assuming you have react-toastify for warnings; install if not: npm i react-toastify
+
 const initialFormState = {
   description: "",
   total_price: 0,
@@ -11,8 +12,9 @@ const initialFormState = {
   offer_start_time: "",
   offer_end_time: "",
   items: [], // Array of selected items/addons/combos
-  images: [], // NEW: Array of image filenames
+  images: [], // Array of image filenames
 };
+
 const ComboOffer = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -23,12 +25,13 @@ const ComboOffer = () => {
   const [warningMessage, setWarningMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [isEdit, setIsEdit] = useState(false);
-  const [baseUrl, setBaseUrl] = useState(""); // NEW: Added baseUrl state like in AdminPage
-  // NEW: States for images
+  const [baseUrl, setBaseUrl] = useState(""); // Added baseUrl state like in AdminPage
+  // States for images
   const [images, setImages] = useState([]); // Filenames
   const [previewUrls, setPreviewUrls] = useState([]); // URLs for preview (local or served)
+
   /* -------------------------------------------------- FETCH CONFIG FOR BASE URL -------------------------------------------------- */
-  // NEW: Added fetchConfig useEffect similar to AdminPage to determine baseUrl for client/server mode
+  // Added fetchConfig useEffect similar to AdminPage to determine baseUrl for client/server mode
   useEffect(() => {
     const fetchConfig = async () => {
       let currentBaseUrl = "";
@@ -51,6 +54,7 @@ const ComboOffer = () => {
     };
     fetchConfig();
   }, []);
+
   /* -------------------------------------------------- FETCH ALL ITEMS -------------------------------------------------- */
   const fetchData = async (currentBaseUrl = "") => {
     setLoading(true);
@@ -61,11 +65,12 @@ const ComboOffer = () => {
     } catch (error) {
       const errorMsg = error.response?.data?.error || error.message;
       setWarningMessage(`Error fetching data: ${errorMsg}`);
-      toast.error(`Error fetching data: ${errorMsg}`); // NEW: Toast for better UX
+      toast.error(`Error fetching data: ${errorMsg}`); // Toast for better UX
     } finally {
       setLoading(false);
     }
   };
+
   /* -------------------------------------------------- EDIT MODE -------------------------------------------------- */
   useEffect(() => {
     if (location.state && location.state.combo) {
@@ -82,7 +87,7 @@ const ComboOffer = () => {
       });
       setSelectedComponents(combo.items);
       setTotalPrice(combo.total_price);
-      // NEW: Set images for edit mode
+      // Set images for edit mode
       if (combo.images) {
         setImages(combo.images);
         const previews = combo.images.map(img => `${baseUrl}/api/combo-images/${img}`);
@@ -90,8 +95,18 @@ const ComboOffer = () => {
       }
     }
   }, [location.state, baseUrl]);
+
+  // Helper to get image URL with baseUrl prefix
+  const getImageUrl = (imagePath) => {
+    if (!imagePath) return "https://via.placeholder.com/50";
+    const prefix = baseUrl || 'http://localhost:8000';
+    // For item images: ${prefix}${imagePath} (assuming relative path)
+    // For addon/combo images: same
+    return `${prefix}${imagePath}`;
+  };
+
   /* -------------------------------------------------- IMAGE UPLOAD HANDLER -------------------------------------------------- */
-  // NEW: Handle multiple image uploads
+  // Handle multiple image uploads
   const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files);
     const apiBase = baseUrl || 'http://localhost:8000';
@@ -116,22 +131,27 @@ const ComboOffer = () => {
     // Clear input
     e.target.value = '';
   };
-  // NEW: Remove image
+
+  // Remove image
   const removeImage = (index) => {
     URL.revokeObjectURL(previewUrls[index]); // Clean up local URL if any
     setImages((prev) => prev.filter((_, i) => i !== index));
     setPreviewUrls((prev) => prev.filter((_, i) => i !== index));
   };
+
   /* -------------------------------------------------- INPUT HANDLERS -------------------------------------------------- */
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
+
   const handleNumericInputChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: Number(value) || "" }));
   };
+
   /* -------------------------------------------------- SELECTION LOGIC -------------------------------------------------- */
+  // UPDATED: Enhanced to show images in selected components (already doing, but ensure paths)
   const handleSelection = (type, id, index = null) => {
     const selected = allItems.find((item) => item._id === id);
     if (!selected) return;
@@ -163,6 +183,7 @@ const ComboOffer = () => {
       total_price: prev.total_price + component.price,
     }));
   };
+
   const removeSelection = (index) => {
     const removed = selectedComponents[index];
     if (!removed || removed.price === undefined) return;
@@ -177,22 +198,24 @@ const ComboOffer = () => {
       };
     });
   };
+
   /* -------------------------------------------------- VALIDATION FOR TIMES -------------------------------------------------- */
   const validateOfferTimes = () => {
     if (formData.offer_start_time && formData.offer_end_time) {
       const startTime = new Date(formData.offer_start_time);
       const endTime = new Date(formData.offer_end_time);
       if (startTime >= endTime) {
-        toast.error("Offer start time must be before end time"); // NEW: Client-side validation with toast
+        toast.error("Offer start time must be before end time"); // Client-side validation with toast
         return false;
       }
     }
     return true;
   };
+
   /* -------------------------------------------------- SUBMIT -------------------------------------------------- */
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!validateOfferTimes()) return; // NEW: Validate before submit
+    if (!validateOfferTimes()) return; // Validate before submit
     setLoading(true);
     try {
       // UPDATED: Use dynamic baseUrl for POST/PUT requests like in AdminPage
@@ -205,14 +228,14 @@ const ComboOffer = () => {
       if (submitData.offer_end_time) {
         submitData.offer_end_time = new Date(submitData.offer_end_time).toISOString();
       }
-      // NEW: Include images
+      // Include images
       submitData.images = images;
       if (isEdit) {
         await axios.put(`${apiBase}/api/combo-offer/${submitData._id}`, submitData);
-        toast.success("Combo offer updated successfully!"); // NEW: Toast
+        toast.success("Combo offer updated successfully!"); // Toast
       } else {
         await axios.post(`${apiBase}/api/combo-offer`, submitData);
-        toast.success("Combo offer created successfully!"); // NEW: Toast
+        toast.success("Combo offer created successfully!"); // Toast
       }
       navigate("/admin", { replace: true });
     } catch (error) {
@@ -223,6 +246,7 @@ const ComboOffer = () => {
       setLoading(false);
     }
   };
+
   /* -------------------------------------------------- STYLES -------------------------------------------------- */
   const pageStyle = {
     padding: "20px",
@@ -253,20 +277,20 @@ const ComboOffer = () => {
   };
   const loadingStyle = { textAlign: "center", color: "#7f8c8d" };
   const formCardStyle = {
-    maxWidth: "800px", // NEW: Wider for side-by-side layout
+    maxWidth: "800px", // Wider for side-by-side layout
     margin: "0 auto",
     backgroundColor: "#ffffff",
     padding: "20px",
     borderRadius: "10px",
     boxShadow: "0 4px 8px rgba(0,0,0,0.1)",
     display: "grid",
-    gridTemplateColumns: "1fr 300px", // NEW: Side layout for form and images
+    gridTemplateColumns: "1fr 300px", // Side layout for form and images
     gap: "20px",
   };
-  const mainFormStyle = { // NEW: Left column
+  const mainFormStyle = { // Left column
     gridColumn: "1",
   };
-  const imagesSectionStyle = { // NEW: Right column
+  const imagesSectionStyle = { // Right column
     gridColumn: "2",
     borderLeft: "1px solid #ddd",
     paddingLeft: "20px",
@@ -319,14 +343,14 @@ const ComboOffer = () => {
     fontSize: "16px",
     boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
     transition: "background 0.3s ease",
-    gridColumn: "1 / -1", // NEW: Span both columns
+    gridColumn: "1 / -1", // Span both columns
   };
   const disabledButtonStyle = {
     ...submitButtonStyle,
     background: "linear-gradient(135deg, #bdc3c7, #95a5a5)",
     cursor: "not-allowed",
   };
-  // NEW: Image upload styles
+  // Image upload styles
   const imageUploadStyle = {
     ...inputStyle,
     padding: "5px",
@@ -362,6 +386,7 @@ const ComboOffer = () => {
     cursor: "pointer",
     fontSize: "12px",
   };
+
   /* -------------------------------------------------- RENDER -------------------------------------------------- */
   return (
     <div style={pageStyle}>
@@ -376,7 +401,7 @@ const ComboOffer = () => {
       {warningMessage && <div style={warningStyle}>{warningMessage}</div>}
       {/* Loading */}
       {loading && <div style={loadingStyle}>Loading...</div>}
-      {/* Form Card - NEW: Grid layout for side-by-side */}
+      {/* Form Card - Grid layout for side-by-side */}
       <div style={formCardStyle}>
         {/* Main Form - Left Side */}
         <div style={mainFormStyle}>
@@ -392,7 +417,7 @@ const ComboOffer = () => {
                 required
               />
             </div>
-            {/* Select Items / Addons / Combos – UPDATED: Include price in option text */}
+            {/* Select Items / Addons / Combos – Include price in option text */}
             <div style={formGroupStyle}>
               <label style={labelStyle}>Select Items/Addons/Combos</label>
               <select
@@ -405,17 +430,17 @@ const ComboOffer = () => {
               >
                 <option value="">Select</option>
                 {allItems.flatMap((item) => [
-                  // Item option - UPDATED: Added price
+                  // Item option - Added price
                   <option key={item._id} value={`item_${item._id}`}>
                     {item.item_name} - ₹{item.price_list_rate} (Item)
                   </option>,
-                  // Addon options - UPDATED: Added price
+                  // Addon options - Added price
                   ...item.addons.map((addon, idx) => (
                     <option key={`${item._id}_addon_${idx}`} value={`addon_${item._id}_${idx}`}>
                       {addon.name1} - ₹{addon.addon_price} (Addon from {item.item_name})
                     </option>
                   )),
-                  // Combo options - UPDATED: Added price
+                  // Combo options - Added price
                   ...item.combos.map((combo, idx) => (
                     <option key={`${item._id}_combo_${idx}`} value={`combo_${item._id}_${idx}`}>
                       {combo.name1} - ₹{combo.combo_price} (Combo from {item.item_name})
@@ -424,22 +449,24 @@ const ComboOffer = () => {
                 ])}
               </select>
             </div>
-            {/* Selected Components */}
+            {/* Selected Components - UPDATED: Shows images for each selected */}
             <div style={selectedComponentsStyle}>
               <h3>Selected Components</h3>
               {selectedComponents.map((comp, index) => (
                 <div key={index} style={componentItemStyle}>
                   <img
-                    src={
-                      // Generic fallback: Try common 'image' field first, then specifics
+                    src={getImageUrl(
                       comp.data.image ||
                       comp.data.addon_image ||
                       comp.data.combo_image ||
-                      comp.data.item_image || // Extra fallback for items if needed
-                      "https://via.placeholder.com/50"
-                    }
+                      comp.data.item_image ||
+                      ""
+                    )}
                     alt={comp.data.item_name || comp.data.name1 || "Component"}
                     style={componentImageStyle}
+                    onError={(e) => {
+                      e.target.src = "https://via.placeholder.com/50?text=No+Img";
+                    }}
                   />
                   <span style={componentTextStyle}>
                     {comp.data.item_name || comp.data.name1} - ₹{comp.price || 0}
@@ -475,7 +502,7 @@ const ComboOffer = () => {
                 style={inputStyle}
                 min="0"
                 step="0.01"
-                // **THIS IS THE ONLY NEW LINE**
+                // THIS IS THE ONLY NEW LINE
                 onWheel={(e) => e.target.blur()}
               />
             </div>
@@ -503,7 +530,7 @@ const ComboOffer = () => {
             </div>
           </form>
         </div>
-        {/* NEW: Images Upload Section - Right Side */}
+        {/* Images Upload Section - Right Side */}
         <div style={imagesSectionStyle}>
           <h3>Upload Images</h3>
           <div style={formGroupStyle}>
@@ -532,10 +559,10 @@ const ComboOffer = () => {
             {images.length === 0 && <p style={{ color: "#666", fontStyle: "italic" }}>No images uploaded yet.</p>}
           </div>
         </div>
-        {/* Submit Button - NEW: Spans both columns */}
+        {/* Submit Button - Spans both columns */}
         <button
           type="submit"
-          disabled={loading || selectedComponents.length === 0} // NEW: Disable if no components
+          disabled={loading || selectedComponents.length === 0} // Disable if no components
           style={loading ? disabledButtonStyle : submitButtonStyle}
           onClick={handleSubmit} // Attach to button outside form for grid span
         >
@@ -545,4 +572,5 @@ const ComboOffer = () => {
     </div>
   );
 };
+
 export default ComboOffer;

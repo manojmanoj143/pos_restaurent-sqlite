@@ -1,9 +1,10 @@
-// ClosingEntryWithNavbar.jsx
+// Full ClosingEntryWithNavbar.jsx - Updated: No major changes; fetches only open entries now via backend filter.
+// After submit, clears localStorage and navigates to home.
+// Ensured posting_date uses inv['date'] from backend (yyyy-mm-dd format).
 import React, { useContext, useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { UserContext } from '../../Context/UserContext'; // Adjust path as per your project structure
-
 // Import SVG icons (adjust paths as needed for your project)
 import ClosingEntryIcon from '/menuIcons/closingentry.svg';
 import HomeIcon from '/menuIcons/home.svg';
@@ -12,30 +13,25 @@ import PowerOffIcon from '/menuIcons/poweroff.svg';
 import TableIcon from '/menuIcons/table1.svg';
 import SaveIcon from '/menuIcons/save.svg';
 import DeliveryIcon from '/menuIcons/delivery.svg'; // Added missing import; adjust path if the file name is different
-
 // Import Bootstrap CSS
 import 'bootstrap/dist/css/bootstrap.min.css';
-
 function ClosingEntryWithNavbar() {
   const { setCartItems } = useContext(UserContext);
   const navigate = useNavigate();
   const location = useLocation(); // Fixed: Use full location object
   const state = location.state; // Extract state from location
   const userData = useSelector((state) => state.user);
-
   const storedUser = JSON.parse(localStorage.getItem('user')) || { email: "Guest" };
   const currentUser = userData?.user || storedUser;
-
   // Date and Time state for Navbar
   const [currentTime, setCurrentTime] = useState(new Date());
-
   // System settings state with defaults (same as OpeningEntry)
   const [settings, setSettings] = useState({
     country: 'Japan',
     language: 'English',
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, // Use local timezone
     currency: 'JPY',
-    dateFormat: 'dd-MMM-yy', // Default to match image: 30-Oct-25
+    dateFormat: 'yyyy-mm-dd', // FIXED: Default to yyyy-mm-dd (2025-11-11) as per user request
     timeFormat: 'hh:mm a', // Default to 12-hour without seconds
     numberFormat: '#,##,###.##',
     useNumberFormatFromCurrency: false,
@@ -43,18 +39,15 @@ function ClosingEntryWithNavbar() {
     floatPrecision: 3,
     currencyPrecision: 4,
   });
-
   const [warningMessage, setWarningMessage] = useState(""); // For warning and success messages
   const [warningType, setWarningType] = useState("warning"); // "warning" or "success"
   const [pendingAction, setPendingAction] = useState(null); // Store the action to perform after OK
-
   // Update time every second
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
-
-  // Fetch system settings on mount with fallback (same as OpeningEntry)
+  // Fetch system settings on mount with fallback (same as OpeningEntry) - Updated default dateFormat
   useEffect(() => {
     fetch('/api/settings')
       .then((res) => {
@@ -64,40 +57,36 @@ function ClosingEntryWithNavbar() {
       .then((data) => setSettings((prev) => ({ ...prev, ...data })))
       .catch((err) => {
         console.error('Error fetching settings:', err);
-        // Fallback to local defaults
+        // Fallback to local defaults with yyyy-mm-dd
         setSettings({
           ...settings,
           timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          dateFormat: 'dd-MMM-yy',
+          dateFormat: 'yyyy-mm-dd', // FIXED: Ensure yyyy-mm-dd fallback
           timeFormat: 'hh:mm a',
         });
       });
   }, []);
-
-  // Dynamic date formatting based on system settings (local time only) - Copied from OpeningEntry
+  // Dynamic date formatting based on system settings (local time only) - Updated to support yyyy-mm-dd explicitly
   const getFormattedDate = (date, dateFormat) => {
     if (!dateFormat) {
-      // Default: yyyy longmonth dd
-      return date.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      });
+      // Default: yyyy-mm-dd
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
     }
-
     const numericFormatter = new Intl.DateTimeFormat('en', { year: 'numeric', month: '2-digit', day: 'numeric' });
     const parts = numericFormatter.formatToParts(date);
     const year = parts.find((p) => p.type === 'year')?.value || '';
     const month = parts.find((p) => p.type === 'month')?.value || '';
     const day = parts.find((p) => p.type === 'day')?.value || '';
-
     switch (dateFormat) {
+      case 'yyyy-mm-dd':
+        return `${year}-${month}-${day}`;
       case 'dd-mm-yyyy':
         return `${day.padStart(2, '0')}-${month}-${year}`;
       case 'mm-dd-yyyy':
         return `${month}-${day.padStart(2, '0')}-${year}`;
-      case 'yyyy-mm-dd':
-        return `${year}-${month}-${day.padStart(2, '0')}`;
       case 'dd/mm/yyyy':
         return `${day.padStart(2, '0')}/${month}/${year}`;
       case 'mm/dd/yyyy':
@@ -118,11 +107,10 @@ function ClosingEntryWithNavbar() {
         const yearShort = date.getFullYear().toString().slice(-2);
         return `${dayStr}-${monthShort}-${yearShort}`;
       default:
-        // Fallback to yyyy longmonth dd
-        return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+        // Fallback to yyyy-mm-dd
+        return `${year}-${month}-${day}`;
     }
   };
-
   // Dynamic time formatting based on system settings (local time only, conditional seconds) - Copied from OpeningEntry
   const getFormattedTime = (date, timeFormat) => {
     if (!timeFormat) {
@@ -133,23 +121,18 @@ function ClosingEntryWithNavbar() {
         hour12: true,
       });
     }
-
     const hasSeconds = timeFormat.includes(':ss') || timeFormat.includes('ss');
     const is12Hour = timeFormat.includes(' a') || timeFormat.startsWith('hh');
-
     const options = {
       hour: '2-digit',
       minute: '2-digit',
       ...(hasSeconds && { second: '2-digit' }),
       hour12: is12Hour,
     };
-
     return date.toLocaleTimeString('en-US', options);
   };
-
   const formattedDate = getFormattedDate(currentTime, settings.dateFormat);
   const formattedTime = getFormattedTime(currentTime, settings.timeFormat);
-
   // Currency formatter for totals - Copied from OpeningEntry
   const getCurrencyFormatter = () => {
     return new Intl.NumberFormat(settings.language || 'en-US', {
@@ -159,7 +142,6 @@ function ClosingEntryWithNavbar() {
       maximumFractionDigits: parseInt(settings.currencyPrecision) || 4,
     });
   };
-
   // Handle OK button click for warning messages
   const handleWarningOk = () => {
     if (pendingAction) {
@@ -169,7 +151,6 @@ function ClosingEntryWithNavbar() {
     setWarningMessage("");
     setWarningType("warning");
   };
-
   const handleLogout = () => {
     setWarningMessage("Logout Successful!");
     setWarningType("success");
@@ -178,24 +159,20 @@ function ClosingEntryWithNavbar() {
       navigate('/', { replace: true });
     });
   };
-
   const handleOpeningEntryNavigation = () => {
     navigate('/opening-entry');
   };
-
   const handleClosingEntryNavigation = () => {
     const posOpeningEntry = localStorage.getItem('posOpeningEntry') || '';
     navigate('/closing-entry', { state: { posOpeningEntry } });
   };
-
   const handleBack = () => {
     navigate(-1);
   };
-
   // Closing Entry-specific state
   const [posOpeningEntry, setPosOpeningEntry] = useState(state?.posOpeningEntry || localStorage.getItem('posOpeningEntry') || '');
   const [periodStartDate, setPeriodStartDate] = useState('');
-  const [postingDate, setPostingDate] = useState(new Date().toISOString().split('T')[0]);
+  const [postingDate, setPostingDate] = useState(new Date().toISOString().split('T')[0]); // yyyy-mm-dd format
   const [periodEndDate, setPeriodEndDate] = useState(new Date().toISOString().slice(0, 16));
   const [company, setCompany] = useState('');
   const [user, setUser] = useState('');
@@ -208,7 +185,6 @@ function ClosingEntryWithNavbar() {
   const [totalQuantity, setTotalQuantity] = useState('');
   const [loading, setLoading] = useState(false);
   const [openingEntries, setOpeningEntries] = useState([]);
-
   // Set initial user data
   useEffect(() => {
     const reduxPosProfile = userData?.pos_profile || localStorage.getItem('pos_profile') || 'POS-001';
@@ -218,8 +194,7 @@ function ClosingEntryWithNavbar() {
     setUser(reduxUserEmail);
     setCompany(reduxCompany);
   }, [userData, currentUser]);
-
-  // Fetch POS Opening Entries
+  // Fetch POS Opening Entries - Now only open ones via backend
   useEffect(() => {
     const fetchOpeningEntries = async () => {
       if (!posProfile) return;
@@ -243,21 +218,18 @@ function ClosingEntryWithNavbar() {
     };
     if (posProfile) fetchOpeningEntries();
   }, [posProfile]);
-
-  // Fetch POS Details when posOpeningEntry changes
+  // Fetch POS Details when posOpeningEntry changes - FIXED: Automatically fetches all associated invoices (any status)
   useEffect(() => {
+    console.log('DEBUG: posOpeningEntry changed to:', posOpeningEntry); // DEBUG: Log for debugging
     const fetchPosDetails = async () => {
       if (!posOpeningEntry || !openingEntries.length) return;
-
       const selectedEntry = openingEntries.find(entry => entry.name === posOpeningEntry);
       if (!selectedEntry) return;
-
-      setPeriodStartDate(selectedEntry.period_start_date.split(' ')[0] || '');
-      setPostingDate(selectedEntry.posting_date || new Date().toISOString().split('T')[0]);
+      setPeriodStartDate(selectedEntry.period_start_date.split(' ')[0] || ''); // yyyy-mm-dd
+      setPostingDate(selectedEntry.posting_date || new Date().toISOString().split('T')[0]); // yyyy-mm-dd
       setCompany(selectedEntry.company || '');
       setUser(selectedEntry.user || currentUser.email || 'bearer@gmail.com');
       setPosProfile(selectedEntry.pos_profile || '');
-
       const balanceDetails = selectedEntry.balance_details || [];
       if (balanceDetails.length > 0) {
         setPaymentReconciliation(balanceDetails.map(detail => ({
@@ -269,7 +241,6 @@ function ClosingEntryWithNavbar() {
       } else {
         setPaymentReconciliation([{ mode_of_payment: '', opening_amount: '0', expected_amount: '0', closing_amount: '' }]);
       }
-
       try {
         const response = await fetch('/api/get_pos_invoices', {
           method: 'POST',
@@ -278,26 +249,24 @@ function ClosingEntryWithNavbar() {
         });
         if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
         const result = await response.json();
-
+        console.log('Fetched POS Invoices Response:', result); // DEBUG: Log full response
         if (result.message && result.message.status === 'success') {
           const invoices = result.message.invoices || [];
+          console.log('Fetched POS Transactions:', invoices); // DEBUG: Log invoices array (should show 2 now)
           setPosTransactions(invoices.length > 0 ? invoices.map(inv => ({
             pos_invoice: inv.pos_invoice || '',
             grand_total: inv.grand_total || '',
-            posting_date: inv.posting_date || '',
+            posting_date: inv.posting_date || '', // yyyy-mm-dd from backend inv['date']
             customer: inv.customer || ''
           })) : [{ pos_invoice: '', grand_total: '', posting_date: '', customer: '' }]);
-
           setTaxes(result.message.taxes?.length ? result.message.taxes.map(tax => ({
             account_head: tax.account_head || '',
             rate: tax.rate || '',
             amount: tax.amount || ''
           })) : [{ account_head: '', rate: '', amount: '' }]);
-
           setGrandTotal(result.message.grand_total || '');
           setNetTotal(result.message.net_total || '');
           setTotalQuantity(result.message.total_quantity || '');
-
           const cashTransactions = invoices.filter(inv => true); // Add cash filter logic if available
           const cashTotal = cashTransactions.reduce((sum, inv) => sum + parseFloat(inv.grand_total || 0), 0);
           setPaymentReconciliation(prev => prev.map(pr => ({
@@ -313,25 +282,20 @@ function ClosingEntryWithNavbar() {
     };
     fetchPosDetails();
   }, [posOpeningEntry, openingEntries, currentUser.email]);
-
   // Handlers for POS Transactions
   const handleAddPosTransaction = () => {
     setPosTransactions(prev => [...prev, { pos_invoice: '', grand_total: '', posting_date: '', customer: '' }]);
   };
-
   const handlePosTransactionChange = (index, field, value) => {
     setPosTransactions(prev => prev.map((tx, i) => (i === index ? { ...tx, [field]: value } : tx)));
   };
-
   const handleRemovePosTransaction = (index) => {
     setPosTransactions(prev => prev.filter((_, i) => i !== index));
   };
-
   // Handlers for Payment Reconciliation
   const handleAddPaymentReconciliation = () => {
     setPaymentReconciliation(prev => [...prev, { mode_of_payment: '', opening_amount: '0', expected_amount: '0', closing_amount: '' }]);
   };
-
   const handlePaymentReconciliationChange = (index, field, value) => {
     setPaymentReconciliation(prev => {
       const updated = prev.map((pr, i) => (i === index ? { ...pr, [field]: value } : pr));
@@ -347,25 +311,20 @@ function ClosingEntryWithNavbar() {
       return updated;
     });
   };
-
   const handleRemovePaymentReconciliation = (index) => {
     setPaymentReconciliation(prev => prev.filter((_, i) => i !== index));
   };
-
   // Handlers for Taxes
   const handleAddTax = () => {
     setTaxes(prev => [...prev, { account_head: '', rate: '', amount: '' }]);
   };
-
   const handleTaxChange = (index, field, value) => {
     setTaxes(prev => prev.map((tax, i) => (i === index ? { ...tax, [field]: value } : tax)));
   };
-
   const handleRemoveTax = (index) => {
     setTaxes(prev => prev.filter((_, i) => i !== index));
   };
-
-  // Submit Handler
+  // Submit Handler - UPDATED: Clear localStorage 'posOpeningEntry' after successful submit to mark shift closed
   const handleSubmit = async () => {
     const missingFields = [];
     if (!posOpeningEntry) missingFields.push('POS Opening Entry');
@@ -383,13 +342,11 @@ function ClosingEntryWithNavbar() {
     if (taxes.some(tax => !tax.account_head || !tax.rate || !tax.amount)) {
       missingFields.push('Taxes (complete all rows)');
     }
-
     if (missingFields.length > 0) {
       setWarningMessage(`Please fill in the following required fields: ${missingFields.join(', ')}`);
       setWarningType("warning");
       return;
     }
-
     setLoading(true);
     const payload = {
       pos_opening_entry: posOpeningEntry,
@@ -402,16 +359,17 @@ function ClosingEntryWithNavbar() {
       net_total: netTotal,
       total_quantity: totalQuantity,
     };
-
     try {
       const response = await fetch('/api/create_closing_entry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-
       const result = await response.json();
       if (response.ok && result.message.status === 'success') {
+        // UPDATED: Clear localStorage after successful closing to mark shift as closed
+        localStorage.removeItem('posOpeningEntry');
+        localStorage.removeItem('openingEntryName');
         setWarningMessage(result.message.message || 'POS Closing Entry created successfully!');
         setWarningType("success");
         setPendingAction(() => () => navigate('/home')); // Navigate to home after success
@@ -427,12 +385,10 @@ function ClosingEntryWithNavbar() {
       setLoading(false);
     }
   };
-
   // Format money values for display (using currency formatter)
   const formatMoney = (value) => {
     return getCurrencyFormatter().format(parseFloat(value) || 0);
   };
-
   return (
     <>
       {/* Warning Alert for Messages */}
@@ -462,7 +418,6 @@ function ClosingEntryWithNavbar() {
               <i className="bi bi-arrow-left fs-2"></i>
             </a>
           </div>
-
           <button
             className="navbar-toggler bg-light"
             type="button"
@@ -474,7 +429,6 @@ function ClosingEntryWithNavbar() {
           >
             <span className="navbar-toggler-icon"></span>
           </button>
-
           <div className="collapse navbar-collapse" id="navbarSupportedContent">
             {/* Centered Navigation Items */}
             <ul className="navbar-nav mx-auto mb-2 mb-lg-0 d-flex justify-content-center">
@@ -542,7 +496,6 @@ function ClosingEntryWithNavbar() {
                 </a>
               </li>
             </ul>
-
             {/* Right Side: User Info and Logout */}
             <div className="d-flex align-items-center ms-auto pe-3">
               <div className="user-info text-end me-3">
@@ -564,7 +517,6 @@ function ClosingEntryWithNavbar() {
           </div>
         </div>
       </nav>
-
       {/* ClosingEntry Component */}
       <div className="container-fluid closing-entry-container mt-4">
         <h2 className="text-center my-4">Create POS Closing Entry</h2>
@@ -612,7 +564,6 @@ function ClosingEntryWithNavbar() {
                 />
               </div>
             </div>
-
             <div className="row mb-3">
               <div className="col-md-4">
                 <label htmlFor="periodEndDate" className="form-label">Period End Date & Time</label>
@@ -645,7 +596,6 @@ function ClosingEntryWithNavbar() {
                 />
               </div>
             </div>
-
             <div className="row mb-3">
               <div className="col-md-6">
                 <label htmlFor="posProfile" className="form-label">POS Profile</label>
@@ -658,7 +608,6 @@ function ClosingEntryWithNavbar() {
                 />
               </div>
             </div>
-
             <h5>POS Transactions</h5>
             <div className="table-responsive mb-3">
               <table className="table border text-start">
@@ -724,7 +673,6 @@ function ClosingEntryWithNavbar() {
                 Add Transaction
               </button>
             </div>
-
             <h5>Payment Reconciliation</h5>
             <div className="table-responsive mb-3">
               <table className="table border text-start">
@@ -789,7 +737,6 @@ function ClosingEntryWithNavbar() {
                 Add Payment
               </button>
             </div>
-
             <h5>Taxes</h5>
             <div className="table-responsive mb-3">
               <table className="table border text-start">
@@ -850,7 +797,6 @@ function ClosingEntryWithNavbar() {
                 Add Tax
               </button>
             </div>
-
             <div className="row mb-3">
               <div className="col-md-4">
                 <label htmlFor="grandTotal" className="form-label">Grand Total</label>
@@ -894,7 +840,6 @@ function ClosingEntryWithNavbar() {
                 />
               </div>
             </div>
-
             <div className="row">
               <div className="col-md-12 text-end">
                 <button className="btn btn-success" onClick={handleSubmit} disabled={loading}>
@@ -908,7 +853,6 @@ function ClosingEntryWithNavbar() {
           </div>
         </div>
       </div>
-
       {/* Inline CSS - Removed 'jsx' attribute to avoid warning if not using styled-jsx; if using Next.js or styled-jsx, add it back */}
       <style>{`
         .icon-size {
@@ -1026,5 +970,4 @@ function ClosingEntryWithNavbar() {
     </>
   );
 }
-
 export default ClosingEntryWithNavbar;

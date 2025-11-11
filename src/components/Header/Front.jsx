@@ -1,4 +1,4 @@
-"use client"
+// FrontPage.jsx - Full detailed and completed (updated to include posOpeningEntry in sales payload)
 import React, { useEffect, useState, useRef } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { useSelector } from "react-redux"
@@ -110,6 +110,8 @@ function FrontPage() {
   const [showWhatsappISDCodeDropdown, setShowWhatsappISDCodeDropdown] = useState(false) // NEW: Dropdown for WhatsApp ISD
   const [email, setEmail] = useState("")
   const [orderId, setOrderId] = useState(null)
+  // UPDATED: Add orderNo state to capture backend-generated orderNo after SAVE for new orders
+  const [orderNo, setOrderNo] = useState(null)
   const [bookedTables, setBookedTables] = useState([])
   const [bookedChairs, setBookedChairs] = useState({})
   const [vatRate, setVatRate] = useState(0.1)
@@ -205,6 +207,8 @@ function FrontPage() {
     deliveryAddress: initialDeliveryAddress,
     whatsappNumber: initialWhatsappNumber,
     email: initialEmail,
+    deliveryPersonId, // NEW: Destructured for Online Delivery
+    deliveryPersonName, // NEW: Destructured for Online Delivery
   } = state || {}
   const navigate = useNavigate()
   // Fetch config for baseUrl (client/server mode)
@@ -309,6 +313,8 @@ function FrontPage() {
       setCartItems(initialCartItems || existingOrder?.cartItems || [])
       setBillCartItems(initialCartItems || existingOrder?.cartItems || [])
       setOrderId(existingOrder?.orderId || null)
+      // UPDATED: Set orderNo from existingOrder if available
+      setOrderNo(existingOrder?.orderNo || null)
       setBookedChairs(JSON.parse(localStorage.getItem("bookedChairs")) || {})
     }
   }, [
@@ -1153,6 +1159,7 @@ function FrontPage() {
       setPendingAction(() => () => navigate("/table"));
     }
   }
+  // UPDATED: handleSaveToBackend - NEW: Include posOpeningEntry from localStorage
   const handleSaveToBackend = async (paymentDetails) => {
     if (billCartItems.length === 0) {
       setWarningMessage("Cart is empty. Please add items before saving.")
@@ -1171,6 +1178,9 @@ function FrontPage() {
       throw new Error("Invalid item quantities")
     }
     const subtotal = calculateSubtotal(billCartItems)
+    // NEW: Get posOpeningEntry from localStorage (set in OpeningEntryWithNavbar.jsx)
+    const posOpeningEntry = localStorage.getItem('posOpeningEntry') || '';
+    console.log('Including posOpeningEntry in sales payload:', posOpeningEntry); // Debug log
     const payload = {
       customer: customerName.trim() || "N/A",
       phoneNumber: phoneNumber ? `${selectedISDCode}${phoneNumber}` : "N/A",
@@ -1241,6 +1251,11 @@ function FrontPage() {
       payments: [paymentDetails],
       orderType: orderType || "Dine In",
       status: "Pending",
+      // UPDATED: Use orderNo state (from SAVE) or existingOrder.orderNo for Online Delivery to match active order
+      orderNo: orderType === "Online Delivery" ? (orderNo || existingOrder?.orderNo || generate_order_number(orderType)) : null,
+      deliveryPersonName: orderType === "Online Delivery" ? (deliveryPersonName || existingOrder?.deliveryPersonName || "") : null,
+      // NEW: Include pos_opening_entry for association with opening entry
+      pos_opening_entry: posOpeningEntry,
     }
     // NEW: Log full payload for debugging (remove in prod)
     console.log("Sending sales payload:", payload);
@@ -1626,6 +1641,8 @@ function FrontPage() {
         if (response.status === 201) {
           console.log("Order saved successfully")
           setOrderId(response.data.orderId)
+          // UPDATED: Set orderNo from backend response for new orders
+          setOrderNo(response.data.orderNo)
           currentOrderId = response.data.orderId
         } else {
           throw new Error("Failed to save order")
@@ -1710,7 +1727,6 @@ function FrontPage() {
   const total = subtotal + vat
   const showKitchenColumn = orderType === "Dine In"
   const visibleCategories = categories.slice(startIndex, startIndex + 5)
-
   // FIXED: Function to get all names for combo bullet list (from ItemListPage)
   const getAllNames = (combo) => {
     const names = [];
@@ -1734,7 +1750,151 @@ function FrontPage() {
     }
     return names.filter(name => name.trim() !== '');
   };
-
+  // UPDATED: Function to get combo items with images and names (for side-by-side display) - from ItemListPage
+  const getComboItemsWithImages = (combo) => {
+    const itemsWithImages = [];
+    if (combo.comboItems && combo.comboItems.length > 0) {
+      combo.comboItems.forEach(comboItem => {
+        const name = comboItem.name || '';
+        const image = comboItem.image || null;
+        if (name.trim() !== '') {
+          itemsWithImages.push({ name, image });
+        }
+      });
+    }
+    return itemsWithImages;
+  };
+  // NEW: Function to get only uploaded images for centered display - from ItemListPage
+  const getUploadedImages = (combo) => {
+    if (combo.images && combo.images.length > 0) {
+      return combo.images.map(img => `/api/combo-images/${img}`);
+    }
+    return [];
+  };
+  // Inline styles for combo poster - EXACTLY from ItemListPage
+  const posterStyle = {
+    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+    borderRadius: "12px",
+    padding: "12px",
+    textAlign: "center",
+    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.2)",
+    color: "#ffffff",
+    position: "relative",
+    cursor: "pointer",
+    transition: "all 0.3s ease",
+    border: "2px solid rgba(255, 255, 255, 0.3)",
+    height: "auto",
+  };
+  const logoStyle = {
+    position: "absolute",
+    top: "8px",
+    left: "8px",
+    fontSize: "18px",
+    fontWeight: "bold",
+    color: "#ffffff",
+    textShadow: "0 1px 3px rgba(0,0,0,0.3)"
+  };
+  const offerNameStyle = {
+    fontSize: "22px",
+    marginBottom: "8px",
+    textShadow: "1px 1px 3px rgba(0,0,0,0.2)",
+    fontFamily: 'ui-sans-serif',
+    color: "#ffffff",
+    fontWeight: "600",
+  };
+  const offerPeriodStyle = {
+    fontSize: "13px",
+    color: "#ffffff",
+    marginBottom: "8px",
+    fontWeight: "bold",
+    backgroundColor: "rgba(0, 0, 0, 0.2)",
+    padding: "4px 8px",
+    borderRadius: "4px",
+    display: "inline-block",
+  };
+  const uploadedImagesStyle = {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "10px",
+    marginTop: "10px",
+    justifyContent: "center", // Center the images
+  };
+  const uploadedImageThumbStyle = {
+    width: "60px", // Slightly larger for neat display
+    height: "60px",
+    objectFit: "cover",
+    borderRadius: "8px",
+    border: "2px solid rgba(255, 255, 255, 0.5)",
+    boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+  };
+  const itemsListStyle = {
+    backgroundColor: "rgba(0, 0, 0, 0.2)",
+    border: "1px solid rgba(255, 255, 255, 0.3)",
+    borderRadius: "8px",
+    padding: "10px",
+    marginBottom: "8px",
+    textAlign: "left",
+  };
+  const itemsListItemStyle = {
+    display: "flex",
+    alignItems: "center",
+    fontSize: "14px",
+    color: "#ffffff",
+    fontWeight: "bold",
+    marginBottom: "6px",
+    listStyleType: "none",
+    paddingLeft: "0",
+  };
+  const itemImageStyle = {
+    width: "30px",
+    height: "30px",
+    objectFit: "cover",
+    borderRadius: "4px",
+    marginRight: "8px",
+    border: "1px solid rgba(255, 255, 255, 0.5)",
+  };
+  const totalPriceStyle = {
+    fontSize: "18px",
+    margin: "12px 0",
+    backgroundColor: "rgba(0, 0, 0, 0.25)",
+    padding: "8px",
+    borderRadius: "8px",
+    color: "#fdd835", // Bright yellow for price
+    fontWeight: "bold",
+    textAlign: "center",
+  };
+  const limitedOfferStyle = {
+    fontSize: "13px",
+    color: "#fdd835", // Bright yellow
+    marginTop: "8px",
+    fontWeight: "bold",
+    textTransform: "uppercase",
+    letterSpacing: "1px",
+    textAlign: "center",
+  };
+  const viewButtonStyle = {
+    marginTop: "8px",
+    backgroundColor: "#ffffff",
+    borderColor: "#ffffff",
+    color: "#764ba2", // Match gradient
+    fontWeight: "bold",
+    padding: "6px 12px",
+    borderRadius: "20px",
+    boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+    display: "block",
+    margin: "8px auto 0",
+    transition: "all 0.3s ease",
+  };
+  const strikethroughStyle = {
+    textDecoration: "line-through",
+    color: "#888",
+    marginRight: "10px",
+  };
+  const offerPriceStyle = {
+    color: "#ff4500",
+    fontWeight: "bold",
+  };
+  
   return (
     <div className="frontpage-container">
       <div className={`frontpage-sidebar ${isSidebarOpen ? "open" : ""}`}>
@@ -1901,73 +2061,96 @@ function FrontPage() {
           <div className={`frontpage-menu-grid ${selectedCategory === "Combos Offer" ? "combo-grid" : ""}`}>
             {filteredItems.map((item) => (
               item.isCombo ? (
-                // FIXED: Full poster style rendering for combos matching ItemListPage
-                <div key={item.id} className="combo-offer-wrapper">
-                  <Card 
-                    className="posterStyle" 
+                // UPDATED: EXACT combo rendering from ItemListPage, with Add to Cart button
+                <div key={item.id} className="col-md-6 mb-4"> {/* CHANGED: Increased width from col-md-3 to col-md-6 for wider combo cards */}
+                  <Card
+                    style={posterStyle}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.transform = "translateY(-5px) scale(1.01)";
-                      e.currentTarget.style.boxShadow = "0 6px 12px rgba(0, 0, 0, 0.15)";
+                      e.currentTarget.style.boxShadow = "0 8px 15px rgba(0, 0, 0, 0.25)";
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.transform = "translateY(0) scale(1)";
-                      e.currentTarget.style.boxShadow = "0 4px 8px rgba(0, 0, 0, 0.1)";
+                      e.currentTarget.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.2)";
                     }}
                   >
-                    <div style={{ position: "absolute", top: "5px", left: "5px", fontSize: "18px", fontWeight: "bold", color: "#1976d2" }}>K</div>
-                    <h4 style={{ fontSize: "22px", marginBottom: "8px", textShadow: "1px 1px 2px rgba(0,0,0,0.1)", fontFamily: 'ui-sans-serif', color: "#0d47a1", fontWeight: "normal", textAlign: "center" }}>
-                      {item.name}
-                    </h4>
+                    <div style={logoStyle}>K</div>
+                    {/* Top: Offer name center */}
+                    <h4 style={offerNameStyle}>{item.name}</h4>
+                    {/* Offer period in one line if active */}
                     {hasActiveOffer(item) && (
-                      <p style={{ fontSize: "13px", color: "#1976d2", marginBottom: "8px", fontWeight: "bold", backgroundColor: "rgba(255, 255, 255, 0.7)", padding: "4px 8px", borderRadius: "4px", display: "inline-block", textAlign: "center", width: "100%" }}>
+                      <p style={offerPeriodStyle}>
                         <strong>Offer Period:</strong> {new Date(item.offer_start_time).toLocaleDateString()} {new Date(item.offer_start_time).toLocaleTimeString()} to {new Date(item.offer_end_time).toLocaleDateString()} {new Date(item.offer_end_time).toLocaleTimeString()}
                       </p>
                     )}
-                    <div className="row" style={{ margin: 0 }}>
-                      <div className="col-4" style={{ padding: 0 }}> {/* Left: Images */}
-                        {item.images && item.images.length > 0 ? (
-                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: "8px", gap: "5px" }}>
-                            {item.images.slice(0, 4).map((img, idx) => (
-                              <img
-                                key={idx}
-                                src={`${baseUrl}/api/combo-images/${img}`}
-                                alt={`Combo image ${idx + 1}`}
-                                style={{ width: "70px", height: "70px", objectFit: "cover", borderRadius: "8px", border: "2px solid rgba(161, 196, 253, 0.5)", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}
-                                onError={(e) => {
-                                  e.target.src = "https://via.placeholder.com/70?text=No+Img";
-                                }}
-                              />
-                            ))}
-                            {item.images.length > 4 && (
-                              <span style={{ fontSize: "11px", color: "#1976d2", alignSelf: "center" }}>+{item.images.length - 4} more</span>
-                            )}
+                    {/* NEW: Centered uploaded multiple images section */}
+                    {(() => {
+                      const uploadedImages = getUploadedImages(item);
+                      if (uploadedImages.length > 0) {
+                        return (
+                          <div style={uploadedImagesStyle}>
+                            {uploadedImages.map((imgPath, idx) => {
+                              const src = `${baseUrl}${imgPath}`;
+                              return (
+                                <img
+                                  key={idx}
+                                  src={src}
+                                  alt={`Uploaded combo image ${idx + 1}`}
+                                  style={uploadedImageThumbStyle}
+                                  onError={(e) => {
+                                    e.target.src = "https://via.placeholder.com/60?text=No+Img";
+                                  }}
+                                />
+                              );
+                            })}
                           </div>
-                        ) : (
-                          <div style={{ height: "280px", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.5)" }}>
-                            <span style={{ color: "#888", fontSize: "12px" }}>No Images</span>
-                          </div>
-                        )}
-                      </div>
-                      <div className="col-8" style={{ padding: "0 10px" }}> {/* Right: Single border box with bullet list */}
-                        <ul style={{ backgroundColor: "rgba(255, 255, 255, 0.7)", border: "2px solid rgba(161, 196, 253, 0.5)", borderRadius: "8px", padding: "10px", marginBottom: "8px", textAlign: "left" }}>
-                          {getAllNames(item).map((name, idx) => (
-                            <li key={idx} style={{ fontSize: "14px", color: "#0d47a1", fontWeight: "bold", marginBottom: "4px", listStyleType: "disc", paddingLeft: "20px" }}>{name}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-                    <p style={{ fontSize: "18px", margin: "12px 0", backgroundColor: "rgba(255, 255, 255, 0.8)", padding: "8px", borderRadius: "8px", color: "#e91e63", fontWeight: "bold", textAlign: "center" }}>
+                        );
+                      }
+                      return null;
+                    })()}
+                    {/* UPDATED: Full width items list with images next to names */}
+                    <ul style={itemsListStyle}>
+                      {getComboItemsWithImages(item).map((itemWithImage, idx) => (
+                        <li key={idx} style={itemsListItemStyle}>
+                          {itemWithImage.image && (
+                            <img
+                              src={itemWithImage.image}
+                              alt={itemWithImage.name}
+                              style={itemImageStyle}
+                              onError={(e) => {
+                                e.target.style.display = "none"; // Hide if error
+                              }}
+                            />
+                          )}
+                          {itemWithImage.name}
+                        </li>
+                      ))}
+                    </ul>
+                    {/* Bottom center: Total price with strikeout if offer */}
+                    <p style={totalPriceStyle}>
                       Total Price: {hasActiveOffer(item) ? (
                         <>
-                          <span style={{ textDecoration: "line-through", color: "#1976d2", fontSize: "16px", marginRight: "10px" }}>₹{item.basePrice}</span>
-                          <span style={{ color: "#e91e63", fontSize: "18px" }}>₹{item.offer_price}</span>
+                          <span style={{ ...strikethroughStyle, color: "#aaa", fontSize: "16px" }}>₹{item.basePrice}</span>
+                          <span style={{ color: "#fdd835", fontSize: "18px" }}>₹{item.offer_price}</span>
                         </>
                       ) : (
-                        <span style={{ color: "#0d47a1", fontSize: "18px" }}>₹{item.basePrice}</span>
+                        <span style={{ color: "#ffffff", fontSize: "18px" }}>₹{item.basePrice}</span>
                       )}
                     </p>
-                    {hasActiveOffer(item) && <p style={{ fontSize: "13px", color: "#e91e63", marginTop: "8px", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "1px", textAlign: "center" }}>LIMITED OFFERS! Place Your Order</p>}
-                    <Button variant="primary" className="poster-add-to-cart-btn" onClick={() => handleItemUpdate({ ...item, quantity: 1 })} style={{ marginTop: "8px", backgroundColor: "rgb(161, 196, 253)", borderColor: "rgb(161, 196, 253)", color: "#0d47a1", fontWeight: "bold", padding: "6px 12px", borderRadius: "20px", boxShadow: "0 2px 4px rgba(0,0,0,0.1)", display: "block", margin: "8px auto 0" }}>
+                    {/* Limited offer center if active */}
+                    {hasActiveOffer(item) && <p style={limitedOfferStyle}>LIMITED OFFERS! Place Your Order</p>}
+                    {/* View button center - CHANGED to Add to Cart for FrontPage */}
+                    <Button
+                      variant="success"
+                      onClick={() => handleItemUpdate({ ...item, quantity: 1 })}
+                      style={viewButtonStyle}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = "#f0f0f0";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = "#ffffff";
+                      }}
+                    >
                       Add to Cart
                     </Button>
                   </Card>
@@ -3114,31 +3297,6 @@ function FrontPage() {
           border: none;
         }
         .frontpage-phone-input:focus { outline: none; }
-        /* FIXED: Poster Styles for Combo Rendering (matching ItemListPage) */
-        .posterStyle {
-          background: linear-gradient(135deg, rgb(161, 196, 253) 0%, rgb(194, 233, 251) 100%);
-          border-radius: 12px;
-          padding: 12px;
-          text-align: center;
-          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-          color: #0d47a1;
-          position: relative;
-          cursor: pointer;
-          transition: all 0.3s ease;
-          border: 2px solid rgba(161, 196, 253, 0.5);
-          height: auto;
-        }
-        .poster-add-to-cart-btn {
-          background-color: rgb(161, 196, 253) !important;
-          border-color: rgb(161, 196, 253) !important;
-          color: #0d47a1 !important;
-          font-weight: bold !important;
-          padding: 6px 12px !important;
-          border-radius: 20px !important;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
-          display: block !important;
-          margin: 8px auto 0 !important;
-        }
         .strikethroughStyle {
           text-decoration: line-through;
           color: #888;
@@ -3147,5 +3305,4 @@ function FrontPage() {
     </div>
   )
 }
-
 export default FrontPage;

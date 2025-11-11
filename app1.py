@@ -552,6 +552,7 @@ def document_to_dict(doc):
         return doc.isoformat()
     return doc
 # NEW: Function to clean expired combo offers
+# NEW: Function to clean expired combo offers
 def clean_expired_combo_offers():
     """Delete expired combo offers from the database."""
     try:
@@ -1520,22 +1521,54 @@ if config.get('mode') == 'server':
                         return jsonify({"error": "Invalid credentials"}), 401
                 else:
                     raise
+            # FIXED: Compute consistent user_identifier to match frontend logic - Use email as key for consistency
+            user_identifier = user.get('email', '').split('@')[0] if '@' in user.get('email', '') else user.get('email', '')
+            logger.info(f"Computed user_identifier for query: '{user_identifier}' from user doc: email='{user.get('email')}', username='{user.get('username')}'")
             token_payload = {
                 'user_id': user['_id'],
                 'exp': datetime.now(timezone.utc) + timedelta(seconds=JWT_EXP_DELTA_SECONDS)
             }
             token = jwt.encode(token_payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
-            user = convert_objectid_to_str(user)
-            requires_opening_entry = opening_collection.find_one({
-                "user_id": user['_id'],
-                "date": {"$gte": datetime.now(ZoneInfo("UTC")).replace(hour=0, minute=0, second=0, microsecond=0)}
-            }) is None
+            user_converted = convert_objectid_to_str(user)
+            # Enhanced logic for requires_opening_entry and requires_closing_entry using consistent user_identifier
+            today_start = datetime.now(ZoneInfo("UTC")).replace(hour=0, minute=0, second=0, microsecond=0)
+            today_date_str = today_start.strftime("%Y-%m-%d")
+            logger.info(f"Today's date for query: {today_date_str}")
+            # FIXED: Changed to exact match for posting_date to avoid $gte string comparison issues
+            # UPDATED: Filter only open shifts (status="Open") to require new opening after closing
+            opening_today = opening_collection.find_one({
+                "user": user_identifier,
+                "posting_date": today_date_str,
+                "status": "Open"  # Only consider open shifts; closed ones are ignored
+            })
+            logger.info(f"Found opening_today: {opening_today is not None}, details: {opening_today.get('name', 'None') if opening_today else 'None'} (Query: user='{user_identifier}', posting_date='{today_date_str}', status='Open')")
+            requires_opening_entry = opening_today is None
+            requires_closing_entry = False
+            pos_opening_entry = None
+            if opening_today:
+                # Check if closing exists for this opening
+                closing_for_opening = pos_closing_collection.find_one({
+                    "pos_opening_entry": opening_today['name']
+                })
+                logger.info(f"Found closing for opening {opening_today['name']}: {closing_for_opening is not None}")
+                if closing_for_opening is None:
+                    # FIXED: Only require closing if there are sales associated with this opening
+                    # FIXED: Replace count_documents (MongoDB method) with len(list(find(...))) for SQLiteCollection compatibility
+                    sales = list(sales_collection.find({
+                        "pos_opening_entry": opening_today['name']
+                    }))
+                    sales_count = len(sales)
+                    logger.info(f"Sales count for opening {opening_today['name']}: {sales_count}")
+                    requires_closing_entry = sales_count > 0
+                    if requires_closing_entry:
+                        pos_opening_entry = opening_today['name'] # Provide the opening name for closing page
+                        logger.info(f"Setting requires_closing_entry=True, pos_opening_entry={pos_opening_entry}")
             response = {
                 "message": "Login successful",
                 "token": token,
                 "user": {
-                    "id": user['_id'],
-                    "username": user.get('username', user.get('firstName', user.get('email', 'Unknown'))),
+                    "id": user_converted['_id'],
+                    "username": user_identifier,
                     "role": user.get('role', 'bearer'),
                     "email": user.get('email', ''),
                     "phone_number": user.get('phone_number', ''),
@@ -1543,8 +1576,11 @@ if config.get('mode') == 'server':
                     "company": user.get('company', 'POS 8'),
                     "is_test": user.get('is_test', False)
                 },
-                "requires_opening_entry": requires_opening_entry
+                "requires_opening_entry": requires_opening_entry,
+                "requires_closing_entry": requires_closing_entry,
+                "pos_opening_entry": pos_opening_entry # NEW: Pass opening name if closing required
             }
+            logger.info(f"Login response flags - requires_opening: {requires_opening_entry}, requires_closing: {requires_closing_entry}, pos_opening_entry: {pos_opening_entry}")
             logger.info(f"User logged in: {identifier}")
             return jsonify(response), 200
         except KeyError as ke:
@@ -2101,15 +2137,12 @@ if config.get('mode') == 'server':
                 error_msg = f"Missing required fields: {', '.join(missing_fields)}"
                 logger.error(error_msg)
                 return jsonify({"error": error_msg}), 400
-        
             # Log full raw payload for debugging (remove in prod)
             logger.info(f"Raw payload received: {json.dumps(sales_data, default=str)}")
-        
             user = users_collection.find_one({"email": sales_data['userId']})
             if not user:
                 logger.error(f"Invalid userId: {sales_data['userId']}")
                 return jsonify({"error": "Invalid userId"}), 400
-        
             sales_data['date'] = sales_data.get('date', datetime.now().strftime("%Y-%m-%d"))
             sales_data['time'] = sales_data.get('time', datetime.now().strftime("%H:%M:%S"))
             net_total = float(sales_data['total']) if sales_data['total'] and str(sales_data['total']).strip() != '' else 0.0
@@ -2123,34 +2156,39 @@ if config.get('mode') == 'server':
             sales_data['grand_total'] = round(grand_total, 2)
             sales_data['invoice_no'] = sales_data.get('invoice_no', f"INV-{int(datetime.now().timestamp())}")
             sales_data['status'] = sales_data.get('status', 'Draft')
-        
             # Store current currency and precision
             current_settings = get_system_settings()
             sales_data['invoice_currency'] = current_settings.get('currency', 'INR')
             sales_data['invoice_currency_precision'] = int(current_settings.get('currencyPrecision', 2)) if current_settings.get('currencyPrecision') and str(current_settings.get('currencyPrecision')).strip() != '' else 2
-        
+            # UPDATED: For Online Delivery orders, store orderNo and deliveryPersonName if provided - Added explicit logging for debugging
+            if sales_data.get('orderType') == 'Online Delivery':
+                sales_data['orderNo'] = sales_data.get('orderNo', '') # Store orderNo from frontend payload
+                sales_data['deliveryPersonName'] = sales_data.get('deliveryPersonName', '') # Store deliveryPersonName from frontend payload
+                logger.info(f"Online Delivery order - Stored orderNo: '{sales_data['orderNo']}', deliveryPersonName: '{sales_data['deliveryPersonName']}' (from payload: '{sales_data.get('deliveryPersonName', 'MISSING')}')")
+            else:
+                sales_data['orderNo'] = None # Explicitly set to None for non-Online Delivery
+                sales_data['deliveryPersonName'] = None # Explicitly set to None for non-Online Delivery
+            # NEW: Associate with POS Opening Entry (from localStorage in frontend)
+            sales_data['pos_opening_entry'] = sales_data.get('pos_opening_entry', '') # Store the opening entry name (e.g., "OPEN-1234567890")
+            logger.info(f"Associated POS Opening Entry: '{sales_data['pos_opening_entry']}' for invoice {sales_data['invoice_no']}")
             processed_items = []
             for item_idx, item in enumerate(sales_data.get('items', [])):
                 if not all(key in item for key in ['item_name', 'basePrice', 'quantity']):
                     logger.error(f"Invalid item structure at index {item_idx}: {item}")
                     return jsonify({"error": "Each item must include item_name, basePrice, and quantity"}), 400
-            
                 # Safe conversion for item quantity and price
                 qty_val = item.get('quantity')
                 item['quantity'] = int(qty_val) if qty_val is not None and str(qty_val).strip() != '' and str(qty_val).isdigit() else 1
                 price_val = item.get('basePrice')
                 item['basePrice'] = float(price_val) if price_val is not None and str(price_val).strip() != '' else 0.0
                 logger.info(f"Processed item {item_idx}: {item['item_name']} - Raw Qty: '{qty_val}', Processed Qty: {item['quantity']}, Raw Price: '{price_val}', Processed Price: {item['basePrice']}")
-            
                 if item.get('is_combo_offer'):
                     item['offer_description'] = item.get('offer_description', item['item_name'])
-            
                 processed_addons = []
                 for addon_idx, addon in enumerate(item.get('addons', [])):
                     if not all(key in addon for key in ['name1', 'addon_price', 'addon_quantity']):
                         logger.error(f"Invalid addon structure at item {item_idx}, addon {addon_idx}: {addon}")
                         return jsonify({"error": "Each addon must include name1, addon_price, and addon_quantity"}), 400
-                
                     # FIXED: Safe int() for addon_quantity (handles '', None, non-numeric)
                     addon_qty_raw = addon.get('addon_quantity')
                     addon_qty = int(addon_qty_raw) if addon_qty_raw is not None and str(addon_qty_raw).strip() != '' and str(addon_qty_raw).isdigit() else 1
@@ -2158,7 +2196,6 @@ if config.get('mode') == 'server':
                     addon_price_raw = addon.get('addon_price')
                     addon_price = float(addon_price_raw) if addon_price_raw is not None and str(addon_price_raw).strip() != '' else 0.0
                     logger.info(f"Processed addon {addon_idx} for item {item_idx}: {addon['name1']} - Raw Qty: '{addon_qty_raw}', Processed Qty: {addon_qty}, Raw Price: '{addon_price_raw}', Processed Price: {addon_price}")
-                
                     processed_addons.append({
                         "addon_name": addon['name1'],
                         "addon_price": addon_price,
@@ -2167,13 +2204,11 @@ if config.get('mode') == 'server':
                         "size": addon.get('size', 'M'),
                         "kitchen": addon.get('kitchen', 'Main Kitchen'),
                     })
-            
                 processed_combos = []
                 for combo_idx, combo in enumerate(item.get('selectedCombos', [])):
                     if not all(key in combo for key in ['name1', 'combo_price']):
                         logger.error(f"Invalid combo structure at item {item_idx}, combo {combo_idx}: {combo}")
                         return jsonify({"error": "Each combo must include name1 and combo_price"}), 400
-                
                     # FIXED: Safe int() for combo_quantity (handles '', None, non-numeric; defaults to 1 even if missing)
                     combo_qty_raw = combo.get('combo_quantity', 1) # Default 1 if missing key
                     combo_qty = int(combo_qty_raw) if combo_qty_raw is not None and str(combo_qty_raw).strip() != '' and str(combo_qty_raw).isdigit() else 1
@@ -2181,7 +2216,6 @@ if config.get('mode') == 'server':
                     combo_price_raw = combo.get('combo_price')
                     combo_price = float(combo_price_raw) if combo_price_raw is not None and str(combo_price_raw).strip() != '' else 0.0
                     logger.info(f"Processed combo {combo_idx} for item {item_idx}: {combo['name1']} - Raw Qty: '{combo_qty_raw}', Processed Qty: {combo_qty}, Raw Price: '{combo_price_raw}', Processed Price: {combo_price}")
-                
                     processed_combos.append({
                         "name1": combo['name1'],
                         "combo_price": combo_price,
@@ -2191,7 +2225,6 @@ if config.get('mode') == 'server':
                         "spicy": combo.get('spicy', False),
                         "kitchen": combo.get('kitchen', 'Main Kitchen'),
                     })
-            
                 processed_items.append({
                     "item_name": item['item_name'],
                     "basePrice": item['basePrice'],
@@ -2207,12 +2240,14 @@ if config.get('mode') == 'server':
                     "is_combo_offer": item.get('is_combo_offer', False),
                     "offer_description": item.get('offer_description'),
                 })
-        
             sales_data['items'] = processed_items
             sales_data['created_at'] = datetime.now(ZoneInfo("UTC")).isoformat()
             sales_id = sales_collection.insert_one(sales_data).inserted_id
-            logger.info(f"Sale saved successfully: {sales_data['invoice_no']} (ID: {sales_id})")
-        
+            # UPDATED: Additional logging for saved sale details, especially for Online Delivery and POS Opening Entry
+            if sales_data.get('orderType') == 'Online Delivery':
+                logger.info(f"Sale saved successfully for Online Delivery: {sales_data['invoice_no']} (ID: {sales_id}) - orderNo: '{sales_data['orderNo']}', deliveryPersonName: '{sales_data['deliveryPersonName']}', pos_opening_entry: '{sales_data['pos_opening_entry']}'")
+            else:
+                logger.info(f"Sale saved successfully: {sales_data['invoice_no']} (ID: {sales_id}) - pos_opening_entry: '{sales_data['pos_opening_entry']}'")
             return jsonify({
                 "id": sales_id,
                 "invoice_no": sales_data['invoice_no'],
@@ -2221,13 +2256,13 @@ if config.get('mode') == 'server':
                 "grand_total": sales_data['grand_total'],
                 "userId": sales_data['userId']
             }), 201
-        
         except ValueError as ve:
             logger.error(f"ValueError in sales invoice (likely qty/price conversion): {str(ve)}\nFull traceback: {traceback.format_exc()}")
             return jsonify({"error": f"Invalid data conversion: {str(ve)}. Check quantities/prices."}), 400
         except Exception as e:
             logger.error(f"Error creating sales invoice: {str(e)}\n{traceback.format_exc()}")
             return jsonify({"error": str(e)}), 500
+
     @app.route('/api/sales', methods=['GET'])
     @db_required
     def get_all_sales():
@@ -2240,6 +2275,7 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error fetching sales: {str(e)}")
             return jsonify({"error": str(e)}), 500
+
     @app.route('/api/sales/<invoice_no>', methods=['GET'])
     @db_required
     def get_sale_by_invoice_no(invoice_no):
@@ -2254,6 +2290,7 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error fetching sale {invoice_no}: {str(e)}")
             return jsonify({"error": str(e)}), 500
+
     @app.route('/api/sales/<invoice_no>/status', methods=['PUT'])
     @db_required
     def update_sale_status(invoice_no):
@@ -2273,6 +2310,65 @@ if config.get('mode') == 'server':
             return jsonify({"message": "Sale status updated successfully"}), 200
         except Exception as e:
             logger.error(f"Error updating sale status {invoice_no}: {str(e)}")
+            return jsonify({"error": str(e)}), 500
+
+    # NEW: Endpoint to update deliveryPersonName in sales record by orderNo (called from ActiveOrders when marking delivered)
+    @app.route('/api/sales/update-delivery', methods=['POST'])
+    @db_required
+    def update_sale_delivery():
+        try:
+            data = request.get_json()
+            order_no = data.get('orderNo')
+            delivery_person_name = data.get('deliveryPersonName')
+            if not order_no or not delivery_person_name:
+                return jsonify({"error": "orderNo and deliveryPersonName are required"}), 400
+            result = sales_collection.update_one(
+                {'orderNo': order_no},
+                {'$set': {'deliveryPersonName': delivery_person_name, 'modified_at': datetime.now(ZoneInfo("UTC")).isoformat()}}
+            )
+            if result.matched_count == 0:
+                logger.warning(f"No sale found for orderNo: {order_no}")
+                return jsonify({"error": "Sale not found"}), 404
+            logger.info(f"Updated delivery person for sale with orderNo: {order_no} to {delivery_person_name}")
+            return jsonify({"message": "Delivery person updated successfully"}), 200
+        except Exception as e:
+            logger.error(f"Error updating sale delivery: {str(e)}")
+            return jsonify({"error": str(e)}), 500
+
+    # UPDATED: Endpoint to deliver order - Update status and payments by orderNo
+    @app.route('/api/sales/deliver-order', methods=['POST'])
+    @db_required
+    def deliver_sale_order():
+        try:
+            data = request.get_json()
+            order_no = data.get('orderNo')
+            status = data.get('status', 'Delivered')
+            payments = data.get('payments', [])
+            if not order_no:
+                return jsonify({"error": "orderNo is required"}), 400
+            # Find sale by orderNo
+            sale = sales_collection.find_one({'orderNo': order_no})
+            if not sale:
+                logger.warning(f"No sale found for orderNo: {order_no}")
+                return jsonify({"error": "Sale not found"}), 404
+            # Update status and payments
+            update_data = {
+                '$set': {
+                    'status': status,
+                    'payments': payments,
+                    'modified_at': datetime.now(ZoneInfo("UTC")).isoformat()
+                }
+            }
+            result = sales_collection.update_one(
+                {'orderNo': order_no},
+                update_data
+            )
+            if result.matched_count == 0:
+                return jsonify({"error": "Failed to update order"}), 500
+            logger.info(f"Delivered order {order_no} (Invoice: {sale['invoice_no']}) with payments: {payments}")
+            return jsonify({"message": "Order delivered successfully", "invoice_no": sale['invoice_no']}), 200
+        except Exception as e:
+            logger.error(f"Error delivering order: {str(e)}")
             return jsonify({"error": str(e)}), 500
     @app.route('/api/tables', methods=['GET'])
     @db_required
@@ -2402,7 +2498,7 @@ if config.get('mode') == 'server':
             data['creation'] = datetime.now(ZoneInfo("UTC")).isoformat()
             data['modified'] = data['creation']
             data['name'] = f"OPEN-{int(datetime.now().timestamp())}"
-            data['status'] = data.get('status', 'Draft')
+            data['status'] = 'Open'  # UPDATED: Set to 'Open' for POS shifts (instead of 'Draft')
             data['docstatus'] = data.get('docstatus', 0)
             data['pos_profile'] = data.get('pos_profile', 'POS-001')
             result = opening_collection.insert_one(data)
@@ -2419,6 +2515,7 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error in create_opening_entry: {str(e)}")
             return jsonify({"message": f"Server error: {str(e)}", "status": "error"}), 500
+
     @app.route('/api/get_pos_opening_entries', methods=['POST'])
     @db_required
     def get_pos_opening_entries():
@@ -2427,13 +2524,16 @@ if config.get('mode') == 'server':
             if not data or 'pos_profile' not in data:
                 return jsonify({"message": "POS profile is required", "status": "error"}), 400
             pos_profile = data['pos_profile']
-            entries = opening_collection.find({"pos_profile": pos_profile})
+            # UPDATED: Filter only open entries (status="Open") for closing dropdown
+            entries = opening_collection.find({"pos_profile": pos_profile, "status": "Open"})
             entries = convert_objectid_to_str(entries)
             logger.info(f"Fetched {len(entries)} POS opening entries for profile: {pos_profile}")
             return jsonify({"message": entries, "status": "success"}), 200
         except Exception as e:
             logger.error(f"Error in get_pos_opening_entries: {str(e)}")
             return jsonify({"message": f"Server error: {str(e)}", "status": "error"}), 500
+
+    # FIXED: Updated filter to fetch ALL invoices associated with pos_opening_entry (any status, including Pending/Draft/Delivered, etc. - no $ne "Cancelled" filter to include all as per user request)
     @app.route('/api/get_pos_invoices', methods=['POST'])
     @db_required
     def get_pos_invoices():
@@ -2442,12 +2542,17 @@ if config.get('mode') == 'server':
             pos_opening_entry = data.get('pos_opening_entry')
             if not pos_opening_entry:
                 return jsonify({"message": "POS opening entry is required", "status": "error"}), 400
+            # FIXED: Filter ONLY by pos_opening_entry (fetch ALL associated invoices, regardless of status - Pending, Draft, Delivered, etc.)
+            invoices_cursor = sales_collection.find({
+                "pos_opening_entry": pos_opening_entry
+            })
+            invoices = convert_objectid_to_str(invoices_cursor)
+            logger.info(f"DEBUG: Found {len(invoices)} invoices for pos_opening_entry: {pos_opening_entry}. Sample statuses: {[inv.get('status', 'N/A') for inv in invoices[:3]]}") # Debug log
+            # Get opening entry for period_start (if needed for other logic, but not for filtering now)
             opening_entry = opening_collection.find_one({"name": pos_opening_entry})
             if not opening_entry:
                 return jsonify({"message": "Opening entry not found", "status": "error"}), 404
-            period_start = opening_entry['period_start_date']
-            invoices = sales_collection.find({"date": {"$gte": period_start}})
-            invoices = convert_objectid_to_str(invoices)
+            # Calculate totals from filtered invoices
             total = sum(float(inv['grand_total']) for inv in invoices)
             net_total = sum(float(inv['total']) for inv in invoices)
             total_qty = sum(sum(item['quantity'] for item in inv['items']) for inv in invoices)
@@ -2462,11 +2567,12 @@ if config.get('mode') == 'server':
                 "total_quantity": total_qty,
                 "status": "success"
             }
-            logger.info(f"Fetched POS invoices for opening entry: {pos_opening_entry}")
+            logger.info(f"Fetched {len(invoices)} POS invoices for opening entry: {pos_opening_entry}")
             return jsonify({"message": response}), 200
         except Exception as e:
             logger.error(f"Error in get_pos_invoices: {str(e)}")
             return jsonify({"message": f"Error: {str(e)}", "status": "error"}), 500
+
     @app.route('/api/create_closing_entry', methods=['POST'])
     @db_required
     def create_closing_entry():
@@ -2484,7 +2590,12 @@ if config.get('mode') == 'server':
             data['status'] = 'Draft'
             data['docstatus'] = 0
             result = pos_closing_collection.insert_one(data)
-            logger.info(f"POS closing entry created: {data['name']}")
+            # UPDATED: After creating closing, mark the opening as 'Closed' to require new opening on next login
+            opening_collection.update_one(
+                {"name": data['pos_opening_entry']},
+                {"$set": {"status": "Closed", "modified": datetime.now(ZoneInfo("UTC")).isoformat()}}
+            )
+            logger.info(f"POS closing entry created: {data['name']} and marked opening {data['pos_opening_entry']} as Closed")
             return jsonify({"message": {"name": data['name'], "status": "success", "message": "Closing Entry created"}}), 201
         except Exception as e:
             logger.error(f"Error in create_closing_entry: {str(e)}")
@@ -2993,6 +3104,8 @@ if config.get('mode') == 'server':
         pattern = r'^[\w\.-]+@[\w\.-]+\.\w+$'
         return re.match(pattern, email) is not None
     VALID_COUNTRY_CODES = ['+91', '+1', '+971', '+44', '+61'] # Add more as needed
+    # NEW: Endpoint for employees
+    # NEW: Endpoint for employees
     @app.route('/api/employees', methods=['GET'])
     @db_required
     def get_employees():
@@ -3001,7 +3114,7 @@ if config.get('mode') == 'server':
             return jsonify(convert_objectid_to_str(employees)), 200
         except Exception as e:
             logger.error(f"Error fetching employees: {str(e)}")
-            return jsonify({'error': str(e)}), 500
+            return jsonify({"error": str(e)}), 500
     @app.route('/api/employees', methods=['POST'])
     @db_required
     def create_employee():
@@ -3133,26 +3246,42 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error deleting employee: {str(e)}")
             return jsonify({"error": str(e)}), 500
-    # UPDATED: Endpoint to get trip reports - now fetches from active_orders with status 'assigned'
+   # UPDATED: Endpoint to get trip reports - now fetches matching sales for the employee (case-insensitive deliveryPersonName, orderType='Online Delivery', status != 'Cancelled')
     @app.route('/api/tripreports/<employee_id>', methods=['GET'])
     @db_required
     def get_trip_reports(employee_id):
         try:
-            # Fetch from trip_reports where deliveryPersonId == employee_id
-            trip_reports = tripreports_collection.find({
-                'deliveryPersonId': employee_id
-            })
-            reports = list(trip_reports)
-            # Ensure deliveryPersonName is set if missing
+            # Fetch employee by ID
+            employee = employees_collection.find_one({'employeeId': employee_id})
+            if not employee:
+                logger.warning(f"Employee not found for ID: {employee_id}")
+                return jsonify([]), 200
+            employee_name = str(employee.get('name', 'Unknown')).lower() # Ensure str and lower for case-insensitive
+            logger.info(f"Fetching trip reports for employee: {employee.get('name')} (ID: {employee_id})")
+            # Fetch all sales and filter in Python for case-insensitive matching
+            all_sales = sales_collection.find()
+            reports = []
+            for sale in all_sales:
+                # FIXED: Handle None for deliveryPersonName - use or '' to ensure string before .lower()
+                delivery_person_name = sale.get('deliveryPersonName') or ''
+                if (delivery_person_name.lower() == employee_name and
+                    sale.get('orderType') == 'Online Delivery' and
+                    sale.get('status') != 'Cancelled'):
+                    # Map items to cartItems for frontend compatibility
+                    if 'items' in sale:
+                        sale['cartItems'] = sale['items']
+                        del sale['items'] # Avoid duplication
+                    reports.append(sale)
+            logger.info(f"Fetched {len(reports)} matching sales as trip reports for {employee.get('name')}")
+            # Ensure deliveryPersonName is set if missing (though filter ensures it)
             for report in reports:
                 if not report.get('deliveryPersonName'):
-                    employee = employees_collection.find_one({'employeeId': employee_id})
-                    if employee:
-                        report['deliveryPersonName'] = employee.get('name', 'Unknown')
+                    report['deliveryPersonName'] = employee.get('name')
             return jsonify(convert_objectid_to_str(reports)), 200
         except Exception as e:
             logger.error(f"Error fetching trip reports: {str(e)}")
             logger.error(traceback.format_exc())
+            return jsonify({"error": str(e)}), 500
     @app.route('/api/uoms', methods=['GET'])
     @db_required
     def get_uoms():
@@ -4670,7 +4799,7 @@ def update_active_order(order_id):
             updated_order['status'] = 'assigned' # Set to assigned instead of deleting
             updated_order['deliveryPersonName'] = employee.get('name', 'N/A')
             # Optional: Move to tripreports if needed, but per requirement, keep in activeorders with status
-            logger.info(f"Assigned delivery person {updated_order['deliveryPersonId']} to order {order_id}")
+            logger.info(f"Assigned delivery person {updated_order['deliveryPersonId']} ({updated_order['deliveryPersonName']}) to order {order_id}")
         if updated_order.get('paid', False) and all(item.get('served', False) for item in updated_order.get('cartItems', [])) and updated_order.get('orderType') != 'Online Delivery':
             updated_order['status'] = 'Completed'
         result = activeorders_collection.replace_one({'orderId': order_id}, updated_order)
@@ -4711,7 +4840,7 @@ def mark_order_delivered(order_id):
         # Insert a copy to trip_reports
         trip_report = order.copy()
         trip_report['delivered_at'] = datetime.now(timezone.utc).isoformat()
-        trip_report['_id'] = str(uuid.uuid4())  # New ID for trip report
+        trip_report['_id'] = str(uuid.uuid4()) # New ID for trip report
         tripreports_collection.insert_one(trip_report)
         # Delete from activeorders and kitchen_saved
         activeorders_collection.delete_one({'orderId': order_id})
@@ -4721,7 +4850,6 @@ def mark_order_delivered(order_id):
     except Exception as e:
         logger.error(f"Error marking order delivered: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
-
 @app.route('/api/kitchen-saved', methods=['POST'])
 @db_required
 def save_kitchen_order():

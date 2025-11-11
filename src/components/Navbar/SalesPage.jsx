@@ -1,4 +1,4 @@
-// SalesPage.jsx (Updated: Added full delivery address handling matching Cash.jsx exactly - UI table display, multi-line print HTML, single-line summary, hasDeliveryAddress check, formatDeliveryAddress, getPrintDeliveryAddressHtml functions. Modal now mirrors Cash.jsx structure with detailed table including delivery address. Print updated for multi-line delivery. Full detailed complete code provided.)
+// SalesPage.jsx (Updated: Added green color for Delivered status in table and modal grand total. Full code preserved.)
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import {
@@ -166,7 +166,7 @@ const SalesPage = () => {
             currencyPrecision: parseInt(parsed.currencyPrecision) || 2,
             language: parsed.language || 'en-IN',
             dateFormat: parsed.dateFormat || 'yyyy-long-mm-dd',
-            timeFormat: parsed.dateFormat || 'HH:mm:ss',
+            timeFormat: parsed.timeFormat || 'HH:mm:ss',
             timeZone: parsed.timeZone || 'Asia/Dubai',
           }));
         }
@@ -616,6 +616,7 @@ const SalesPage = () => {
   // CORRECTED: Standardized padding, line-height, font-size to exactly match Cash.jsx for alignment
   // NEW: Handle combo offer display name
   // UPDATED: Full delivery address handling - multi-line HTML matching Cash.jsx
+  // NEW: Added orderNo and deliveryPersonName display for Online Delivery in print
   const generatePrintableContent = (sale, isPreview = false) => {
     if (!sale) return "";
     const subtotal = calculateSubtotal(sale);
@@ -672,6 +673,21 @@ const SalesPage = () => {
     // Fix for missing variables `icePrice` and `spicyPrice` from user's original `calculateItemPrices`
     // We'll look for them on the item object directly as `generatePrintableContent` does.
     // NEW: Updated item row to use getItemDisplayName which handles combo offers
+    // NEW: Added orderNo and deliveryPersonName for Online Delivery
+    const orderNoDisplay = sale.orderType === "Online Delivery" && sale.orderNo ? `
+      <tr>
+        <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">Order No</td>
+        <td style="text-align: center; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">:</td>
+        <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">${sale.orderNo}</td>
+      </tr>
+    ` : "";
+    const deliveryPersonDisplay = sale.orderType === "Online Delivery" && sale.deliveryPersonName ? `
+      <tr>
+        <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">Delivery Person</td>
+        <td style="text-align: center; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">:</td>
+        <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">${sale.deliveryPersonName}</td>
+      </tr>
+    ` : "";
     return `
       <div style="font-family: Arial, sans-serif; width: 88mm; font-size: 12px; padding: 10px; color: #000000; ${borderStyle} box-sizing: border-box; line-height: 1.2;">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
@@ -721,6 +737,8 @@ const SalesPage = () => {
                 `
                 : ""
             }
+            ${orderNoDisplay}
+            ${deliveryPersonDisplay}
             ${
               hasDeliveryAddressFlag && deliveryAddressHtml
                 ? `
@@ -774,7 +792,7 @@ const SalesPage = () => {
                 const spicyPrice = parseFloat(item.spicy_price) || 0;
                 // NEW: Use updated display name for combo offers
                 const displayName = getItemDisplayName(item);
-    
+  
                 return `
                   <tr>
                     <td style="text-align: left; padding: 4px 8px; border-bottom: 1px solid #000; line-height: 1.2; font-size: 12px; vertical-align: top;">${displayName}</td>
@@ -1167,6 +1185,10 @@ const SalesPage = () => {
   const formatter = getCurrencyFormatter();
   // UPDATED: For modal, compute formatted delivery address
   const formattedDeliveryAddress = invoiceDetails ? formatDeliveryAddress(invoiceDetails.deliveryAddress) : null;
+  // NEW: Helper to get grand total style - green if Delivered
+  const getGrandTotalStyle = (sale) => {
+    return sale.status === 'Delivered' ? { color: 'green', fontWeight: 'bold' } : {};
+  };
   if (loading || baseUrl === null) // Show loading while fetching config or data
     return (
       <Container className="text-center mt-5">
@@ -1446,7 +1468,10 @@ const SalesPage = () => {
                             {col.key === "total" && formatCurrency(calculateSubtotal(sale), sale)} {/* FIXED: Pass sale for historical currency */}
                             {col.key === "vat" && formatCurrency(calculateVAT(sale), sale)} {/* FIXED: Pass sale */}
                             {col.key === "grand_total" &&
-                              formatCurrency(calculateGrandTotal(sale), sale)} {/* FIXED: Pass sale */}
+                              <span style={getGrandTotalStyle(sale)}>
+                                {formatCurrency(calculateGrandTotal(sale), sale)} {/* UPDATED: Green if Delivered */}
+                              </span>
+                            }
                             {col.key === "actions" && (
                               <>
                                 <Button
@@ -1483,6 +1508,8 @@ const SalesPage = () => {
         </Col>
       </Row>
       {/* UPDATED: Modal now mirrors Cash.jsx structure - Detailed table with delivery address, items, totals */}
+      {/* NEW: Added orderNo and deliveryPersonName rows for Online Delivery */}
+      {/* UPDATED: Grand total green if Delivered */}
       <Modal
         show={showModal}
         onHide={() => setShowModal(false)}
@@ -1547,6 +1574,24 @@ const SalesPage = () => {
                         <strong>Table:</strong>
                       </td>
                       <td style={{ textAlign: "right" }}>{invoiceDetails.tableNumber}</td>
+                    </tr>
+                  )}
+                  {/* NEW: Order No for Online Delivery */}
+                  {invoiceDetails.orderType === "Online Delivery" && invoiceDetails.orderNo && (
+                    <tr>
+                      <td style={{ textAlign: "left" }}>
+                        <strong>Order No:</strong>
+                      </td>
+                      <td style={{ textAlign: "right" }}>{invoiceDetails.orderNo}</td>
+                    </tr>
+                  )}
+                  {/* NEW: Delivery Person Name for Online Delivery */}
+                  {invoiceDetails.orderType === "Online Delivery" && invoiceDetails.deliveryPersonName && (
+                    <tr>
+                      <td style={{ textAlign: "left" }}>
+                        <strong>Delivery Person:</strong>
+                      </td>
+                      <td style={{ textAlign: "right" }}>{invoiceDetails.deliveryPersonName}</td>
                     </tr>
                   )}
                   {/* NEW: Delivery address row matching Cash.jsx */}
@@ -1732,8 +1777,8 @@ const SalesPage = () => {
                 <p>
                   <strong>VAT ({(calculateVAT(invoiceDetails) / calculateSubtotal(invoiceDetails) * 100 || 0).toFixed(0)}%):</strong> {formatCurrency(calculateVAT(invoiceDetails), invoiceDetails)}
                 </p>
-                <p>
-                  <strong>Grand Total:</strong> {formatCurrency(calculateGrandTotal(invoiceDetails), invoiceDetails)}
+                <p style={getGrandTotalStyle(invoiceDetails)}>
+                  <strong>Grand Total:</strong> {formatCurrency(calculateGrandTotal(invoiceDetails), invoiceDetails)} {/* UPDATED: Green if Delivered */}
                 </p>
               </div>
             </div>

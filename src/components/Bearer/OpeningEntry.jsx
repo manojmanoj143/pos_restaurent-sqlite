@@ -1,9 +1,9 @@
-// OpeningEntryWithNavbar.jsx
+// Full OpeningEntryWithNavbar.jsx - Updated: No major changes; status='Open' is set in backend.
+// Ensured localStorage 'posOpeningEntry' set after success for sales association.
 import React, { useContext, useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { UserContext } from '../../Context/UserContext';
-
 // Import SVG icons (adjust paths as needed for your project)
 import ClosingEntryIcon from '/menuIcons/closingentry.svg';
 import HomeIcon from '/menuIcons/home.svg';
@@ -12,24 +12,19 @@ import PowerOffIcon from '/menuIcons/poweroff.svg';
 import TableIcon from '/menuIcons/table1.svg';
 import SaveIcon from '/menuIcons/save.svg';
 import DeliveryIcon from '/menuIcons/delivery.svg'; // Added missing import for DeliveryIcon
-
 // Import Bootstrap CSS
 import 'bootstrap/dist/css/bootstrap.min.css';
-
 function OpeningEntryWithNavbar() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, setUser } = useContext(UserContext);
   const reduxUser = useSelector((state) => state.user.user);
   const posProfile = useSelector((state) => state.user.pos_profile);
-
   // Get user from Redux or fallback to localStorage
   const storedUser = JSON.parse(localStorage.getItem('user')) || { email: 'bearer@gmail.com' };
   const currentUser = user || reduxUser || storedUser;
-
   // Date and Time state for Navbar
   const [currentTime, setCurrentTime] = useState(new Date());
-
   // System settings state with defaults
   const [settings, setSettings] = useState({
     country: 'Japan',
@@ -44,18 +39,15 @@ function OpeningEntryWithNavbar() {
     floatPrecision: 3,
     currencyPrecision: 4,
   });
-
   // Warning message states
   const [warningMessage, setWarningMessage] = useState(''); // For logout and error messages
   const [warningType, setWarningType] = useState('warning'); // 'warning' or 'success'
   const [pendingAction, setPendingAction] = useState(null); // Store the action to perform after OK
-
   // Update time every second
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
-
   // Fetch system settings on mount with fallback
   useEffect(() => {
     fetch('/api/settings')
@@ -75,7 +67,6 @@ function OpeningEntryWithNavbar() {
         });
       });
   }, []);
-
   // Dynamic date formatting based on system settings (local time only)
   const getFormattedDate = (date, dateFormat) => {
     if (!dateFormat) {
@@ -86,13 +77,11 @@ function OpeningEntryWithNavbar() {
         day: 'numeric',
       });
     }
-
     const numericFormatter = new Intl.DateTimeFormat('en', { year: 'numeric', month: '2-digit', day: 'numeric' });
     const parts = numericFormatter.formatToParts(date);
     const year = parts.find((p) => p.type === 'year')?.value || '';
     const month = parts.find((p) => p.type === 'month')?.value || '';
     const day = parts.find((p) => p.type === 'day')?.value || '';
-
     switch (dateFormat) {
       case 'dd-mm-yyyy':
         return `${day.padStart(2, '0')}-${month}-${year}`;
@@ -124,7 +113,6 @@ function OpeningEntryWithNavbar() {
         return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     }
   };
-
   // Dynamic time formatting based on system settings (local time only, conditional seconds)
   const getFormattedTime = (date, timeFormat) => {
     if (!timeFormat) {
@@ -135,23 +123,18 @@ function OpeningEntryWithNavbar() {
         hour12: true,
       });
     }
-
     const hasSeconds = timeFormat.includes(':ss') || timeFormat.includes('ss');
     const is12Hour = timeFormat.includes(' a') || timeFormat.startsWith('hh');
-
     const options = {
       hour: '2-digit',
       minute: '2-digit',
       ...(hasSeconds && { second: '2-digit' }),
       hour12: is12Hour,
     };
-
     return date.toLocaleTimeString('en-US', options);
   };
-
   const formattedDate = getFormattedDate(currentTime, settings.dateFormat);
   const formattedTime = getFormattedTime(currentTime, settings.timeFormat);
-
   // Currency formatter for totals
   const getCurrencyFormatter = () => {
     return new Intl.NumberFormat(settings.language || 'en-US', {
@@ -161,7 +144,6 @@ function OpeningEntryWithNavbar() {
       maximumFractionDigits: parseInt(settings.currencyPrecision) || 4,
     });
   };
-
   // Handle OK button click for warning messages
   const handleWarningOk = () => {
     if (pendingAction) {
@@ -171,7 +153,6 @@ function OpeningEntryWithNavbar() {
     setWarningMessage('');
     setWarningType('warning');
   };
-
   // Navbar-specific functions
   const handleLogout = () => {
     setWarningMessage('Logout Successful!');
@@ -182,21 +163,17 @@ function OpeningEntryWithNavbar() {
       navigate('/', { replace: true });
     });
   };
-
   const handleOpeningEntryNavigation = () => {
     navigate('/opening-entry');
   };
-
   const handleClosingEntryNavigation = () => {
     const posOpeningEntry = localStorage.getItem('posOpeningEntry') || '';
     console.log('Navigating to Closing Entry with posOpeningEntry:', posOpeningEntry);
     navigate('/closing-entry', { state: { posOpeningEntry } });
   };
-
   const handleBack = () => {
     navigate(-1);
   };
-
   // OpeningEntry-specific state and logic
   const [periodStartDate, setPeriodStartDate] = useState('');
   const [postingDate, setPostingDate] = useState(new Date().toISOString().split('T')[0]);
@@ -207,7 +184,6 @@ function OpeningEntryWithNavbar() {
   const [error, setError] = useState('');
   const [warning, setWarning] = useState('');
   const [successMessage, setSuccessMessage] = useState(''); // New state for success message
-
   // Initialize user and company data on mount
   useEffect(() => {
     console.log('OpeningEntryWithNavbar mounted');
@@ -215,20 +191,17 @@ function OpeningEntryWithNavbar() {
       console.log('Global click in OpeningEntryWithNavbar:', e.target);
     };
     document.addEventListener('click', handleGlobalClick);
-
     const storedUser = JSON.parse(localStorage.getItem('user'));
     const currentUser = user || reduxUser || storedUser;
     if (currentUser) {
       setUsername(currentUser.username || currentUser.email?.split('@')[0] || 'Guest');
       setCompany(currentUser.company || 'MyCompany');
     }
-
     return () => {
       console.log('OpeningEntryWithNavbar unmounted');
       document.removeEventListener('click', handleGlobalClick);
     };
   }, [user, reduxUser]);
-
   // Form validation
   const validateForm = () => {
     const missingFields = [];
@@ -239,7 +212,6 @@ function OpeningEntryWithNavbar() {
     if (balanceDetails.length === 0 || balanceDetails.some((d) => !d.mode_of_payment || !d.opening_amount)) {
       missingFields.push('Balance Details (complete all rows)');
     }
-
     if (missingFields.length > 0) {
       setWarning(`Please fill in the following required fields: ${missingFields.join(', ')}`);
       return false;
@@ -247,12 +219,10 @@ function OpeningEntryWithNavbar() {
     setWarning('');
     return true;
   };
-
   // Add a new balance detail row
   const handleAddBalanceDetail = () => {
     setBalanceDetails((prev) => [...prev, { mode_of_payment: '', opening_amount: '' }]);
   };
-
   // Update balance detail fields
   const handleBalanceDetailChange = (index, field, value) => {
     setBalanceDetails((prev) =>
@@ -260,17 +230,14 @@ function OpeningEntryWithNavbar() {
     );
     validateForm();
   };
-
   // Remove a balance detail row
   const handleRemoveBalanceDetail = (index) => {
     setBalanceDetails((prev) => prev.filter((_, i) => i !== index));
     validateForm();
   };
-
-  // Submit form data to API
+  // Submit form data to API - UPDATED: Set localStorage 'posOpeningEntry' after success for sales association
   const handleSubmit = async () => {
     if (!validateForm()) return;
-
     setLoading(true);
     setError('');
     setSuccessMessage('');
@@ -280,18 +247,16 @@ function OpeningEntryWithNavbar() {
       company,
       user: username,
       balance_details: balanceDetails,
-      status: 'Draft',
+      status: 'Open',  // UPDATED: Explicitly set status='Open' in payload (backend will use it)
       docstatus: 0,
     };
     console.log('OpeningEntry - Payload:', payload);
-
     try {
       const response = await fetch('/api/create_opening_entry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-
       let result;
       try {
         result = await response.json();
@@ -299,13 +264,11 @@ function OpeningEntryWithNavbar() {
         console.error('Failed to parse JSON:', jsonError);
         throw new Error('Server returned invalid JSON');
       }
-
       console.log('OpeningEntry API Response:', { status: response.status, result });
-
       if (response.ok && result.message.status === 'success') {
         const openingEntryName = result.message.name;
         localStorage.setItem('openingEntryName', openingEntryName);
-        localStorage.setItem('posOpeningEntry', openingEntryName);
+        localStorage.setItem('posOpeningEntry', openingEntryName); // Persist for sales association
         setSuccessMessage(`Opening Entry created successfully: ${openingEntryName}`);
       } else {
         const errorMessage = typeof result.message === 'string' ? result.message : `Server error: ${response.status}`;
@@ -323,17 +286,14 @@ function OpeningEntryWithNavbar() {
       setLoading(false);
     }
   };
-
   // Handle success message OK button
   const handleSuccessOk = () => {
     setSuccessMessage('');
     navigate('/home');
   };
-
   // Calculate total
   const totalAmount = balanceDetails.reduce((sum, detail) => sum + (parseFloat(detail.opening_amount) || 0), 0);
   const currencyFormat = getCurrencyFormatter().format(totalAmount);
-
   return (
     <>
       {/* Warning Alert for Logout and Errors */}
@@ -358,7 +318,6 @@ function OpeningEntryWithNavbar() {
               <i className="bi bi-arrow-left fs-2"></i>
             </a>
           </div>
-
           <button
             className="navbar-toggler bg-light"
             type="button"
@@ -370,7 +329,6 @@ function OpeningEntryWithNavbar() {
           >
             <span className="navbar-toggler-icon"></span>
           </button>
-
           <div className="collapse navbar-collapse" id="navbarSupportedContent">
             <ul className="navbar-nav mx-auto mb-2 mb-lg-0 d-flex justify-content-center">
               <li className="nav-item">
@@ -428,7 +386,6 @@ function OpeningEntryWithNavbar() {
                 </a>
               </li>
             </ul>
-
             <div className="d-flex align-items-center ms-auto pe-3">
               <div className="user-info text-end me-3">
                 <div className="d-flex align-items-center justify-content-end">
@@ -449,7 +406,6 @@ function OpeningEntryWithNavbar() {
           </div>
         </div>
       </nav>
-
       {/* OpeningEntry Component */}
       <div className="container-fluid opening-entry-container mt-4">
         <h2 className="text-center my-4">Create Opening Entry</h2>
@@ -517,7 +473,6 @@ function OpeningEntryWithNavbar() {
                 />
               </div>
             </div>
-
             <div className="row mb-3">
               <div className="col-md-6">
                 <label htmlFor="user" className="form-label">User</label>
@@ -530,7 +485,6 @@ function OpeningEntryWithNavbar() {
                 />
               </div>
             </div>
-
             <div className="table-responsive mb-3">
               <table className="table border text-start">
                 <thead>
@@ -582,7 +536,6 @@ function OpeningEntryWithNavbar() {
                 Add Payment Mode
               </button>
             </div>
-
             <div className="row">
               <div className="col-md-6">
                 <div className="grand-tot-div">
@@ -602,7 +555,6 @@ function OpeningEntryWithNavbar() {
           </div>
         </div>
       </div>
-
       {/* Inline CSS */}
       <style jsx>{`
         .icon-size {
@@ -725,5 +677,4 @@ function OpeningEntryWithNavbar() {
     </>
   );
 }
-
 export default OpeningEntryWithNavbar;

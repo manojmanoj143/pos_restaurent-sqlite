@@ -1,4 +1,3 @@
-// src/components/Form/ItemListPage.jsx
 import React, { useState, useEffect } from "react";
 import { Modal, Button, Card, Form, Badge, ListGroup, Table } from "react-bootstrap";
 import { FaArrowLeft, FaPlusCircle, FaEye, FaEyeSlash, FaTrash } from "react-icons/fa";
@@ -319,17 +318,21 @@ const ItemListPage = () => {
     borderColor: "#28a745",
   };
 
+  // UPDATED: Regular item card style
   const cardStyle = {
-    border: "1px solid #ddd",
+    border: "1px solid #eee",
+    backgroundColor: "#fdfdfd",
     padding: "10px",
-    boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
+    boxShadow: "0 2px 4px rgba(0, 0, 0, 0.05)",
     borderRadius: "8px",
     transition: "all 0.3s ease",
   };
 
+  // UPDATED: Regular item card hover style
   const cardHoverStyle = {
     transform: "translateY(-5px)",
-    boxShadow: "0 4px 6px rgba(0, 0, 0, 0.2)",
+    boxShadow: "0 6px 10px rgba(0, 0, 0, 0.15)",
+    borderColor: "#28a745"
   };
 
   const imgStyle = {
@@ -386,11 +389,13 @@ const ItemListPage = () => {
     fontSize: "16px",
   };
 
+  // UPDATED: multipleImagesStyle to center content
   const multipleImagesStyle = {
     display: "flex",
     flexWrap: "wrap",
     gap: "10px",
     marginTop: "10px",
+    justifyContent: "center", // Center the images
   };
 
   const nutritionModalStyle = {
@@ -420,105 +425,119 @@ const ItemListPage = () => {
     transition: "all 0.3s ease",
   };
 
-  // Poster style for combo offers
+  // UPDATED: Poster style for combo offers
   const posterStyle = {
-    background: "linear-gradient(135deg, rgb(161, 196, 253) 0%, rgb(194, 233, 251) 100%)",
+    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
     borderRadius: "12px",
     padding: "12px",
     textAlign: "center",
-    boxShadow: "0 4px 8px rgba(0, 0, 0, 0.1)",
-    color: "#0d47a1",
+    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.2)",
+    color: "#ffffff",
     position: "relative",
     cursor: "pointer",
     transition: "all 0.3s ease",
-    border: "2px solid rgba(161, 196, 253, 0.5)",
+    border: "2px solid rgba(255, 255, 255, 0.3)",
     height: "auto",
   };
 
+  // UPDATED: Logo style for new combo card
   const logoStyle = {
     position: "absolute",
-    top: "5px",
-    left: "5px",
+    top: "8px",
+    left: "8px",
     fontSize: "18px",
     fontWeight: "bold",
-    color: "#1976d2",
+    color: "#ffffff",
+    textShadow: "0 1px 3px rgba(0,0,0,0.3)"
   };
 
-  // Offer name at top center
+  // UPDATED: Offer name for new combo card
   const offerNameStyle = {
     fontSize: "22px",
     marginBottom: "8px",
-    textShadow: "1px 1px 2px rgba(0,0,0,0.1)",
+    textShadow: "1px 1px 3px rgba(0,0,0,0.2)",
     fontFamily: 'ui-sans-serif',
-    color: "#0d47a1",
-    fontWeight: "normal",
+    color: "#ffffff",
+    fontWeight: "600",
   };
 
-  // Offer period in one line
+  // UPDATED: Offer period for new combo card
   const offerPeriodStyle = {
     fontSize: "13px",
-    color: "#1976d2",
+    color: "#ffffff",
     marginBottom: "8px",
     fontWeight: "bold",
-    backgroundColor: "rgba(255, 255, 255, 0.7)",
+    backgroundColor: "rgba(0, 0, 0, 0.2)",
     padding: "4px 8px",
     borderRadius: "4px",
     display: "inline-block",
   };
 
-  // Images left side, vertical stack
-  const comboImagesLeftStyle = {
+  // NEW: Style for uploaded multiple images - centered, larger thumbs
+  const uploadedImagesStyle = {
     display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    marginBottom: "8px",
-    gap: "5px",
+    flexWrap: "wrap",
+    gap: "8px",
+    marginBottom: "12px",
+    justifyContent: "center",
   };
 
-  const comboImageThumbStyle = {
-    width: "70px",
-    height: "70px",
+  const uploadedImageThumbStyle = {
+    width: "60px", // Slightly larger for neat display
+    height: "60px",
     objectFit: "cover",
     borderRadius: "8px",
-    border: "2px solid rgba(161, 196, 253, 0.5)",
+    border: "2px solid rgba(255, 255, 255, 0.5)",
     boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
   };
 
-  // Right side: Single border box with bullet list of names (items, addons, combos combined)
+  // UPDATED: Items list for new combo card - full width, centered
   const itemsListStyle = {
-    backgroundColor: "rgba(255, 255, 255, 0.7)",
-    border: "2px solid rgba(161, 196, 253, 0.5)",
+    backgroundColor: "rgba(0, 0, 0, 0.2)",
+    border: "1px solid rgba(255, 255, 255, 0.3)",
     borderRadius: "8px",
     padding: "10px",
     marginBottom: "8px",
     textAlign: "left",
   };
 
+  // NEW: Item list item with image next to name - flex row
   const itemsListItemStyle = {
+    display: "flex",
+    alignItems: "center",
     fontSize: "14px",
-    color: "#0d47a1",
+    color: "#ffffff",
     fontWeight: "bold",
-    marginBottom: "4px",
-    listStyleType: "disc",
-    paddingLeft: "20px",
+    marginBottom: "6px",
+    listStyleType: "none",
+    paddingLeft: "0",
   };
 
-  // Total price center bottom
+  const itemImageStyle = {
+    width: "30px",
+    height: "30px",
+    objectFit: "cover",
+    borderRadius: "4px",
+    marginRight: "8px",
+    border: "1px solid rgba(255, 255, 255, 0.5)",
+  };
+
+  // UPDATED: Total price for new combo card
   const totalPriceStyle = {
     fontSize: "18px",
     margin: "12px 0",
-    backgroundColor: "rgba(255, 255, 255, 0.8)",
+    backgroundColor: "rgba(0, 0, 0, 0.25)",
     padding: "8px",
     borderRadius: "8px",
-    color: "#e91e63",
+    color: "#fdd835", // Bright yellow for price
     fontWeight: "bold",
     textAlign: "center",
   };
 
-  // Limited offer center
+  // UPDATED: Limited offer for new combo card
   const limitedOfferStyle = {
     fontSize: "13px",
-    color: "#e91e63",
+    color: "#fdd835", // Bright yellow
     marginTop: "8px",
     fontWeight: "bold",
     textTransform: "uppercase",
@@ -526,21 +545,22 @@ const ItemListPage = () => {
     textAlign: "center",
   };
 
-  // View button center
+  // UPDATED: View button for new combo card
   const viewButtonStyle = {
     marginTop: "8px",
-    backgroundColor: "rgb(161, 196, 253)",
-    borderColor: "rgb(161, 196, 253)",
-    color: "#0d47a1",
+    backgroundColor: "#ffffff",
+    borderColor: "#ffffff",
+    color: "#764ba2", // Match gradient
     fontWeight: "bold",
     padding: "6px 12px",
     borderRadius: "20px",
     boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
     display: "block",
     margin: "8px auto 0",
+    transition: "all 0.3s ease",
   };
 
-  // Get unique categories from items, including Combos Offer
+  // UPDATED: Get unique categories from items, including Combos Offer
   const getCategories = () => {
     const categories = [...new Set(itemList.map(item => item.item_group))];
     const filteredCategories = categories.filter(category => category);
@@ -631,28 +651,27 @@ const ItemListPage = () => {
   // Searched items for offer modal
   const searchedItems = itemList.filter(item => item.item_name.toLowerCase().includes(searchTerm.toLowerCase()));
 
-  // Function to get all names (items + addons + combos) for bullet list
-  const getAllNames = (combo) => {
-    const names = [];
-    // Items
+  // UPDATED: Function to get combo items with images and names (for side-by-side display)
+  const getComboItemsWithImages = (combo) => {
+    const itemsWithImages = [];
     if (combo.items && combo.items.length > 0) {
       combo.items.forEach(comboItem => {
-        names.push(comboItem.data.item_name || comboItem.data.name1 || '');
+        const name = comboItem.data.item_name || comboItem.data.name1 || '';
+        const image = comboItem.data.image || comboItem.data.addon_image || comboItem.data.combo_image || comboItem.data.item_image || null;
+        if (name.trim() !== '') {
+          itemsWithImages.push({ name, image });
+        }
       });
     }
-    // Addons
-    if (combo.addons && combo.addons.length > 0) {
-      combo.addons.forEach(addon => {
-        if (addon.name1) names.push(addon.name1);
-      });
+    return itemsWithImages;
+  };
+
+  // NEW: Function to get only uploaded images for centered display
+  const getUploadedImages = (combo) => {
+    if (combo.images && combo.images.length > 0) {
+      return combo.images.map(img => `/api/combo-images/${img}`);
     }
-    // Combos (sub-combos?)
-    if (combo.combos && combo.combos.length > 0) {
-      combo.combos.forEach(subCombo => {
-        if (subCombo.name1) names.push(subCombo.name1);
-      });
-    }
-    return names.filter(name => name.trim() !== '');
+    return [];
   };
 
   return (
@@ -800,11 +819,11 @@ const ItemListPage = () => {
                   style={posterStyle}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.transform = "translateY(-5px) scale(1.01)";
-                    e.currentTarget.style.boxShadow = "0 6px 12px rgba(0, 0, 0, 0.15)";
+                    e.currentTarget.style.boxShadow = "0 8px 15px rgba(0, 0, 0, 0.25)";
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.transform = "translateY(0) scale(1)";
-                    e.currentTarget.style.boxShadow = "0 4px 8px rgba(0, 0, 0, 0.1)";
+                    e.currentTarget.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.2)";
                   }}
                 >
                   <div style={logoStyle}>K</div>
@@ -816,49 +835,58 @@ const ItemListPage = () => {
                       <strong>Offer Period:</strong> {new Date(combo.offer_start_time).toLocaleDateString()} {new Date(combo.offer_start_time).toLocaleTimeString()} to {new Date(combo.offer_end_time).toLocaleDateString()} {new Date(combo.offer_end_time).toLocaleTimeString()}
                     </p>
                   )}
-                  {/* Two-column layout: left images, right list */}
-                  <div className="row" style={{ margin: 0 }}>
-                    <div className="col-4" style={{ padding: 0 }}> {/* Left: Images */}
-                      {combo.images && combo.images.length > 0 ? (
-                        <div style={comboImagesLeftStyle}>
-                          {combo.images.slice(0, 4).map((img, idx) => (
-                            <img
-                              key={idx}
-                              src={`${baseUrl}/api/combo-images/${img}`}
-                              alt={`Combo image ${idx + 1}`}
-                              style={comboImageThumbStyle}
-                              onError={(e) => {
-                                e.target.src = "https://via.placeholder.com/70?text=No+Img";
-                              }}
-                            />
-                          ))}
-                          {combo.images.length > 4 && (
-                            <span style={{ fontSize: "11px", color: "#1976d2", alignSelf: "center" }}>+{combo.images.length - 4} more</span>
-                          )}
+                  {/* NEW: Centered uploaded multiple images section */}
+                  {(() => {
+                    const uploadedImages = getUploadedImages(combo);
+                    if (uploadedImages.length > 0) {
+                      return (
+                        <div style={uploadedImagesStyle}>
+                          {uploadedImages.map((imgPath, idx) => {
+                            const src = `${baseUrl}${imgPath}`;
+                            return (
+                              <img
+                                key={idx}
+                                src={src}
+                                alt={`Uploaded combo image ${idx + 1}`}
+                                style={uploadedImageThumbStyle}
+                                onError={(e) => {
+                                  e.target.src = "https://via.placeholder.com/60?text=No+Img";
+                                }}
+                              />
+                            );
+                          })}
                         </div>
-                      ) : (
-                        <div style={{ height: "280px", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.5)" }}>
-                          <span style={{ color: "#888", fontSize: "12px" }}>No Images</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="col-8" style={{ padding: "0 10px" }}> {/* Right: Single border box with bullet list */}
-                      <ul style={itemsListStyle}>
-                        {getAllNames(combo).map((name, idx) => (
-                          <li key={idx} style={itemsListItemStyle}>{name}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                  {/* UPDATED: Full width items list with images next to names */}
+                  <ul style={itemsListStyle}>
+                    {getComboItemsWithImages(combo).map((itemWithImage, idx) => (
+                      <li key={idx} style={itemsListItemStyle}>
+                        {itemWithImage.image && (
+                          <img
+                            src={`${baseUrl}${itemWithImage.image}`}
+                            alt={itemWithImage.name}
+                            style={itemImageStyle}
+                            onError={(e) => {
+                              e.target.style.display = "none"; // Hide if error
+                            }}
+                          />
+                        )}
+                        {itemWithImage.name}
+                      </li>
+                    ))}
+                  </ul>
                   {/* Bottom center: Total price with strikeout if offer */}
                   <p style={totalPriceStyle}>
                     Total Price: {hasActiveOffer(combo) ? (
                       <>
-                        <span style={{ ...strikethroughStyle, color: "#1976d2", fontSize: "16px" }}>₹{combo.total_price}</span>
-                        <span style={{ color: "#e91e63", fontSize: "18px" }}>₹{combo.offer_price}</span>
+                        <span style={{ ...strikethroughStyle, color: "#aaa", fontSize: "16px" }}>₹{combo.total_price}</span>
+                        <span style={{ color: "#fdd835", fontSize: "18px" }}>₹{combo.offer_price}</span>
                       </>
                     ) : (
-                      <span style={{ color: "#0d47a1", fontSize: "18px" }}>₹{combo.total_price}</span>
+                      <span style={{ color: "#ffffff", fontSize: "18px" }}>₹{combo.total_price}</span>
                     )}
                   </p>
                   {/* Limited offer center if active */}
@@ -868,6 +896,12 @@ const ItemListPage = () => {
                     variant="success"
                     onClick={() => handleItemClick(combo, true)}
                     style={viewButtonStyle}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = "#f0f0f0";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = "#ffffff";
+                    }}
                   >
                     View
                   </Button>
@@ -888,13 +922,8 @@ const ItemListPage = () => {
                     alt={item.item_name || item.name}
                     style={imgStyle}
                   />
-                  <Card.Body style={{ textAlign: "center" }}>
-                    <Button variant="success" onClick={() => handleItemClick(item, selectedCategory === "Combos Offer")}
-                      style={{ marginBottom: "10px", backgroundColor: "#28a745", borderColor: "#28a745" }}
-                    >
-                      View
-                    </Button>
-                    <Card.Title style={{ fontSize: "1.2rem", color: "black" }}>
+                  <Card.Body style={{ textAlign: "center", padding: "0.75rem" }}>
+                    <Card.Title style={{ fontSize: "1rem", color: "black", marginBottom: "0.5rem", height: "40px", overflow: "hidden" }}>
                       {item.item_name || item.name}
                     </Card.Title>
                     <div style={priceStyle}>
@@ -907,6 +936,12 @@ const ItemListPage = () => {
                         <span>₹{item.price_list_rate || item.total_price}</span>
                       )}
                     </div>
+                     <Button variant="success" onClick={() => handleItemClick(item, selectedCategory === "Combos Offer")}
+                      className="w-100"
+                      style={{ marginTop: "10px", backgroundColor: "#28a745", borderColor: "#28a745" }}
+                    >
+                      View
+                    </Button>
                   </Card.Body>
                 </Card>
               </div>
@@ -922,159 +957,180 @@ const ItemListPage = () => {
           </Modal.Header>
           <Modal.Body>
             <div className="container">
-              {!selectedItem.isCombo && (
-                <>
-                  <h5>Item Code: {selectedItem.item_code}</h5>
-                  <h5>Item Group: {selectedItem.item_group}</h5>
-                  <h5>Kitchen: {selectedItem.kitchen || "Not specified"}</h5>
-                </>
-              )}
-              <h5>
-                Price:{" "}
-                {hasActiveOffer(selectedItem) ? (
-                  <>
-                    <span style={strikethroughStyle}>₹{selectedItem.price_list_rate || selectedItem.total_price}</span>{" "}
-                    <span style={offerPriceStyle}>₹{selectedItem.offer_price}</span>
-                  </>
-                ) : (
-                  `₹${selectedItem.price_list_rate || selectedItem.total_price}`
-                )}
-              </h5>
-              {hasActiveOffer(selectedItem) && (
-                <>
-                  <h5>Offer Starts: {new Date(selectedItem.offer_start_time).toLocaleString()}</h5>
-                  <h5>Offer Ends: {new Date(selectedItem.offer_end_time).toLocaleString()}</h5>
-                </>
-              )}
-              <div>
-                <h6>Image:</h6>
-                <img
-                  src={`${baseUrl}${selectedItem.image}` || "https://via.placeholder.com/200x200?text=No+Image+Available"}
-                  alt={selectedItem.item_name || selectedItem.description}
-                  className="img-fluid"
-                  style={imgStyle}
-                />
+              {/* --- UPDATED LAYOUT: START --- */}
+              <div className="row">
+                {/* Left Column: Image */}
+                <div className="col-md-5">
+                  <h6>Image:</h6>
+                  <img
+                    src={`${baseUrl}${selectedItem.image}` || "https://via.placeholder.com/200x200?text=No+Image+Available"}
+                    alt={selectedItem.item_name || selectedItem.description}
+                    className="img-fluid"
+                    style={{ ...imgStyle, height: "auto", maxHeight: "300px" }} // Adjusted style
+                  />
+                </div>
+                {/* Right Column: Details */}
+                <div className="col-md-7">
+                  {!selectedItem.isCombo && (
+                    <>
+                      <h5>Item Code: {selectedItem.item_code}</h5>
+                      <h5>Item Group: {selectedItem.item_group}</h5>
+                      <h5>Kitchen: {selectedItem.kitchen || "Not specified"}</h5>
+                    </>
+                  )}
+                  <h5>
+                    Price:{" "}
+                    {hasActiveOffer(selectedItem) ? (
+                      <>
+                        <span style={strikethroughStyle}>₹{selectedItem.price_list_rate || selectedItem.total_price}</span>{" "}
+                        <span style={offerPriceStyle}>₹{selectedItem.offer_price}</span>
+                      </>
+                    ) : (
+                      `₹${selectedItem.price_list_rate || selectedItem.total_price}`
+                    )}
+                  </h5>
+                  {hasActiveOffer(selectedItem) && (
+                    <>
+                      <h5>Offer Starts: {new Date(selectedItem.offer_start_time).toLocaleString()}</h5>
+                      <h5>Offer Ends: {new Date(selectedItem.offer_end_time).toLocaleString()}</h5>
+                    </>
+                  )}
+                </div>
               </div>
+              {/* Bottom Row: Additional Images (Centered) */}
               {selectedItem.images && selectedItem.images.length > 0 && (
-                <div>
-                  <h6>Additional Images:</h6>
-                  <div style={multipleImagesStyle}>
-                    {selectedItem.images.map((img, idx) => (
-                      <img
-                        key={idx}
-                        src={`${baseUrl}${img}`}
-                        alt={`${selectedItem.item_name} additional ${idx + 1}`}
-                        style={{ width: "100px", height: "100px", objectFit: "cover", borderRadius: "8px" }}
-                        onError={(e) => {
-                          e.target.src = "https://via.placeholder.com/100x100?text=Image+Not+Found";
-                        }}
-                      />
-                    ))}
+                <div className="row mt-3">
+                  <div className="col-12">
+                    <h6>Additional Images:</h6>
+                    <div style={multipleImagesStyle}>
+                      {selectedItem.images.map((img, idx) => {
+                        const src = selectedItem.isCombo
+                          ? `${baseUrl}/api/combo-images/${img}`
+                          : `${baseUrl}${img}`;
+                        return (
+                          <img
+                            key={idx}
+                            src={src}
+                            alt={`${selectedItem.item_name || selectedItem.description} additional ${idx + 1}`}
+                            style={{ width: "100px", height: "100px", objectFit: "cover", borderRadius: "8px" }}
+                            onError={(e) => {
+                              e.target.src = "https://via.placeholder.com/100x100?text=Image+Not+Found";
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               )}
-              {selectedItem.addons && selectedItem.addons.length > 0 && (
-                <div>
-                  <h6>Addons:</h6>
-                  <ul>
-                    {selectedItem.addons
-                      .filter(addon => addon.name1 || addon.addon_price > 0 || addon.addon_image)
-                      .map((addon, idx) => (
-                        <li key={idx}>
-                          {addon.name1 && <p>Name: {addon.name1}</p>}
-                          {addon.addon_price > 0 && <p>Price: ₹{addon.addon_price}</p>}
-                          {addon.addon_image && (
-                            <img
-                              src={`${baseUrl}${addon.addon_image}`}
-                              alt={addon.name1}
-                              style={{ width: "100px", height: "100px", objectFit: "cover" }}
-                            />
-                          )}
-                        </li>
-                      ))}
-                  </ul>
+              {/* --- UPDATED LAYOUT: END --- */}
+              {/* Other details (Addons, Combos, Variants, etc.) can go here in new rows */}
+              <div className="row mt-3">
+                <div className="col-12">
+                  {selectedItem.addons && selectedItem.addons.length > 0 && (
+                    <div>
+                      <h6>Addons:</h6>
+                      <ul>
+                        {selectedItem.addons
+                          .filter(addon => addon.name1 || addon.addon_price > 0 || addon.addon_image)
+                          .map((addon, idx) => (
+                            <li key={idx}>
+                              {addon.name1 && <p>Name: {addon.name1}</p>}
+                              {addon.addon_price > 0 && <p>Price: ₹{addon.addon_price}</p>}
+                              {addon.addon_image && (
+                                <img
+                                  src={`${baseUrl}${addon.addon_image}`}
+                                  alt={addon.name1}
+                                  style={{ width: "100px", height: "100px", objectFit: "cover" }}
+                                />
+                              )}
+                            </li>
+                          ))}
+                      </ul>
+                    </div>
+                  )}
+                  {selectedItem.combos && selectedItem.combos.length > 0 && (
+                    <div>
+                      <h6>Combos:</h6>
+                      <ul>
+                        {selectedItem.combos
+                          .filter(combo => combo.name1 || combo.combo_price > 0 || combo.combo_image)
+                          .map((combo, idx) => (
+                            <li key={idx}>
+                              {combo.name1 && <p>Name: {combo.name1}</p>}
+                              {combo.combo_price > 0 && <p>Price: ₹{combo.combo_price}</p>}
+                              {combo.combo_image && (
+                                <img
+                                  src={`${baseUrl}${combo.combo_image}`}
+                                  alt={combo.name1}
+                                  style={{ width: "100px", height: "100px", objectFit: "cover" }}
+                                />
+                              )}
+                            </li>
+                          ))}
+                      </ul>
+                    </div>
+                  )}
+                  {selectedItem.items && selectedItem.items.length > 0 && selectedItem.isCombo && (
+                    <div>
+                      <h6>Items in Combo:</h6>
+                      <ul>
+                        {selectedItem.items.map((comboItem, idx) => (
+                          <li key={idx}>
+                            {comboItem.data.item_name || comboItem.data.name1} - ₹{comboItem.price}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {selectedItem.variants && selectedItem.variants.length > 0 && (
+                    <div>
+                      <h6>Variants:</h6>
+                      <ul>
+                        {selectedItem.variants
+                          .filter(variant => variant.type_of_variants || variant.variant_image)
+                          .map((variant, idx) => (
+                            <li key={idx}>
+                              {variant.type_of_variants && <p>Type: {variant.type_of_variants}</p>}
+                              {variant.variant_image && (
+                                <img
+                                  src={`${baseUrl}${variant.variant_image}`}
+                                  alt={variant.type_of_variants}
+                                  style={{ width: "100px", height: "100px", objectFit: "cover" }}
+                                />
+                              )}
+                            </li>
+                          ))}
+                      </ul>
+                    </div>
+                  )}
+                  {selectedItem.custom_fields && selectedItem.custom_fields.length > 0 && (
+                    <div>
+                      <h6>Custom Fields:</h6>
+                      <ul>
+                        {selectedItem.custom_fields.map((field, idx) => (
+                          <li key={idx}>
+                            <p>
+                              {field.name}:{" "}
+                              {field.type === "image" ? (
+                                <img
+                                  src={field.value ? `${baseUrl}/api/images/${field.value}` : "https://via.placeholder.com/100x100?text=No+Image+Available"}
+                                  alt={field.name}
+                                  style={{ width: "100px", height: "100px", objectFit: "cover" }}
+                                />
+                              ) : field.type === "checkbox" ? (
+                                field.value ? "Yes" : "No"
+                              ) : (
+                                field.value
+                              )}
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
-              )}
-              {selectedItem.combos && selectedItem.combos.length > 0 && (
-                <div>
-                  <h6>Combos:</h6>
-                  <ul>
-                    {selectedItem.combos
-                      .filter(combo => combo.name1 || combo.combo_price > 0 || combo.combo_image)
-                      .map((combo, idx) => (
-                        <li key={idx}>
-                          {combo.name1 && <p>Name: {combo.name1}</p>}
-                          {combo.combo_price > 0 && <p>Price: ₹{combo.combo_price}</p>}
-                          {combo.combo_image && (
-                            <img
-                              src={`${baseUrl}${combo.combo_image}`}
-                              alt={combo.name1}
-                              style={{ width: "100px", height: "100px", objectFit: "cover" }}
-                            />
-                          )}
-                        </li>
-                      ))}
-                  </ul>
-                </div>
-              )}
-              {selectedItem.items && selectedItem.items.length > 0 && selectedItem.isCombo && (
-                <div>
-                  <h6>Items in Combo:</h6>
-                  <ul>
-                    {selectedItem.items.map((comboItem, idx) => (
-                      <li key={idx}>
-                        {comboItem.data.item_name || comboItem.data.name1} - ₹{comboItem.price}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {selectedItem.variants && selectedItem.variants.length > 0 && (
-                <div>
-                  <h6>Variants:</h6>
-                  <ul>
-                    {selectedItem.variants
-                      .filter(variant => variant.type_of_variants || variant.variant_image)
-                      .map((variant, idx) => (
-                        <li key={idx}>
-                          {variant.type_of_variants && <p>Type: {variant.type_of_variants}</p>}
-                          {variant.variant_image && (
-                            <img
-                              src={`${baseUrl}${variant.variant_image}`}
-                              alt={variant.type_of_variants}
-                              style={{ width: "100px", height: "100px", objectFit: "cover" }}
-                            />
-                          )}
-                        </li>
-                      ))}
-                  </ul>
-                </div>
-              )}
-              {selectedItem.custom_fields && selectedItem.custom_fields.length > 0 && (
-                <div>
-                  <h6>Custom Fields:</h6>
-                  <ul>
-                    {selectedItem.custom_fields.map((field, idx) => (
-                      <li key={idx}>
-                        <p>
-                          {field.name}:{" "}
-                          {field.type === "image" ? (
-                            <img
-                              src={field.value ? `${baseUrl}/api/images/${field.value}` : "https://via.placeholder.com/100x100?text=No+Image+Available"}
-                              alt={field.name}
-                              style={{ width: "100px", height: "100px", objectFit: "cover" }}
-                            />
-                          ) : field.type === "checkbox" ? (
-                            field.value ? "Yes" : "No"
-                          ) : (
-                            field.value
-                          )}
-                        </p>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              </div>
             </div>
           </Modal.Body>
           <Modal.Footer>
@@ -1131,6 +1187,7 @@ const ItemListPage = () => {
           </Modal.Footer>
         </Modal>
       )}
+      {/* Nutrition Modal */}
       {selectedItem && (
         <Modal show={showNutritionModal} onHide={handleCloseNutritionModal}>
           <Modal.Header closeButton>
@@ -1169,6 +1226,7 @@ const ItemListPage = () => {
           </Modal.Footer>
         </Modal>
       )}
+      {/* Offer Modal */}
       {showOfferModal && (
         <Modal show={showOfferModal} onHide={handleCloseOfferModal}>
           <Modal.Header closeButton>
