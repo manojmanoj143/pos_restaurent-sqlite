@@ -1,4 +1,4 @@
-// FrontPage.jsx - Full detailed and completed (updated to include posOpeningEntry in sales payload)
+// FrontPage.jsx - Full detailed and completed (updated to include currency symbol display from settings)
 import React, { useEffect, useState, useRef } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { useSelector } from "react-redux"
@@ -97,6 +97,7 @@ function FrontPage() {
   const [filteredCustomers, setFilteredCustomers] = useState([])
   const [showCustomerSection, setShowCustomerSection] = useState(false)
   const [baseUrl, setBaseUrl] = useState(""); // Dynamic base URL for client/server mode
+  const [currency, setCurrency] = useState("INR"); // NEW: Currency from settings, default INR
   const [deliveryAddress, setDeliveryAddress] = useState({
     building_name: "",
     flat_villa_no: "",
@@ -169,6 +170,24 @@ function FrontPage() {
     const typePrefix = orderType === "Dine In" ? "DIN" : orderType === "Takeaway" ? "TAK" : "DEL";
     return `${typePrefix}-${timestamp}`;
   };
+  // UPDATED: Helper function to format price with currency symbol (e.g., "₹200.00" for INR)
+  // Maps currency codes to symbols; defaults to INR symbol if no currency or invalid
+  const getCurrencySymbol = (currCode) => {
+    const symbols = {
+      'INR': '₹',
+      'USD': '$',
+      'EUR': '€',
+      'GBP': '£',
+      'AED': 'د.إ',
+      // Add more as needed
+    };
+    return symbols[currCode?.toUpperCase()] || '₹'; // Default to ₹ (INR) if not found
+  };
+  const formatPrice = (price) => {
+    const symbol = getCurrencySymbol(currency); // Get symbol based on current currency
+    if (isNaN(price) || price === 0) return `${symbol}0.00`;
+    return `${symbol}${price.toFixed(2)}`;
+  };
   const handleThemeChange = (theme) => {
     setCurrentTheme(theme)
     setShowThemeSelector(false)
@@ -230,6 +249,22 @@ function FrontPage() {
     };
     fetchConfig();
   }, []);
+  // UPDATED: Fetch currency from settings (default INR with symbol handling)
+  useEffect(() => {
+    const fetchCurrency = async () => {
+      try {
+        const apiPath = baseUrl ? `${baseUrl}/api/settings` : '/api/settings';
+        const response = await axios.get(apiPath);
+        const { currency: fetchedCurrency = "INR" } = response.data;
+        setCurrency(fetchedCurrency.toUpperCase()); // Ensure uppercase like INR, AED
+        console.log("Fetched currency:", fetchedCurrency); // Debug
+      } catch (error) {
+        console.error("Failed to fetch currency settings:", error);
+        setCurrency("INR"); // Fallback to INR
+      }
+    };
+    fetchCurrency();
+  }, [baseUrl]);
   // Handle clicks outside customer section
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -1894,7 +1929,6 @@ function FrontPage() {
     color: "#ff4500",
     fontWeight: "bold",
   };
-  
   return (
     <div className="frontpage-container">
       <div className={`frontpage-sidebar ${isSidebarOpen ? "open" : ""}`}>
@@ -2126,15 +2160,15 @@ function FrontPage() {
                         </li>
                       ))}
                     </ul>
-                    {/* Bottom center: Total price with strikeout if offer */}
+                    {/* Bottom center: Total price with strikeout if offer - UPDATED: Use formatPrice */}
                     <p style={totalPriceStyle}>
                       Total Price: {hasActiveOffer(item) ? (
                         <>
-                          <span style={{ ...strikethroughStyle, color: "#aaa", fontSize: "16px" }}>₹{item.basePrice}</span>
-                          <span style={{ color: "#fdd835", fontSize: "18px" }}>₹{item.offer_price}</span>
+                          <span style={{ ...strikethroughStyle, color: "#aaa", fontSize: "16px" }}>{formatPrice(item.basePrice)}</span>
+                          <span style={{ color: "#fdd835", fontSize: "18px" }}>{formatPrice(item.offer_price)}</span>
                         </>
                       ) : (
-                        <span style={{ color: "#ffffff", fontSize: "18px" }}>₹{item.basePrice}</span>
+                        <span style={{ color: "#ffffff", fontSize: "18px" }}>{formatPrice(item.basePrice)}</span>
                       )}
                     </p>
                     {/* Limited offer center if active */}
@@ -2161,7 +2195,7 @@ function FrontPage() {
                   <div className="frontpage-menu-card-content">
                     <h5 className="frontpage-menu-card-name">{item.name}</h5>
                     <p className="frontpage-menu-card-price">
-                      ₹{(hasActiveOffer(item) ? item.offer_price : item.basePrice).toFixed(2)}
+                      {formatPrice(hasActiveOffer(item) ? item.offer_price : item.basePrice)} {/* UPDATED: Use formatPrice */}
                     </p>
                     {hasActiveOffer(item) && <span className="frontpage-offer-badge">Offer</span>}
                   </div>
@@ -2466,14 +2500,14 @@ function FrontPage() {
                       <td>
                         {item.isCombo && item.originalBasePrice ? (
                           <>
-                            <span className="strikethroughStyle">₹{(item.originalBasePrice * item.quantity).toFixed(2)}</span> ₹{(item.basePrice * item.quantity).toFixed(2)}
+                            <span className="strikethroughStyle">{formatPrice(item.originalBasePrice * item.quantity)}</span> {formatPrice(item.basePrice * item.quantity)}
                           </>
                         ) : item.originalBasePrice ? (
                           <>
-                            <span className="strikethroughStyle">₹{getOriginalMainItemTotal(item).toFixed(2)}</span> ₹{getMainItemTotal(item).toFixed(2)}
+                            <span className="strikethroughStyle">{formatPrice(getOriginalMainItemTotal(item))}</span> {formatPrice(getMainItemTotal(item))}
                           </>
                         ) : (
-                          `₹${getMainItemTotal(item).toFixed(2)}`
+                          formatPrice(getMainItemTotal(item))
                         )}
                       </td>
                       {showKitchenColumn && <td>{item.kitchen || "Main Kitchen"}</td>}
@@ -2498,7 +2532,7 @@ function FrontPage() {
                           </div>
                         </td>
                         <td>{item.quantity}</td>
-                        <td>₹{((comboItem.price || 0) * item.quantity).toFixed(2)}</td>
+                        <td>{formatPrice((comboItem.price || 0) * item.quantity)}</td> {/* UPDATED: Use formatPrice */}
                         {showKitchenColumn && <td>{comboItem.kitchen || "Main Kitchen"}</td>}
                         <td></td>
                       </tr>
@@ -2518,7 +2552,7 @@ function FrontPage() {
                             min="1"
                           />
                         </td>
-                        <td>₹{((item.icePrice || 0) * item.quantity).toFixed(2)}</td>
+                        <td>{formatPrice((item.icePrice || 0) * item.quantity)}</td> {/* UPDATED: Use formatPrice */}
                         {showKitchenColumn && <td></td>}
                         <td>
                           <button
@@ -2545,7 +2579,7 @@ function FrontPage() {
                             min="1"
                           />
                         </td>
-                        <td>₹{((item.spicyPrice || 0) * item.quantity).toFixed(2)}</td>
+                        <td>{formatPrice((item.spicyPrice || 0) * item.quantity)}</td> {/* UPDATED: Use formatPrice */}
                         {showKitchenColumn && <td></td>}
                         <td>
                           <button
@@ -2577,7 +2611,7 @@ function FrontPage() {
                               min="1"
                             />
                           </td>
-                          <td>₹{((variant.price || 0) * (item.customVariantsQuantities?.[variantName] || 1)).toFixed(2)}</td>
+                          <td>{formatPrice((variant.price || 0) * (item.customVariantsQuantities?.[variantName] || 1))}</td> {/* UPDATED: Use formatPrice */}
                           {showKitchenColumn && <td></td>}
                           <td>
                             <button
@@ -2618,7 +2652,7 @@ function FrontPage() {
                                     min="1"
                                   />
                                 </td>
-                                <td>₹{((item.addonPrices ? item.addonPrices[addonName] : 0) * qty).toFixed(2)}</td>
+                                <td>{formatPrice((item.addonPrices ? item.addonPrices[addonName] : 0) * qty)}</td> {/* UPDATED: Use formatPrice */}
                                 {showKitchenColumn && (
                                   <td>{item.addonVariants ? item.addonVariants[addonName]?.kitchen || "Main Kitchen" : "Main Kitchen"}</td>
                                 )}
@@ -2648,7 +2682,7 @@ function FrontPage() {
                                       min="1"
                                     />
                                   </td>
-                                  <td>₹{((item.addonIcePrices ? item.addonIcePrices[addonName] : 0) * qty).toFixed(2)}</td>
+                                  <td>{formatPrice((item.addonIcePrices ? item.addonIcePrices[addonName] : 0) * qty)}</td> {/* UPDATED: Use formatPrice */}
                                   {showKitchenColumn && <td></td>}
                                   <td>
                                     <button
@@ -2687,7 +2721,7 @@ function FrontPage() {
                                       min="1"
                                     />
                                   </td>
-                                  <td>₹{((item.addonSpicyPrices ? item.addonSpicyPrices[addonName] : 0) * qty).toFixed(2)}</td>
+                                  <td>{formatPrice((item.addonSpicyPrices ? item.addonSpicyPrices[addonName] : 0) * qty)}</td> {/* UPDATED: Use formatPrice */}
                                   {showKitchenColumn && <td></td>}
                                   <td>
                                     <button
@@ -2732,7 +2766,7 @@ function FrontPage() {
                                         min="1"
                                       />
                                     </td>
-                                    <td>₹0.00</td>
+                                    <td>{formatPrice(0)}</td> {/* UPDATED: Use formatPrice */}
                                     {showKitchenColumn && <td></td>}
                                     <td>
                                       <button
@@ -2774,7 +2808,7 @@ function FrontPage() {
                                           min="1"
                                         />
                                       </td>
-                                      <td>₹{((variant.price || 0) * qty).toFixed(2)}</td>
+                                      <td>{formatPrice((variant.price || 0) * qty)}</td> {/* UPDATED: Use formatPrice */}
                                       {showKitchenColumn && <td></td>}
                                       <td>
                                         <button
@@ -2826,7 +2860,7 @@ function FrontPage() {
                                     min="1"
                                   />
                                 </td>
-                                <td>₹{((item.comboPrices ? item.comboPrices[comboName] : 0) * qty).toFixed(2)}</td>
+                                <td>{formatPrice((item.comboPrices ? item.comboPrices[comboName] : 0) * qty)}</td> {/* UPDATED: Use formatPrice */}
                                 {showKitchenColumn && (
                                   <td>{item.comboVariants ? item.comboVariants[comboName]?.kitchen || "Main Kitchen" : "Main Kitchen"}</td>
                                 )}
@@ -2856,7 +2890,7 @@ function FrontPage() {
                                       min="1"
                                     />
                                   </td>
-                                  <td>₹{((item.comboIcePrices ? item.comboIcePrices[comboName] : 0) * qty).toFixed(2)}</td>
+                                  <td>{formatPrice((item.comboIcePrices ? item.comboIcePrices[comboName] : 0) * qty)}</td> {/* UPDATED: Use formatPrice */}
                                   {showKitchenColumn && <td></td>}
                                   <td>
                                     <button
@@ -2895,7 +2929,7 @@ function FrontPage() {
                                       min="1"
                                     />
                                   </td>
-                                  <td>₹{((item.comboSpicyPrices ? item.comboSpicyPrices[comboName] : 0) * qty).toFixed(2)}</td>
+                                  <td>{formatPrice((item.comboSpicyPrices ? item.comboSpicyPrices[comboName] : 0) * qty)}</td> {/* UPDATED: Use formatPrice */}
                                   {showKitchenColumn && <td></td>}
                                   <td>
                                     <button
@@ -2940,7 +2974,7 @@ function FrontPage() {
                                         min="1"
                                       />
                                     </td>
-                                    <td>₹0.00</td>
+                                    <td>{formatPrice(0)}</td> {/* UPDATED: Use formatPrice */}
                                     {showKitchenColumn && <td></td>}
                                     <td>
                                       <button
@@ -2982,7 +3016,7 @@ function FrontPage() {
                                           min="1"
                                         />
                                       </td>
-                                      <td>₹{((variant.price || 0) * qty).toFixed(2)}</td>
+                                      <td>{formatPrice((variant.price || 0) * qty)}</td> {/* UPDATED: Use formatPrice */}
                                       {showKitchenColumn && <td></td>}
                                       <td>
                                         <button
@@ -3020,21 +3054,21 @@ function FrontPage() {
             <div className="frontpage-summary-row" key={item.id}>
               <span>{item.name}:</span>
               <span>
-                <span className="strikethroughStyle">₹{(item.originalBasePrice * item.quantity).toFixed(2)}</span> ₹{(item.basePrice * item.quantity).toFixed(2)}
+                <span className="strikethroughStyle">{formatPrice(item.originalBasePrice * item.quantity)}</span> {formatPrice(item.basePrice * item.quantity)}
               </span>
             </div>
           ))}
           <div className="frontpage-summary-row">
             <span>Subtotal:</span>
-            <span>₹{subtotal.toFixed(2)}</span>
+            <span>{formatPrice(subtotal)}</span> {/* UPDATED: Use formatPrice */}
           </div>
           <div className="frontpage-summary-row vat">
             <span>VAT ({vatRate * 100}%):</span>
-            <span>₹{vat.toFixed(2)}</span>
+            <span>{formatPrice(vat)}</span> {/* UPDATED: Use formatPrice */}
           </div>
           <div className="frontpage-summary-row total">
             <span>Grand Total:</span>
-            <span>₹{total.toFixed(2)}</span>
+            <span>{formatPrice(total)}</span> {/* UPDATED: Use formatPrice */}
           </div>
         </div>
         <div className="frontpage-action-buttons">
@@ -3305,4 +3339,5 @@ function FrontPage() {
     </div>
   )
 }
+
 export default FrontPage;

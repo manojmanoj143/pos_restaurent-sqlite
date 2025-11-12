@@ -1,3 +1,4 @@
+// Updated SystemSettings.jsx - Default currency changed to INR and country to India
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaArrowLeft } from 'react-icons/fa';
@@ -20,10 +21,10 @@ const SystemSettings = () => {
     password: '',
   });
   const [settings, setSettings] = useState({
-    country: 'Japan',
+    country: 'India', // Updated: Default to India
     language: 'English',
     timeZone: 'Asia/Dubai',
-    currency: 'JPY',
+    currency: 'INR', // Updated: Default to INR (Indian Rupee)
     dateFormat: 'yyyy/mm/dd',
     timeFormat: 'HH:mm:ss',
     numberFormat: '#,##,###.##',

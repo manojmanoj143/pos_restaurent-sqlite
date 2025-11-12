@@ -38,6 +38,11 @@ except ImportError:
     logging.warning("schedule library not found. Automatic tasks will be disabled.")
 # SQLite import
 import sqlite3
+
+COMBO_IMAGES_DIR = os.path.join(
+    os.environ.get('UPLOAD_FOLDER', 'static'),  # Fallback to 'static' in dev
+    'combo_images'
+)
 # --- Configuration Management ---
 def get_base_dir():
     """Determine the base directory, handling both development and frozen executable cases."""
@@ -4153,33 +4158,58 @@ if config.get('mode') == 'server':
             if 'file' not in request.files:
                 logger.error("No file provided for combo image upload")
                 return jsonify({"error": "No file provided"}), 400
+            
             file = request.files['file']
             if file.filename == '':
                 logger.error("No file selected for combo image upload")
                 return jsonify({"error": "No file selected"}), 400
+            
             if file:
                 filename = secure_filename(file.filename)
                 if not filename:
+                    logger.error("Invalid filename for combo image upload")
                     return jsonify({"error": "Invalid filename"}), 400
-                # Ensure directory exists
-                upload_dir = 'static/combo_images'
-                os.makedirs(upload_dir, exist_ok=True)
+                
+                # UPDATED: Use dynamic COMBO_IMAGES_DIR (writable via UPLOAD_FOLDER in EXE)
+                upload_dir = COMBO_IMAGES_DIR
+                os.makedirs(upload_dir, exist_ok=True)  # Safe create if not exists
+                
                 filepath = os.path.join(upload_dir, filename)
+                
+                # Check if file already exists, append timestamp if needed to avoid overwrite
+                if os.path.exists(filepath):
+                    name, ext = os.path.splitext(filename)
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    filename = f"{name}_{timestamp}{ext}"
+                    filepath = os.path.join(upload_dir, filename)
+                    logger.info(f"Filename collision detected, renamed to: {filename}")
+                
                 file.save(filepath)
-                logger.info(f"Combo image uploaded: {filename}")
+                logger.info(f"Combo image uploaded successfully: {filename} to {upload_dir}")
                 return jsonify({"filename": filename}), 200
-            return jsonify({"error": "Upload failed"}), 500
+            
+            return jsonify({"error": "Upload failed - no file processed"}), 500
+        
         except Exception as e:
-            logger.error(f"Error uploading combo image: {str(e)}\n{traceback.format_exc()}")
+            error_msg = f"Error uploading combo image: {str(e)}\n{traceback.format_exc()}"
+            logger.error(error_msg)
             return jsonify({"error": str(e)}), 500
-    # NEW: Serve combo images
+
+    # UPDATED: Serve combo images from dynamic directory
     @app.route('/api/combo-images/<filename>')
     def serve_combo_image(filename):
         try:
-            return send_from_directory('static/combo_images', filename)
-        except Exception as e:
-            logger.error(f"Error serving combo image {filename}: {str(e)}")
+            # UPDATED: Use dynamic COMBO_IMAGES_DIR parent for send_from_directory
+            # send_from_directory expects the directory containing the files
+            upload_dir = COMBO_IMAGES_DIR
+            return send_from_directory(upload_dir, filename)
+        except FileNotFoundError:
+            logger.warning(f"Combo image not found: {filename}")
             return "Image not found", 404
+        except Exception as e:
+            logger.error(f"Error serving combo image {filename}: {str(e)}\n{traceback.format_exc()}")
+            return "Server error", 500
+
     @app.route('/api/combo-offer', methods=['GET'])
     @db_required
     def get_combo_offers():
@@ -4187,7 +4217,7 @@ if config.get('mode') == 'server':
             # NEW: Run cleanup before fetching (in addition to scheduler)
             clean_expired_combo_offers()
             offers = combo_offers_collection.find()
-            current_time = datetime.now(timezone.utc) # FIXED: Use timezone.utc for awareness
+            current_time = datetime.now(timezone.utc)  # FIXED: Use timezone.utc for awareness
             offers_list = []
             for offer in offers:
                 if 'offer_end_time' in offer and offer['offer_end_time']:
@@ -4212,6 +4242,7 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error fetching combo offers: {str(e)}\n{traceback.format_exc()}")
             return jsonify({"error": str(e)}), 500
+
     @app.route('/api/combo-offer/<offer_id>', methods=['GET'])
     @db_required
     def get_combo_offer(offer_id):
@@ -4220,7 +4251,7 @@ if config.get('mode') == 'server':
             if not offer:
                 logger.warning(f"Combo offer not found: {offer_id}")
                 return jsonify({"error": "Combo offer not found"}), 404
-            current_time = datetime.now(timezone.utc) # FIXED: Use timezone.utc
+            current_time = datetime.now(timezone.utc)  # FIXED: Use timezone.utc
             if 'offer_end_time' in offer and offer['offer_end_time']:
                 try:
                     end_time_str = str(offer['offer_end_time'])
@@ -4242,6 +4273,7 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error fetching combo offer {offer_id}: {str(e)}\n{traceback.format_exc()}")
             return jsonify({"error": str(e)}), 500
+
     @app.route('/api/combo-offer', methods=['POST'])
     @db_required
     def create_combo_offer():
@@ -4292,13 +4324,14 @@ if config.get('mode') == 'server':
                 except (ValueError, TypeError) as e:
                     logger.error(f"Invalid offer time format: {str(e)}")
                     return jsonify({"error": f"Invalid offer time format: {str(e)}"}), 400
-            data['created_at'] = datetime.now(timezone.utc).isoformat() # FIXED: Use timezone.utc
+            data['created_at'] = datetime.now(timezone.utc).isoformat()  # FIXED: Use timezone.utc
             offer_id = combo_offers_collection.insert_one(data).inserted_id
             logger.info(f"Combo offer created with ID: {offer_id}")
             return jsonify({'message': 'Combo offer created successfully!', 'id': offer_id}), 201
         except Exception as e:
             logger.error(f"Error creating combo offer: {str(e)}\n{traceback.format_exc()}")
             return jsonify({'error': str(e)}), 500
+
     @app.route('/api/combo-offer/<offer_id>', methods=['PUT'])
     @db_required
     def update_combo_offer(offer_id):
@@ -4342,7 +4375,7 @@ if config.get('mode') == 'server':
                 except (ValueError, TypeError) as e:
                     logger.error(f"Invalid offer time format: {str(e)}")
                     return jsonify({"error": f"Invalid offer time format: {str(e)}"}), 400
-            data['modified_at'] = datetime.now(timezone.utc).isoformat() # FIXED: Use timezone.utc
+            data['modified_at'] = datetime.now(timezone.utc).isoformat()  # FIXED: Use timezone.utc
             result = combo_offers_collection.update_one({'_id': offer_id}, {'$set': data})
             if result.matched_count == 0:
                 logger.warning(f"Combo offer not found for update: {offer_id}")
@@ -4352,6 +4385,7 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error updating combo offer {offer_id}: {str(e)}\n{traceback.format_exc()}")
             return jsonify({"error": str(e)}), 500
+
     @app.route('/api/combo-offer/<offer_id>', methods=['DELETE'])
     @db_required
     def delete_combo_offer(offer_id):

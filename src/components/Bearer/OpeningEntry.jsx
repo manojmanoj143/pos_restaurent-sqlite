@@ -1,5 +1,5 @@
-// Full OpeningEntryWithNavbar.jsx - Updated: No major changes; status='Open' is set in backend.
-// Ensured localStorage 'posOpeningEntry' set after success for sales association.
+// Updated OpeningEntryWithNavbar.jsx (renamed to openingentry.jsx as requested) - Default currency changed to INR and country to India
+// Full detailed and completed code
 import React, { useContext, useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
@@ -14,6 +14,7 @@ import SaveIcon from '/menuIcons/save.svg';
 import DeliveryIcon from '/menuIcons/delivery.svg'; // Added missing import for DeliveryIcon
 // Import Bootstrap CSS
 import 'bootstrap/dist/css/bootstrap.min.css';
+
 function OpeningEntryWithNavbar() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -25,12 +26,12 @@ function OpeningEntryWithNavbar() {
   const currentUser = user || reduxUser || storedUser;
   // Date and Time state for Navbar
   const [currentTime, setCurrentTime] = useState(new Date());
-  // System settings state with defaults
+  // System settings state with defaults - Updated to India/INR
   const [settings, setSettings] = useState({
-    country: 'Japan',
+    country: 'India', // Updated: Default to India
     language: 'English',
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, // Use local timezone
-    currency: 'JPY',
+    currency: 'INR', // Updated: Default to INR (Indian Rupee)
     dateFormat: 'dd-MMM-yy', // Default to match image: 30-Oct-25
     timeFormat: 'hh:mm a', // Default to 12-hour without seconds
     numberFormat: '#,##,###.##',
@@ -139,7 +140,7 @@ function OpeningEntryWithNavbar() {
   const getCurrencyFormatter = () => {
     return new Intl.NumberFormat(settings.language || 'en-US', {
       style: 'currency',
-      currency: settings.currency || 'JPY',
+      currency: settings.currency || 'INR', // Updated fallback to INR
       minimumFractionDigits: parseInt(settings.currencyPrecision) || 4,
       maximumFractionDigits: parseInt(settings.currencyPrecision) || 4,
     });
@@ -247,7 +248,7 @@ function OpeningEntryWithNavbar() {
       company,
       user: username,
       balance_details: balanceDetails,
-      status: 'Open',  // UPDATED: Explicitly set status='Open' in payload (backend will use it)
+      status: 'Open', // UPDATED: Explicitly set status='Open' in payload (backend will use it)
       docstatus: 0,
     };
     console.log('OpeningEntry - Payload:', payload);
@@ -677,4 +678,5 @@ function OpeningEntryWithNavbar() {
     </>
   );
 }
+
 export default OpeningEntryWithNavbar;

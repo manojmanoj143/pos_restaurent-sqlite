@@ -4,7 +4,6 @@ import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import { FaArrowLeft } from "react-icons/fa";
 import { toast } from "react-toastify"; // Assuming you have react-toastify for warnings; install if not: npm i react-toastify
-
 const initialFormState = {
   description: "",
   total_price: 0,
@@ -14,7 +13,6 @@ const initialFormState = {
   items: [], // Array of selected items/addons/combos
   images: [], // Array of image filenames
 };
-
 const ComboOffer = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -29,7 +27,6 @@ const ComboOffer = () => {
   // States for images
   const [images, setImages] = useState([]); // Filenames
   const [previewUrls, setPreviewUrls] = useState([]); // URLs for preview (local or served)
-
   /* -------------------------------------------------- FETCH CONFIG FOR BASE URL -------------------------------------------------- */
   // Added fetchConfig useEffect similar to AdminPage to determine baseUrl for client/server mode
   useEffect(() => {
@@ -54,7 +51,6 @@ const ComboOffer = () => {
     };
     fetchConfig();
   }, []);
-
   /* -------------------------------------------------- FETCH ALL ITEMS -------------------------------------------------- */
   const fetchData = async (currentBaseUrl = "") => {
     setLoading(true);
@@ -70,7 +66,6 @@ const ComboOffer = () => {
       setLoading(false);
     }
   };
-
   /* -------------------------------------------------- EDIT MODE -------------------------------------------------- */
   useEffect(() => {
     if (location.state && location.state.combo) {
@@ -95,7 +90,6 @@ const ComboOffer = () => {
       }
     }
   }, [location.state, baseUrl]);
-
   // Helper to get image URL with baseUrl prefix
   const getImageUrl = (imagePath) => {
     if (!imagePath) return "https://via.placeholder.com/50";
@@ -104,7 +98,6 @@ const ComboOffer = () => {
     // For addon/combo images: same
     return `${prefix}${imagePath}`;
   };
-
   /* -------------------------------------------------- IMAGE UPLOAD HANDLER -------------------------------------------------- */
   // Handle multiple image uploads
   const handleImageUpload = async (e) => {
@@ -131,25 +124,21 @@ const ComboOffer = () => {
     // Clear input
     e.target.value = '';
   };
-
   // Remove image
   const removeImage = (index) => {
     URL.revokeObjectURL(previewUrls[index]); // Clean up local URL if any
     setImages((prev) => prev.filter((_, i) => i !== index));
     setPreviewUrls((prev) => prev.filter((_, i) => i !== index));
   };
-
   /* -------------------------------------------------- INPUT HANDLERS -------------------------------------------------- */
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
-
   const handleNumericInputChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: Number(value) || "" }));
   };
-
   /* -------------------------------------------------- SELECTION LOGIC -------------------------------------------------- */
   // UPDATED: Enhanced to show images in selected components (already doing, but ensure paths)
   const handleSelection = (type, id, index = null) => {
@@ -183,7 +172,6 @@ const ComboOffer = () => {
       total_price: prev.total_price + component.price,
     }));
   };
-
   const removeSelection = (index) => {
     const removed = selectedComponents[index];
     if (!removed || removed.price === undefined) return;
@@ -198,7 +186,6 @@ const ComboOffer = () => {
       };
     });
   };
-
   /* -------------------------------------------------- VALIDATION FOR TIMES -------------------------------------------------- */
   const validateOfferTimes = () => {
     if (formData.offer_start_time && formData.offer_end_time) {
@@ -211,7 +198,6 @@ const ComboOffer = () => {
     }
     return true;
   };
-
   /* -------------------------------------------------- SUBMIT -------------------------------------------------- */
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -246,7 +232,6 @@ const ComboOffer = () => {
       setLoading(false);
     }
   };
-
   /* -------------------------------------------------- STYLES -------------------------------------------------- */
   const pageStyle = {
     padding: "20px",
@@ -386,7 +371,6 @@ const ComboOffer = () => {
     cursor: "pointer",
     fontSize: "12px",
   };
-
   /* -------------------------------------------------- RENDER -------------------------------------------------- */
   return (
     <div style={pageStyle}>
@@ -572,5 +556,4 @@ const ComboOffer = () => {
     </div>
   );
 };
-
 export default ComboOffer;

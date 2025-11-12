@@ -1,4 +1,4 @@
-// FoodDetails.jsx - Full Updated Code
+// FoodDetails.jsx - Full Updated Code with Dynamic Currency Symbol
 import React, { useState, useEffect, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import './foodDetails.css';
@@ -7,12 +7,15 @@ const BASE_URL = 'http://127.0.0.1:8000';
 
 class ErrorBoundary extends React.Component {
   state = { hasError: false };
+
   static getDerivedStateFromError() {
     return { hasError: true };
   }
+
   componentDidCatch(error, errorInfo) {
     console.error('Error in FoodDetails:', error, errorInfo);
   }
+
   render() {
     if (this.state.hasError) {
       return <div>Something went wrong. Please try again.</div>;
@@ -27,6 +30,26 @@ ErrorBoundary.propTypes = {
 
 const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
   if (!item) return null;
+
+  // NEW: Currency Symbol State and Logic
+  const [currencySymbol, setCurrencySymbol] = useState('₹'); // Default to INR
+
+  const getCurrencySymbol = (currencyCode) => {
+    switch (currencyCode) {
+      case 'INR': return '₹';
+      case 'USD': return '$';
+      case 'EUR': return '€';
+      case 'GBP': return '£';
+      default: return currencyCode; // Fallback to code if no symbol
+    }
+  };
+
+  useEffect(() => {
+    const storedSettings = JSON.parse(localStorage.getItem('systemSettings'));
+    if (storedSettings && storedSettings.currency) {
+      setCurrencySymbol(getCurrencySymbol(storedSettings.currency));
+    }
+  }, []);
 
   const [addonQuantities, setAddonQuantities] = useState(cartItem?.addonQuantities || {});
   const [comboQuantities, setComboQuantities] = useState(cartItem?.comboQuantities || {});
@@ -1051,14 +1074,14 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
                     {hasActiveOffer() ? (
                       <span>
                         <span style={{ textDecoration: 'line-through', color: '#888' }}>
-                          ₹{(fetchedItem.price_list_rate || 0).toFixed(2)}
+                          {currencySymbol}{(fetchedItem.price_list_rate || 0).toFixed(2)}
                         </span>
                         <span style={{ color: '#ff4500', fontWeight: 'bold', marginLeft: '5px' }}>
-                          ₹{calculateOfferSizePrice(fetchedItem.offer_price, selectedVariants.size).toFixed(2)}
+                          {currencySymbol}{calculateOfferSizePrice(fetchedItem.offer_price, selectedVariants.size).toFixed(2)}
                         </span>
                       </span>
                     ) : (
-                      `₹${getCurrentItemPrice().toFixed(2)}`
+                      `${currencySymbol}${getCurrentItemPrice().toFixed(2)}`
                     )}
                   </p>
                   {hasActiveOffer() && (
@@ -1075,7 +1098,7 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
                   )}
                 </div>
                 <p className="text-center">
-                  <strong>Total Price:</strong> ₹{(totalPrice || 0).toFixed(2)}
+                  <strong>Total Price:</strong> {currencySymbol}{(totalPrice || 0).toFixed(2)}
                 </p>
                 <div className="quantity-container d-flex justify-content-center mb-3">
                   <button className="quantity-btn minus" onClick={decreaseQuantity}>
@@ -1131,19 +1154,19 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
                                     className={`variant-option ${selectedVariants.size === 'S' ? 'selected' : ''}`}
                                     onClick={() => handleVariantChange('size', 'S')}
                                   >
-                                    <h6>S (₹{fetchedItem.variants.size.small_price || 0})</h6>
+                                    <h6>S ({currencySymbol}{fetchedItem.variants.size.small_price || 0})</h6>
                                   </div>
                                   <div
                                     className={`variant-option ${selectedVariants.size === 'M' ? 'selected' : ''}`}
                                     onClick={() => handleVariantChange('size', 'M')}
                                   >
-                                    <h6>M (₹{fetchedItem.variants.size.medium_price || 0})</h6>
+                                    <h6>M ({currencySymbol}{fetchedItem.variants.size.medium_price || 0})</h6>
                                   </div>
                                   <div
                                     className={`variant-option ${selectedVariants.size === 'L' ? 'selected' : ''}`}
                                     onClick={() => handleVariantChange('size', 'L')}
                                   >
-                                    <h6>L (₹{fetchedItem.variants.size.large_price || 0})</h6>
+                                    <h6>L ({currencySymbol}{fetchedItem.variants.size.large_price || 0})</h6>
                                   </div>
                                 </div>
                               </div>
@@ -1162,7 +1185,7 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
                                     className={`variant-option ${selectedVariants.cold === 'with_ice' ? 'selected' : ''}`}
                                     onClick={() => handleVariantChange('cold', 'with_ice')}
                                   >
-                                    <h6>With Ice (+₹{fetchedItem.variants.cold.ice_price || 0})</h6>
+                                    <h6>With Ice (+{currencySymbol}{fetchedItem.variants.cold.ice_price || 0})</h6>
                                   </div>
                                 </div>
                               </div>
@@ -1175,13 +1198,13 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
                                     className={`variant-option ${!selectedVariants.spicy ? 'selected' : ''}`}
                                     onClick={() => handleVariantChange('spicy', false)}
                                   >
-                                    <h6>Non-Spicy (₹{fetchedItem.variants.spicy.non_spicy_price || 0})</h6>
+                                    <h6>Non-Spicy ({currencySymbol}{fetchedItem.variants.spicy.non_spicy_price || 0})</h6>
                                   </div>
                                   <div
                                     className={`variant-option ${selectedVariants.spicy ? 'selected' : ''}`}
                                     onClick={() => handleVariantChange('spicy', true)}
                                   >
-                                    <h6>Spicy (+₹{fetchedItem.variants.spicy.spicy_price || 30})</h6>
+                                    <h6>Spicy (+{currencySymbol}{fetchedItem.variants.spicy.spicy_price || 30})</h6>
                                   </div>
                                 </div>
                               </div>
@@ -1221,7 +1244,7 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
                                         className={`variant-option ${selectedCustomVariants[sub.name] ? 'selected' : ''}`}
                                         onClick={() => handleCustomVariantChange(sub.name)}
                                       >
-                                        <h6>{sub.name} (+₹{sub.price || 0})</h6>
+                                        <h6>{sub.name} (+{currencySymbol}{sub.price || 0})</h6>
                                         {sub.image && (
                                           <img
                                             src={sub.image}
@@ -1269,7 +1292,7 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
                                   onError={e => (e.target.src = 'https://placehold.co/100x100/EFEFEF/AAAAAA?text=No+Image')}
                                 />
                                 <span>{addon.name1}</span>
-                                <span>₹{(currentPrice || 0).toFixed(2)}</span>
+                                <span>{currencySymbol}{(currentPrice || 0).toFixed(2)}</span>
                                 {isSelected && (
                                   <div className="addon-controls">
                                     {(addon.size?.enabled || addon.cold?.enabled || addon.spicy?.enabled || addon.sugar?.enabled) && (
@@ -1330,19 +1353,19 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
                                             className={`variant-option ${selectedAddonVariants[addon.name1]?.size === 'S' ? 'selected' : ''}`}
                                             onClick={() => handleAddonVariantChange(addon.name1, 'size', 'S')}
                                           >
-                                            <h6>S (₹{addon.size.small_price || 0})</h6>
+                                            <h6>S ({currencySymbol}{addon.size.small_price || 0})</h6>
                                           </div>
                                           <div
                                             className={`variant-option ${selectedAddonVariants[addon.name1]?.size === 'M' ? 'selected' : ''}`}
                                             onClick={() => handleAddonVariantChange(addon.name1, 'size', 'M')}
                                           >
-                                            <h6>M (₹{addon.size.medium_price || 0})</h6>
+                                            <h6>M ({currencySymbol}{addon.size.medium_price || 0})</h6>
                                           </div>
                                           <div
                                             className={`variant-option ${selectedAddonVariants[addon.name1]?.size === 'L' ? 'selected' : ''}`}
                                             onClick={() => handleAddonVariantChange(addon.name1, 'size', 'L')}
                                           >
-                                            <h6>L (₹{addon.size.large_price || 0})</h6>
+                                            <h6>L ({currencySymbol}{addon.size.large_price || 0})</h6>
                                           </div>
                                         </div>
                                       </div>
@@ -1361,7 +1384,7 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
                                             className={`variant-option ${selectedAddonVariants[addon.name1]?.cold === 'with_ice' ? 'selected' : ''}`}
                                             onClick={() => handleAddonVariantChange(addon.name1, 'cold', 'with_ice')}
                                           >
-                                            <h6>With Ice (+₹{addon.cold.ice_price || 0})</h6>
+                                            <h6>With Ice (+{currencySymbol}{addon.cold.ice_price || 0})</h6>
                                           </div>
                                         </div>
                                       </div>
@@ -1374,13 +1397,13 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
                                             className={`variant-option ${!selectedAddonVariants[addon.name1]?.spicy ? 'selected' : ''}`}
                                             onClick={() => handleAddonVariantChange(addon.name1, 'spicy', false)}
                                           >
-                                            <h6>Non-Spicy (₹{addon.size?.enabled ? addon.size.medium_price : addon.addon_price || 0})</h6>
+                                            <h6>Non-Spicy ({currencySymbol}{addon.size?.enabled ? addon.size.medium_price : addon.addon_price || 0})</h6>
                                           </div>
                                           <div
                                             className={`variant-option ${selectedAddonVariants[addon.name1]?.spicy ? 'selected' : ''}`}
                                             onClick={() => handleAddonVariantChange(addon.name1, 'spicy', true)}
                                           >
-                                            <h6>Spicy (+₹{addon.spicy.spicy_price || 30})</h6>
+                                            <h6>Spicy (+{currencySymbol}{addon.spicy.spicy_price || 30})</h6>
                                           </div>
                                         </div>
                                       </div>
@@ -1423,7 +1446,7 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
                                                 className={`variant-option ${selectedAddonCustomVariants[addon.name1]?.[sub.name] ? 'selected' : ''}`}
                                                 onClick={() => handleAddonCustomVariantChange(addon.name1, sub.name)}
                                               >
-                                                <h6>{sub.name} (+₹{sub.price || 0})</h6>
+                                                <h6>{sub.name} (+{currencySymbol}{sub.price || 0})</h6>
                                                 {sub.image && (
                                                   <img
                                                     src={sub.image}
@@ -1489,7 +1512,7 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
                                       onError={e => (e.target.src = 'https://placehold.co/100x100/EFEFEF/AAAAAA?text=No+Image')}
                                     />
                                     <span>{combo.name1}</span>
-                                    <span>₹{(currentPrice || 0).toFixed(2)}</span>
+                                    <span>{currencySymbol}{(currentPrice || 0).toFixed(2)}</span>
                                     {isSelected && (
                                       <div className="combo-controls">
                                         {(combo.size?.enabled || combo.cold?.enabled || combo.spicy?.enabled || combo.sugar?.enabled) && (
@@ -1550,19 +1573,19 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
                                                 className={`variant-option ${selectedComboVariants[combo.name1]?.size === 'S' ? 'selected' : ''}`}
                                                 onClick={() => handleComboVariantChange(combo.name1, 'size', 'S')}
                                               >
-                                                <h6>S (₹{combo.size.small_price || 0})</h6>
+                                                <h6>S ({currencySymbol}{combo.size.small_price || 0})</h6>
                                               </div>
                                               <div
                                                 className={`variant-option ${selectedComboVariants[combo.name1]?.size === 'M' ? 'selected' : ''}`}
                                                 onClick={() => handleComboVariantChange(combo.name1, 'size', 'M')}
                                               >
-                                                <h6>M (₹{combo.size.medium_price || 0})</h6>
+                                                <h6>M ({currencySymbol}{combo.size.medium_price || 0})</h6>
                                               </div>
                                               <div
                                                 className={`variant-option ${selectedComboVariants[combo.name1]?.size === 'L' ? 'selected' : ''}`}
                                                 onClick={() => handleComboVariantChange(combo.name1, 'size', 'L')}
                                               >
-                                                <h6>L (₹{combo.size.large_price || 0})</h6>
+                                                <h6>L ({currencySymbol}{combo.size.large_price || 0})</h6>
                                               </div>
                                             </div>
                                           </div>
@@ -1581,7 +1604,7 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
                                                 className={`variant-option ${selectedComboVariants[combo.name1]?.cold === 'with_ice' ? 'selected' : ''}`}
                                                 onClick={() => handleComboVariantChange(combo.name1, 'cold', 'with_ice')}
                                               >
-                                                <h6>With Ice (+₹{combo.cold.ice_price || 0})</h6>
+                                                <h6>With Ice (+{currencySymbol}{combo.cold.ice_price || 0})</h6>
                                               </div>
                                             </div>
                                           </div>
@@ -1594,13 +1617,13 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
                                                 className={`variant-option ${!selectedComboVariants[combo.name1]?.spicy ? 'selected' : ''}`}
                                                 onClick={() => handleComboVariantChange(combo.name1, 'spicy', false)}
                                               >
-                                                <h6>Non-Spicy (₹{combo.size?.enabled ? combo.size.medium_price : combo.combo_price || 0})</h6>
+                                                <h6>Non-Spicy ({currencySymbol}{combo.size?.enabled ? combo.size.medium_price : combo.combo_price || 0})</h6>
                                               </div>
                                               <div
                                                 className={`variant-option ${selectedComboVariants[combo.name1]?.spicy ? 'selected' : ''}`}
                                                 onClick={() => handleComboVariantChange(combo.name1, 'spicy', true)}
                                               >
-                                                <h6>Spicy (+₹{combo.spicy.spicy_price || 30})</h6>
+                                                <h6>Spicy (+{currencySymbol}{combo.spicy.spicy_price || 30})</h6>
                                               </div>
                                             </div>
                                           </div>
@@ -1643,7 +1666,7 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
                                                     className={`variant-option ${selectedComboCustomVariants[combo.name1]?.[sub.name] ? 'selected' : ''}`}
                                                     onClick={() => handleComboCustomVariantChange(combo.name1, sub.name)}
                                                   >
-                                                    <h6>{sub.name} (+₹{sub.price || 0})</h6>
+                                                    <h6>{sub.name} (+{currencySymbol}{sub.price || 0})</h6>
                                                     {sub.image && (
                                                       <img
                                                         src={sub.image}
@@ -1694,7 +1717,6 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
             </div>
           </div>
         </div>
-
         {/* NEW: Kitchen Note Modal */}
         {showKitchenNoteModal && (
           <div className="modal fade show d-block sec-modal" style={{ zIndex: 1060 }}>
@@ -1730,7 +1752,6 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
             </div>
           </div>
         )}
-
         {showModal && (
           <div className="modal-side-content" style={{ zIndex: 1060 }}>
             <div className="modal-side-header">

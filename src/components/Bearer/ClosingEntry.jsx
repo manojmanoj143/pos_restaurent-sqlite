@@ -1,6 +1,5 @@
-// Full ClosingEntryWithNavbar.jsx - Updated: No major changes; fetches only open entries now via backend filter.
-// After submit, clears localStorage and navigates to home.
-// Ensured posting_date uses inv['date'] from backend (yyyy-mm-dd format).
+// Updated ClosingEntryWithNavbar.jsx (renamed to closingentry.jsx as requested) - Default currency changed to INR and country to India
+// Full detailed and completed code
 import React, { useContext, useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
@@ -15,6 +14,7 @@ import SaveIcon from '/menuIcons/save.svg';
 import DeliveryIcon from '/menuIcons/delivery.svg'; // Added missing import; adjust path if the file name is different
 // Import Bootstrap CSS
 import 'bootstrap/dist/css/bootstrap.min.css';
+
 function ClosingEntryWithNavbar() {
   const { setCartItems } = useContext(UserContext);
   const navigate = useNavigate();
@@ -25,12 +25,12 @@ function ClosingEntryWithNavbar() {
   const currentUser = userData?.user || storedUser;
   // Date and Time state for Navbar
   const [currentTime, setCurrentTime] = useState(new Date());
-  // System settings state with defaults (same as OpeningEntry)
+  // System settings state with defaults (same as OpeningEntry) - Updated to India/INR
   const [settings, setSettings] = useState({
-    country: 'Japan',
+    country: 'India', // Updated: Default to India
     language: 'English',
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, // Use local timezone
-    currency: 'JPY',
+    currency: 'INR', // Updated: Default to INR (Indian Rupee)
     dateFormat: 'yyyy-mm-dd', // FIXED: Default to yyyy-mm-dd (2025-11-11) as per user request
     timeFormat: 'hh:mm a', // Default to 12-hour without seconds
     numberFormat: '#,##,###.##',
@@ -133,11 +133,11 @@ function ClosingEntryWithNavbar() {
   };
   const formattedDate = getFormattedDate(currentTime, settings.dateFormat);
   const formattedTime = getFormattedTime(currentTime, settings.timeFormat);
-  // Currency formatter for totals - Copied from OpeningEntry
+  // Currency formatter for totals - Copied from OpeningEntry, updated fallback
   const getCurrencyFormatter = () => {
     return new Intl.NumberFormat(settings.language || 'en-US', {
       style: 'currency',
-      currency: settings.currency || 'JPY',
+      currency: settings.currency || 'INR', // Updated fallback to INR
       minimumFractionDigits: parseInt(settings.currencyPrecision) || 4,
       maximumFractionDigits: parseInt(settings.currencyPrecision) || 4,
     });
@@ -970,4 +970,5 @@ function ClosingEntryWithNavbar() {
     </>
   );
 }
+
 export default ClosingEntryWithNavbar;
