@@ -4,11 +4,9 @@ import { useNavigate } from "react-router-dom";
 
 class ErrorBoundary extends React.Component {
   state = { hasError: false, error: null };
-
   static getDerivedStateFromError(error) {
     return { hasError: true, error };
   }
-
   render() {
     if (this.state.hasError) {
       return (
@@ -98,7 +96,7 @@ function Kitchen() {
     fetchConfig();
   }, []);
 
-  // Fetch active orders
+  // Fetch active orders - FIXED: Reduced interval to 5 seconds for near real-time updates across systems
   React.useEffect(() => {
     const fetchOrders = async () => {
       try {
@@ -139,7 +137,8 @@ function Kitchen() {
       }
     };
     fetchOrders();
-    const interval = setInterval(fetchOrders, 60000); // Increased to 60 seconds
+    // FIXED: Changed from 60000ms (60s) to 5000ms (5s) for faster polling - updates show almost immediately across systems
+    const interval = setInterval(fetchOrders, 5000);
     return () => clearInterval(interval);
   }, [baseUrl]);
 
@@ -693,6 +692,11 @@ function Kitchen() {
     );
   };
 
+  // NEW: Manual refresh handler for on-demand fetch
+  const handleRefresh = () => {
+    fetchOrders(); // Reuse the existing fetch function
+  };
+
   // Style helpers
   const getRowStyle = (status) => {
     switch (status || "Pending") {
@@ -841,6 +845,21 @@ function Kitchen() {
             onClick={() => navigate(-1)}
           >
             Back
+          </button>
+          {/* NEW: Refresh button for manual fetch */}
+          <button
+            style={{
+              padding: "6px 12px",
+              backgroundColor: "#007bff",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+              marginRight: "10px",
+            }}
+            onClick={handleRefresh}
+          >
+            Refresh Orders
           </button>
           <h3 style={{ textAlign: "center", flex: 1, margin: 0 }}>
             Kitchen Services

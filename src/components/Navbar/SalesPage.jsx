@@ -1,6 +1,6 @@
-// SalesPage.jsx (Updated: Added green color for Delivered status in table and modal grand total. Full code preserved.)
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import * as XLSX from 'xlsx'; // NEW: Import XLSX for browser compatibility
 import {
   Container,
   Table,
@@ -17,7 +17,7 @@ import "./salespage.css";
 import { useNavigate } from "react-router-dom";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
-import { FaPrint, FaEnvelope, FaArrowLeft } from "react-icons/fa";
+import { FaPrint, FaEnvelope, FaArrowLeft, FaFilePdf, FaFileExcel } from "react-icons/fa";
 // Check if running in Electron environment
 const isElectron = window && window.process && window.process.type;
 const ipcRenderer = isElectron ? window.require("electron").ipcRenderer : null;
@@ -49,9 +49,11 @@ const SalesPage = () => {
   const [filterItem, setFilterItem] = useState("");
   const [filterCategory, setFilterCategory] = useState("");
   const [filterUser, setFilterUser] = useState("");
+  const [filterDeliveryPerson, setFilterDeliveryPerson] = useState(""); // NEW: Delivery Person filter state
   const [itemOptions, setItemOptions] = useState([]);
   const [categoryOptions, setCategoryOptions] = useState([]);
   const [userList, setUserList] = useState([]);
+  const [deliveryPersonOptions, setDeliveryPersonOptions] = useState([]); // NEW: Unique delivery persons from sales data
   const [itemSearch, setItemSearch] = useState("");
   const [showItemDropdown, setShowItemDropdown] = useState(false);
   const [filterOrderType, setFilterOrderType] = useState("");
@@ -84,10 +86,37 @@ const SalesPage = () => {
     { key: "phoneNumber", label: "Phone Number", align: "center" },
     { key: "orderType", label: "Order Type", align: "center" },
     { key: "total", label: "Total", align: "right" },
-    { key: "vat", label: "VAT Amount", align: "right" },
+    { key: "vat_amount", label: "VAT Amount", align: "right" },
     { key: "grand_total", label: "Grand Total", align: "right" },
     { key: "actions", label: "Actions", align: "center" },
   ]);
+  // NEW: Column management states
+  const [showColumnModal, setShowColumnModal] = useState(false);
+  const [selectedFieldToAdd, setSelectedFieldToAdd] = useState('');
+  const [selectedPosition, setSelectedPosition] = useState(0);
+  // NEW: All possible columns (excluding actions)
+  const possibleColumns = [
+    { key: "invoice_no", label: "Invoice No", align: "left" },
+    { key: "customer", label: "Customer", align: "left" },
+    { key: "date", label: "Date", align: "center" },
+    { key: "time", label: "Time", align: "center" },
+    { key: "phoneNumber", label: "Phone Number", align: "center" },
+    { key: "whatsappNumber", label: "WhatsApp Number", align: "center" },
+    { key: "email", label: "Email", align: "left" },
+    { key: "tableNumber", label: "Table Number", align: "center" },
+    { key: "chairsBooked", label: "Chairs Booked", align: "center" },
+    { key: "deliveryAddress", label: "Delivery Address", align: "left" },
+    { key: "orderType", label: "Order Type", align: "center" },
+    { key: "status", label: "Status", align: "center" },
+    { key: "orderNo", label: "Order No", align: "center" },
+    { key: "deliveryPersonName", label: "Delivery Person", align: "left" },
+    { key: "userId", label: "User ID", align: "left" },
+    { key: "payments_mode", label: "Payment Mode", align: "center" },
+    { key: "due_date", label: "Due Date", align: "center" },
+    { key: "total", label: "Total", align: "right" },
+    { key: "vat_amount", label: "VAT Amount", align: "right" },
+    { key: "grand_total", label: "Grand Total", align: "right" },
+  ];
   // NEW: Update current time every second (like in cash.jsx)
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -124,6 +153,11 @@ const SalesPage = () => {
     });
     const uniqueOffers = [...new Set(offers)].sort(); // Sort alphabetically
     setOfferOptions(uniqueOffers);
+  };
+  // NEW: Extract unique delivery persons from sales data after fetching
+  const extractDeliveryPersonOptions = (sales) => {
+    const persons = [...new Set(sales.map((sale) => sale.deliveryPersonName).filter(Boolean))].sort();
+    setDeliveryPersonOptions(persons);
   };
   // NEW: This useEffect now depends on `baseUrl`
   // It will run once `baseUrl` is set (from null to a string)
@@ -290,6 +324,7 @@ const SalesPage = () => {
   useEffect(() => {
     if (salesData.length > 0) {
       extractOfferOptions(salesData);
+      extractDeliveryPersonOptions(salesData); // NEW: Extract delivery persons
     }
   }, [salesData]);
   // NEW: Listen for settings changes (e.g., from SystemSettings) and re-fetch if needed
@@ -360,6 +395,32 @@ const SalesPage = () => {
     const interval = setInterval(handleSettingsUpdate, 5000); // Poll every 5s for changes
     return () => clearInterval(interval);
   }, [baseUrl]);
+  // NEW: Column management functions
+  const addColumn = () => {
+    const fieldKey = selectedFieldToAdd;
+    if (!fieldKey) return;
+    const field = possibleColumns.find(p => p.key === fieldKey);
+    if (!field || columnOrder.some(c => c.key === field.key)) return;
+    const pos = parseInt(selectedPosition);
+    const newOrder = [...columnOrder];
+    newOrder.splice(pos, 0, field);
+    setColumnOrder(newOrder);
+    setSelectedFieldToAdd('');
+    setSelectedPosition(0);
+    setWarningMessage(`Column "${field.label}" added successfully.`);
+    setWarningType("success");
+  };
+  const removeColumn = (index) => {
+    const newOrder = [...columnOrder];
+    const removed = newOrder.splice(index, 1)[0];
+    // If actions removed, add it back at the end
+    if (removed && removed.key === "actions") {
+      newOrder.push(removed);
+    }
+    setColumnOrder(newOrder);
+    setWarningMessage(`Column "${removed.label}" removed successfully.`);
+    setWarningType("warning");
+  };
   // NEW: Currency formatter (same as cash.jsx) - Memoized for performance, now accepts optional params
   const getCurrencyFormatter = React.useCallback((invoiceCurrency = null, invoicePrecision = null) => {
     const locale = settings.language || 'en-IN'; // Use en-IN for INR defaults
@@ -517,6 +578,7 @@ const SalesPage = () => {
       })
       .map((sale) => ({
         ...sale,
+        chairsBooked: Array.isArray(sale.chairsBooked) ? sale.chairsBooked : [],
         orderType: sale.orderType || "N/A",
         userId: sale.userId || "N/A",
         // FIXED: Ensure date and time are formatted using current settings on load, but preserve original for historical display if needed
@@ -792,7 +854,6 @@ const SalesPage = () => {
                 const spicyPrice = parseFloat(item.spicy_price) || 0;
                 // NEW: Use updated display name for combo offers
                 const displayName = getItemDisplayName(item);
-  
                 return `
                   <tr>
                     <td style="text-align: left; padding: 4px 8px; border-bottom: 1px solid #000; line-height: 1.2; font-size: 12px; vertical-align: top;">${displayName}</td>
@@ -934,6 +995,206 @@ const SalesPage = () => {
         </div>
       </div>
     `;
+  };
+  // NEW: Generate printable report content for the entire filtered sales table (similar to SalesReport)
+  const generateReportPrintableContent = (filteredSales, filterDescription = "All Sales Data") => {
+    if (filteredSales.length === 0) return "";
+    const effectivePrintSettings = printSettings || defaultPrintSettings;
+    const restaurantName = effectivePrintSettings.restaurantName;
+    const street = effectivePrintSettings.street;
+    const city = effectivePrintSettings.city;
+    const pincode = effectivePrintSettings.pincode;
+    const address = `${street}${street ? ', ' : ''}${city}${pincode ? `, ${pincode}` : ''}`;
+    const phone = effectivePrintSettings.phone;
+    const gstin = effectivePrintSettings.gstin;
+    const thankYouMessage = effectivePrintSettings.thankYouMessage;
+    const poweredBy = effectivePrintSettings.poweredBy ? `Powered by ${effectivePrintSettings.poweredBy}` : "Powered by manoj";
+    // Compute aggregates for print
+    const { currencyTotals } = calculateAggregates(filteredSales, false, null);
+    let rows = filteredSales.map((sale) => {
+      const amounts = {
+        subtotal: calculateSubtotal(sale),
+        vat: calculateVAT(sale),
+        grand: calculateGrandTotal(sale),
+      };
+      return `
+        <tr style="border-bottom: 1px solid #d3d3d3;">
+          <td style="text-align: left; padding: 8px; font-size: 12px; border-right: 1px solid #d3d3d3;">${sale.invoice_no}</td>
+          <td style="text-align: left; padding: 8px; font-size: 12px; border-right: 1px solid #d3d3d3;">${sale.customer || "N/A"}</td>
+          <td style="text-align: center; padding: 8px; font-size: 12px; border-right: 1px solid #d3d3d3;">${sale.date}</td>
+          <td style="text-align: center; padding: 8px; font-size: 12px; border-right: 1px solid #d3d3d3;">${sale.time}</td>
+          <td style="text-align: center; padding: 8px; font-size: 12px; border-right: 1px solid #d3d3d3;">${sale.payments?.[0]?.mode_of_payment || "CASH"}</td>
+          <td style="text-align: right; padding: 8px; font-size: 12px; border-right: 1px solid #d3d3d3;">${formatCurrency(amounts.subtotal, sale)}</td>
+          <td style="text-align: right; padding: 8px; font-size: 12px; border-right: 1px solid #d3d3d3;">${formatCurrency(amounts.vat, sale)}</td>
+          <td style="text-align: right; padding: 8px; font-size: 12px;">${formatCurrency(amounts.grand, sale)}</td>
+        </tr>
+      `;
+    }).join("");
+    let tfoot = '';
+    currencyTotals.forEach((totals, currency) => {
+      const formatter = getCurrencyFormatter(currency, totals.precision);
+      tfoot += `
+        <tr style="border-top: 2px solid #000000;">
+          <td colspan="5" style="text-align: right; padding: 8px; font-size: 12px; font-weight: bold;">${currency} Subtotal:</td>
+          <td style="text-align: right; padding: 8px; font-size: 12px; font-weight: bold;">${formatter.format(totals.subtotal)}</td>
+          <td style="text-align: right; padding: 8px; font-size: 12px; font-weight: bold;">${formatter.format(totals.vat)}</td>
+          <td style="text-align: right; padding: 8px; font-size: 12px; font-weight: bold;">${formatter.format(totals.grand)}</td>
+        </tr>
+      `;
+    });
+    return `
+      <div style="font-family: Arial, sans-serif; width: 210mm; font-size: 12px; padding: 20px; color: #000000; box-sizing: border-box;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 2px solid #000000; padding-bottom: 10px;">
+          ${logoUrl ? `<div style="flex: 0 0 auto;"><img src="${logoUrl}" alt="Logo" style="width: 50px; height: 50px; object-fit: contain; border-radius: 3px;"/></div>` : ''}
+          <div style="flex: 1; text-align: right; font-family: Arial, sans-serif; font-size: 12px;">
+            <h3 style="margin: 0 0 5px 0; font-size: 18px; color: #000000;">${restaurantName}</h3>
+            <p style="margin: 2px 0;">${address}</p>
+            <p style="margin: 2px 0;">Phone: ${phone}</p>
+            <p style="margin: 2px 0;">GSTIN: ${gstin}</p>
+          </div>
+        </div>
+        <div style="margin-bottom: 20px;">
+          <h4 style="margin: 0; font-size: 14px; text-align: center;">Sales Report - ${filterDescription}</h4>
+        </div>
+        <table style="width: 100%; border-collapse: collapse; border: 1px solid #000000; margin-bottom: 20px;">
+          <thead>
+            <tr style="background-color: #f0f0f0; border-bottom: 2px solid #000000;">
+              <th style="text-align: left; padding: 8px; font-size: 12px; border-right: 1px solid #000000;">Invoice No</th>
+              <th style="text-align: left; padding: 8px; font-size: 12px; border-right: 1px solid #000000;">Customer</th>
+              <th style="text-align: center; padding: 8px; font-size: 12px; border-right: 1px solid #000000;">Date</th>
+              <th style="text-align: center; padding: 8px; font-size: 12px; border-right: 1px solid #000000;">Time</th>
+              <th style="text-align: center; padding: 8px; font-size: 12px; border-right: 1px solid #000000;">Mode of Payment</th>
+              <th style="text-align: right; padding: 8px; font-size: 12px; border-right: 1px solid #000000;">Total</th>
+              <th style="text-align: right; padding: 8px; font-size: 12px; border-right: 1px solid #000000;">VAT</th>
+              <th style="text-align: right; padding: 8px; font-size: 12px;">Grand Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+          <tfoot>
+            ${tfoot}
+          </tfoot>
+        </table>
+        <div style="text-align: center; margin-top: 20px; border-top: 2px solid #000000; padding-top: 10px;">
+          <p style="margin: 4px 0; font-size: 12px;">${thankYouMessage}</p>
+          <p style="margin: 4px 0; font-size: 12px;">${poweredBy}</p>
+        </div>
+      </div>
+    `;
+  };
+  // NEW: Helper to get filter description for report title
+  const getFilterDescription = () => {
+    const filters = [];
+    if (fromDate) filters.push(`From ${getFormattedDate(fromDate, 'dd-MM-yyyy')}`);
+    if (toDate) filters.push(`To ${getFormattedDate(toDate, 'dd-MM-yyyy')}`);
+    if (filterStartTime) filters.push(`Start Time: ${filterStartTime}`);
+    if (filterEndTime) filters.push(`End Time: ${filterEndTime}`);
+    if (filterInvoiceNo) filters.push(`Invoice: ${filterInvoiceNo}`);
+    if (filterCustomer) filters.push(`Customer: ${filterCustomer}`);
+    if (filterPhone) filters.push(`Phone: ${filterPhone}`);
+    if (filterItem) filters.push(`Item: ${filterItem}`);
+    if (filterCategory) filters.push(`Category: ${filterCategory}`);
+    if (filterOffer) filters.push(`Offer: ${filterOffer}`);
+    if (filterDeliveryPerson) filters.push(`Delivery Person: ${filterDeliveryPerson}`);
+    if (filterUser) filters.push(`User: ${filterUser}`);
+    if (filterOrderType) filters.push(`Order Type: ${filterOrderType}`);
+    return filters.length > 0 ? filters.join(', ') : 'All Sales Data';
+  };
+  // UPDATED: Export to Excel - Now uses imported XLSX, triggers download/save to system
+  const handleExportExcel = () => {
+    const wsData = filteredSales.map((sale) => {
+      const amounts = {
+        subtotal: calculateSubtotal(sale),
+        vat: calculateVAT(sale),
+        grand: calculateGrandTotal(sale),
+      };
+      return {
+        'Invoice No': sale.invoice_no,
+        'Customer': sale.customer || 'N/A',
+        'Date': sale.date,
+        'Time': sale.time,
+        'Phone Number': sale.phoneNumber || 'N/A',
+        'Order Type': sale.orderType || 'N/A',
+        'Total': amounts.subtotal,
+        'VAT Amount': amounts.vat,
+        'Grand Total': amounts.grand,
+        'Payment Mode': sale.payments?.[0]?.mode_of_payment || 'CASH',
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(wsData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Sales Data');
+    const filterDesc = getFilterDescription().replace(/[, ]/g, '_');
+    const fileName = `Sales_Report_${filterDesc}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    XLSX.writeFile(wb, fileName); // This triggers download/save to user's system
+    setWarningMessage(`Excel exported successfully as ${fileName}!`);
+    setWarningType("success");
+  };
+  // NEW: Export to PDF (similar to SalesReport)
+  const handleExportPDF = () => {
+    const filterDesc = getFilterDescription();
+    const content = generateReportPrintableContent(filteredSales, filterDesc);
+    const win = window.open("", "_blank");
+    win.document.write(`
+      <html>
+        <head>
+          <title>Sales Report PDF</title>
+          <style>
+            @media print {
+              body { margin: 0; }
+              @page { margin: 10mm; size: A4; }
+            }
+            body { margin: 0; font-family: Arial, sans-serif; }
+            .print-preview-content {
+              width: 210mm;
+              font-size: 12px;
+              padding: 20px;
+              color: #000000;
+              box-sizing: border-box;
+            }
+            .print-preview-content table {
+              width: 100%;
+              border-collapse: collapse;
+              border: 1px solid #000000;
+            }
+            .print-preview-content th,
+            .print-preview-content td {
+              padding: 8px;
+              border-right: 1px solid #000000;
+            }
+            .print-preview-content th {
+              background: #f0f0f0;
+            }
+          </style>
+        </head>
+        <body onload="window.print(); window.close()">
+          ${content}
+        </body>
+      </html>
+    `);
+    win.document.close();
+  };
+  // NEW: Aggregate calculation helper (simplified from SalesReport for totals)
+  const calculateAggregates = (sales) => {
+    const currencyTotals = new Map();
+    sales.forEach((sale) => {
+      const amounts = {
+        subtotal: calculateSubtotal(sale),
+        vat: calculateVAT(sale),
+        grand: calculateGrandTotal(sale),
+      };
+      const currency = sale.invoice_currency || settings.currency || 'INR';
+      const precision = sale.invoice_currency_precision || settings.currencyPrecision || 2;
+      if (!currencyTotals.has(currency)) {
+        currencyTotals.set(currency, { subtotal: 0, vat: 0, grand: 0, precision });
+      }
+      const totals = currencyTotals.get(currency);
+      totals.subtotal += amounts.subtotal;
+      totals.vat += amounts.vat;
+      totals.grand += amounts.grand;
+    });
+    return { currencyTotals: new Map([...currencyTotals.entries()]) };
   };
   const handlePrint = (sale) => {
     const content = generatePrintableContent(sale);
@@ -1129,6 +1390,10 @@ const SalesPage = () => {
     const offerMatch = filterOffer
       ? sale.items.some((item) => item.is_combo_offer && item.offer_description === filterOffer)
       : true;
+    // NEW: Delivery Person match logic
+    const deliveryPersonMatch = filterDeliveryPerson
+      ? sale.deliveryPersonName === filterDeliveryPerson
+      : true;
     return (
       dateMatch &&
       timeMatch &&
@@ -1139,7 +1404,8 @@ const SalesPage = () => {
       categoryMatch &&
       userMatch &&
       orderTypeMatch &&
-      offerMatch // NEW: Include offer filter
+      offerMatch && // NEW: Include offer filter
+      deliveryPersonMatch // NEW: Include delivery person filter
     );
   });
   // NEW: Updated back button logic
@@ -1201,9 +1467,12 @@ const SalesPage = () => {
   if (salesData.length === 0)
     return (
       <Container className="sales-page-container mt-4">
-        <div className="mb-4">
+        <div className="mb-4 d-flex justify-content-between">
           <Button variant="outline-primary" onClick={handleBack} className="back-btn">
             <FaArrowLeft /> Back
+          </Button>
+          <Button variant="outline-secondary" onClick={() => setShowColumnModal(true)} className="back-btn">
+            Manage Columns
           </Button>
         </div>
         <div className="text-center mt-5" style={{ color: "#000000" }}>
@@ -1228,13 +1497,24 @@ const SalesPage = () => {
           </button>
         </div>
       )}
-      <div className="mb-4">
+      <div className="mb-4 d-flex justify-content-between flex-wrap gap-2">
         <Button variant="outline-primary" onClick={handleBack} className="back-btn">
           <FaArrowLeft /> Back
         </Button>
+        <div className="d-flex gap-2">
+          <Button variant="primary" onClick={handleExportExcel} className="back-btn">
+            <FaFileExcel /> Export Excel
+          </Button>
+          <Button variant="danger" onClick={handleExportPDF} className="back-btn">
+            <FaFilePdf /> Export PDF
+          </Button>
+          <Button variant="outline-secondary" onClick={() => setShowColumnModal(true)} className="back-btn">
+            Manage Columns
+          </Button>
+        </div>
       </div>
       <Form.Group className="mb-4 filter-group d-flex flex-wrap gap-3">
-        <div className="filter-item">
+        <div className="filter-item" style={{ minWidth: '180px', maxWidth: '200px', flex: '1 1 auto' }}>
           <Form.Label className="fw-bold">From Date:</Form.Label>
           <DatePicker
             selected={fromDate}
@@ -1243,7 +1523,7 @@ const SalesPage = () => {
             className="form-control shadow-sm"
           />
         </div>
-        <div className="filter-item">
+        <div className="filter-item" style={{ minWidth: '180px', maxWidth: '200px', flex: '1 1 auto' }}>
           <Form.Label className="fw-bold">To Date:</Form.Label>
           <DatePicker
             selected={toDate}
@@ -1253,7 +1533,7 @@ const SalesPage = () => {
             minDate={fromDate}
           />
         </div>
-        <div className="filter-item">
+        <div className="filter-item" style={{ minWidth: '180px', maxWidth: '200px', flex: '1 1 auto' }}>
           <Form.Label className="fw-bold">Start Time:</Form.Label>
           <Form.Select
             value={filterStartTime}
@@ -1268,7 +1548,7 @@ const SalesPage = () => {
             ))}
           </Form.Select>
         </div>
-        <div className="filter-item">
+        <div className="filter-item" style={{ minWidth: '180px', maxWidth: '200px', flex: '1 1 auto' }}>
           <Form.Label className="fw-bold">End Time:</Form.Label>
           <Form.Select
             value={filterEndTime}
@@ -1283,7 +1563,7 @@ const SalesPage = () => {
             ))}
           </Form.Select>
         </div>
-        <div className="filter-item">
+        <div className="filter-item" style={{ minWidth: '180px', maxWidth: '200px', flex: '1 1 auto' }}>
           <Form.Label className="fw-bold">Invoice No:</Form.Label>
           <Form.Control
             type="text"
@@ -1293,7 +1573,7 @@ const SalesPage = () => {
             className="shadow-sm"
           />
         </div>
-        <div className="filter-item">
+        <div className="filter-item" style={{ minWidth: '180px', maxWidth: '200px', flex: '1 1 auto' }}>
           <Form.Label className="fw-bold">Customer Name:</Form.Label>
           <Form.Control
             type="text"
@@ -1303,7 +1583,7 @@ const SalesPage = () => {
             className="shadow-sm"
           />
         </div>
-        <div className="filter-item">
+        <div className="filter-item" style={{ minWidth: '180px', maxWidth: '200px', flex: '1 1 auto' }}>
           <Form.Label className="fw-bold">Phone Number:</Form.Label>
           <Form.Control
             type="text"
@@ -1313,7 +1593,7 @@ const SalesPage = () => {
             className="shadow-sm"
           />
         </div>
-        <div className="filter-item position-relative">
+        <div className="filter-item position-relative" style={{ minWidth: '180px', maxWidth: '200px', flex: '1 1 auto' }}>
           <Form.Label className="fw-bold">Item Name:</Form.Label>
           <Form.Control
             type="text"
@@ -1342,7 +1622,7 @@ const SalesPage = () => {
             </div>
           )}
         </div>
-        <div className="filter-item">
+        <div className="filter-item" style={{ minWidth: '180px', maxWidth: '200px', flex: '1 1 auto' }}>
           <Form.Label className="fw-bold">Category:</Form.Label>
           <Form.Select
             value={filterCategory}
@@ -1358,7 +1638,7 @@ const SalesPage = () => {
           </Form.Select>
         </div>
         {/* NEW: Offer Name Filter Dropdown */}
-        <div className="filter-item">
+        <div className="filter-item" style={{ minWidth: '180px', maxWidth: '200px', flex: '1 1 auto' }}>
           <Form.Label className="fw-bold">Offer Name:</Form.Label>
           <Form.Select
             value={filterOffer}
@@ -1373,7 +1653,23 @@ const SalesPage = () => {
             ))}
           </Form.Select>
         </div>
-        <div className="filter-item">
+        {/* NEW: Delivery Person Filter Dropdown */}
+        <div className="filter-item" style={{ minWidth: '180px', maxWidth: '200px', flex: '1 1 auto' }}>
+          <Form.Label className="fw-bold">Delivery Person:</Form.Label>
+          <Form.Select
+            value={filterDeliveryPerson}
+            onChange={(e) => setFilterDeliveryPerson(e.target.value)}
+            className="form-control shadow-sm"
+          >
+            <option value="">All Delivery Persons</option>
+            {deliveryPersonOptions.map((person, index) => (
+              <option key={index} value={person}>
+                {person}
+              </option>
+            ))}
+          </Form.Select>
+        </div>
+        <div className="filter-item" style={{ minWidth: '180px', maxWidth: '200px', flex: '1 1 auto' }}>
           <Form.Label className="fw-bold">Bearer:</Form.Label>
           <Form.Select
             value={filterUser}
@@ -1388,7 +1684,7 @@ const SalesPage = () => {
             ))}
           </Form.Select>
         </div>
-        <div className="filter-item">
+        <div className="filter-item" style={{ minWidth: '180px', maxWidth: '200px', flex: '1 1 auto' }}>
           <Form.Label className="fw-bold">Order Type:</Form.Label>
           <Form.Select
             value={filterOrderType}
@@ -1416,7 +1712,8 @@ const SalesPage = () => {
                   filterPhone ||
                   filterItem ||
                   filterCategory ||
-                  filterOffer || // NEW: Include offer in title check
+                  filterOffer ||
+                  filterDeliveryPerson || // NEW: Include delivery person in title check
                   filterUser ||
                   filterOrderType
                   ? "Filtered Sales Data"
@@ -1442,6 +1739,12 @@ const SalesPage = () => {
                           onDragLeave={(e) => col.key !== "actions" && handleDragLeave(e)}
                           onDrop={(e) => col.key !== "actions" && handleDrop(e, index)}
                           onDragEnd={(e) => col.key !== "actions" && handleDragEnd(e)}
+                          onDoubleClick={(e) => {
+                            e.stopPropagation();
+                            if (col.key === "actions") return;
+                            // UPDATED: No confirm, directly remove and show warning
+                            removeColumn(index);
+                          }}
                           className={col.key !== "actions" ? "draggable-header" : ""}
                         >
                           {col.label}
@@ -1464,9 +1767,20 @@ const SalesPage = () => {
                             {col.key === "date" && sale.date}
                             {col.key === "time" && sale.time}
                             {col.key === "phoneNumber" && (sale.phoneNumber || "N/A")}
+                            {col.key === "whatsappNumber" && (sale.whatsappNumber || "N/A")}
+                            {col.key === "email" && (sale.email || "N/A")}
+                            {col.key === "tableNumber" && (sale.tableNumber || "N/A")}
+                            {col.key === "chairsBooked" && (Array.isArray(sale.chairsBooked) ? sale.chairsBooked.length : 0)}
+                            {col.key === "deliveryAddress" && (formatDeliveryAddress(sale.deliveryAddress) || "N/A")}
                             {col.key === "orderType" && (sale.orderType || "N/A")}
+                            {col.key === "status" && <span style={{ color: sale.status === 'Delivered' ? 'green' : 'inherit' }}>{sale.status || "N/A"}</span>}
+                            {col.key === "orderNo" && (sale.orderNo || "N/A")}
+                            {col.key === "deliveryPersonName" && (sale.deliveryPersonName || "N/A")}
+                            {col.key === "userId" && (sale.userId || "N/A")}
+                            {col.key === "payments_mode" && (sale.payments?.[0]?.mode_of_payment || "N/A")}
+                            {col.key === "due_date" && (sale.payment_terms?.[0]?.due_date || "N/A")}
                             {col.key === "total" && formatCurrency(calculateSubtotal(sale), sale)} {/* FIXED: Pass sale for historical currency */}
-                            {col.key === "vat" && formatCurrency(calculateVAT(sale), sale)} {/* FIXED: Pass sale */}
+                            {col.key === "vat_amount" && formatCurrency(calculateVAT(sale), sale)} {/* FIXED: Pass sale */}
                             {col.key === "grand_total" &&
                               <span style={getGrandTotalStyle(sale)}>
                                 {formatCurrency(calculateGrandTotal(sale), sale)} {/* UPDATED: Green if Delivered */}
@@ -1798,6 +2112,60 @@ const SalesPage = () => {
               </Button>
             </>
           )}
+        </Modal.Footer>
+      </Modal>
+      {/* NEW: Column Management Modal - UPDATED: Added stylish classes */}
+      <Modal show={showColumnModal} onHide={() => setShowColumnModal(false)} className="column-modal" centered size="md">
+        <Modal.Header closeButton className="bg-secondary text-white">
+          <Modal.Title>Manage Table Columns</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="p-4" style={{ backgroundColor: "#f8f9fa", borderRadius: "8px" }}>
+          <div className="mb-3 p-3 bg-white rounded shadow-sm">
+            <h6 className="fw-bold text-primary mb-2">Add New Column</h6>
+            <Form.Group className="mb-2">
+              <Form.Label className="fw-bold">Select Field to Add</Form.Label>
+              <Form.Select value={selectedFieldToAdd} onChange={(e) => setSelectedFieldToAdd(e.target.value)}>
+                <option value="">Choose a field...</option>
+                {possibleColumns
+                  .filter((p) => !columnOrder.some((c) => c.key === p.key))
+                  .map((p) => (
+                    <option key={p.key} value={p.key}>
+                      {p.label}
+                    </option>
+                  ))}
+              </Form.Select>
+            </Form.Group>
+            <Form.Group>
+              <Form.Label className="fw-bold">Insert Position</Form.Label>
+              <Form.Select value={selectedPosition} onChange={(e) => setSelectedPosition(Number(e.target.value))}>
+                {Array.from({ length: columnOrder.length + 1 }, (_, i) => (
+                  <option key={i} value={i}>
+                    {i === columnOrder.length ? 'At the end' : `Before "${columnOrder[i].label}"`}
+                  </option>
+                ))}
+              </Form.Select>
+            </Form.Group>
+            <Button variant="primary" onClick={addColumn} disabled={!selectedFieldToAdd} className="mt-2 w-100">
+              Add Column
+            </Button>
+          </div>
+          <hr />
+          <div className="p-3 bg-white rounded shadow-sm">
+            <h6 className="fw-bold text-primary mb-2">Current Columns (Double-click headers in table to remove)</h6>
+            {columnOrder.map((col, index) => (
+              <div key={col.key} className="d-flex justify-content-between align-items-center mb-2 p-2 border rounded bg-light">
+                <span className="fw-medium">{col.label} ({col.align})</span>
+                <Button size="sm" variant="danger" onClick={() => removeColumn(index)}>
+                  Remove
+                </Button>
+              </div>
+            ))}
+          </div>
+        </Modal.Body>
+        <Modal.Footer className="bg-light">
+          <Button variant="secondary" onClick={() => setShowColumnModal(false)}>
+            Close
+          </Button>
         </Modal.Footer>
       </Modal>
     </Container>

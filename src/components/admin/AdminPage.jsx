@@ -1,3 +1,4 @@
+// src/components/AdminPage.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -26,8 +27,8 @@ import {
   FaTrash,
   FaChartLine, // NEW: For Sales menu
   FaFileInvoiceDollar, // NEW: For Sales Invoice
+  FaEyeSlash, // NEW: For Hidden Items
 } from 'react-icons/fa';
-
 function AdminPage() {
   const navigate = useNavigate();
   const [customerCount, setCustomerCount] = useState(0);
@@ -50,7 +51,6 @@ function AdminPage() {
   const [previewUrl, setPreviewUrl] = useState(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false); // NEW: State for logout modal
-
   // Navigation handlers
   // Updated to show confirmation modal instead of immediate logout
   const handleLogoutClick = () => {
@@ -67,7 +67,6 @@ function AdminPage() {
   };
   const handleNavigation = (path) => navigate(path);
   const toggleMasterMenu = () => setIsMasterOpen(!isMasterOpen);
-
   // Fetch logo
   const fetchLogo = async (currentBaseUrl) => {
     try {
@@ -79,7 +78,6 @@ function AdminPage() {
       console.error("Failed to fetch logo:", err);
     }
   };
-
   // Handle logo upload
   const handleLogoChange = (e) => {
     const file = e.target.files[0];
@@ -96,13 +94,11 @@ function AdminPage() {
       setError('Please select a valid image file (PNG, JPG, JPEG, GIF, WebP)');
     }
   };
-
   // Check allowed file types for logo
   const allowedFile = (filename) => {
     const allowed = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'jfif','ico'];
     return allowed.some(ext => filename.toLowerCase().endsWith(`.${ext}`));
   };
-
   // Upload logo
   const handleUploadLogo = async () => {
     if (!logoFile) {
@@ -139,7 +135,6 @@ function AdminPage() {
       setUploadingLogo(false);
     }
   };
-
   // Delete logo
   const handleDeleteLogo = async () => {
     // Removed window.confirm - no alert, direct action with message feedback
@@ -155,7 +150,6 @@ function AdminPage() {
       setError(`Failed to delete logo: ${err.message}`);
     }
   };
-
   // Fetch dashboard counts
   const fetchCounts = async (currentBaseUrl) => {
     try {
@@ -172,7 +166,6 @@ function AdminPage() {
       setLoading(false);
     }
   };
-
   useEffect(() => {
     const fetchConfig = async () => {
       let currentBaseUrl = "";
@@ -196,7 +189,6 @@ function AdminPage() {
     };
     fetchConfig();
   }, []);
-
   // Clean up preview URL
   useEffect(() => {
     return () => {
@@ -205,7 +197,6 @@ function AdminPage() {
       }
     };
   }, [previewUrl]);
-
   // File import handlers
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -219,7 +210,6 @@ function AdminPage() {
       setError('Please select a valid JSON file');
     }
   };
-
   const handleImportMongoDB = async () => {
     if (!importFile) {
       setError('Please select a JSON file to import');
@@ -257,12 +247,10 @@ function AdminPage() {
       setLoading(false);
     }
   };
-
   // Search handler
   const handleSearchChange = (e) => {
     setSearchQuery(e.target.value);
   };
-
   // Menu items
   const masterMenuItems = [
     {
@@ -285,6 +273,7 @@ function AdminPage() {
         { icon: <FaUtensils />, text: 'Add Ingredient & Nutrition', path: '/add-ingredients-nutrition' },
         { icon: <FaLayerGroup />, text: 'Add Variant', path: '/create-variant' },
         { icon: <FaGift />, text: 'Combo Offer', path: '/combo-offer' },
+        { icon: <FaEyeSlash />, text: 'Hidden Items', path: '/hidden-items' }, // NEW: Hidden Items added here
         // MOVED: Vat removed from Items and placed in Settings
       ],
     },
@@ -320,12 +309,10 @@ function AdminPage() {
       ],
     },
   ];
-
   const otherMenuItems = [
     // REMOVED: { icon: <FaFileAlt />, text: 'Record', path: '/record' },
     // Note: System Settings has been moved to Settings submenu under Master
   ];
-
   // Filter menu items based on search query
   const filterMenu = (items, query) => {
     const lowerQuery = query.toLowerCase();
@@ -345,13 +332,10 @@ function AdminPage() {
       return acc;
     }, []);
   };
-
   const filteredMasterMenuItems = filterMenu(masterMenuItems, searchQuery);
   const filteredOtherMenuItems = filterMenu(otherMenuItems, searchQuery);
-
   // Determine if "Master" should be shown based on search
   const showMasterMenu = searchQuery ? filteredMasterMenuItems.length > 0 : true;
-
   // Helper to get expand state for a menu item
   const getExpandState = (itemText) => {
     switch (itemText) {
@@ -363,7 +347,6 @@ function AdminPage() {
       default: return false;
     }
   };
-
   // Helper to toggle expand state
   const toggleExpandState = (itemText) => {
     switch (itemText) {
@@ -374,7 +357,6 @@ function AdminPage() {
       case 'Sales': setIsSalesOpen(!isSalesOpen); break;
     }
   };
-
   // Helper to set expand state
   const setExpandState = (itemText, value) => {
     switch (itemText) {
@@ -385,7 +367,6 @@ function AdminPage() {
       case 'Sales': setIsSalesOpen(value); break;
     }
   };
-
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f4f6f9' }}>
       {/* Sidebar */}
@@ -511,7 +492,6 @@ function AdminPage() {
             </div>
           )}
         </div>
-
         {/* Search Box */}
         <div style={{
           position: 'relative',
@@ -1032,5 +1012,4 @@ function AdminPage() {
     </div>
   );
 }
-
 export default AdminPage;

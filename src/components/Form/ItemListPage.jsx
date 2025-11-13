@@ -1,10 +1,10 @@
+// src/components/ItemListPage.jsx
 import React, { useState, useEffect } from "react";
 import { Modal, Button, Card, Form, Badge, ListGroup, Table } from "react-bootstrap";
 import { FaArrowLeft, FaPlusCircle, FaEye, FaEyeSlash, FaTrash } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import 'bootstrap/dist/css/bootstrap.min.css';
-
 const ItemListPage = () => {
   const [itemList, setItemList] = useState([]);
   const [comboList, setComboList] = useState([]);
@@ -25,7 +25,6 @@ const ItemListPage = () => {
   const [itemSales, setItemSales] = useState([]);
   const [baseUrl, setBaseUrl] = useState("");
   const navigate = useNavigate();
-
   useEffect(() => {
     const fetchConfig = async () => {
       try {
@@ -43,7 +42,6 @@ const ItemListPage = () => {
     };
     fetchConfig();
   }, []);
-
   // Fetch all items (excluding hidden)
   const handleViewItems = async () => {
     try {
@@ -54,7 +52,6 @@ const ItemListPage = () => {
       setWarningMessage("Error while fetching items");
     }
   };
-
   // Fetch all combo offers
   const handleViewCombos = async () => {
     try {
@@ -65,7 +62,6 @@ const ItemListPage = () => {
       setWarningMessage("Error while fetching combo offers");
     }
   };
-
   // Fetch sales for selected item
   const fetchItemSales = async (itemId) => {
     try {
@@ -76,7 +72,6 @@ const ItemListPage = () => {
       setWarningMessage("Error while fetching sales for this item");
     }
   };
-
   // Handle item or combo click to view details
   const handleItemClick = async (item, isCombo = false) => {
     const normalizedIngredients = normalizeIngredients(item.ingredients);
@@ -90,13 +85,11 @@ const ItemListPage = () => {
     }
     setShowModal(true);
   };
-
   // Handle sale click to view details
   const handleSaleClick = (sale) => {
     setSelectedSale(sale);
     setShowSaleModal(true);
   };
-
   // Delete sale
   const handleDeleteSale = async () => {
     if (selectedSale) {
@@ -120,20 +113,17 @@ const ItemListPage = () => {
       }
     }
   };
-
   // Close the item details modal
   const handleCloseModal = () => {
     setShowModal(false);
     setSelectedItem(null);
     setItemSales([]);
   };
-
   // Close the sale details modal
   const handleCloseSaleModal = () => {
     setShowSaleModal(false);
     setSelectedSale(null);
   };
-
   // Close the offer modal
   const handleCloseOfferModal = () => {
     setShowOfferModal(false);
@@ -143,17 +133,14 @@ const ItemListPage = () => {
     setOfferStartTime("");
     setOfferEndTime("");
   };
-
   // Close the nutrition modal
   const handleCloseNutritionModal = () => {
     setShowNutritionModal(false);
   };
-
   // Go back to the previous page
   const goBack = () => {
     navigate('/admin');
   };
-
   // Delete item or combo - Modified to hide if has sales
   const handleDeleteItem = async () => {
     if (selectedItem) {
@@ -181,7 +168,6 @@ const ItemListPage = () => {
       }
     }
   };
-
   // Edit item or combo
   const handleEditItem = () => {
     if (selectedItem.isCombo) {
@@ -194,12 +180,10 @@ const ItemListPage = () => {
       });
     }
   };
-
   // Handle offer button click
   const handleOfferClick = () => {
     setShowOfferModal(true);
   };
-
   // Handle selecting an item for offer
   const handleOfferItemSelect = (item) => {
     setOfferItem(item);
@@ -207,7 +191,6 @@ const ItemListPage = () => {
     setOfferStartTime("");
     setOfferEndTime("");
   };
-
   // Submit offer
   const handleOfferSubmit = async () => {
     if (!offerItem || !offerPrice || !offerStartTime || !offerEndTime) {
@@ -240,22 +223,15 @@ const ItemListPage = () => {
       setWarningMessage('Error while adding offer');
     }
   };
-
   // Handle Ingredients & Nutrition button click
   const handleNutritionClick = () => {
     setShowNutritionModal(true);
   };
-
   // Handle Add New Item button click
   const handleAddNewItem = () => {
     navigate('/create-item');
   };
-
-  // Handle Hidden Items button click - Now navigates to separate page
-  const handleHiddenItemsClick = () => {
-    navigate('/hidden-items');
-  };
-
+  // REMOVED: handleHiddenItemsClick - Button removed as per request
   // Normalize ingredients to always be an array
   const normalizeIngredients = (ingredients) => {
     if (Array.isArray(ingredients)) {
@@ -269,7 +245,6 @@ const ItemListPage = () => {
     }
     return [];
   };
-
   // Initial fetch and refresh on popstate
   useEffect(() => {
     if (baseUrl !== null) {
@@ -277,7 +252,6 @@ const ItemListPage = () => {
       handleViewCombos();
     }
   }, [baseUrl]);
-
   useEffect(() => {
     const handlePopState = () => {
       handleViewItems();
@@ -286,7 +260,6 @@ const ItemListPage = () => {
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
-
   // Inline styles
   const sidebarStyle = {
     position: "fixed",
@@ -299,7 +272,6 @@ const ItemListPage = () => {
     overflowY: "auto",
     borderRight: "1px solid #ddd",
   };
-
   const categoryBoxStyle = {
     padding: "10px",
     marginBottom: "10px",
@@ -310,14 +282,12 @@ const ItemListPage = () => {
     textAlign: "center",
     transition: "all 0.3s ease",
   };
-
   const selectedCategoryBoxStyle = {
     ...categoryBoxStyle,
     backgroundColor: "#28a745",
     color: "white",
     borderColor: "#28a745",
   };
-
   // UPDATED: Regular item card style
   const cardStyle = {
     border: "1px solid #eee",
@@ -327,42 +297,35 @@ const ItemListPage = () => {
     borderRadius: "8px",
     transition: "all 0.3s ease",
   };
-
   // UPDATED: Regular item card hover style
   const cardHoverStyle = {
     transform: "translateY(-5px)",
     boxShadow: "0 6px 10px rgba(0, 0, 0, 0.15)",
     borderColor: "#28a745"
   };
-
   const imgStyle = {
     width: "100%",
     height: "200px",
     objectFit: "cover",
     borderRadius: "8px",
   };
-
   const contentStyle = {
     marginLeft: "220px",
     padding: "20px",
   };
-
   const priceStyle = {
     fontSize: "1rem",
     marginTop: "5px",
   };
-
   const strikethroughStyle = {
     textDecoration: "line-through",
     color: "#888",
     marginRight: "10px",
   };
-
   const offerPriceStyle = {
     color: "#ff4500",
     fontWeight: "bold",
   };
-
   const warningBoxStyle = {
     backgroundColor: "#fff3cd",
     border: "1px solid #ffeeba",
@@ -375,12 +338,10 @@ const ItemListPage = () => {
     alignItems: "center",
     marginTop: "60px",
   };
-
   const warningTextStyle = {
     margin: 0,
     fontSize: "14px",
   };
-
   const closeWarningStyle = {
     background: "none",
     border: "none",
@@ -388,7 +349,6 @@ const ItemListPage = () => {
     cursor: "pointer",
     fontSize: "16px",
   };
-
   // UPDATED: multipleImagesStyle to center content
   const multipleImagesStyle = {
     display: "flex",
@@ -397,16 +357,13 @@ const ItemListPage = () => {
     marginTop: "10px",
     justifyContent: "center", // Center the images
   };
-
   const nutritionModalStyle = {
     padding: "20px",
   };
-
   const nutritionItemStyle = {
     marginBottom: "10px",
     fontSize: "1rem",
   };
-
   // Style for the fixed back button
   const backButtonStyle = {
     position: "fixed",
@@ -424,7 +381,6 @@ const ItemListPage = () => {
     justifyContent: "center",
     transition: "all 0.3s ease",
   };
-
   // UPDATED: Poster style for combo offers
   const posterStyle = {
     background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
@@ -439,7 +395,6 @@ const ItemListPage = () => {
     border: "2px solid rgba(255, 255, 255, 0.3)",
     height: "auto",
   };
-
   // UPDATED: Logo style for new combo card
   const logoStyle = {
     position: "absolute",
@@ -450,7 +405,6 @@ const ItemListPage = () => {
     color: "#ffffff",
     textShadow: "0 1px 3px rgba(0,0,0,0.3)"
   };
-
   // UPDATED: Offer name for new combo card
   const offerNameStyle = {
     fontSize: "22px",
@@ -460,7 +414,6 @@ const ItemListPage = () => {
     color: "#ffffff",
     fontWeight: "600",
   };
-
   // UPDATED: Offer period for new combo card
   const offerPeriodStyle = {
     fontSize: "13px",
@@ -472,7 +425,6 @@ const ItemListPage = () => {
     borderRadius: "4px",
     display: "inline-block",
   };
-
   // NEW: Style for uploaded multiple images - centered, larger thumbs
   const uploadedImagesStyle = {
     display: "flex",
@@ -481,7 +433,6 @@ const ItemListPage = () => {
     marginBottom: "12px",
     justifyContent: "center",
   };
-
   const uploadedImageThumbStyle = {
     width: "60px", // Slightly larger for neat display
     height: "60px",
@@ -490,7 +441,6 @@ const ItemListPage = () => {
     border: "2px solid rgba(255, 255, 255, 0.5)",
     boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
   };
-
   // UPDATED: Items list for new combo card - full width, centered
   const itemsListStyle = {
     backgroundColor: "rgba(0, 0, 0, 0.2)",
@@ -500,7 +450,6 @@ const ItemListPage = () => {
     marginBottom: "8px",
     textAlign: "left",
   };
-
   // NEW: Item list item with image next to name - flex row
   const itemsListItemStyle = {
     display: "flex",
@@ -512,7 +461,6 @@ const ItemListPage = () => {
     listStyleType: "none",
     paddingLeft: "0",
   };
-
   const itemImageStyle = {
     width: "30px",
     height: "30px",
@@ -521,7 +469,6 @@ const ItemListPage = () => {
     marginRight: "8px",
     border: "1px solid rgba(255, 255, 255, 0.5)",
   };
-
   // UPDATED: Total price for new combo card
   const totalPriceStyle = {
     fontSize: "18px",
@@ -533,7 +480,6 @@ const ItemListPage = () => {
     fontWeight: "bold",
     textAlign: "center",
   };
-
   // UPDATED: Limited offer for new combo card
   const limitedOfferStyle = {
     fontSize: "13px",
@@ -544,7 +490,6 @@ const ItemListPage = () => {
     letterSpacing: "1px",
     textAlign: "center",
   };
-
   // UPDATED: View button for new combo card
   const viewButtonStyle = {
     marginTop: "8px",
@@ -559,27 +504,23 @@ const ItemListPage = () => {
     margin: "8px auto 0",
     transition: "all 0.3s ease",
   };
-
   // UPDATED: Get unique categories from items, including Combos Offer
   const getCategories = () => {
     const categories = [...new Set(itemList.map(item => item.item_group))];
     const filteredCategories = categories.filter(category => category);
     return ["All Items", ...filteredCategories, `Combos Offer (${comboList.length})`];
   };
-
   // Handle category selection
   const handleCategoryClick = (category) => {
     const cleanCategory = category.replace(/\s*\(\d+\)\s*$/, '');
     setSelectedCategory(cleanCategory);
   };
-
   // Filter items based on selected category
   const filteredItems = selectedCategory === "All Items"
     ? itemList
     : selectedCategory === "Combos Offer"
     ? comboList
     : itemList.filter(item => item.item_group === selectedCategory);
-
   // Check if item has an active offer
   const hasActiveOffer = (item) => {
     if (item.offer_price === undefined || !item.offer_start_time || !item.offer_end_time) {
@@ -590,12 +531,10 @@ const ItemListPage = () => {
     const endTime = new Date(item.offer_end_time);
     return startTime <= currentTime && currentTime <= endTime;
   };
-
   // Format nutrition field names for display
   const formatNutritionLabel = (key) => {
     return key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' ');
   };
-
   // Render ingredients based on their type
   const renderIngredients = (ingredients) => {
     if (!ingredients) {
@@ -634,7 +573,6 @@ const ItemListPage = () => {
     }
     return null;
   };
-
   // Check if there's valid data to display
   const hasValidData = () => {
     const hasIngredients =
@@ -647,10 +585,8 @@ const ItemListPage = () => {
       Object.entries(nutritionData.nutrition).some(([_, value]) => value !== '' && value !== null && value !== undefined);
     return hasIngredients || hasNutrition;
   };
-
   // Searched items for offer modal
   const searchedItems = itemList.filter(item => item.item_name.toLowerCase().includes(searchTerm.toLowerCase()));
-
   // UPDATED: Function to get combo items with images and names (for side-by-side display)
   const getComboItemsWithImages = (combo) => {
     const itemsWithImages = [];
@@ -665,7 +601,6 @@ const ItemListPage = () => {
     }
     return itemsWithImages;
   };
-
   // NEW: Function to get only uploaded images for centered display
   const getUploadedImages = (combo) => {
     if (combo.images && combo.images.length > 0) {
@@ -673,7 +608,6 @@ const ItemListPage = () => {
     }
     return [];
   };
-
   return (
     <div className="container-fluid mt-5">
       <button
@@ -689,37 +623,11 @@ const ItemListPage = () => {
         <FaArrowLeft style={{ fontSize: "24px" }} />
       </button>
       <button
-        onClick={handleOfferClick}
-        style={{
-          position: "fixed",
-          top: "20px",
-          right: "20px",
-          backgroundColor: "#ff4500",
-          border: "none",
-          color: "white",
-          borderRadius: "5px",
-          padding: "10px 20px",
-          cursor: "pointer",
-          fontSize: "16px",
-          fontWeight: "bold",
-          transition: "all 0.3s ease",
-          zIndex: 1000,
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.backgroundColor = "#ff6347";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.backgroundColor = "#ff4500";
-        }}
-      >
-        Offer
-      </button>
-      <button
         onClick={handleAddNewItem}
         style={{
           position: "fixed",
           top: "20px",
-          right: "120px",
+          right: "20px",
           backgroundColor: "#28a745",
           border: "none",
           color: "white",
@@ -742,32 +650,7 @@ const ItemListPage = () => {
       >
         <FaPlusCircle style={{ marginRight: "5px" }} /> Add New Item
       </button>
-      <button
-        onClick={handleHiddenItemsClick}
-        style={{
-          position: "fixed",
-          top: "20px",
-          right: "320px",
-          backgroundColor: "#6c757d",
-          border: "none",
-          color: "white",
-          borderRadius: "5px",
-          padding: "10px 20px",
-          cursor: "pointer",
-          fontSize: "16px",
-          fontWeight: "bold",
-          transition: "all 0.3s ease",
-          zIndex: 1000,
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.backgroundColor = "#5a6268";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.backgroundColor = "#6c757d";
-        }}
-      >
-        <FaEyeSlash style={{ marginRight: "5px" }} /> Hidden Items
-      </button>
+      {/* REMOVED: Hidden Items button as per request */}
       {warningMessage && (
         <div style={warningBoxStyle}>
           <p style={warningTextStyle}>{warningMessage}</p>
@@ -1314,5 +1197,4 @@ const ItemListPage = () => {
     </div>
   );
 };
-
 export default ItemListPage;

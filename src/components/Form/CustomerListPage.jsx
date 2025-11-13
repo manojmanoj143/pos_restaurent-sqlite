@@ -710,13 +710,12 @@ const CustomerListPage = () => {
                             value={filterCountry}
                             onChange={(e) => setFilterCountry(e.target.value)}
                             style={{
-                              marginLeft: '4px',
                               padding: '2px 4px',
                               borderRadius: '3px',
                               border: '1px solid #a1c4fd',
                               background: '#ffffff',
                               color: '#333',
-                              fontSize: '12px',
+                              fontSize: '11px',
                               minWidth: '80px'
                             }}
                           >
@@ -736,13 +735,12 @@ const CustomerListPage = () => {
                             value={filterField1}
                             onChange={(e) => setFilterField1(e.target.value)}
                             style={{
-                              marginLeft: '4px',
                               padding: '2px 4px',
                               borderRadius: '3px',
                               border: '1px solid #a1c4fd',
                               background: '#ffffff',
                               color: '#333',
-                              fontSize: '12px',
+                              fontSize: '11px',
                               minWidth: '80px'
                             }}
                           >
@@ -762,13 +760,12 @@ const CustomerListPage = () => {
                             value={filterField2}
                             onChange={(e) => setFilterField2(e.target.value)}
                             style={{
-                              marginLeft: '4px',
                               padding: '2px 4px',
                               borderRadius: '3px',
                               border: '1px solid #a1c4fd',
                               background: '#ffffff',
                               color: '#333',
-                              fontSize: '12px',
+                              fontSize: '11px',
                               minWidth: '80px'
                             }}
                           >
@@ -788,13 +785,12 @@ const CustomerListPage = () => {
                             value={filterField3}
                             onChange={(e) => setFilterField3(e.target.value)}
                             style={{
-                              marginLeft: '4px',
                               padding: '2px 4px',
                               borderRadius: '3px',
                               border: '1px solid #a1c4fd',
                               background: '#ffffff',
                               color: '#333',
-                              fontSize: '12px',
+                              fontSize: '11px',
                               minWidth: '80px'
                             }}
                           >
@@ -846,28 +842,31 @@ const CustomerListPage = () => {
                             ...(isLastHeader && { borderTopRightRadius: '8px' })
                           }}
                         >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
-                            {header.label}
-                            {header.filter && header.filter}
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}>
+                            <span style={{ fontSize: '12px', fontWeight: '500' }}>{header.label}</span>
                             {header.filter && (
-                              <button
-                                onClick={() => {
-                                  if (header.key === 'country') setFilterCountry('');
-                                  if (header.key === 'field1') setFilterField1('');
-                                  if (header.key === 'field2') setFilterField2('');
-                                  if (header.key === 'field3') setFilterField3('');
-                                }}
-                                style={{
-                                  background: 'none',
-                                  border: 'none',
-                                  fontSize: '12px',
-                                  color: '#333',
-                                  cursor: 'pointer',
-                                  padding: '1px'
-                                }}
-                              >
-                                ×
-                              </button>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                {header.filter}
+                                <button
+                                  onClick={() => {
+                                    if (header.key === 'country') setFilterCountry('');
+                                    if (header.key === 'field1') setFilterField1('');
+                                    if (header.key === 'field2') setFilterField2('');
+                                    if (header.key === 'field3') setFilterField3('');
+                                  }}
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    fontSize: '12px',
+                                    color: '#333',
+                                    cursor: 'pointer',
+                                    padding: '1px',
+                                    lineHeight: '1'
+                                  }}
+                                >
+                                  ×
+                                </button>
+                              </div>
                             )}
                           </div>
                         </th>

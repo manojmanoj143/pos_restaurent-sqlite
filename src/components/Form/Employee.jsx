@@ -1,4 +1,3 @@
-// EmployeePage.jsx - Full Updated Code
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -15,7 +14,7 @@ function EmployeePage() {
     vehicleNumber: '',
     role: 'Delivery Boy',
     email: '',
-    secretKey: '', // New field for secret key (display only for existing, auto-generate for new)
+    secretKey: '', // Manual 6-digit input
   });
   const [editMode, setEditMode] = useState(false);
   const [editEmployeeId, setEditEmployeeId] = useState(null);
@@ -36,7 +35,7 @@ function EmployeePage() {
     const fetchConfig = async () => {
       let currentBaseUrl = "";
       try {
-        const response = await axios.get("http://localhost:8000/api/network_info");
+        const response = await axios.get("/api/network_info");
         const { config: appConfig } = response.data;
         if (appConfig.mode === "client") {
           currentBaseUrl = `http://${appConfig.server_ip}:8000`;
@@ -59,7 +58,7 @@ function EmployeePage() {
     try {
       setLoading(true);
       setError(null);
-      const apiUrl = currentBaseUrl ? `${currentBaseUrl}/api/employees` : 'http://localhost:8000/api/employees';
+      const apiUrl = currentBaseUrl ? `${currentBaseUrl}/api/employees` : '/api/employees'; // FIXED: Use relative if no baseUrl
       const response = await axios.get(apiUrl);
       const data = Array.isArray(response.data) ? response.data : [];
       setEmployees(data);
@@ -70,36 +69,50 @@ function EmployeePage() {
       setLoading(false);
     }
   };
+  // Validate 6-digit secret key
+  const validateSecretKey = (key) => {
+    return key.length === 6 && /^\d+$/.test(key);
+  };
   // Handle form input changes
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
+    // Clear error when user starts typing secret key
+    if (name === 'secretKey' && error && error.includes('Secret key')) {
+      setError(null);
+    }
   };
-  // Handle employee creation (updated to use baseUrl, auto-generate secret key)
+  // Handle employee creation (updated to use baseUrl, manual secret key)
   const handleCreateEmployee = async (e) => {
     e.preventDefault();
     const fullPhoneNumber = `${formData.countryCode}${formData.phoneNumber}`;
-    if (!formData.name || !formData.phoneNumber || !formData.vehicleNumber || !formData.email) {
-      setError('Please fill in all fields');
+    if (!formData.name || !formData.phoneNumber || !formData.vehicleNumber || !formData.email || !formData.secretKey) {
+      setError('Please fill in all fields, including a 6-digit secret key');
+      return;
+    }
+    if (!validateSecretKey(formData.secretKey)) {
+      setError('Secret key must be exactly 6 digits');
       return;
     }
     try {
       setLoading(true);
       setError(null);
       setMessage('');
-      const apiUrl = baseUrl ? `${baseUrl}/api/employees` : 'http://localhost:8000/api/employees';
+      const apiUrl = baseUrl ? `${baseUrl}/api/employees` : '/api/employees'; // FIXED: Use relative if no baseUrl
       const response = await axios.post(apiUrl, {
         name: formData.name,
         phoneNumber: fullPhoneNumber,
         vehicleNumber: formData.vehicleNumber,
         role: formData.role,
         email: formData.email,
+        secretKey: formData.secretKey,
       });
       const newEmployee = response.data.employee; // Backend returns the created employee with secretKey
       setMessage(`Employee created successfully! Secret Key: ${newEmployee.secretKey}`);
       setFormData({ name: '', countryCode: '+91', phoneNumber: '', vehicleNumber: '', role: 'Delivery Boy', email: '', secretKey: '' });
       fetchEmployees();
     } catch (err) {
+      console.error("Backend Error Details:", err.response?.data); // FIXED: Better logging for debugging
       setError(`Failed to create employee: ${err.response?.data?.error || err.message}`);
     } finally {
       setLoading(false);
@@ -118,39 +131,49 @@ function EmployeePage() {
       vehicleNumber: employee.vehicleNumber,
       role: employee.role,
       email: employee.email || '',
-      secretKey: employee.secretKey || '', // Display existing secret key (read-only)
+      secretKey: employee.secretKey || '', // Load existing secret key for editing
     });
     setSelectedEmployee(employee);
   };
-  // Handle employee update (updated to use baseUrl, regenerate secret key if needed)
+  // Handle employee update (updated to use baseUrl, manual secret key)
   const handleUpdateEmployee = async (e) => {
     e.preventDefault();
     const fullPhoneNumber = `${formData.countryCode}${formData.phoneNumber}`;
-    if (!formData.name || !formData.phoneNumber || !formData.vehicleNumber || !formData.email) {
-      setError('Please fill in all fields');
+    if (!formData.name || !formData.phoneNumber || !formData.vehicleNumber || !formData.email || !formData.secretKey) {
+      setError('Please fill in all fields, including a 6-digit secret key');
+      return;
+    }
+    if (!validateSecretKey(formData.secretKey)) {
+      setError('Secret key must be exactly 6 digits');
       return;
     }
     try {
       setLoading(true);
       setError(null);
       setMessage('');
-      const apiUrl = baseUrl ? `${baseUrl}/api/employees/${editEmployeeId}` : `http://localhost:8000/api/employees/${editEmployeeId}`;
+      const apiUrl = baseUrl ? `${baseUrl}/api/employees/${editEmployeeId}` : `/api/employees/${editEmployeeId}`; // FIXED: Use relative if no baseUrl
       const response = await axios.put(apiUrl, {
         name: formData.name,
         phoneNumber: fullPhoneNumber,
         vehicleNumber: formData.vehicleNumber,
         role: formData.role,
         email: formData.email,
-        regenerateSecretKey: true, // Flag to regenerate secret key on update
+        secretKey: formData.secretKey, // Manual update of secret key
       });
-      const updatedEmployee = response.data.employee; // Backend returns updated with new secretKey
-      setMessage(`Employee updated successfully! New Secret Key: ${updatedEmployee.secretKey}`);
+      const updatedEmployee = response.data.employee; // Backend returns updated with secretKey
+      setMessage(`Employee updated successfully! Secret Key: ${updatedEmployee.secretKey}`);
       setFormData({ name: '', countryCode: '+91', phoneNumber: '', vehicleNumber: '', role: 'Delivery Boy', email: '', secretKey: '' });
       setEditMode(false);
       setEditEmployeeId(null);
       setSelectedEmployee(null);
       fetchEmployees();
     } catch (err) {
+      // IMPROVED: Better logging to show exact backend error
+      console.error("Backend Error Details:", {
+        status: err.response?.status,
+        data: err.response?.data,
+        message: err.message
+      });
       setError(`Failed to update employee: ${err.response?.data?.error || err.message}`);
     } finally {
       setLoading(false);
@@ -163,12 +186,13 @@ function EmployeePage() {
       setLoading(true);
       setError(null);
       setMessage('');
-      const apiUrl = baseUrl ? `${baseUrl}/api/employees/${employeeId}` : `http://localhost:8000/api/employees/${employeeId}`;
+      const apiUrl = baseUrl ? `${baseUrl}/api/employees/${employeeId}` : `/api/employees/${employeeId}`; // FIXED: Use relative if no baseUrl
       await axios.delete(apiUrl);
       setMessage('Employee deleted successfully');
       setSelectedEmployee(null);
       fetchEmployees();
     } catch (err) {
+      console.error("Backend Error Details:", err.response?.data); // FIXED: Better logging
       setError(`Failed to delete employee: ${err.response?.data?.error || err.message}`);
     } finally {
       setLoading(false);
@@ -346,43 +370,44 @@ function EmployeePage() {
               >
                 <option value="Delivery Boy">Delivery Boy</option>
               </select>
-              {editMode && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <FaKey style={{ color: '#f39c12' }} />
-                  <input
-                    type="text"
-                    value={formData.secretKey}
-                    placeholder="Secret Key (Read-only)"
-                    readOnly
-                    style={{
-                      flex: 1,
-                      padding: '10px',
-                      border: '1px solid #ccc',
-                      borderRadius: '5px',
-                      fontSize: '1rem',
-                      outline: 'none',
-                      backgroundColor: '#f8f9fa',
-                    }}
-                  />
-                </div>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <FaKey style={{ color: '#f39c12' }} />
+                <input
+                  type="text"
+                  name="secretKey"
+                  value={formData.secretKey}
+                  onChange={handleInputChange}
+                  placeholder="6-Digit Secret Key"
+                  maxLength={6}
+                  style={{
+                    flex: 1,
+                    padding: '10px',
+                    border: '1px solid #ccc',
+                    borderRadius: '5px',
+                    fontSize: '1rem',
+                    outline: 'none',
+                    textAlign: 'center',
+                    fontWeight: 'bold',
+                  }}
+                />
+              </div>
               <button
                 onClick={editMode ? handleUpdateEmployee : handleCreateEmployee}
-                disabled={loading}
+                disabled={loading || !validateSecretKey(formData.secretKey)}
                 style={{
                   padding: '10px 20px',
-                  backgroundColor: loading ? '#ccc' : '#3498db',
+                  backgroundColor: loading || !validateSecretKey(formData.secretKey) ? '#ccc' : '#3498db',
                   color: '#fff',
                   border: 'none',
                   borderRadius: '5px',
-                  cursor: loading ? 'not-allowed' : 'pointer',
+                  cursor: loading || !validateSecretKey(formData.secretKey) ? 'not-allowed' : 'pointer',
                   transition: 'background-color 0.3s',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}
-                onMouseOver={(e) => !loading && (e.target.style.backgroundColor = '#2980b9')}
-                onMouseOut={(e) => !loading && (e.target.style.backgroundColor = '#3498db')}
+                onMouseOver={(e) => !loading && validateSecretKey(formData.secretKey) && (e.target.style.backgroundColor = '#2980b9')}
+                onMouseOut={(e) => !loading && validateSecretKey(formData.secretKey) && (e.target.style.backgroundColor = '#3498db')}
               >
                 <FaPlusCircle style={{ marginRight: '5px' }} />
                 {loading ? 'Processing...' : editMode ? 'Update Employee' : 'Create Employee'}

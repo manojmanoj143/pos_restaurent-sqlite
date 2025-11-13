@@ -1,10 +1,13 @@
-// ActiveOrders.jsx - Full Updated Code with Mark Delivered Moving to Trip Reports and Updating Sales Record with deliveryPersonName. (No changes needed here for initial assignment, as it already sets deliveryPersonName correctly. Added update to sales in handleMarkDelivered for Online Delivery orders. Logging added in backend for debugging.)
+// ActiveOrders.jsx - Full Updated Code with Mark Delivered Moving to Trip Reports and Updating Sales Record with deliveryPersonName. 
+// Changes: Replaced window.confirm in handleMarkDelivered with the warning confirmation system (setWarningMessage, setIsConfirmation, setPendingAction).
+// All other confirmations already use the warning system. Suppressed non-confirmation UI messages as before. No window.alerts or confirms used.
 import React, { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
 import axios from "axios";
 import { FaArrowLeft, FaSyncAlt, FaCheck, FaTruck, FaKey } from "react-icons/fa";
 import "./ActiveOrders.css";
+
 function ActiveOrders() {
   const [savedOrders, setSavedOrders] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -23,6 +26,7 @@ function ActiveOrders() {
   const [baseUrl, setBaseUrl] = useState(""); // Dynamic base URL for client/server mode
   const [vatRate, setVatRate] = useState(0.10); // UPDATED: Dynamic VAT rate like in FrontPage
   const navigate = useNavigate();
+
   // Fetch config for baseUrl (client/server mode)
   useEffect(() => {
     const fetchConfig = async () => {
@@ -42,6 +46,7 @@ function ActiveOrders() {
     };
     fetchConfig();
   }, []);
+
   // UPDATED: Fetch VAT rate dynamically like in FrontPage
   useEffect(() => {
     const fetchVat = async () => {
@@ -55,6 +60,7 @@ function ActiveOrders() {
     };
     fetchVat();
   }, [baseUrl]);
+
   const fetchData = async () => {
     try {
       const ordersResponse = await axios.get(`${baseUrl}/api/activeorders`);
@@ -86,6 +92,7 @@ function ActiveOrders() {
       // Suppressed UI warning message as per request - do not setWarningMessage
     }
   };
+
   const fetchEmployees = async () => {
     try {
       const response = await axios.get(`${baseUrl}/api/employees`);
@@ -95,6 +102,7 @@ function ActiveOrders() {
       // Suppressed UI warning message as per request
     }
   };
+
   const fetchTables = async () => {
     try {
       const response = await axios.get(`${baseUrl}/api/tables`);
@@ -104,6 +112,7 @@ function ActiveOrders() {
       // Suppressed UI warning message as per request
     }
   };
+
   useEffect(() => {
     fetchData();
     fetchEmployees();
@@ -111,16 +120,19 @@ function ActiveOrders() {
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, [baseUrl, vatRate]); // Re-fetch after baseUrl and vatRate are set
+
   const getFloor = (tableNumber) => {
     const table = tables.find((t) => String(t.table_number) === String(tableNumber));
     return table ? table.floor : "N/A";
   };
+
   const handleRefresh = () => {
     fetchData();
     // Suppressed UI warning message as per request
     // setWarningMessage("Orders refreshed!");
     // setWarningType("success");
   };
+
   const handleWarningOk = () => {
     if (pendingAction) {
       pendingAction();
@@ -130,6 +142,7 @@ function ActiveOrders() {
     setWarningType("warning");
     setIsConfirmation(false);
   };
+
   const handleConfirmYes = () => {
     if (pendingAction) {
       pendingAction();
@@ -139,12 +152,14 @@ function ActiveOrders() {
     setWarningType("warning");
     setIsConfirmation(false);
   };
+
   const handleConfirmNo = () => {
     setWarningMessage("");
     setWarningType("warning");
     setPendingAction(null);
     setIsConfirmation(false);
   };
+
   const handleDeleteOrder = (orderId, tableNumber, orderNo) => {
     setWarningMessage(`Are you sure you want to delete order ${orderNo || "N/A"}?`);
     setWarningType("warning");
@@ -172,6 +187,7 @@ function ActiveOrders() {
       }
     );
   };
+
   const handleDeleteItem = async (orderId, itemId) => {
     try {
       await axios.delete(`${baseUrl}/api/activeorders/${orderId}/items/${itemId}`);
@@ -182,6 +198,7 @@ function ActiveOrders() {
       // Suppressed UI warning message as per request
     }
   };
+
   const handleDeleteAllCompleted = () => {
     setWarningMessage("Are you sure you want to delete all completed orders?");
     setWarningType("warning");
@@ -208,6 +225,7 @@ function ActiveOrders() {
       }
     );
   };
+
   const handleCompleted = async (orderId) => {
     const order = savedOrders.find((o) => o.orderId === orderId);
     if (!order) return;
@@ -240,6 +258,7 @@ function ActiveOrders() {
       // Suppressed UI warning message as per request
     }
   };
+
   const checkAllItemsPickedUp = (order) => {
     if (!order.cartItems || order.cartItems.length === 0) return false;
     const allPickedUp = order.cartItems.every((item) => {
@@ -251,6 +270,7 @@ function ActiveOrders() {
     console.log(`Check if all items picked up for order ${order.orderNo}: ${allPickedUp}`);
     return allPickedUp;
   };
+
   // New: Validate secret key to get employee ID
   const validateSecretKey = async (secretKey) => {
     try {
@@ -261,6 +281,7 @@ function ActiveOrders() {
       return null;
     }
   };
+
   const handleAssignDeliveryPerson = async (orderId, deliveryPersonId) => {
     const order = savedOrders.find((o) => o.orderId === orderId);
     if (!order) {
@@ -282,6 +303,7 @@ function ActiveOrders() {
     setSelectedDeliveryPersonId(deliveryPersonId);
     setShowDeliveryPopup(true);
   };
+
   const confirmDeliveryAssignment = async () => {
     try {
       const order = savedOrders.find((o) => o.orderId === selectedOrderId);
@@ -317,11 +339,13 @@ function ActiveOrders() {
       setShowDeliveryPopup(false);
     }
   };
+
   // New: Handle re-assign with secret key
   const handleReassignWithSecretKey = (orderId) => {
     setSelectedOrderId(orderId);
     setShowReassignPopup(true);
   };
+
   const confirmReassign = async () => {
     const newEmployeeId = await validateSecretKey(secretKeyInput);
     if (!newEmployeeId) {
@@ -345,40 +369,51 @@ function ActiveOrders() {
       console.error("Failed to reassign:", err);
     }
   };
+
   // UPDATED: Mark as delivered - Now calls new endpoint to move to trip_reports and updates sales record with deliveryPersonName for Online Delivery
-  const handleMarkDelivered = async (orderId) => {
-    if (!window.confirm('Mark as delivered and move to trip reports?')) return;
-    try {
-      const order = savedOrders.find(o => o.orderId === orderId);
-      await axios.put(`${baseUrl}/api/activeorders/${orderId}/mark-delivered`);
-      // NEW: If Online Delivery and has deliveryPersonName, update the corresponding sales record
-      if (order && order.orderType === 'Online Delivery' && order.orderNo && order.deliveryPersonName) {
+  // FIXED: Replaced window.confirm with warning confirmation system
+  const handleMarkDelivered = (orderId) => {
+    setWarningMessage('Mark as delivered and move to trip reports?');
+    setWarningType("warning");
+    setIsConfirmation(true);
+    setPendingAction(() =>
+      async () => {
         try {
-          await axios.post(`${baseUrl}/api/sales/update-delivery`, {
-            orderNo: order.orderNo,
-            deliveryPersonName: order.deliveryPersonName
-          });
-          console.log(`Updated sales record for orderNo: ${order.orderNo} with deliveryPersonName: ${order.deliveryPersonName}`);
-        } catch (updateErr) {
-          console.error("Failed to update sales delivery info:", updateErr);
+          const order = savedOrders.find(o => o.orderId === orderId);
+          await axios.put(`${baseUrl}/api/activeorders/${orderId}/mark-delivered`);
+          // NEW: If Online Delivery and has deliveryPersonName, update the corresponding sales record
+          if (order && order.orderType === 'Online Delivery' && order.orderNo && order.deliveryPersonName) {
+            try {
+              await axios.post(`${baseUrl}/api/sales/update-delivery`, {
+                orderNo: order.orderNo,
+                deliveryPersonName: order.deliveryPersonName
+              });
+              console.log(`Updated sales record for orderNo: ${order.orderNo} with deliveryPersonName: ${order.deliveryPersonName}`);
+            } catch (updateErr) {
+              console.error("Failed to update sales delivery info:", updateErr);
+            }
+          }
+          fetchData();
+          // Suppressed UI warning message as per request
+        } catch (err) {
+          console.error("Failed to mark delivered:", err);
         }
       }
-      fetchData();
-      // Suppressed UI warning message as per request
-    } catch (err) {
-      console.error("Failed to mark delivered:", err);
-    }
+    );
   };
+
   const cancelDeliveryPopup = () => {
     setShowDeliveryPopup(false);
     setSelectedOrderId(null);
     setSelectedDeliveryPersonId(null);
   };
+
   const cancelReassignPopup = () => {
     setShowReassignPopup(false);
     setSecretKeyInput('');
     setSelectedOrderId(null);
   };
+
   const updateOrder = async (orderId, updatedOrder) => {
     try {
       const response = await axios.put(`${baseUrl}/api/activeorders/${orderId}`, updatedOrder);
@@ -393,6 +428,7 @@ function ActiveOrders() {
       // Suppressed UI warning message as per request
     }
   };
+
   const inferOrderType = (order) => {
     if (order.tableNumber && order.tableNumber !== "N/A") return "Dine In";
     else if (
@@ -402,6 +438,7 @@ function ActiveOrders() {
       return "Online Delivery";
     else return "Take Away";
   };
+
   const handleSelectOrder = (order) => {
     if (!order.cartItems || order.cartItems.length === 0) {
       console.error("This order has no items.");
@@ -661,12 +698,15 @@ function ActiveOrders() {
       },
     });
   };
+
   const handleBack = () => {
     navigate("/frontpage");
   };
+
   const toggleItems = (index) => {
     setExpandedItems((prev) => ({ ...prev, [index]: !prev[index] }));
   };
+
   const renderIngredients = (ingredients) => {
     if (!ingredients || ingredients.length === 0) return "No ingredients";
     return (
@@ -679,10 +719,12 @@ function ActiveOrders() {
       </ul>
     );
   };
+
   const getPickedUpTick = (item, kitchen) => {
     if (!item.kitchenStatuses || !kitchen) return null;
     return item.kitchenStatuses[kitchen] === "PickedUp" ? <FaCheck style={{ color: 'green', marginLeft: '5px' }} /> : null;
   };
+
   const renderAddons = (addonQuantities, addonVariants, addonPrices, item) => {
     if (!addonQuantities || Object.keys(addonQuantities).length === 0) return null;
     return (
@@ -704,6 +746,7 @@ function ActiveOrders() {
       </ul>
     );
   };
+
   const renderCombos = (comboQuantities, comboVariants, comboPrices, item) => {
     if (!comboQuantities || Object.keys(comboQuantities).length === 0) return null;
     return (
@@ -727,6 +770,7 @@ function ActiveOrders() {
       </ul>
     );
   };
+
   // FIXED: New function to render combo offer sub-items
   const renderComboOfferSubItems = (comboItems, itemQuantity, item) => {
     if (!comboItems || comboItems.length === 0) return null;
@@ -746,10 +790,12 @@ function ActiveOrders() {
       </ul>
     );
   };
+
   const calculateOrderTotal = (cartItems) => {
     if (!Array.isArray(cartItems)) return "0.00";
     return cartItems.reduce((sum, item) => sum + (Number(item.totalPrice) || 0), 0).toFixed(2);
   };
+
   // UPDATED: Use dynamic vatRate for grand total calculation
   const calculateGrandTotal = (cartItems) => {
     if (!Array.isArray(cartItems)) return "0.00";
@@ -757,6 +803,7 @@ function ActiveOrders() {
     const vat = subtotal * vatRate;
     return (subtotal + vat).toFixed(2);
   };
+
   const getItemStatus = (item) => {
     if (!item.kitchenStatuses) return item.status || "Pending";
     const statuses = Object.values(item.kitchenStatuses);
@@ -765,6 +812,7 @@ function ActiveOrders() {
     else if (statuses.includes("Preparing")) return "Preparing";
     else return "Pending";
   };
+
   const getStatusStyle = (status) => {
     switch (status) {
       case "Pending":
@@ -779,6 +827,7 @@ function ActiveOrders() {
         return {};
     }
   };
+
   // FIXED: Updated to include country, field1, field2, field3, flat_villa_no, building_name
   const formatDeliveryAddress = (deliveryAddress) => {
     if (!deliveryAddress) return "Not provided";
@@ -792,37 +841,45 @@ function ActiveOrders() {
     ].filter((part) => part != null && String(part).trim() !== "");
     return parts.length > 0 ? parts.join(", ") : "Not provided";
   };
+
   const formatChairsBooked = (chairsBooked) => {
     if (!Array.isArray(chairsBooked) || chairsBooked.length === 0) return "None";
     return chairsBooked.join(", ");
   };
+
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return "N/A";
     return new Date(timestamp).toLocaleString();
   };
+
   const getDeliveryPersonName = (deliveryPersonId) => {
     const employee = employees.find((emp) => emp.employeeId === deliveryPersonId);
     return employee ? `${employee.name} (ID: ${employee.employeeId})` : "Not assigned";
   };
+
   const orderCounts = {
     "Dine In": savedOrders.filter((order) => (order.orderType || inferOrderType(order)) === "Dine In" && order.status !== 'assigned').length,
     "Take Away": savedOrders.filter((order) => (order.orderType || inferOrderType(order)) === "Take Away" && order.status !== 'assigned').length,
     "Online Delivery": savedOrders.filter((order) => (order.orderType || inferOrderType(order)) === "Online Delivery" && order.status !== 'assigned').length,
     "Delivered": savedOrders.filter((order) => order.status === 'assigned').length, // New filter for assigned/delivered
   };
+
   const filteredOrders = savedOrders.filter((order) => {
     const orderType = order.orderType || inferOrderType(order);
     const isDeliveredFilter = filterType === "Delivered";
     return (isDeliveredFilter ? order.status === 'assigned' : orderType === filterType && order.status !== 'assigned');
   });
+
   const unservedFiltered = filteredOrders.filter((order) => {
     const allItemsCompleted = order.cartItems.every((item) => (item.servedQuantity || 0) >= (item.quantity || 1));
     return !(order.paid && allItemsCompleted);
   });
+
   const completedFiltered = filteredOrders.filter((order) => {
     const allItemsCompleted = order.cartItems.every((item) => (item.servedQuantity || 0) >= (item.quantity || 1));
     return order.paid && allItemsCompleted;
   });
+
   const handleServiceChange = async (orderId, itemId, isServed) => {
     try {
       const order = savedOrders.find((o) => o.orderId === orderId);
@@ -851,6 +908,7 @@ function ActiveOrders() {
       // Suppressed UI warning message as per request
     }
   };
+
   const handlePaymentChange = async (orderId, isPaid) => {
     try {
       const response = await axios.put(`${baseUrl}/api/activeorders/${orderId}`, { paid: isPaid });
@@ -865,6 +923,7 @@ function ActiveOrders() {
       // Suppressed UI warning message as per request
     }
   };
+
   const renderOrderTable = (orders, tableTitle) => {
     const isOnlineDelivery = filterType === "Online Delivery";
     const isDeliveredFilter = filterType === "Delivered";
@@ -1135,10 +1194,12 @@ function ActiveOrders() {
       </div>
     );
   };
+
   function checkAllItemsPickedUpForItem(item) {
     if (!item.kitchenStatuses) return false;
     return Object.values(item.kitchenStatuses).every((status) => status === "PickedUp");
   }
+
   return (
     <div className="active-orders-container">
       {warningMessage && (
@@ -1254,4 +1315,5 @@ function ActiveOrders() {
     </div>
   );
 }
+
 export default ActiveOrders;

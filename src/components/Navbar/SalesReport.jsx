@@ -443,7 +443,79 @@ const SalesReport = () => {
     const totalAmount = unitTotal * (item.quantity || 1);
     return { baseAmount, addonTotal, comboTotal, unitTotal, totalAmount };
   };
-  // Get contribution for a specific item/addon/combo in a sale
+  // UPDATED: Get matching entries for item filter - Collect detailed lines for items, addons, combos separately
+  const getMatchingEntries = (sales, filterItem) => {
+    const lowerFilter = filterItem.toLowerCase();
+    const entries = [];
+    sales.forEach((sale) => {
+      sale.items.forEach((item) => {
+        // Match main item
+        if (item.item_name && item.item_name.toLowerCase() === lowerFilter) {
+          const { baseAmount } = calculateItemPrices(item);
+          entries.push({
+            type: 'Item',
+            name: item.item_name,
+            qty: item.quantity || 0,
+            unitPrice: baseAmount,
+            total: baseAmount * (item.quantity || 1),
+            invoice_no: sale.invoice_no,
+            customer: sale.customer || 'N/A',
+            date: sale.date,
+            time: sale.time,
+            paymentMode: sale.payments?.[0]?.mode_of_payment || 'CASH',
+            sale,
+          });
+        }
+        // Match addons
+        if (item.addons && item.addons.length > 0) {
+          item.addons.forEach((addon) => {
+            if (addon.addon_name && addon.addon_name.toLowerCase() === lowerFilter) {
+              const addonContrib = (parseFloat(addon.addon_price) || 0) * (addon.addon_quantity || 1);
+              entries.push({
+                type: 'Addon',
+                name: `${addon.addon_name}${addon.size ? ` (${addon.size})` : ''}`,
+                qty: (addon.addon_quantity || 0) * (item.quantity || 1),
+                unitPrice: parseFloat(addon.addon_price) || 0,
+                total: addonContrib * (item.quantity || 1),
+                invoice_no: sale.invoice_no,
+                customer: sale.customer || 'N/A',
+                date: sale.date,
+                time: sale.time,
+                paymentMode: sale.payments?.[0]?.mode_of_payment || 'CASH',
+                sale,
+                parentItem: item.item_name,
+              });
+            }
+          });
+        }
+        // Match combos (using name1)
+        if (item.selectedCombos && item.selectedCombos.length > 0) {
+          item.selectedCombos.forEach((combo) => {
+            if (combo.name1 && combo.name1.toLowerCase() === lowerFilter) {
+              const comboContrib = (parseFloat(combo.combo_price) || 0) * (combo.combo_quantity || 1);
+              entries.push({
+                type: 'Combo',
+                name: `${combo.name1}${combo.size ? ` (${combo.size})` : ''}`,
+                qty: (combo.combo_quantity || 0) * (item.quantity || 1),
+                unitPrice: parseFloat(combo.combo_price) || 0,
+                total: comboContrib * (item.quantity || 1),
+                invoice_no: sale.invoice_no,
+                customer: sale.customer || 'N/A',
+                date: sale.date,
+                time: sale.time,
+                paymentMode: sale.payments?.[0]?.mode_of_payment || 'CASH',
+                sale,
+                parentItem: item.item_name,
+              });
+            }
+          });
+        }
+      });
+    });
+    // Sort by date descending
+    return entries.sort((a, b) => new Date(b.date) - new Date(a.date));
+  };
+  // UPDATED: Get contribution for aggregates - Now per matching entry for detailed calculation
   const getItemContribution = (sale, filterItem) => {
     let subtotal = 0;
     let quantity = 0;
@@ -452,7 +524,7 @@ const SalesReport = () => {
       // Main item match
       if (item.item_name && item.item_name.toLowerCase() === lowerFilter) {
         const prices = calculateItemPrices(item);
-        subtotal += prices.totalAmount;
+        subtotal += prices.baseAmount * (item.quantity || 1); // Only base, excluding addons/combos
         quantity += item.quantity || 0;
       }
       // Addon matches
@@ -501,9 +573,13 @@ const SalesReport = () => {
   const calculateGrandTotal = (sale) => {
     return parseFloat(sale.grand_total) || 0;
   };
-  // Get amounts for a sale (full or item-specific) - UPDATED to use invoice VAT amount
-  const getSaleAmounts = (sale, isItemFilter, filterItem) => {
+  // UPDATED: Get amounts for a sale (full or item-specific) - Now supports detailed for item filter
+  const getSaleAmounts = (sale, isItemFilter, filterItem, isDetailed = false) => {
     if (isItemFilter && filterItem) {
+      if (isDetailed) {
+        // For detailed, return 0 as base, since we calculate per entry
+        return { subtotal: 0, vat: 0, grand: 0, quantity: 0 };
+      }
       const contrib = getItemContribution(sale, filterItem);
       const sub = contrib.subtotal;
       // FIXED: For item-wise, prorate VAT based on item's contribution to subtotal (using sale's vat_amount)
@@ -519,6 +595,54 @@ const SalesReport = () => {
         quantity: null,
       };
     }
+  };
+  // UPDATED: Calculate aggregates - Now handles detailed item contributions
+  const calculateAggregates = (sales, isItemFilter, filterItem, matchingEntries = []) => {
+    const currencyTotals = new Map();
+    let totalQuantity = 0;
+    let totalRecords = 0;
+    if (isItemFilter && filterItem && matchingEntries.length > 0) {
+      // Detailed mode: Aggregate from entries
+      matchingEntries.forEach((entry) => {
+        const currency = entry.sale.invoice_currency || settings.currency || 'INR';
+        const precision = entry.sale.invoice_currency_precision || settings.currencyPrecision || 2;
+        if (!currencyTotals.has(currency)) {
+          currencyTotals.set(currency, { subtotal: 0, vat: 0, grand: 0, precision, count: 0 });
+        }
+        const totals = currencyTotals.get(currency);
+        totals.subtotal += entry.total;
+        totals.count += 1;
+        totalQuantity += entry.qty;
+        // Prorate VAT per entry's sale
+        const contrib = getItemContribution(entry.sale, filterItem);
+        const totalSub = calculateSubtotal(entry.sale);
+        const proratedVatPerSale = totalSub > 0 ? (contrib.subtotal / totalSub) * calculateVAT(entry.sale) : 0;
+        // Apportion prorated VAT to this entry based on entry.total / contrib.subtotal
+        const entryVat = contrib.subtotal > 0 ? (entry.total / contrib.subtotal) * proratedVatPerSale : 0;
+        totals.vat += entryVat;
+        totals.grand += entry.total + entryVat;
+      });
+      totalRecords = matchingEntries.length;
+    } else {
+      // Non-item filter: Original logic
+      sales.forEach((sale) => {
+        const amounts = getSaleAmounts(sale, isItemFilter, filterItem);
+        const currency = sale.invoice_currency || settings.currency || 'INR';
+        const precision = sale.invoice_currency_precision || settings.currencyPrecision || 2;
+        if (!currencyTotals.has(currency)) {
+          currencyTotals.set(currency, { subtotal: 0, vat: 0, grand: 0, precision });
+        }
+        const totals = currencyTotals.get(currency);
+        totals.subtotal += amounts.subtotal;
+        totals.vat += amounts.vat;
+        totals.grand += amounts.grand;
+        if (isItemFilter) {
+          totalQuantity += amounts.quantity || 0;
+          totalRecords += 1; // Count sales containing the item
+        }
+      });
+    }
+    return { currencyTotals: new Map([...currencyTotals.entries()]), totalQuantity, totalRecords };
   };
   // Parse date string to Date object (assuming backend date is yyyy-MM-dd)
   const parseDate = (dateStr) => {
@@ -591,7 +715,7 @@ const SalesReport = () => {
   // Filter sales data based on user inputs (apply all set filters) - fixed item match to use name1 for combos
   const filteredSales = salesData.filter((sale) => {
     const saleDate = parseDate(sale.date);
-   
+  
     // Convert filter dates (which are Date objects) to start/end of day for comparison
     const from = fromDate ? new Date(fromDate.setHours(0, 0, 0, 0)) : null;
     const to = toDate ? new Date(toDate.setHours(23, 59, 59, 999)) : null;
@@ -642,30 +766,9 @@ const SalesReport = () => {
       phoneMatch
     );
   });
-  // UPDATED: Calculate aggregates per currency (since mixed currencies)
-  const calculateAggregates = (sales, isItemFilter, filterItem) => {
-    const currencyTotals = new Map();
-    let totalQuantity = 0;
-    let totalRecords = 0;
-    sales.forEach((sale) => {
-      const amounts = getSaleAmounts(sale, isItemFilter, filterItem);
-      const currency = sale.invoice_currency || settings.currency || 'INR';
-      const precision = sale.invoice_currency_precision || settings.currencyPrecision || 2;
-      if (!currencyTotals.has(currency)) {
-        currencyTotals.set(currency, { subtotal: 0, vat: 0, grand: 0, precision });
-      }
-      const totals = currencyTotals.get(currency);
-      totals.subtotal += amounts.subtotal;
-      totals.vat += amounts.vat;
-      totals.grand += amounts.grand;
-      if (isItemFilter) {
-        totalQuantity += amounts.quantity || 0;
-        totalRecords += 1; // Count sales containing the item
-      }
-    });
-    return { currencyTotals: new Map([...currencyTotals.entries()]), totalQuantity, totalRecords };
-  };
-  const { currencyTotals, totalQuantity, totalRecords } = calculateAggregates(filteredSales, isItemFilter, filterItem);
+  // UPDATED: Get matching entries only if item filter
+  const matchingEntries = isItemFilter ? getMatchingEntries(filteredSales, filterItem) : [];
+  const { currencyTotals, totalQuantity, totalRecords } = calculateAggregates(filteredSales, isItemFilter, filterItem, matchingEntries);
   // Handle warning message dismissal
   const handleWarningOk = () => {
     if (pendingAction) {
@@ -680,7 +783,7 @@ const SalesReport = () => {
   const handleBack = () => {
     navigate(-1);
   };
-  // UPDATED: Generate HTML content for printing or PDF export - Now handles per-sale currency
+  // UPDATED: Generate HTML content for printing or PDF export - Now handles detailed item lines for item filter
   const generatePrintableContent = (sales, filterType) => {
     if (sales.length === 0) return "";
     const effectivePrintSettings = printSettings || {
@@ -728,34 +831,59 @@ const SalesReport = () => {
     } else {
       filterDescription = "All Sales";
     }
+    // UPDATED: For item filter, get matching entries
+    const printMatchingEntries = isItemFilt ? getMatchingEntries(sales, filtItem) : [];
     // Compute aggregates for print (per currency)
-    const { currencyTotals: printCurrencyTotals, totalQuantity: printTotalQuantity, totalRecords: printTotalRecords } = calculateAggregates(sales, isItemFilt, filtItem);
-    let rows = sales
-      .map(
-        (sale) => {
-          const amounts = getSaleAmounts(sale, isItemFilt, filtItem);
-          return `
+    const { currencyTotals: printCurrencyTotals, totalQuantity: printTotalQuantity, totalRecords: printTotalRecords } = calculateAggregates(sales, isItemFilt, filtItem, printMatchingEntries);
+    let rows = '';
+    if (isItemFilt && printMatchingEntries.length > 0) {
+      // Detailed rows for item filter
+      rows = printMatchingEntries
+        .map(
+          (entry) => `
             <tr style="border-bottom: 1px solid #d3d3d3;">
-              <td style="text-align: left; padding: 8px; font-size: 12px; border-right: 1px solid #d3d3d3;">${sale.invoice_no}</td>
-              <td style="text-align: left; padding: 8px; font-size: 12px; border-right: 1px solid #d3d3d3;">${sale.customer || "N/A"}</td>
-              <td style="text-align: center; padding: 8px; font-size: 12px; border-right: 1px solid #d3d3d3;">${sale.date}</td>
-              <td style="text-align: center; padding: 8px; font-size: 12px; border-right: 1px solid #d3d3d3;">${sale.time}</td>
-              <td style="text-align: center; padding: 8px; font-size: 12px; border-right: 1px solid #d3d3d3;">${sale.payments?.[0]?.mode_of_payment || "CASH"}</td>
-              <td style="text-align: right; padding: 8px; font-size: 12px; border-right: 1px solid #d3d3d3;">${formatCurrency(amounts.subtotal, sale)}</td>
-              <td style="text-align: right; padding: 8px; font-size: 12px; border-right: 1px solid #d3d3d3;">${formatCurrency(amounts.vat, sale)}</td>
-              <td style="text-align: right; padding: 8px; font-size: 12px;">${formatCurrency(amounts.grand, sale)}</td>
+              <td style="text-align: left; padding: 8px; font-size: 12px; border-right: 1px solid #d3d3d3;">${entry.invoice_no}</td>
+              <td style="text-align: left; padding: 8px; font-size: 12px; border-right: 1px solid #d3d3d3;">${entry.customer}</td>
+              <td style="text-align: center; padding: 8px; font-size: 12px; border-right: 1px solid #d3d3d3;">${entry.date}</td>
+              <td style="text-align: center; padding: 8px; font-size: 12px; border-right: 1px solid #d3d3d3;">${entry.time}</td>
+              <td style="text-align: center; padding: 8px; font-size: 12px; border-right: 1px solid #d3d3d3;">${entry.paymentMode}</td>
+              <td style="text-align: left; padding: 8px; font-size: 12px; border-right: 1px solid #d3d3d3;">${entry.type} ${entry.parentItem ? `(from ${entry.parentItem})` : ''}</td>
+              <td style="text-align: left; padding: 8px; font-size: 12px; border-right: 1px solid #d3d3d3;">${entry.name}</td>
+              <td style="text-align: center; padding: 8px; font-size: 12px; border-right: 1px solid #d3d3d3;">${entry.qty}</td>
+              <td style="text-align: right; padding: 8px; font-size: 12px;">${formatCurrency(entry.total, entry.sale)}</td>
             </tr>
-          `;
-        }
-      )
-      .join("");
+          `
+        )
+        .join("");
+    } else {
+      // Original sale rows
+      rows = sales
+        .map(
+          (sale) => {
+            const amounts = getSaleAmounts(sale, isItemFilt, filtItem);
+            return `
+              <tr style="border-bottom: 1px solid #d3d3d3;">
+                <td style="text-align: left; padding: 8px; font-size: 12px; border-right: 1px solid #d3d3d3;">${sale.invoice_no}</td>
+                <td style="text-align: left; padding: 8px; font-size: 12px; border-right: 1px solid #d3d3d3;">${sale.customer || "N/A"}</td>
+                <td style="text-align: center; padding: 8px; font-size: 12px; border-right: 1px solid #d3d3d3;">${sale.date}</td>
+                <td style="text-align: center; padding: 8px; font-size: 12px; border-right: 1px solid #d3d3d3;">${sale.time}</td>
+                <td style="text-align: center; padding: 8px; font-size: 12px; border-right: 1px solid #d3d3d3;">${sale.payments?.[0]?.mode_of_payment || "CASH"}</td>
+                <td style="text-align: right; padding: 8px; font-size: 12px; border-right: 1px solid #d3d3d3;">${formatCurrency(amounts.subtotal, sale)}</td>
+                <td style="text-align: right; padding: 8px; font-size: 12px; border-right: 1px solid #d3d3d3;">${formatCurrency(amounts.vat, sale)}</td>
+                <td style="text-align: right; padding: 8px; font-size: 12px;">${formatCurrency(amounts.grand, sale)}</td>
+              </tr>
+            `;
+          }
+        )
+        .join("");
+    }
     let tfoot = '';
     // FIXED: Correct Map.forEach usage - (value, key) order, not destructuring value as array
     printCurrencyTotals.forEach((totals, currency) => {
       const formatter = getCurrencyFormatter(currency, totals.precision);
       tfoot += `
         <tr style="border-top: 2px solid #000000;">
-          <td colspan="5" style="text-align: right; padding: 8px; font-size: 12px; font-weight: bold;">${currency} Subtotal:</td>
+          <td colspan="${isItemFilt ? '8' : '5'}" style="text-align: right; padding: 8px; font-size: 12px; font-weight: bold;">${currency} Subtotal:</td>
           <td style="text-align: right; padding: 8px; font-size: 12px; font-weight: bold;">${formatter.format(totals.subtotal)}</td>
           <td style="text-align: right; padding: 8px; font-size: 12px; font-weight: bold;">${formatter.format(totals.vat)}</td>
           <td style="text-align: right; padding: 8px; font-size: 12px; font-weight: bold;">${formatter.format(totals.grand)}</td>
@@ -765,7 +893,7 @@ const SalesReport = () => {
     if (isItemFilt) {
       tfoot = `
         <tr style="border-top: 1px solid #000000;">
-          <td colspan="8" style="text-align: left; padding: 8px; font-size: 12px; font-weight: bold;">Total Records: ${printTotalRecords}, Total Quantity Sold: ${printTotalQuantity}</td>
+          <td colspan="${printMatchingEntries.length > 0 ? '9' : '8'}" style="text-align: left; padding: 8px; font-size: 12px; font-weight: bold;">Total Records: ${printTotalRecords}, Total Quantity Sold: ${printTotalQuantity}</td>
         </tr>
         ${tfoot}
       `;
@@ -787,14 +915,26 @@ const SalesReport = () => {
         <table style="width: 100%; border-collapse: collapse; border: 1px solid #000000; margin-bottom: 20px;">
           <thead>
             <tr style="background-color: #f0f0f0; border-bottom: 2px solid #000000;">
-              <th style="text-align: left; padding: 8px; font-size: 12px; border-right: 1px solid #000000;">Invoice No</th>
-              <th style="text-align: left; padding: 8px; font-size: 12px; border-right: 1px solid #000000;">Customer</th>
-              <th style="text-align: center; padding: 8px; font-size: 12px; border-right: 1px solid #000000;">Date</th>
-              <th style="text-align: center; padding: 8px; font-size: 12px; border-right: 1px solid #000000;">Time</th>
-              <th style="text-align: center; padding: 8px; font-size: 12px; border-right: 1px solid #000000;">Mode of Payment</th>
-              <th style="text-align: right; padding: 8px; font-size: 12px; border-right: 1px solid #000000;">Total</th>
-              <th style="text-align: right; padding: 8px; font-size: 12px; border-right: 1px solid #000000;">VAT</th>
-              <th style="text-align: right; padding: 8px; font-size: 12px;">Grand Total</th>
+              ${isItemFilt ? `
+                <th style="text-align: left; padding: 8px; font-size: 12px; border-right: 1px solid #000000;">Invoice No</th>
+                <th style="text-align: left; padding: 8px; font-size: 12px; border-right: 1px solid #000000;">Customer</th>
+                <th style="text-align: center; padding: 8px; font-size: 12px; border-right: 1px solid #000000;">Date</th>
+                <th style="text-align: center; padding: 8px; font-size: 12px; border-right: 1px solid #000000;">Time</th>
+                <th style="text-align: center; padding: 8px; font-size: 12px; border-right: 1px solid #000000;">Mode of Payment</th>
+                <th style="text-align: left; padding: 8px; font-size: 12px; border-right: 1px solid #000000;">Type</th>
+                <th style="text-align: left; padding: 8px; font-size: 12px; border-right: 1px solid #000000;">Name</th>
+                <th style="text-align: center; padding: 8px; font-size: 12px; border-right: 1px solid #000000;">Qty</th>
+                <th style="text-align: right; padding: 8px; font-size: 12px;">Total</th>
+              ` : `
+                <th style="text-align: left; padding: 8px; font-size: 12px; border-right: 1px solid #000000;">Invoice No</th>
+                <th style="text-align: left; padding: 8px; font-size: 12px; border-right: 1px solid #000000;">Customer</th>
+                <th style="text-align: center; padding: 8px; font-size: 12px; border-right: 1px solid #000000;">Date</th>
+                <th style="text-align: center; padding: 8px; font-size: 12px; border-right: 1px solid #000000;">Time</th>
+                <th style="text-align: center; padding: 8px; font-size: 12px; border-right: 1px solid #000000;">Mode of Payment</th>
+                <th style="text-align: right; padding: 8px; font-size: 12px; border-right: 1px solid #000000;">Total</th>
+                <th style="text-align: right; padding: 8px; font-size: 12px; border-right: 1px solid #000000;">VAT</th>
+                <th style="text-align: right; padding: 8px; font-size: 12px;">Grand Total</th>
+              `}
             </tr>
           </thead>
           <tbody>
@@ -1214,7 +1354,7 @@ const SalesReport = () => {
                     ? `Year-wise Sales Report: ${filterYear}`
                     : "All Sales Report"}
                 </Card.Title>
-                {filteredSales.length === 0 ? (
+                {(!isItemFilter && filteredSales.length === 0) || (isItemFilter && matchingEntries.length === 0) ? (
                   <div className="text-center" style={{ color: "#000000" }}>
                     No sales match the selected filters.
                   </div>
@@ -1230,69 +1370,134 @@ const SalesReport = () => {
                         className="table-header"
                       >
                         <tr>
-                          <th style={{ textAlign: "left", padding: "12px" }}>
-                            Invoice No
-                          </th>
-                          <th style={{ textAlign: "left", padding: "12px" }}>
-                            Customer
-                          </th>
-                          <th style={{ textAlign: "center", padding: "12px" }}>Date</th>
-                          <th style={{ textAlign: "center", padding: "12px" }}>Time</th>
-                          <th style={{ textAlign: "center", padding: "12px" }}>
-                            Mode of Payment
-                          </th>
-                          <th style={{ textAlign: "right", padding: "12px" }}>
-                            Total
-                          </th>
-                          <th style={{ textAlign: "right", padding: "12px" }}>
-                            VAT
-                          </th>
-                          <th style={{ textAlign: "right", padding: "12px" }}>
-                            Grand Total
-                          </th>
+                          {isItemFilter ? (
+                            <>
+                              <th style={{ textAlign: "left", padding: "12px" }}>
+                                Invoice No
+                              </th>
+                              <th style={{ textAlign: "left", padding: "12px" }}>
+                                Customer
+                              </th>
+                              <th style={{ textAlign: "center", padding: "12px" }}>Date</th>
+                              <th style={{ textAlign: "center", padding: "12px" }}>Time</th>
+                              <th style={{ textAlign: "center", padding: "12px" }}>
+                                Mode of Payment
+                              </th>
+                              <th style={{ textAlign: "left", padding: "12px" }}>
+                                Type
+                              </th>
+                              <th style={{ textAlign: "left", padding: "12px" }}>
+                                Name
+                              </th>
+                              <th style={{ textAlign: "center", padding: "12px" }}>Qty</th>
+                              <th style={{ textAlign: "right", padding: "12px" }}>
+                                Total
+                              </th>
+                            </>
+                          ) : (
+                            <>
+                              <th style={{ textAlign: "left", padding: "12px" }}>
+                                Invoice No
+                              </th>
+                              <th style={{ textAlign: "left", padding: "12px" }}>
+                                Customer
+                              </th>
+                              <th style={{ textAlign: "center", padding: "12px" }}>Date</th>
+                              <th style={{ textAlign: "center", padding: "12px" }}>Time</th>
+                              <th style={{ textAlign: "center", padding: "12px" }}>
+                                Mode of Payment
+                              </th>
+                              <th style={{ textAlign: "right", padding: "12px" }}>
+                                Total
+                              </th>
+                              <th style={{ textAlign: "right", padding: "12px" }}>
+                                VAT
+                              </th>
+                              <th style={{ textAlign: "right", padding: "12px" }}>
+                                Grand Total
+                              </th>
+                            </>
+                          )}
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredSales.map((sale) => {
-                          const amounts = getSaleAmounts(sale, isItemFilter, filterItem);
-                          return (
+                        {isItemFilter ? (
+                          matchingEntries.map((entry, index) => (
                             <tr
-                              key={sale.invoice_no}
+                              key={`${entry.invoice_no}-${entry.name}-${index}`}
                               className="table-row"
                             >
                               <td style={{ textAlign: "left", padding: "12px" }}>
-                                {sale.invoice_no}
+                                {entry.invoice_no}
                               </td>
                               <td style={{ textAlign: "left", padding: "12px" }}>
-                                {sale.customer || "N/A"}
+                                {entry.customer}
                               </td>
                               <td style={{ textAlign: "center", padding: "12px" }}>
-                                {sale.date}
+                                {entry.date}
                               </td>
                               <td style={{ textAlign: "center", padding: "12px" }}>
-                                {sale.time}
+                                {entry.time}
                               </td>
                               <td style={{ textAlign: "center", padding: "12px" }}>
-                                {sale.payments?.[0]?.mode_of_payment || "CASH"}
+                                {entry.paymentMode}
+                              </td>
+                              <td style={{ textAlign: "left", padding: "12px" }}>
+                                {entry.type} {entry.parentItem ? `(from ${entry.parentItem})` : ''}
+                              </td>
+                              <td style={{ textAlign: "left", padding: "12px" }}>
+                                {entry.name}
+                              </td>
+                              <td style={{ textAlign: "center", padding: "12px" }}>
+                                {entry.qty}
                               </td>
                               <td style={{ textAlign: "right", padding: "12px" }}>
-                                {formatCurrency(amounts.subtotal, sale)}
-                              </td>
-                              <td style={{ textAlign: "right", padding: "12px" }}>
-                                {formatCurrency(amounts.vat, sale)}
-                              </td>
-                              <td style={{ textAlign: "right", padding: "12px" }}>
-                                {formatCurrency(amounts.grand, sale)}
+                                {formatCurrency(entry.total, entry.sale)}
                               </td>
                             </tr>
-                          );
-                        })}
+                          ))
+                        ) : (
+                          filteredSales.map((sale) => {
+                            const amounts = getSaleAmounts(sale, isItemFilter, filterItem);
+                            return (
+                              <tr
+                                key={sale.invoice_no}
+                                className="table-row"
+                              >
+                                <td style={{ textAlign: "left", padding: "12px" }}>
+                                  {sale.invoice_no}
+                                </td>
+                                <td style={{ textAlign: "left", padding: "12px" }}>
+                                  {sale.customer || "N/A"}
+                                </td>
+                                <td style={{ textAlign: "center", padding: "12px" }}>
+                                  {sale.date}
+                                </td>
+                                <td style={{ textAlign: "center", padding: "12px" }}>
+                                  {sale.time}
+                                </td>
+                                <td style={{ textAlign: "center", padding: "12px" }}>
+                                  {sale.payments?.[0]?.mode_of_payment || "CASH"}
+                                </td>
+                                <td style={{ textAlign: "right", padding: "12px" }}>
+                                  {formatCurrency(amounts.subtotal, sale)}
+                                </td>
+                                <td style={{ textAlign: "right", padding: "12px" }}>
+                                  {formatCurrency(amounts.vat, sale)}
+                                </td>
+                                <td style={{ textAlign: "right", padding: "12px" }}>
+                                  {formatCurrency(amounts.grand, sale)}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
                       </tbody>
                       <tfoot>
                         {isItemFilter && (
                           <tr>
                             <td
-                              colSpan="8"
+                              colSpan={isItemFilter ? "8" : "8"}
                               style={{
                                 textAlign: "left",
                                 padding: "12px",
@@ -1307,7 +1512,7 @@ const SalesReport = () => {
                         {Array.from(currencyTotals.entries()).map(([currency, totals]) => (
                           <tr key={currency} className="currency-total-row">
                             <td
-                              colSpan={isItemFilter ? "5" : "5"}
+                              colSpan={isItemFilter ? "7" : "5"}
                               style={{
                                 textAlign: "right",
                                 padding: "12px",

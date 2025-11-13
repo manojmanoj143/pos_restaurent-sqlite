@@ -43,6 +43,13 @@ COMBO_IMAGES_DIR = os.path.join(
     os.environ.get('UPLOAD_FOLDER', 'static'),  # Fallback to 'static' in dev
     'combo_images'
 )
+
+
+def is_valid_secret_key(secret_key):
+    """Validate secret key is exactly 6 digits."""
+    return secret_key.isdigit() and len(secret_key) == 6
+
+
 # --- Configuration Management ---
 def get_base_dir():
     """Determine the base directory, handling both development and frozen executable cases."""
@@ -154,7 +161,7 @@ class SQLiteCollection:
                 return d
         return None
 
-    def update_one(self, filter, update, array_filters=None):
+    def update_one(self, filter, update, array_filters=None, upsert=False):  # FIXED: Added upsert=False param
         cur = self.conn.cursor()
         rows = cur.execute(f"SELECT id, data FROM {self.name}").fetchall()
         matched = False
@@ -221,8 +228,41 @@ class SQLiteCollection:
                 cur.execute(f"UPDATE {self.name} SET data = ? WHERE id = ?", (json_doc, row_id))
                 self.conn.commit()
                 return type('UpdateResult', (), {'matched_count': 1, 'modified_count': 1})()
+        if not matched and upsert:
+            # FIXED: Implement upsert logic
+            new_doc = dict(filter)  # Start with filter as base
+            if '$set' in update:
+                for k, v in update['$set'].items():
+                    if '.' in k:
+                        parts = k.split('.')
+                        current = new_doc
+                        for part in parts[:-1]:
+                            if part.isdigit():
+                                part = int(part)
+                            if part not in current:
+                                current[part] = {} if not str(part).isdigit() else []
+                            current = current[part]
+                        current[parts[-1]] = v
+                    else:
+                        new_doc[k] = v
+            if '$inc' in update:
+                for k, v in update['$inc'].items():
+                    if '.' in k:
+                        parts = k.split('.')
+                        current = new_doc
+                        for part in parts[:-1]:
+                            if part.isdigit():
+                                part = int(part)
+                            if part not in current:
+                                current[part] = {} if not str(part).isdigit() else []
+                            current = current[part]
+                        current[parts[-1]] = current.get(parts[-1], 0) + v
+                    else:
+                        new_doc[k] = new_doc.get(k, 0) + v
+            # Insert the new doc (add _id if missing)
+            self.insert_one(new_doc)
+            return type('UpdateResult', (), {'matched_count': 0, 'modified_count': 1})()
         return type('UpdateResult', (), {'matched_count': 0, 'modified_count': 0})()
-
     def update_many(self, filter, update):
         cur = self.conn.cursor()
         rows = cur.execute(f"SELECT id, data FROM {self.name}").fetchall()
@@ -3097,20 +3137,20 @@ if config.get('mode') == 'server':
         '+44', # UK
         '+61', # Australia
     ]
+
     def generate_employee_id():
         """Generate a unique employee ID."""
         return str(uuid.uuid4())[:8]
-    def generate_secret_key():
-        """Generate a unique secret key for employee."""
-        return secrets.token_hex(16) # 32-character hex string
+
     def validate_email(email):
         """Validate email format."""
         import re
         pattern = r'^[\w\.-]+@[\w\.-]+\.\w+$'
         return re.match(pattern, email) is not None
+
     VALID_COUNTRY_CODES = ['+91', '+1', '+971', '+44', '+61'] # Add more as needed
-    # NEW: Endpoint for employees
-    # NEW: Endpoint for employees
+
+    # UPDATED: Endpoint for employees - Manual 6-digit secret key, no auto-generate
     @app.route('/api/employees', methods=['GET'])
     @db_required
     def get_employees():
@@ -3120,14 +3160,15 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error fetching employees: {str(e)}")
             return jsonify({"error": str(e)}), 500
+
     @app.route('/api/employees', methods=['POST'])
     @db_required
     def create_employee():
         try:
             data = request.get_json()
-            required_fields = ['name', 'phoneNumber', 'vehicleNumber', 'role', 'email']
+            required_fields = ['name', 'phoneNumber', 'vehicleNumber', 'role', 'email', 'secretKey']
             if not data or not all(key in data for key in required_fields):
-                return jsonify({'error': 'Missing required fields'}), 400
+                return jsonify({'error': 'Missing required fields: name, phoneNumber, vehicleNumber, role, email, secretKey'}), 400
             phone_number = data['phoneNumber']
             if not any(phone_number.startswith(code) for code in VALID_COUNTRY_CODES):
                 return jsonify({'error': 'Phone number must include a valid country code (e.g., +91, +1, +971)'}), 400
@@ -3139,8 +3180,12 @@ if config.get('mode') == 'server':
                 return jsonify({'error': 'Invalid email format'}), 400
             if employees_collection.find_one({'email': email}):
                 return jsonify({'error': 'Email already exists'}), 400
+            secret_key = data['secretKey']
+            if not is_valid_secret_key(secret_key):  # FIXED: Global helper now available
+                return jsonify({'error': 'Secret key must be exactly 6 digits'}), 400
+            if employees_collection.find_one({'secretKey': secret_key}):
+                return jsonify({'error': 'Secret key already exists. Please choose a unique 6-digit key'}), 400
             employee_id = generate_employee_id()
-            secret_key = generate_secret_key() # Generate unique secret key
             employee = {
                 'employeeId': employee_id,
                 'name': data['name'],
@@ -3148,7 +3193,7 @@ if config.get('mode') == 'server':
                 'vehicleNumber': data['vehicleNumber'],
                 'role': data['role'],
                 'email': email,
-                'secretKey': secret_key, # Store secret key
+                'secretKey': secret_key, # Manual secret key
                 'created_at': datetime.now(ZoneInfo("UTC")).isoformat()
             }
             employees_collection.insert_one(employee)
@@ -3163,15 +3208,17 @@ if config.get('mode') == 'server':
             return jsonify({'message': 'Employee created successfully', 'employee': employee}), 201
         except Exception as e:
             logger.error(f"Error creating employee: {str(e)}")
+            logger.error(traceback.format_exc())  # Added for better debugging
             return jsonify({'error': str(e)}), 500
+
     @app.route('/api/employees/<employee_id>', methods=['PUT'])
     @db_required
     def update_employee(employee_id):
         try:
             data = request.get_json()
-            required_fields = ['name', 'phoneNumber', 'vehicleNumber', 'role', 'email']
+            required_fields = ['name', 'phoneNumber', 'vehicleNumber', 'role', 'email', 'secretKey']
             if not data or not all(key in data for key in required_fields):
-                return jsonify({'error': 'Missing required fields'}), 400
+                return jsonify({'error': 'Missing required fields: name, phoneNumber, vehicleNumber, role, email, secretKey'}), 400
             phone_number = data['phoneNumber']
             if not any(phone_number.startswith(code) for code in VALID_COUNTRY_CODES):
                 return jsonify({'error': 'Phone number must include a valid country code (e.g., +91, +1, +971)'}), 400
@@ -3184,17 +3231,21 @@ if config.get('mode') == 'server':
             existing_employee = employees_collection.find_one({'email': email, 'employeeId': {'$ne': employee_id}})
             if existing_employee:
                 return jsonify({'error': 'Email already exists'}), 400
-            regenerate_secret_key = data.get('regenerateSecretKey', False)
+            secret_key = data['secretKey']
+            if not is_valid_secret_key(secret_key):  # FIXED: Global helper now available
+                return jsonify({'error': 'Secret key must be exactly 6 digits'}), 400
+            existing_secret = employees_collection.find_one({'secretKey': secret_key, 'employeeId': {'$ne': employee_id}})
+            if existing_secret:
+                return jsonify({'error': 'Secret key already exists. Please choose a unique 6-digit key'}), 400
             updated_employee = {
                 'name': data['name'],
                 'phoneNumber': phone_number,
                 'vehicleNumber': data['vehicleNumber'],
                 'role': data['role'],
                 'email': email,
+                'secretKey': secret_key, # Manual update of secret key
                 'updated_at': datetime.now(ZoneInfo("UTC")).isoformat()
             }
-            if regenerate_secret_key:
-                updated_employee['secretKey'] = generate_secret_key() # Regenerate unique secret key
             result = employees_collection.update_one(
                 {'employeeId': employee_id},
                 {'$set': updated_employee}
@@ -3213,20 +3264,23 @@ if config.get('mode') == 'server':
             )
             # Fetch updated employee to return
             updated_full = employees_collection.find_one({'employeeId': employee_id})
-            logger.info(f"Updated employee: {employee_id} with email: {email}")
+            logger.info(f"Updated employee: {employee_id} with email: {email} and secret key: {secret_key}")
             return jsonify({'message': 'Employee updated successfully', 'employee': updated_full}), 200
         except Exception as e:
             logger.error(f"Error updating employee: {str(e)}")
             return jsonify({'error': str(e)}), 500
-    # New: Validate secret key endpoint
+
+    # FIXED: Renamed route to avoid name collision with helper function
     @app.route('/api/employees/validate-secret-key', methods=['POST'])
     @db_required
-    def validate_secret_key():
+    def validate_employee_secret_key(): # Renamed route function
         try:
             data = request.get_json()
             secret_key = data.get('secretKey')
             if not secret_key:
                 return jsonify({'error': 'Secret key required'}), 400
+            if not is_valid_secret_key(secret_key):  # FIXED: Global helper now available
+                return jsonify({'error': 'Secret key must be exactly 6 digits'}), 400
             employee = employees_collection.find_one({'secretKey': secret_key})
             if not employee:
                 return jsonify({'error': 'Invalid secret key'}), 400
@@ -3234,6 +3288,7 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error validating secret key: {str(e)}")
             return jsonify({'error': str(e)}), 500
+
     @app.route('/api/employees/<employee_id>', methods=['DELETE'])
     @db_required
     def delete_employee(employee_id):
@@ -3251,7 +3306,8 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error deleting employee: {str(e)}")
             return jsonify({"error": str(e)}), 500
-   # UPDATED: Endpoint to get trip reports - now fetches matching sales for the employee (case-insensitive deliveryPersonName, orderType='Online Delivery', status != 'Cancelled')
+
+    # UPDATED: Endpoint to get trip reports - now fetches matching sales for the employee (case-insensitive deliveryPersonName, orderType='Online Delivery', status != 'Cancelled')
     @app.route('/api/tripreports/<employee_id>', methods=['GET'])
     @db_required
     def get_trip_reports(employee_id):
