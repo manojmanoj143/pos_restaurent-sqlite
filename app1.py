@@ -1746,20 +1746,27 @@ if config.get('mode') == 'server':
                     item.pop('offer_price', None)
                     item.pop('offer_start_time', None)
                     item.pop('offer_end_time', None)
-                if item.get('image'):
-                    item['image'] = f"/api/images/{os.path.basename(item['image'])}"
-                else:
-                    item['image'] = placeholder_url
+                # Ensure tax_rate is 0 if tax_applicable is False
+                if not item.get('tax_applicable', False):
+                    item['tax_rate'] = 0
                 for addon in item.get('addons', []):
+                    if not addon.get('tax_applicable', False):
+                        addon['tax_rate'] = 0
                     if addon.get('addon_image'):
                         addon['addon_image'] = f"/api/images/{os.path.basename(addon['addon_image'])}"
                     else:
                         addon['addon_image'] = placeholder_url
                 for combo in item.get("combos", []):
+                    if not combo.get('tax_applicable', False):
+                        combo['tax_rate'] = 0
                     if combo.get('combo_image'):
                         combo['combo_image'] = f"/api/images/{os.path.basename(combo['combo_image'])}"
                     else:
                         combo['combo_image'] = placeholder_url
+                if item.get('image'):
+                    item['image'] = f"/api/images/{os.path.basename(item['image'])}"
+                else:
+                    item['image'] = placeholder_url
                 items_list.append(item)
                 logger.info(f"Fetched {len(items_list)} items")
             return jsonify(items_list), 200
@@ -1798,20 +1805,27 @@ if config.get('mode') == 'server':
                 item.pop('offer_price', None)
                 item.pop('offer_start_time', None)
                 item.pop('offer_end_time', None)
-            if item.get('image'):
-                item['image'] = f"/api/images/{os.path.basename(item['image'])}"
-            else:
-                item['image'] = placeholder_url
+            # Ensure tax_rate is 0 if tax_applicable is False
+            if not item.get('tax_applicable', False):
+                item['tax_rate'] = 0
             for addon in item.get('addons', []):
+                if not addon.get('tax_applicable', False):
+                    addon['tax_rate'] = 0
                 if addon.get('addon_image'):
                     addon['addon_image'] = f"/api/images/{os.path.basename(addon['addon_image'])}"
                 else:
                     addon['addon_image'] = placeholder_url
             for combo in item.get("combos", []):
+                if not combo.get('tax_applicable', False):
+                    combo['tax_rate'] = 0
                 if combo.get('combo_image'):
                     combo['combo_image'] = f"/api/images/{os.path.basename(combo['combo_image'])}"
                 else:
                     combo['combo_image'] = placeholder_url
+            if item.get('image'):
+                item['image'] = f"/api/images/{os.path.basename(item['image'])}"
+            else:
+                item['image'] = placeholder_url
             logger.info(f"Fetched item: {identifier}")
             return jsonify(item), 200
         except Exception as e:
@@ -1841,6 +1855,15 @@ if config.get('mode') == 'server':
                     logger.error(f"Invalid offer time format: {str(e)}")
                     return jsonify({"error": f"Invalid offer time format: {str(e)}"}), 400
             data = sanitize_image_fields(data)
+            # Ensure tax_rate is 0 if tax_applicable is False
+            if not data.get('tax_applicable', False):
+                data['tax_rate'] = 0
+            for addon in data.get('addons', []):
+                if not addon.get('tax_applicable', False):
+                    addon['tax_rate'] = 0
+            for combo in data.get('combos', []):
+                if not combo.get('tax_applicable', False):
+                    combo['tax_rate'] = 0
             data.setdefault('custom_addon_applicable', False)
             data.setdefault('custom_combo_applicable', False)
             data.setdefault('custom_total_calories', 0)
@@ -1884,6 +1907,15 @@ if config.get('mode') == 'server':
                     logger.error(f"Invalid offer time format: {str(e)}")
                     return jsonify({"error": f"Invalid offer time format: {str(e)}"}), 400
             data = sanitize_image_fields(data)
+            # Ensure tax_rate is 0 if tax_applicable is False
+            if not data.get('tax_applicable', False):
+                data['tax_rate'] = 0
+            for addon in data.get('addons', []):
+                if not addon.get('tax_applicable', False):
+                    addon['tax_rate'] = 0
+            for combo in data.get('combos', []):
+                if not combo.get('tax_applicable', False):
+                    combo['tax_rate'] = 0
             data['modified_at'] = datetime.now(ZoneInfo("UTC")).isoformat()
             result = items_collection.update_one({'_id': item_id}, {'$set': data})
             if result.matched_count == 0:
@@ -4589,7 +4621,7 @@ def manage_company_details():
         response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
         return response, 200
-   
+  
     if request.method == 'POST':
         try:
             data = request.get_json()
@@ -4607,6 +4639,9 @@ def manage_company_details():
                 'taxNumber': data.get('taxNumber', ''),
                 'fssaiNumber': data.get('fssaiNumber', ''),
                 'panNumber': data.get('panNumber', ''),
+                'openingTime': data.get('openingTime', ''),
+                'closingTime': data.get('closingTime', ''),
+                'totalTime': data.get('totalTime', ''),
                 # UPDATED: Addresses now use dynamic fields: country, field1, field2, field3, flat_villa_no, building_name
                 'addresses': data.get('addresses', [{'country': '', 'field1': '', 'field2': '', 'field3': '', 'flat_villa_no': '', 'building_name': ''}]),
                 'contacts': data.get('contacts', [{'phoneNumber': '', 'whatsappNumber': '', 'emailAddress': '', 'website': ''}]),
@@ -4630,7 +4665,7 @@ def manage_company_details():
         except Exception as e:
             logger.error(f"Error saving company details: {str(e)}")
             return jsonify({"error": f"Failed to save company details: {str(e)}"}), 500
-   
+  
     if request.method == 'GET':
         try:
             details = list(company_details_collection.find())

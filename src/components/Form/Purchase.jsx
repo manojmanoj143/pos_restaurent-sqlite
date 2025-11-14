@@ -31,7 +31,7 @@ function WarningMessage({ message, onConfirm, onCancel }) {
 }
 function Purchase() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('item');
+  const [activeTab, setActiveTab] = useState('landing'); // Start with 'landing' for initial button view
   const [globalSearch, setGlobalSearch] = useState(''); // NEW: Global search state
   const [items, setItems] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
@@ -242,15 +242,34 @@ function Purchase() {
     invoice: 'Purchase Invoice',
     report: 'Reports',
   };
+  // NEW: Centered tabs for main navigation
+  const centeredTabs = [
+    { key: 'item', name: 'Items', icon: <FaShoppingCart /> },
+    { key: 'supplier', name: 'Suppliers', icon: <FaUser /> },
+    { key: 'order', name: 'Purchase Order', icon: <FaShoppingCart /> },
+    { key: 'receipt', name: 'Purchase Receipt', icon: <FaTruck /> },
+    { key: 'invoice', name: 'Purchase Invoice', icon: <FaFileInvoice /> },
+    { key: 'report', name: 'Reports', icon: <FaChartBar /> },
+  ];
+  // NEW: Handle Back Button Logic
+  const handleBack = () => {
+    if (activeTab === 'landing') {
+      navigate('/admin');
+    } else {
+      setActiveTab('landing');
+    }
+  };
   useEffect(() => {
-    fetchItems();
-    fetchSuppliers();
-    fetchSupplierGroups(); // NEW: Fetch Supplier Groups
-    fetchPurchaseOrders();
-    fetchPurchaseReceipts();
-    fetchPurchaseInvoices();
-    fetchUoms();
-  }, []);
+    if (activeTab !== 'landing') {
+      fetchItems();
+      fetchSuppliers();
+      fetchSupplierGroups(); // NEW: Fetch Supplier Groups
+      fetchPurchaseOrders();
+      fetchPurchaseReceipts();
+      fetchPurchaseInvoices();
+      fetchUoms();
+    }
+  }, [activeTab]); // Fetch data only when not on landing
   useEffect(() => {
     if (suppliers.length > 0) {
       const companies = [...new Set(suppliers.map(s => s.company).filter(Boolean))];
@@ -2342,14 +2361,6 @@ function Purchase() {
   const calculateGrandTotal = (data, field = 'grandTotal') => {
     return data.reduce((sum, item) => sum + (item[field] || 0), 0);
   };
-  const tabs = [
-    { key: 'item', name: 'Items', icon: <FaShoppingCart /> },
-    { key: 'supplier', name: 'Suppliers', icon: <FaUser /> },
-    { key: 'order', name: 'Purchase Order', icon: <FaShoppingCart /> },
-    { key: 'receipt', name: 'Purchase Receipt', icon: <FaTruck /> },
-    { key: 'invoice', name: 'Purchase Invoice', icon: <FaFileInvoice /> },
-    { key: 'report', name: 'Reports', icon: <FaChartBar /> },
-  ];
   const handleTopSave = (e) => {
     if (editingSupplier) {
         handleSupplierUpdate(e);
@@ -2400,866 +2411,1239 @@ function Purchase() {
     setActiveTab(tabKey);
     setGlobalSearch('');
   };
-  return (
-    <div className="purchase-container">
-      <div className="purchase-sidebar">
-        <h2>Purchase Module</h2>
-        {tabs.map(tab => (
+  // NEW: Landing page with centered buttons
+  const LandingPage = () => (
+    <div className="purchase-landing">
+      <h1>Purchase Module</h1>
+      <div className="purchase-landing-buttons">
+        {centeredTabs.map(tab => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`purchase-tab-button ${activeTab === tab.key ? 'active' : ''}`}
+            className="purchase-landing-button"
           >
             {tab.icon}
             <span>{tab.name}</span>
           </button>
         ))}
       </div>
+    </div>
+  );
+  return (
+    <div className="purchase-container">
       <div className="purchase-content">
-        <button onClick={() => navigate('/admin')} className="purchase-back-button">
+        <button onClick={handleBack} className="purchase-back-button">
           <FaArrowLeft />
         </button>
         <div className="purchase-main-content">
-          <h2>{tabHeadings[activeTab] || 'Purchase Module'}</h2>
-          {/* NEW: Global Search Bar - Top Right */}
-          <div className="purchase-global-search" style={{ position: 'absolute', top: '20px', right: '20px', width: '300px' }}>
-            <input
-              type="text"
-              placeholder="Search modules (Items, Suppliers, etc.)..."
-              value={globalSearch}
-              onChange={(e) => setGlobalSearch(e.target.value)}
-              className="purchase-input"
-            />
-            {globalSearch && (
-              <div className="purchase-search-dropdown" style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: '1px solid #ccc', maxHeight: '200px', overflowY: 'auto', zIndex: 1000 }}>
-                {tabOptions
-                  .filter(tab => tab.name.toLowerCase().includes(globalSearch.toLowerCase()))
-                  .map(tab => (
-                    <button
-                      key={tab.key}
-                      onClick={() => handleGlobalSearchClick(tab.key)}
-                      className="purchase-search-item"
-                      style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px', border: 'none', background: 'none', cursor: 'pointer' }}
-                    >
-                      {tab.name}
-                    </button>
-                  ))}
-              </div>
-            )}
-          </div>
-          {loading && <p className="purchase-loading">Loading...</p>}
-          {(error || message) && (
-            <p className={`purchase-message ${error ? 'error' : 'success'}`}>
-              {error || message}
-            </p>
-          )}
-          {showWarning && (
-            <WarningMessage
-              message={showWarning}
-              onConfirm={warningAction}
-              onCancel={() => { setShowWarning(null); setWarningAction(null); }}
-            />
-          )}
-          {showNewUomModal && (
-            <div className="purchase-modal-overlay" onClick={() => { setShowNewUomModal(false); setNewUomName(''); setPendingUom(null); }}>
-              <div className="purchase-modal" onClick={(e) => e.stopPropagation()}>
-                <button className="purchase-modal-close" onClick={() => { setShowNewUomModal(false); setNewUomName(''); setPendingUom(null); }}>
-                    <FaTimes />
-                </button>
-                <h3>Create New UOM</h3>
+          {activeTab === 'landing' ? (
+            <LandingPage />
+          ) : (
+            <>
+              <h2>{tabHeadings[activeTab] || 'Purchase Module'}</h2>
+              {/* NEW: Global Search Bar - Top Right */}
+              <div className="purchase-global-search" style={{ position: 'absolute', top: '20px', right: '20px', width: '300px' }}>
                 <input
-                    type="text"
-                    value={newUomName}
-                    onChange={(e) => setNewUomName(e.target.value)}
-                    placeholder="Enter new UOM name"
-                    className="purchase-input"
+                  type="text"
+                  placeholder="Search modules (Items, Suppliers, etc.)..."
+                  value={globalSearch}
+                  onChange={(e) => setGlobalSearch(e.target.value)}
+                  className="purchase-input"
                 />
-                <div className="purchase-form-buttons">
-                    <button onClick={handleCreateNewUom} className="purchase-button submit">Create</button>
-                    <button onClick={() => { setShowNewUomModal(false); setNewUomName(''); setPendingUom(null); }} className="purchase-button cancel">Cancel</button>
-                </div>
+                {globalSearch && (
+                  <div className="purchase-search-dropdown" style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: '1px solid #ccc', maxHeight: '200px', overflowY: 'auto', zIndex: 1000 }}>
+                    {tabOptions
+                      .filter(tab => tab.name.toLowerCase().includes(globalSearch.toLowerCase()))
+                      .map(tab => (
+                        <button
+                          key={tab.key}
+                          onClick={() => handleGlobalSearchClick(tab.key)}
+                          className="purchase-search-item"
+                          style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px', border: 'none', background: 'none', cursor: 'pointer' }}
+                        >
+                          {tab.name}
+                        </button>
+                      ))}
+                  </div>
+                )}
               </div>
-            </div>
-          )}
-          {showNewCompanyModal && (
-            <div className="purchase-modal-overlay" onClick={() => { setShowNewCompanyModal(false); setNewCompanyName(''); setPendingCompany(null); }}>
-              <div className="purchase-modal" onClick={(e) => e.stopPropagation()}>
-                <button className="purchase-modal-close" onClick={() => { setShowNewCompanyModal(false); setNewCompanyName(''); setPendingCompany(null); }}>
-                    <FaTimes />
-                </button>
-                <h3>Create New Company</h3>
-                <input
-                    type="text"
-                    value={newCompanyName}
-                    onChange={(e) => setNewCompanyName(e.target.value)}
-                    placeholder="Enter new company name"
-                    className="purchase-input"
-                />
-                <div className="purchase-form-buttons">
-                    <button onClick={handleCreateNewCompany} className="purchase-button submit">Create</button>
-                    <button onClick={() => { setShowNewCompanyModal(false); setNewCompanyName(''); setPendingCompany(null); }} className="purchase-button cancel">Cancel</button>
-                </div>
-              </div>
-            </div>
-          )}
-          {showUomListModal && (
-            <div className="purchase-modal-overlay" onClick={() => setShowUomListModal(false)}>
-              <div className="purchase-modal" onClick={(e) => e.stopPropagation()}>
-                <button className="purchase-modal-close" onClick={() => setShowUomListModal(false)}>
-                    <FaTimes />
-                </button>
-                <h3>UOM List</h3>
-                <table className="purchase-table">
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {uomOptions.map(uom => (
-                            <tr key={uom._id}>
-                                <td>
-                                    {editingUom === uom._id ? (
-                                        <input
-                                            type="text"
-                                            value={editingUomName}
-                                            onChange={(e) => setEditingUomName(e.target.value)}
-                                            className="purchase-input"
-                                        />
-                                    ) : (
-                                        uom.name
-                                    )}
-                                </td>
-                                <td>
-                                    {editingUom === uom._id ? (
-                                        <>
-                                            <button onClick={() => handleUpdateUom(uom._id)} className="purchase-button submit">
-                                                <FaCheck /> Save
-                                            </button>
-                                            <button onClick={() => setEditingUom(null)} className="purchase-button cancel">
-                                                <FaTimes /> Cancel
-                                            </button>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <button onClick={() => handleEditUom(uom)} className="purchase-button edit">
-                                                <FaEdit /> Edit
-                                            </button>
-                                            <button onClick={() => deleteUom(uom._id)} className="purchase-button delete">
-                                                <FaTrash /> Delete
-                                            </button>
-                                        </>
-                                    )}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-          {/* NEW: Supplier Group Modal */}
-          {showSupplierGroupModal && (
-            <div className="purchase-modal-overlay" onClick={() => { setShowSupplierGroupModal(false); setNewSupplierGroupName(''); setEditingSupplierGroup(null); }}>
-              <div className="purchase-modal" onClick={(e) => e.stopPropagation()}>
-                <button className="purchase-modal-close" onClick={() => { setShowSupplierGroupModal(false); setNewSupplierGroupName(''); setEditingSupplierGroup(null); }}>
-                    <FaTimes />
-                </button>
-                <h3>{editingSupplierGroup ? 'Edit Supplier Group' : 'Create New Supplier Group'}</h3>
-                <input
-                    type="text"
-                    value={newSupplierGroupName}
-                    onChange={(e) => setNewSupplierGroupName(e.target.value)}
-                    placeholder="Enter supplier group name"
-                    className="purchase-input"
-                />
-                <div className="purchase-form-buttons">
-                    <button onClick={handleSupplierGroupSubmit} className="purchase-button submit">
-                        {editingSupplierGroup ? 'Update' : 'Create'}
-                    </button>
-                    <button onClick={() => { setShowSupplierGroupModal(false); setNewSupplierGroupName(''); setEditingSupplierGroup(null); }} className="purchase-button cancel">Cancel</button>
-                </div>
-              </div>
-            </div>
-          )}
-          {activeTab === 'item' && (
-            <div className="purchase-section">
-              <div className="purchase-header">
-                <h3>Manage Items</h3>
-                <div className="purchase-filter-group-center">
-                  <input
-                    type="text"
-                    placeholder="Search items by name"
-                    value={itemSearch}
-                    onChange={(e) => setItemSearch(e.target.value)}
-                    className="purchase-input"
-                  />
-                </div>
-                <div className="purchase-filter-group-right">
-                   {editingItem && (
-                    <button type="button" onClick={() => setEditingItem(null)} className="purchase-button cancel">
-                      Cancel
-                    </button>
-                  )}
-                  <button type="button" onClick={() => setShowUomListModal(true)} className="purchase-button filter">
-                    View UOMs
+              {/* NEW: Centered Tab Navigation */}
+              <div className="purchase-centered-tabs">
+                {centeredTabs.map(tab => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setActiveTab(tab.key)}
+                    className={`purchase-tab-button ${activeTab === tab.key ? 'active' : ''}`}
+                  >
+                    {tab.icon}
+                    <span>{tab.name}</span>
                   </button>
-                  <button type="button" onClick={editingItem ? handleItemUpdate : handleItemSubmit} className="purchase-button submit">
-                    {editingItem ? 'Update Item' : 'Save Item(s)'}
-                  </button>
-                </div>
+                ))}
               </div>
-              <div className="purchase-form">
-                <table className="purchase-table">
-                    <thead>
-                        <tr>
-                            <th rowSpan="2">Company</th>
-                            <th rowSpan="2">Item Name</th>
-                            <th rowSpan="2">Grams</th>
-                            <th colSpan="2">Carton</th>
-                            <th colSpan="2">Packet</th>
-                            <th colSpan="2">Patty</th>
-                            <th rowSpan="2">Suppliers</th>
-                            <th rowSpan="2">Actions</th>
-                        </tr>
-                        <tr>
-                            <th>Nos</th><th>UOM</th>
-                            <th>Nos</th><th>UOM</th>
-                            <th>Nos</th><th>UOM</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {itemFormRows.map((row, idx) => (
-                            <tr key={idx}>
-                                <td>
-                                    <select
-                                        value={row.company}
-                                        onChange={(e) => handleItemFormChange(idx, 'company', e.target.value)}
-                                        className="purchase-input select"
-                                        required
-                                    >
-                                        <option value="">Select Company</option>
-                                        {uniqueCompanyNames.map(name => (
-                                            <option key={name} value={name}>
-                                                {name}
-                                            </option>
-                                        ))}
-                                        <option value="create_new">Create New Company</option>
-                                    </select>
-                                </td>
-                                <td><input type="text" value={row.name} onChange={(e) => handleItemFormChange(idx, 'name', e.target.value)} placeholder="Item name" className="purchase-input" required/></td>
-                                <td><input type="number" value={row.grams} onChange={(e) => handleItemFormChange(idx, 'grams', e.target.value)} placeholder="Grams" className="purchase-input"/></td>
-                                <td><input type="number" value={row.boxToMaster} onChange={(e) => handleItemFormChange(idx, 'boxToMaster', e.target.value)} placeholder="Nos" className="purchase-input" required /></td>
-                                <td>
-                                    <select value={row.masterUnit} onChange={(e) => handleItemFormChange(idx, 'masterUnit', e.target.value)} className="purchase-input select" required>
-                                        <option value="">Select UOM</option>
-                                        {uomOptions.map(uom => (<option key={uom._id} value={uom.name}>{uom.name}</option>))}
-                                        <option value="create_new">Create New UOM</option>
-                                    </select>
-                                </td>
-                                <td><input type="number" value={row.masterToOuter} onChange={(e) => handleItemFormChange(idx, 'masterToOuter', e.target.value)} placeholder="Nos" className="purchase-input" required /></td>
-                                <td>
-                                    <select value={row.outerUnit} onChange={(e) => handleItemFormChange(idx, 'outerUnit', e.target.value)} className="purchase-input select" required>
-                                        <option value="">Select UOM</option>
-                                        {uomOptions.map(uom => (<option key={uom._id} value={uom.name}>{uom.name}</option>))}
-                                        <option value="create_new">Create New UOM</option>
-                                    </select>
-                                </td>
-                                <td><input type="number" value={row.outerToNos} onChange={(e) => handleItemFormChange(idx, 'outerToNos', e.target.value)} placeholder="Nos" className="purchase-input" required /></td>
-                                <td><input type="text" value={row.nosUnit} onChange={(e) => handleItemFormChange(idx, 'nosUnit', e.target.value)} placeholder="Nos UOM (e.g., Patty)" className="purchase-input" required /></td>
-                                <td>
-                                    <select
-                                      multiple
-                                      value={row.suppliers.map(s => `${s.supplierId}|${s.supplierName}`)}
-                                      onChange={(e) => {
-                                        const selectedOptions = Array.from(e.target.selectedOptions);
-                                        const newSuppliers = selectedOptions.map(option => {
-                                          const [supplierId, supplierName] = option.value.split('|');
-                                          return { supplierId, supplierName };
-                                        });
-                                        handleItemFormChange(idx, 'suppliers', newSuppliers);
-                                      }}
-                                      className="purchase-input select"
-                                    >
-                                      {suppliers
-                                        .filter(s => s.company === row.company)
-                                        .flatMap(supplier =>
-                                          (supplier.supplier_names && supplier.supplier_names.length > 0)
-                                            ? supplier.supplier_names.map(name => ({
-                                                id: supplier._id,
-                                                displayName: name
-                                              }))
-                                            : [{
-                                                id: supplier._id,
-                                                displayName: supplier.company
-                                              }]
-                                        )
-                                        .map(option => (
-                                          <option key={`${option.id}-${option.displayName}`} value={`${option.id}|${option.displayName}`}>
-                                            {option.displayName}
-                                          </option>
-                                        ))
-                                      }
-                                    </select>
-                                </td>
-                                <td>
-                                    {!editingItem && (
-                                    <button type="button" onClick={() => removeItemFormRow(idx)} className="purchase-button delete" disabled={itemFormRows.length === 1}>
-                                        <FaTrash />
-                                    </button>
-                                    )}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-                <div className="purchase-form-buttons">
-                    {!editingItem && (
-                    <button type="button" onClick={addItemFormRow} className="purchase-button add-row">
-                        <FaPlus /> Add Row
+              {loading && <p className="purchase-loading">Loading...</p>}
+              {(error || message) && (
+                <p className={`purchase-message ${error ? 'error' : 'success'}`}>
+                  {error || message}
+                </p>
+              )}
+              {showWarning && (
+                <WarningMessage
+                  message={showWarning}
+                  onConfirm={warningAction}
+                  onCancel={() => { setShowWarning(null); setWarningAction(null); }}
+                />
+              )}
+              {showNewUomModal && (
+                <div className="purchase-modal-overlay" onClick={() => { setShowNewUomModal(false); setNewUomName(''); setPendingUom(null); }}>
+                  <div className="purchase-modal" onClick={(e) => e.stopPropagation()}>
+                    <button className="purchase-modal-close" onClick={() => { setShowNewUomModal(false); setNewUomName(''); setPendingUom(null); }}>
+                        <FaTimes />
                     </button>
-                    )}
+                    <h3>Create New UOM</h3>
+                    <input
+                        type="text"
+                        value={newUomName}
+                        onChange={(e) => setNewUomName(e.target.value)}
+                        placeholder="Enter new UOM name"
+                        className="purchase-input"
+                    />
+                    <div className="purchase-form-buttons">
+                        <button onClick={handleCreateNewUom} className="purchase-button submit">Create</button>
+                        <button onClick={() => { setShowNewUomModal(false); setNewUomName(''); setPendingUom(null); }} className="purchase-button cancel">Cancel</button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <h3>Items List</h3>
-              <table className="purchase-table">
-                <thead>
-                  <tr>
-                    <th>Company</th>
-                    <th>Name</th>
-                    <th>Grams</th>
-                    <th>Cartons per Box</th>
-                    <th>Packets per Carton</th>
-                    <th>Patties per Packet</th>
-                    <th>Sold Nos</th>
-                    <th>Total Purchased</th>
-                    <th>Total Stock</th>
-                    <th>Suppliers</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredItems.map(item => {
-                    const remainingPatties = item.totalStock;
-           
-                    const supplierNamesList = (item.suppliers && Array.isArray(item.suppliers))
-                        ? item.suppliers.map(s => s.supplierName).join(', ')
-                        : 'N/A';
-                    return (
-                      <tr key={item._id}>
-                        <td>{item.company}</td>
-                        <td>{item.name}</td>
-                        <td>{item.grams || '-'}</td>
-                        <td>{item.boxToMaster} {item.masterUnit}</td>
-                        <td>{item.masterToOuter} {item.outerUnit}</td>
-                        <td>{item.outerToNos} {item.nosUnit}</td>
-                        <td>{item.soldNos || 0} {item.nosUnit}</td>
-                        <td>{item.totalPurchased || 0} {item.nosUnit}</td>
-                        <td>{remainingPatties} {item.nosUnit}</td>
-                        <td>{supplierNamesList}</td>
-                        <td className="purchase-action-buttons">
-                          <button onClick={() => setEditingItem(item)} className="purchase-button edit"><FaEdit /> Edit</button>
-                          <button onClick={() => deleteItem(item._id)} className="purchase-button delete"><FaTrash /> Delete</button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-          {activeTab === 'supplier' && (
-            <div className="purchase-section">
-                <div className="purchase-header">
-                    <h3>Manage Suppliers</h3>
+              )}
+              {showNewCompanyModal && (
+                <div className="purchase-modal-overlay" onClick={() => { setShowNewCompanyModal(false); setNewCompanyName(''); setPendingCompany(null); }}>
+                  <div className="purchase-modal" onClick={(e) => e.stopPropagation()}>
+                    <button className="purchase-modal-close" onClick={() => { setShowNewCompanyModal(false); setNewCompanyName(''); setPendingCompany(null); }}>
+                        <FaTimes />
+                    </button>
+                    <h3>Create New Company</h3>
+                    <input
+                        type="text"
+                        value={newCompanyName}
+                        onChange={(e) => setNewCompanyName(e.target.value)}
+                        placeholder="Enter new company name"
+                        className="purchase-input"
+                    />
+                    <div className="purchase-form-buttons">
+                        <button onClick={handleCreateNewCompany} className="purchase-button submit">Create</button>
+                        <button onClick={() => { setShowNewCompanyModal(false); setNewCompanyName(''); setPendingCompany(null); }} className="purchase-button cancel">Cancel</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {showUomListModal && (
+                <div className="purchase-modal-overlay" onClick={() => setShowUomListModal(false)}>
+                  <div className="purchase-modal" onClick={(e) => e.stopPropagation()}>
+                    <button className="purchase-modal-close" onClick={() => setShowUomListModal(false)}>
+                        <FaTimes />
+                    </button>
+                    <h3>UOM List</h3>
+                    <table className="purchase-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {uomOptions.map(uom => (
+                                <tr key={uom._id}>
+                                    <td>
+                                        {editingUom === uom._id ? (
+                                            <input
+                                                type="text"
+                                                value={editingUomName}
+                                                onChange={(e) => setEditingUomName(e.target.value)}
+                                                className="purchase-input"
+                                            />
+                                        ) : (
+                                            uom.name
+                                        )}
+                                    </td>
+                                    <td>
+                                        {editingUom === uom._id ? (
+                                            <>
+                                                <button onClick={() => handleUpdateUom(uom._id)} className="purchase-button submit">
+                                                    <FaCheck /> Save
+                                                </button>
+                                                <button onClick={() => setEditingUom(null)} className="purchase-button cancel">
+                                                    <FaTimes /> Cancel
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <button onClick={() => handleEditUom(uom)} className="purchase-button edit">
+                                                    <FaEdit /> Edit
+                                                </button>
+                                                <button onClick={() => deleteUom(uom._id)} className="purchase-button delete">
+                                                    <FaTrash /> Delete
+                                                </button>
+                                            </>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+              {/* NEW: Supplier Group Modal */}
+              {showSupplierGroupModal && (
+                <div className="purchase-modal-overlay" onClick={() => { setShowSupplierGroupModal(false); setNewSupplierGroupName(''); setEditingSupplierGroup(null); }}>
+                  <div className="purchase-modal" onClick={(e) => e.stopPropagation()}>
+                    <button className="purchase-modal-close" onClick={() => { setShowSupplierGroupModal(false); setNewSupplierGroupName(''); setEditingSupplierGroup(null); }}>
+                        <FaTimes />
+                    </button>
+                    <h3>{editingSupplierGroup ? 'Edit Supplier Group' : 'Create New Supplier Group'}</h3>
+                    <input
+                        type="text"
+                        value={newSupplierGroupName}
+                        onChange={(e) => setNewSupplierGroupName(e.target.value)}
+                        placeholder="Enter supplier group name"
+                        className="purchase-input"
+                    />
+                    <div className="purchase-form-buttons">
+                        <button onClick={handleSupplierGroupSubmit} className="purchase-button submit">
+                            {editingSupplierGroup ? 'Update' : 'Create'}
+                        </button>
+                        <button onClick={() => { setShowSupplierGroupModal(false); setNewSupplierGroupName(''); setEditingSupplierGroup(null); }} className="purchase-button cancel">Cancel</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {activeTab === 'item' && (
+                <div className="purchase-section">
+                  <div className="purchase-header">
+                    <h3>Manage Items</h3>
                     <div className="purchase-filter-group-center">
-                        <input
-                            type="text"
-                            placeholder="Search suppliers by name or phone"
-                            value={supplierSearch}
-                            onChange={(e) => setSupplierSearch(e.target.value)}
-                            className="purchase-input"
-                        />
+                      <input
+                        type="text"
+                        placeholder="Search items by name"
+                        value={itemSearch}
+                        onChange={(e) => setItemSearch(e.target.value)}
+                        className="purchase-input"
+                      />
                     </div>
                     <div className="purchase-filter-group-right">
-                        <button onClick={() => setShowSupplierGroupModal(true)} className="purchase-button filter"> {/* NEW: Create Supplier Group Button */}
-                            Create Supplier Group
+                       {editingItem && (
+                        <button type="button" onClick={() => setEditingItem(null)} className="purchase-button cancel">
+                          Cancel
                         </button>
-                        <button onClick={() => setShowSupplierModal(true)} className="purchase-button filter">
-                            View Suppliers List
+                      )}
+                      <button type="button" onClick={() => setShowUomListModal(true)} className="purchase-button filter">
+                        View UOMs
+                      </button>
+                      <button type="button" onClick={editingItem ? handleItemUpdate : handleItemSubmit} className="purchase-button submit">
+                        {editingItem ? 'Update Item' : 'Save Item(s)'}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="purchase-form">
+                    <table className="purchase-table">
+                        <thead>
+                            <tr>
+                                <th rowSpan="2">Company</th>
+                                <th rowSpan="2">Item Name</th>
+                                <th rowSpan="2">Grams</th>
+                                <th colSpan="2">Carton</th>
+                                <th colSpan="2">Packet</th>
+                                <th colSpan="2">Patty</th>
+                                <th rowSpan="2">Suppliers</th>
+                                <th rowSpan="2">Actions</th>
+                            </tr>
+                            <tr>
+                                <th>Nos</th><th>UOM</th>
+                                <th>Nos</th><th>UOM</th>
+                                <th>Nos</th><th>UOM</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {itemFormRows.map((row, idx) => (
+                                <tr key={idx}>
+                                    <td>
+                                        <select
+                                            value={row.company}
+                                            onChange={(e) => handleItemFormChange(idx, 'company', e.target.value)}
+                                            className="purchase-input select"
+                                            required
+                                        >
+                                            <option value="">Select Company</option>
+                                            {uniqueCompanyNames.map(name => (
+                                                <option key={name} value={name}>
+                                                    {name}
+                                                </option>
+                                            ))}
+                                            <option value="create_new">Create New Company</option>
+                                        </select>
+                                    </td>
+                                    <td><input type="text" value={row.name} onChange={(e) => handleItemFormChange(idx, 'name', e.target.value)} placeholder="Item name" className="purchase-input" required/></td>
+                                    <td><input type="number" value={row.grams} onChange={(e) => handleItemFormChange(idx, 'grams', e.target.value)} placeholder="Grams" className="purchase-input"/></td>
+                                    <td><input type="number" value={row.boxToMaster} onChange={(e) => handleItemFormChange(idx, 'boxToMaster', e.target.value)} placeholder="Nos" className="purchase-input" required /></td>
+                                    <td>
+                                        <select value={row.masterUnit} onChange={(e) => handleItemFormChange(idx, 'masterUnit', e.target.value)} className="purchase-input select" required>
+                                            <option value="">Select UOM</option>
+                                            {uomOptions.map(uom => (<option key={uom._id} value={uom.name}>{uom.name}</option>))}
+                                            <option value="create_new">Create New UOM</option>
+                                        </select>
+                                    </td>
+                                    <td><input type="number" value={row.masterToOuter} onChange={(e) => handleItemFormChange(idx, 'masterToOuter', e.target.value)} placeholder="Nos" className="purchase-input" required /></td>
+                                    <td>
+                                        <select value={row.outerUnit} onChange={(e) => handleItemFormChange(idx, 'outerUnit', e.target.value)} className="purchase-input select" required>
+                                            <option value="">Select UOM</option>
+                                            {uomOptions.map(uom => (<option key={uom._id} value={uom.name}>{uom.name}</option>))}
+                                            <option value="create_new">Create New UOM</option>
+                                        </select>
+                                    </td>
+                                    <td><input type="number" value={row.outerToNos} onChange={(e) => handleItemFormChange(idx, 'outerToNos', e.target.value)} placeholder="Nos" className="purchase-input" required /></td>
+                                    <td><input type="text" value={row.nosUnit} onChange={(e) => handleItemFormChange(idx, 'nosUnit', e.target.value)} placeholder="Nos UOM (e.g., Patty)" className="purchase-input" required /></td>
+                                    <td>
+                                        <select
+                                          multiple
+                                          value={row.suppliers.map(s => `${s.supplierId}|${s.supplierName}`)}
+                                          onChange={(e) => {
+                                            const selectedOptions = Array.from(e.target.selectedOptions);
+                                            const newSuppliers = selectedOptions.map(option => {
+                                              const [supplierId, supplierName] = option.value.split('|');
+                                              return { supplierId, supplierName };
+                                            });
+                                            handleItemFormChange(idx, 'suppliers', newSuppliers);
+                                          }}
+                                          className="purchase-input select"
+                                        >
+                                          {suppliers
+                                            .filter(s => s.company === row.company)
+                                            .flatMap(supplier =>
+                                              (supplier.supplier_names && supplier.supplier_names.length > 0)
+                                                ? supplier.supplier_names.map(name => ({
+                                                    id: supplier._id,
+                                                    displayName: name
+                                                  }))
+                                                : [{
+                                                    id: supplier._id,
+                                                    displayName: supplier.company
+                                                  }]
+                                            )
+                                            .map(option => (
+                                              <option key={`${option.id}-${option.displayName}`} value={`${option.id}|${option.displayName}`}>
+                                                {option.displayName}
+                                              </option>
+                                            ))
+                                          }
+                                        </select>
+                                    </td>
+                                    <td>
+                                        {!editingItem && (
+                                        <button type="button" onClick={() => removeItemFormRow(idx)} className="purchase-button delete" disabled={itemFormRows.length === 1}>
+                                            <FaTrash />
+                                        </button>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    <div className="purchase-form-buttons">
+                        {!editingItem && (
+                        <button type="button" onClick={addItemFormRow} className="purchase-button add-row">
+                            <FaPlus /> Add Row
                         </button>
-                        <button onClick={handleTopSave} className="purchase-button submit">
-                            {editingSupplier ? 'Update Supplier' : 'Save'}
-                        </button>
-                        {editingSupplier && (
-                            <button type="button" onClick={() => setEditingSupplier(null)} className="purchase-button cancel">
-                                Cancel
-                            </button>
                         )}
                     </div>
-                </div>
-                <div className="purchase-form">
-                    <div className="purchase-supplier-tabs">
-                        <div className={`purchase-supplier-tab ${activeSection === 'details' ? 'active' : ''}`} onClick={() => setActiveSection('details')}>Details</div>
-                        <div className={`purchase-supplier-tab ${activeSection === 'tax' ? 'active' : ''}`} onClick={() => setActiveSection('tax')}>Tax</div>
-                        <div className={`purchase-supplier-tab ${activeSection === 'address_contact' ? 'active' : ''}`} onClick={() => setActiveSection('address_contact')}>Address & Contact</div>
-                        <div className={`purchase-supplier-tab ${activeSection === 'accounting' ? 'active' : ''}`} onClick={() => setActiveSection('accounting')}>Accounting</div>
-                        <div className={`purchase-supplier-tab ${activeSection === 'settings' ? 'active' : ''}`} onClick={() => setActiveSection('settings')}>Settings</div>
-                    </div>
-                    {activeSection === 'details' && (
-                        <div className="purchase-supplier-content">
-                            <div className="purchase-form-field"><label className="purchase-label">Company Name / Trade Name</label><input type="text" value={supplierForm.company} onChange={(e) => setSupplierForm({ ...supplierForm, company: e.target.value })} className="purchase-input"/></div>
-                            <div className="purchase-form-field"><label className="purchase-label">Supplier Code / Short Name</label><input type="text" value={supplierForm.code} onChange={(e) => setSupplierForm({ ...supplierForm, code: e.target.value })} className="purchase-input"/></div>
-                            <div className="purchase-form-field">
-                                <label className="purchase-label">Supplier Names</label>
-                                {supplierNames.map((name, idx) => (
-                                    <div key={idx} className="purchase-contact-block">
-                                        <input type="text" value={name} onChange={(e) => handleSupplierNameChange(idx, e.target.value)} placeholder={`Supplier Name ${idx + 1}`} className="purchase-input"/>
-                                        <button type="button" onClick={() => removeSupplierName(idx)} className="purchase-button delete" disabled={supplierNames.length === 1}>Remove Name</button>
-                                    </div>
-                                ))}
-                                <button type="button" onClick={addSupplierName} className="purchase-button add-row"><FaPlus /> Add Supplier Name</button>
-                            </div>
-                            {/* NEW: Supplier Group Dropdown */}
-                            <div className="purchase-form-field">
-                                <label className="purchase-label">Supplier group/Category</label>
-                                <select
-                                    value={supplierForm.group}
-                                    onChange={(e) => setSupplierForm({ ...supplierForm, group: e.target.value })}
-                                    className="purchase-input select"
-                                >
-                                    <option value="">Select Group</option>
-                                    {supplierGroups.map(group => (
-                                        <option key={group._id} value={group.group_name}>{group.group_name}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="purchase-form-field"><label className="purchase-label">Country</label><input type="text" value={supplierForm.country} onChange={(e) => setSupplierForm({ ...supplierForm, country: e.target.value })} className="purchase-input"/></div>
-                            <div className="purchase-form-field">
-                                <label className="purchase-label">Default Currency</label>
-                                <select value={supplierForm.currency} onChange={(e) => setSupplierForm({ ...supplierForm, currency: e.target.value })} className="purchase-input select">
-                                    <option value="">Select Default Currency</option>
-                                    {currencyOptions.map(curr => <option key={curr} value={curr}>{curr}</option>)}
-                                </select>
-                            </div>
-                        </div>
-                    )}
-                    {activeSection === 'tax' && (
-                        <div className="purchase-supplier-content">
-                            <div className="purchase-form-field"><label className="purchase-label">Tax ID / VAT / TRN</label><input type="text" value={supplierForm.taxId} onChange={(e) => setSupplierForm({ ...supplierForm, taxId: e.target.value })} className="purchase-input"/></div>
-                            <div className="purchase-form-field"><label className="purchase-label">Tax Category</label><input type="text" value={supplierForm.taxCategory} onChange={(e) => setSupplierForm({ ...supplierForm, taxCategory: e.target.value })} className="purchase-input"/></div>
-                            <div className="purchase-form-field"><label className="purchase-label">Tax Withholding Category</label><input type="text" value={supplierForm.taxWithholdingCategory} onChange={(e) => setSupplierForm({ ...supplierForm, taxWithholdingCategory: e.target.value })} className="purchase-input"/></div>
-                        </div>
-                    )}
-                    {activeSection === 'address_contact' && (
-                        <div className="purchase-supplier-content">
-                            {supplierForm.contacts.map((contact, idx) => (
-                                <div key={idx} className="purchase-contact-block">
-                                    <div className="purchase-form-field"><label className="purchase-label">Contact Person {idx + 1}</label><input type="text" value={contact.contactPerson} onChange={(e) => handleContactChange(idx, 'contactPerson', e.target.value)} className="purchase-input"/></div>
-                                    <div className="purchase-form-field"><label className="purchase-label">WhatsApp No. {idx + 1}</label><input type="tel" value={contact.whatsapp} onChange={(e) => handleContactChange(idx, 'whatsapp', e.target.value)} className="purchase-input"/></div>
-                                    <div className="purchase-form-field"><label className="purchase-label">Phone {idx + 1}</label><input type="tel" value={contact.phone} onChange={(e) => handleContactChange(idx, 'phone', e.target.value)} className="purchase-input"/></div>
-                                    <div className="purchase-form-field"><label className="purchase-label">Email {idx + 1}</label><input type="email" value={contact.email} onChange={(e) => handleContactChange(idx, 'email', e.target.value)} className="purchase-input"/></div>
-                                    <div className="purchase-form-field">
-                                        <label className="purchase-label">Address {idx + 1}</label><input type="text" value={contact.address} onChange={(e) => handleContactChange(idx, 'address', e.target.value)} className="purchase-input"/>
-                                        <button type="button" onClick={() => removeContact(idx)} className="purchase-button delete" disabled={supplierForm.contacts.length === 1}>Remove Contact</button>
-                                    </div>
-                                </div>
-                            ))}
-                            <button type="button" onClick={addContact} className="purchase-button add-row"><FaPlus /> Add Contact</button>
-                        </div>
-                    )}
-                    {activeSection === 'accounting' && (
-                        <div className="purchase-supplier-content">
-                            <div className="purchase-form-field">
-                                <label className="purchase-label">Preferred Payment Mode</label>
-                                <select value={supplierForm.paymentMode} onChange={(e) => setSupplierForm({ ...supplierForm, paymentMode: e.target.value })} className="purchase-input select">
-                                    <option value="">Select Preferred Payment Mode</option>
-                                    {paymentModeOptions.map(mode => <option key={mode} value={mode}>{mode}</option>)}
-                                </select>
-                            </div>
-                            <div className="purchase-form-field">
-                                <label className="purchase-label">Payment Terms</label>
-                                <select value={supplierForm.paymentTerms} onChange={(e) => setSupplierForm({ ...supplierForm, paymentTerms: e.target.value })} className="purchase-input select">
-                                    <option value="">Select Payment Terms</option>
-                                    {paymentTermsOptions.map(term => <option key={term} value={term}>{term}</option>)}
-                                </select>
-                            </div>
-                            <div className="purchase-form-field"><label className="purchase-label">Credit Limit</label><input type="number" value={supplierForm.creditLimit} onChange={(e) => setSupplierForm({ ...supplierForm, creditLimit: Number(e.target.value) })} className="purchase-input"/></div>
-                            <div className="purchase-form-field"><label className="purchase-label">Payment Terms Override</label><input type="text" value={supplierForm.paymentTermsOverride} onChange={(e) => setSupplierForm({ ...supplierForm, paymentTermsOverride: e.target.value })} className="purchase-input"/></div>
-                        </div>
-                    )}
-                    {activeSection === 'settings' && (
-                        <div className="purchase-supplier-content">
-                            <div className="purchase-form-field"><label className="purchase-label">Bank Details (Account No., IBAN, SWIFT)</label><textarea value={supplierForm.bankDetails} onChange={(e) => setSupplierForm({ ...supplierForm, bankDetails: e.target.value })} className="purchase-input textarea"/></div>
-                            <div className="purchase-form-field"><label className="purchase-label">Website</label><input type="url" value={supplierForm.website} onChange={(e) => setSupplierForm({ ...supplierForm, website: e.target.value })} className="purchase-input"/></div>
-                            <div className="purchase-form-field"><label className="purchase-label">On-Time Delivery %</label><input type="number" value={supplierForm.onTimeDelivery} onChange={(e) => setSupplierForm({ ...supplierForm, onTimeDelivery: Number(e.target.value) })} className="purchase-input" min="0" max="100"/></div>
-                            <div className="purchase-form-field"><label className="purchase-label">Defect Rate %</label><input type="number" value={supplierForm.defectRate} onChange={(e) => setSupplierForm({ ...supplierForm, defectRate: Number(e.target.value) })} className="purchase-input" min="0" max="100"/></div>
-                            <div className="purchase-form-field"><label className="purchase-label">Last Purchase Date</label><input type="date" value={supplierForm.lastPurchaseDate} onChange={(e) => setSupplierForm({ ...supplierForm, lastPurchaseDate: e.target.value })} className="purchase-input"/></div>
-                            <div className="purchase-form-field"><label className="purchase-label">Last Purchase Value</label><input type="number" value={supplierForm.lastPurchaseValue} onChange={(e) => setSupplierForm({ ...supplierForm, lastPurchaseValue: Number(e.target.value) })} className="purchase-input"/></div>
-                        </div>
-                    )}
-                </div>
-                 {showSupplierModal && (
-                    <div className="purchase-modal-overlay" onClick={() => setShowSupplierModal(false)}>
-                        <div className="purchase-modal" onClick={(e) => e.stopPropagation()}>
-                            <button className="purchase-modal-close" onClick={() => setShowSupplierModal(false)}><FaTimes /></button>
-                            <h3>Suppliers List</h3>
-                            <div className="purchase-table-wrapper">
-                                <table className="purchase-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Code</th>
-                                            <th>Company Name</th>
-                                            <th>Supplier Names</th>
-                                            <th>Group</th>
-                                            <th>Country</th>
-                                            <th>Currency</th>
-                                            <th>Tax ID</th>
-                                            <th>Contacts</th>
-                                            <th>Last Purchase Date</th>
-                                            <th>Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {filteredSuppliers.map(supplier => (
-                                            <tr key={supplier._id}>
-                                                <td>{supplier.code}</td>
-                                                <td>{supplier.company}</td>
-                                                <td>{(supplier.supplier_names || []).join(', ')}</td>
-                                                <td>{supplier.group}</td>
-                                                <td>{supplier.country}</td>
-                                                <td>{supplier.currency}</td>
-                                                <td>{supplier.taxId}</td>
-                                                <td>{Array.isArray(supplier.contacts) ? supplier.contacts.map(c => `${c.contactPerson} (${c.phone}, ${c.address})`).join(', ') : ''}</td>
-                                                <td>{supplier.lastPurchaseDate ? new Date(supplier.lastPurchaseDate).toLocaleDateString() : '-'}</td>
-                                                <td className="purchase-action-buttons">
-                                                    <button onClick={() => {
-                                                        setEditingSupplier(supplier);
-                                                        setSupplierNames(supplier.supplier_names || ['']);
-                                                        setShowSupplierModal(false);
-                                                    }} className="purchase-button edit"><FaEdit /> Edit</button>
-                                                    <button onClick={() => deleteSupplier(supplier._id)} className="purchase-button delete"><FaTrash /> Delete</button>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                 )}
-                 {/* NEW: Supplier Groups List Modal */}
-                 {activeTab === 'supplier' && (
-                   <div className="purchase-supplier-groups-list">
-                     <h4>Supplier Groups</h4>
-                     <table className="purchase-table">
-                       <thead>
-                         <tr>
-                           <th>Group Name</th>
-                           <th>Actions</th>
-                         </tr>
-                       </thead>
-                       <tbody>
-                         {supplierGroups.map(group => (
-                           <tr key={group._id}>
-                             <td>{group.group_name}</td>
-                             <td>
-                               <button onClick={() => { setEditingSupplierGroup(group); setNewSupplierGroupName(group.group_name); }} className="purchase-button edit">
-                                 <FaEdit /> Edit
-                               </button>
-                               <button onClick={() => deleteSupplierGroup(group._id)} className="purchase-button delete">
-                                 <FaTrash /> Delete
-                               </button>
-                             </td>
-                           </tr>
-                         ))}
-                       </tbody>
-                     </table>
-                   </div>
-                 )}
-            </div>
-          )}
-          {activeTab === 'order' && (
-              <div className="purchase-section">
-               <div className="purchase-header">
-                  <h3>Purchase Order</h3>
-                  <div className="purchase-filter-group-center">
-                    <FaFilter className="purchase-icon" onClick={() => setShowPoFilters(!showPoFilters)} />
-                    {showPoFilters && (
-                      <div className="purchase-filter-dropdown">
-                        <button onClick={() => setShowPoDateFilter(!showPoDateFilter)} className="purchase-button filter-option">
-                          {showPoDateFilter ? 'Hide' : 'Show'} Date Filter
-                        </button>
-                        <button onClick={() => setShowPoSupplierFilter(!showPoSupplierFilter)} className="purchase-button filter-option">
-                          {showPoSupplierFilter ? 'Hide' : 'Show'} Supplier Filter
-                        </button>
-                        <button onClick={() => setShowPoItemFilter(!showPoItemFilter)} className="purchase-button filter-option">
-                          {showPoItemFilter ? 'Hide' : 'Show'} Item Filter
-                        </button>
-                      </div>
-                    )}
                   </div>
-                  <div className="purchase-active-filters">
-                    {showPoDateFilter && (
-                      <>
-                        <label>From: <input type="date" value={poDateFrom} onChange={(e) => setPoDateFrom(e.target.value)} className="purchase-input" /></label>
-                        <label>To: <input type="date" value={poDateTo} onChange={(e) => setPoDateTo(e.target.value)} className="purchase-input" /></label>
-                      </>
-                    )}
-                    {showPoSupplierFilter && (
-                      <select
-                        value={poSelectedSupplier}
-                        onChange={(e) => setPoSelectedSupplier(e.target.value)}
-                        className="purchase-input select"
-                      >
-                        <option value="">All Suppliers</option>
-                        {suppliers.map(s => <option key={s._id} value={s._id}>{`${s.code} - ${s.company}`}</option>)}
-                      </select>
-                    )}
-                    {showPoItemFilter && (
-                      <select
-                        value={poSelectedItem}
-                        onChange={(e) => setPoSelectedItem(e.target.value)}
-                        className="purchase-input select"
-                      >
-                        <option value="">All Items</option>
-                        {items.map(i => <option key={i._id} value={i._id}>{i.name}</option>)}
-                      </select>
-                    )}
-                  </div>
-                  <div className="purchase-filter-group-right">
-                    <button type="button" onClick={handlePoSave} className="purchase-button save">Save</button>
-                    <button type="button" onClick={handlePoSubmit} className="purchase-button submit">Submit</button>
-                  </div>
-                </div>
-               <div className="purchase-main">
-                  <div className="purchase-form-grid">
-                    <div className="purchase-form-field">
-                      <label className="purchase-label">Serial No *</label>
-                      <input
-                        type="text"
-                        value={poForm.series}
-                        onChange={(e) => handlePoFormChange('series', e.target.value)}
-                        className="purchase-input"
-                        required
-                      />
-                    </div>
-                    <div className="purchase-form-field">
-                      <label className="purchase-label">Date *</label>
-                      <input
-                        type="date"
-                        value={poForm.date}
-                        onChange={(e) => handlePoFormChange('date', e.target.value)}
-                        className="purchase-input"
-                        required
-                      />
-                    </div>
-                    <div className="purchase-form-field">
-                      <label className="purchase-label">Supplier Code *</label>
-                      <select
-                        value={poForm.supplierId}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          if (value === 'create_new') {
-                            setCreatingSupplierForPo(true);
-                            setActiveTab('supplier');
-                            return;
-                          }
-                          const supplier = suppliers.find(s => s._id === value);
-                          if (supplier) {
-                            const contact = supplier.contacts && supplier.contacts.length > 0 ? supplier.contacts[0] : { address: '', phone: '', email: '' };
-                            setCurrentPoSupplier(supplier);
-                            setPoForm(prev => ({
-                              ...prev,
-                              supplierId: value,
-                              name: supplier.supplier_names.length > 0 ? supplier.supplier_names[0] : supplier.company,
-                              supplierCompany: supplier.company,
-                              address: contact.address,
-                              phone: contact.phone,
-                              email: contact.email,
-                              currency: supplier.currency
-                            }));
-                          } else {
-                            setCurrentPoSupplier(null);
-                          }
-                        }}
-                        className="purchase-input select"
-                        required
-                      >
-                        <option value="">Select Supplier Code</option>
-                        {suppliers.map(s => <option key={s._id} value={s._id}>{`${s.code} - ${s.company}`}</option>)}
-                        <option value="create_new">Create New Supplier</option>
-                      </select>
-                    </div>
-                    <div className="purchase-form-field">
-                      <label className="purchase-label">Supplier Name *</label>
-                      {currentPoSupplier ? (
-                        <select
-                          value={poForm.name}
-                          onChange={(e) => handlePoFormChange('name', e.target.value)}
-                          className="purchase-input select"
-                          required
-                        >
-                          { (currentPoSupplier.supplier_names.length > 0 ? currentPoSupplier.supplier_names : [currentPoSupplier.company]).map(name => (
-                            <option key={name} value={name}>{name}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <input
-                          type="text"
-                          value={poForm.name}
-                          disabled
-                          className="purchase-input"
-                        />
-                      )}
-                    </div>
-                    <div className="purchase-form-field">
-                      <label className="purchase-label">Supplier Company</label>
-                      <input
-                        type="text"
-                        value={poForm.supplierCompany}
-                        disabled
-                        className="purchase-input"
-                      />
-                    </div>
-                    <div className="purchase-form-field">
-                      <label className="purchase-label">Company *</label>
-                      <input
-                        type="text"
-                        value={poForm.company}
-                        onChange={(e) => handlePoFormChange('company', e.target.value)}
-                        className="purchase-input"
-                        required
-                      />
-                    </div>
-                  </div>
-                  <h3>Items</h3>
+                  <h3>Items List</h3>
                   <table className="purchase-table">
                     <thead>
                       <tr>
-                        <th>No</th>
-                        <th>Item Code *</th>
-                        <th>Quantity *</th>
-                        <th>UOM *</th>
-                        <th>Rate (${poForm.currency})</th>
-                        <th>Amount (${poForm.currency})</th>
+                        <th>Company</th>
+                        <th>Name</th>
+                        <th>Grams</th>
+                        <th>Cartons per Box</th>
+                        <th>Packets per Carton</th>
+                        <th>Patties per Packet</th>
+                        <th>Sold Nos</th>
+                        <th>Total Purchased</th>
+                        <th>Total Stock</th>
+                        <th>Suppliers</th>
                         <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {poForm.items.map((item, index) => {
-                        const selectedItem = items.find(i => i._id === item.itemId);
-                        const uomDisplay = item.uom === 'master' ? (selectedItem ? selectedItem.masterUnit : 'Master') :
-                                           item.uom === 'outer' ? (selectedItem ? selectedItem.outerUnit : 'Outer') :
-                                           item.uom === 'nos' ? (selectedItem ? selectedItem.nosUnit : 'Nos') : 'Grams';
+                      {filteredItems.map(item => {
+                        const remainingPatties = item.totalStock;
+             
+                        const supplierNamesList = (item.suppliers && Array.isArray(item.suppliers))
+                            ? item.suppliers.map(s => s.supplierName).join(', ')
+                            : 'N/A';
                         return (
-                          <tr key={index}>
-                            <td>{index + 1}</td>
-                            <td>
-                              <div className="purchase-item-select">
-                                <select
-                                  value={item.itemId}
-                                  onChange={(e) => handlePoItemChange(index, 'itemId', e.target.value)}
-                                  className="purchase-input select"
-                                  required
-                                >
-                                  <option value="">Select Item</option>
-                                  {items.map(i => <option key={i._id} value={i._id}>{i.name}</option>)}
-                                  <option value="create_new">Create New Item</option>
-                                </select>
-                                {item.itemId && (
-                                  <button onClick={() => {
-                                    setEditingItem(selectedItem);
-                                    setEditingFrom('order');
-                                    setActiveTab('item');
-                                  }} className="purchase-button edit">
-                                    <FaEdit />
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-                            <td>
-                              <input
-                                type="number"
-                                value={item.quantity}
-                                onChange={(e) => handlePoItemChange(index, 'quantity', e.target.value)}
-                                className="purchase-input"
-                                required
-                              />
-                            </td>
-                            <td>
-                              <select
-                                value={item.uom}
-                                onChange={(e) => handlePoItemChange(index, 'uom', e.target.value)}
-                                className="purchase-input select"
-                              >
-                                <option value="master">{selectedItem ? selectedItem.masterUnit : 'Master'}</option>
-                                <option value="outer">{selectedItem ? selectedItem.outerUnit : 'Outer'}</option>
-                                <option value="nos">{selectedItem ? selectedItem.nosUnit : 'Nos'}</option>
-                                <option value="grams">Grams</option>
-                              </select>
-                            </td>
-                            <td>
-                              <input
-                                type="number"
-                                value={item.rate}
-                                onChange={(e) => handlePoItemChange(index, 'rate', e.target.value)}
-                                className="purchase-input"
-                              />
-                            </td>
-                            <td className="purchase-calculated">
-                              {poForm.currency} {(item.amount || 0).toFixed(2)}
-                            </td>
-                            <td>
-                              <button
-                                type="button"
-                                onClick={() => removePoItem(index)}
-                                className="purchase-button delete"
-                                disabled={poForm.items.length === 1}
-                              >
-                                <FaTrash />
-                              </button>
+                          <tr key={item._id}>
+                            <td>{item.company}</td>
+                            <td>{item.name}</td>
+                            <td>{item.grams || '-'}</td>
+                            <td>{item.boxToMaster} {item.masterUnit}</td>
+                            <td>{item.masterToOuter} {item.outerUnit}</td>
+                            <td>{item.outerToNos} {item.nosUnit}</td>
+                            <td>{item.soldNos || 0} {item.nosUnit}</td>
+                            <td>{item.totalPurchased || 0} {item.nosUnit}</td>
+                            <td>{remainingPatties} {item.nosUnit}</td>
+                            <td>{supplierNamesList}</td>
+                            <td className="purchase-action-buttons">
+                              <button onClick={() => setEditingItem(item)} className="purchase-button edit"><FaEdit /> Edit</button>
+                              <button onClick={() => deleteItem(item._id)} className="purchase-button delete"><FaTrash /> Delete</button>
                             </td>
                           </tr>
                         );
                       })}
                     </tbody>
                   </table>
-                  <div className="purchase-form-buttons">
-                    <button type="button" onClick={addPoItem} className="purchase-button add-row">
-                      Add Row
-                    </button>
+                </div>
+              )}
+              {activeTab === 'supplier' && (
+                <div className="purchase-section">
+                    <div className="purchase-header">
+                        <h3>Manage Suppliers</h3>
+                        <div className="purchase-filter-group-center">
+                            <input
+                                type="text"
+                                placeholder="Search suppliers by name or phone"
+                                value={supplierSearch}
+                                onChange={(e) => setSupplierSearch(e.target.value)}
+                                className="purchase-input"
+                            />
+                        </div>
+                        <div className="purchase-filter-group-right">
+                            <button onClick={() => setShowSupplierGroupModal(true)} className="purchase-button filter"> {/* NEW: Create Supplier Group Button */}
+                                Create Supplier Group
+                            </button>
+                            <button onClick={() => setShowSupplierModal(true)} className="purchase-button filter">
+                                View Suppliers List
+                            </button>
+                            <button onClick={handleTopSave} className="purchase-button submit">
+                                {editingSupplier ? 'Update Supplier' : 'Save'}
+                            </button>
+                            {editingSupplier && (
+                                <button type="button" onClick={() => setEditingSupplier(null)} className="purchase-button cancel">
+                                    Cancel
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                    <div className="purchase-form">
+                        <div className="purchase-supplier-tabs">
+                            <div className={`purchase-supplier-tab ${activeSection === 'details' ? 'active' : ''}`} onClick={() => setActiveSection('details')}>Details</div>
+                            <div className={`purchase-supplier-tab ${activeSection === 'tax' ? 'active' : ''}`} onClick={() => setActiveSection('tax')}>Tax</div>
+                            <div className={`purchase-supplier-tab ${activeSection === 'address_contact' ? 'active' : ''}`} onClick={() => setActiveSection('address_contact')}>Address & Contact</div>
+                            <div className={`purchase-supplier-tab ${activeSection === 'accounting' ? 'active' : ''}`} onClick={() => setActiveSection('accounting')}>Accounting</div>
+                            <div className={`purchase-supplier-tab ${activeSection === 'settings' ? 'active' : ''}`} onClick={() => setActiveSection('settings')}>Settings</div>
+                        </div>
+                        {activeSection === 'details' && (
+                            <div className="purchase-supplier-content">
+                                <div className="purchase-form-field"><label className="purchase-label">Company Name / Trade Name</label><input type="text" value={supplierForm.company} onChange={(e) => setSupplierForm({ ...supplierForm, company: e.target.value })} className="purchase-input"/></div>
+                                <div className="purchase-form-field"><label className="purchase-label">Supplier Code / Short Name</label><input type="text" value={supplierForm.code} onChange={(e) => setSupplierForm({ ...supplierForm, code: e.target.value })} className="purchase-input"/></div>
+                                <div className="purchase-form-field">
+                                    <label className="purchase-label">Supplier Names</label>
+                                    {supplierNames.map((name, idx) => (
+                                        <div key={idx} className="purchase-contact-block">
+                                            <input type="text" value={name} onChange={(e) => handleSupplierNameChange(idx, e.target.value)} placeholder={`Supplier Name ${idx + 1}`} className="purchase-input"/>
+                                            <button type="button" onClick={() => removeSupplierName(idx)} className="purchase-button delete" disabled={supplierNames.length === 1}>Remove Name</button>
+                                        </div>
+                                    ))}
+                                    <button type="button" onClick={addSupplierName} className="purchase-button add-row"><FaPlus /> Add Supplier Name</button>
+                                </div>
+                                {/* NEW: Supplier Group Dropdown */}
+                                <div className="purchase-form-field">
+                                    <label className="purchase-label">Supplier group/Category</label>
+                                    <select
+                                        value={supplierForm.group}
+                                        onChange={(e) => setSupplierForm({ ...supplierForm, group: e.target.value })}
+                                        className="purchase-input select"
+                                    >
+                                        <option value="">Select Group</option>
+                                        {supplierGroups.map(group => (
+                                            <option key={group._id} value={group.group_name}>{group.group_name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="purchase-form-field"><label className="purchase-label">Country</label><input type="text" value={supplierForm.country} onChange={(e) => setSupplierForm({ ...supplierForm, country: e.target.value })} className="purchase-input"/></div>
+                                <div className="purchase-form-field">
+                                    <label className="purchase-label">Default Currency</label>
+                                    <select value={supplierForm.currency} onChange={(e) => setSupplierForm({ ...supplierForm, currency: e.target.value })} className="purchase-input select">
+                                        <option value="">Select Default Currency</option>
+                                        {currencyOptions.map(curr => <option key={curr} value={curr}>{curr}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                        )}
+                        {activeSection === 'tax' && (
+                            <div className="purchase-supplier-content">
+                                <div className="purchase-form-field"><label className="purchase-label">Tax ID / VAT / TRN</label><input type="text" value={supplierForm.taxId} onChange={(e) => setSupplierForm({ ...supplierForm, taxId: e.target.value })} className="purchase-input"/></div>
+                                <div className="purchase-form-field"><label className="purchase-label">Tax Category</label><input type="text" value={supplierForm.taxCategory} onChange={(e) => setSupplierForm({ ...supplierForm, taxCategory: e.target.value })} className="purchase-input"/></div>
+                                <div className="purchase-form-field"><label className="purchase-label">Tax Withholding Category</label><input type="text" value={supplierForm.taxWithholdingCategory} onChange={(e) => setSupplierForm({ ...supplierForm, taxWithholdingCategory: e.target.value })} className="purchase-input"/></div>
+                            </div>
+                        )}
+                        {activeSection === 'address_contact' && (
+                            <div className="purchase-supplier-content">
+                                {supplierForm.contacts.map((contact, idx) => (
+                                    <div key={idx} className="purchase-contact-block">
+                                        <div className="purchase-form-field"><label className="purchase-label">Contact Person {idx + 1}</label><input type="text" value={contact.contactPerson} onChange={(e) => handleContactChange(idx, 'contactPerson', e.target.value)} className="purchase-input"/></div>
+                                        <div className="purchase-form-field"><label className="purchase-label">WhatsApp No. {idx + 1}</label><input type="tel" value={contact.whatsapp} onChange={(e) => handleContactChange(idx, 'whatsapp', e.target.value)} className="purchase-input"/></div>
+                                        <div className="purchase-form-field"><label className="purchase-label">Phone {idx + 1}</label><input type="tel" value={contact.phone} onChange={(e) => handleContactChange(idx, 'phone', e.target.value)} className="purchase-input"/></div>
+                                        <div className="purchase-form-field"><label className="purchase-label">Email {idx + 1}</label><input type="email" value={contact.email} onChange={(e) => handleContactChange(idx, 'email', e.target.value)} className="purchase-input"/></div>
+                                        <div className="purchase-form-field">
+                                            <label className="purchase-label">Address {idx + 1}</label><input type="text" value={contact.address} onChange={(e) => handleContactChange(idx, 'address', e.target.value)} className="purchase-input"/>
+                                            <button type="button" onClick={() => removeContact(idx)} className="purchase-button delete" disabled={supplierForm.contacts.length === 1}>Remove Contact</button>
+                                        </div>
+                                    </div>
+                                ))}
+                                <button type="button" onClick={addContact} className="purchase-button add-row"><FaPlus /> Add Contact</button>
+                            </div>
+                        )}
+                        {activeSection === 'accounting' && (
+                            <div className="purchase-supplier-content">
+                                <div className="purchase-form-field">
+                                    <label className="purchase-label">Preferred Payment Mode</label>
+                                    <select value={supplierForm.paymentMode} onChange={(e) => setSupplierForm({ ...supplierForm, paymentMode: e.target.value })} className="purchase-input select">
+                                        <option value="">Select Preferred Payment Mode</option>
+                                        {paymentModeOptions.map(mode => <option key={mode} value={mode}>{mode}</option>)}
+                                    </select>
+                                </div>
+                                <div className="purchase-form-field">
+                                    <label className="purchase-label">Payment Terms</label>
+                                    <select value={supplierForm.paymentTerms} onChange={(e) => setSupplierForm({ ...supplierForm, paymentTerms: e.target.value })} className="purchase-input select">
+                                        <option value="">Select Payment Terms</option>
+                                        {paymentTermsOptions.map(term => <option key={term} value={term}>{term}</option>)}
+                                    </select>
+                                </div>
+                                <div className="purchase-form-field"><label className="purchase-label">Credit Limit</label><input type="number" value={supplierForm.creditLimit} onChange={(e) => setSupplierForm({ ...supplierForm, creditLimit: Number(e.target.value) })} className="purchase-input"/></div>
+                                <div className="purchase-form-field"><label className="purchase-label">Payment Terms Override</label><input type="text" value={supplierForm.paymentTermsOverride} onChange={(e) => setSupplierForm({ ...supplierForm, paymentTermsOverride: e.target.value })} className="purchase-input"/></div>
+                            </div>
+                        )}
+                        {activeSection === 'settings' && (
+                            <div className="purchase-supplier-content">
+                                <div className="purchase-form-field"><label className="purchase-label">Bank Details (Account No., IBAN, SWIFT)</label><textarea value={supplierForm.bankDetails} onChange={(e) => setSupplierForm({ ...supplierForm, bankDetails: e.target.value })} className="purchase-input textarea"/></div>
+                                <div className="purchase-form-field"><label className="purchase-label">Website</label><input type="url" value={supplierForm.website} onChange={(e) => setSupplierForm({ ...supplierForm, website: e.target.value })} className="purchase-input"/></div>
+                                <div className="purchase-form-field"><label className="purchase-label">On-Time Delivery %</label><input type="number" value={supplierForm.onTimeDelivery} onChange={(e) => setSupplierForm({ ...supplierForm, onTimeDelivery: Number(e.target.value) })} className="purchase-input" min="0" max="100"/></div>
+                                <div className="purchase-form-field"><label className="purchase-label">Defect Rate %</label><input type="number" value={supplierForm.defectRate} onChange={(e) => setSupplierForm({ ...supplierForm, defectRate: Number(e.target.value) })} className="purchase-input" min="0" max="100"/></div>
+                                <div className="purchase-form-field"><label className="purchase-label">Last Purchase Date</label><input type="date" value={supplierForm.lastPurchaseDate} onChange={(e) => setSupplierForm({ ...supplierForm, lastPurchaseDate: e.target.value })} className="purchase-input"/></div>
+                                <div className="purchase-form-field"><label className="purchase-label">Last Purchase Value</label><input type="number" value={supplierForm.lastPurchaseValue} onChange={(e) => setSupplierForm({ ...supplierForm, lastPurchaseValue: Number(e.target.value) })} className="purchase-input"/></div>
+                            </div>
+                        )}
+                    </div>
+                     {showSupplierModal && (
+                        <div className="purchase-modal-overlay" onClick={() => setShowSupplierModal(false)}>
+                            <div className="purchase-modal" onClick={(e) => e.stopPropagation()}>
+                                <button className="purchase-modal-close" onClick={() => setShowSupplierModal(false)}><FaTimes /></button>
+                                <h3>Suppliers List</h3>
+                                <div className="purchase-table-wrapper">
+                                    <table className="purchase-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Code</th>
+                                                <th>Company Name</th>
+                                                <th>Supplier Names</th>
+                                                <th>Group</th>
+                                                <th>Country</th>
+                                                <th>Currency</th>
+                                                <th>Tax ID</th>
+                                                <th>Contacts</th>
+                                                <th>Last Purchase Date</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {filteredSuppliers.map(supplier => (
+                                                <tr key={supplier._id}>
+                                                    <td>{supplier.code}</td>
+                                                    <td>{supplier.company}</td>
+                                                    <td>{(supplier.supplier_names || []).join(', ')}</td>
+                                                    <td>{supplier.group}</td>
+                                                    <td>{supplier.country}</td>
+                                                    <td>{supplier.currency}</td>
+                                                    <td>{supplier.taxId}</td>
+                                                    <td>{Array.isArray(supplier.contacts) ? supplier.contacts.map(c => `${c.contactPerson} (${c.phone}, ${c.address})`).join(', ') : ''}</td>
+                                                    <td>{supplier.lastPurchaseDate ? new Date(supplier.lastPurchaseDate).toLocaleDateString() : '-'}</td>
+                                                    <td className="purchase-action-buttons">
+                                                        <button onClick={() => {
+                                                            setEditingSupplier(supplier);
+                                                            setSupplierNames(supplier.supplier_names || ['']);
+                                                            setShowSupplierModal(false);
+                                                        }} className="purchase-button edit"><FaEdit /> Edit</button>
+                                                        <button onClick={() => deleteSupplier(supplier._id)} className="purchase-button delete"><FaTrash /> Delete</button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                     )}
+                     {/* NEW: Supplier Groups List Modal */}
+                     {activeTab === 'supplier' && (
+                       <div className="purchase-supplier-groups-list">
+                         <h4>Supplier Groups</h4>
+                         <table className="purchase-table">
+                           <thead>
+                             <tr>
+                               <th>Group Name</th>
+                               <th>Actions</th>
+                             </tr>
+                           </thead>
+                           <tbody>
+                             {supplierGroups.map(group => (
+                               <tr key={group._id}>
+                                 <td>{group.group_name}</td>
+                                 <td>
+                                   <button onClick={() => { setEditingSupplierGroup(group); setNewSupplierGroupName(group.group_name); }} className="purchase-button edit">
+                                     <FaEdit /> Edit
+                                   </button>
+                                   <button onClick={() => deleteSupplierGroup(group._id)} className="purchase-button delete">
+                                     <FaTrash /> Delete
+                                   </button>
+                                 </td>
+                               </tr>
+                             ))}
+                           </tbody>
+                         </table>
+                       </div>
+                     )}
+                </div>
+              )}
+              {activeTab === 'order' && (
+                  <div className="purchase-section">
+                   <div className="purchase-header">
+                      <h3>Purchase Order</h3>
+                      <div className="purchase-filter-group-center">
+                        <FaFilter className="purchase-icon" onClick={() => setShowPoFilters(!showPoFilters)} />
+                        {showPoFilters && (
+                          <div className="purchase-filter-dropdown">
+                            <button onClick={() => setShowPoDateFilter(!showPoDateFilter)} className="purchase-button filter-option">
+                              {showPoDateFilter ? 'Hide' : 'Show'} Date Filter
+                            </button>
+                            <button onClick={() => setShowPoSupplierFilter(!showPoSupplierFilter)} className="purchase-button filter-option">
+                              {showPoSupplierFilter ? 'Hide' : 'Show'} Supplier Filter
+                            </button>
+                            <button onClick={() => setShowPoItemFilter(!showPoItemFilter)} className="purchase-button filter-option">
+                              {showPoItemFilter ? 'Hide' : 'Show'} Item Filter
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <div className="purchase-active-filters">
+                        {showPoDateFilter && (
+                          <>
+                            <label>From: <input type="date" value={poDateFrom} onChange={(e) => setPoDateFrom(e.target.value)} className="purchase-input" /></label>
+                            <label>To: <input type="date" value={poDateTo} onChange={(e) => setPoDateTo(e.target.value)} className="purchase-input" /></label>
+                          </>
+                        )}
+                        {showPoSupplierFilter && (
+                          <select
+                            value={poSelectedSupplier}
+                            onChange={(e) => setPoSelectedSupplier(e.target.value)}
+                            className="purchase-input select"
+                          >
+                            <option value="">All Suppliers</option>
+                            {suppliers.map(s => <option key={s._id} value={s._id}>{`${s.code} - ${s.company}`}</option>)}
+                          </select>
+                        )}
+                        {showPoItemFilter && (
+                          <select
+                            value={poSelectedItem}
+                            onChange={(e) => setPoSelectedItem(e.target.value)}
+                            className="purchase-input select"
+                          >
+                            <option value="">All Items</option>
+                            {items.map(i => <option key={i._id} value={i._id}>{i.name}</option>)}
+                          </select>
+                        )}
+                      </div>
+                      <div className="purchase-filter-group-right">
+                        <button type="button" onClick={handlePoSave} className="purchase-button save">Save</button>
+                        <button type="button" onClick={handlePoSubmit} className="purchase-button submit">Submit</button>
+                      </div>
+                    </div>
+                   <div className="purchase-main">
+                      <div className="purchase-form-grid">
+                        <div className="purchase-form-field">
+                          <label className="purchase-label">Serial No *</label>
+                          <input
+                            type="text"
+                            value={poForm.series}
+                            onChange={(e) => handlePoFormChange('series', e.target.value)}
+                            className="purchase-input"
+                            required
+                          />
+                        </div>
+                        <div className="purchase-form-field">
+                          <label className="purchase-label">Date *</label>
+                          <input
+                            type="date"
+                            value={poForm.date}
+                            onChange={(e) => handlePoFormChange('date', e.target.value)}
+                            className="purchase-input"
+                            required
+                          />
+                        </div>
+                        <div className="purchase-form-field">
+                          <label className="purchase-label">Supplier Code *</label>
+                          <select
+                            value={poForm.supplierId}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              if (value === 'create_new') {
+                                setCreatingSupplierForPo(true);
+                                setActiveTab('supplier');
+                                return;
+                              }
+                              const supplier = suppliers.find(s => s._id === value);
+                              if (supplier) {
+                                const contact = supplier.contacts && supplier.contacts.length > 0 ? supplier.contacts[0] : { address: '', phone: '', email: '' };
+                                setCurrentPoSupplier(supplier);
+                                setPoForm(prev => ({
+                                  ...prev,
+                                  supplierId: value,
+                                  name: supplier.supplier_names.length > 0 ? supplier.supplier_names[0] : supplier.company,
+                                  supplierCompany: supplier.company,
+                                  address: contact.address,
+                                  phone: contact.phone,
+                                  email: contact.email,
+                                  currency: supplier.currency
+                                }));
+                              } else {
+                                setCurrentPoSupplier(null);
+                              }
+                            }}
+                            className="purchase-input select"
+                            required
+                          >
+                            <option value="">Select Supplier Code</option>
+                            {suppliers.map(s => <option key={s._id} value={s._id}>{`${s.code} - ${s.company}`}</option>)}
+                            <option value="create_new">Create New Supplier</option>
+                          </select>
+                        </div>
+                        <div className="purchase-form-field">
+                          <label className="purchase-label">Supplier Name *</label>
+                          {currentPoSupplier ? (
+                            <select
+                              value={poForm.name}
+                              onChange={(e) => handlePoFormChange('name', e.target.value)}
+                              className="purchase-input select"
+                              required
+                            >
+                              { (currentPoSupplier.supplier_names.length > 0 ? currentPoSupplier.supplier_names : [currentPoSupplier.company]).map(name => (
+                                <option key={name} value={name}>{name}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              type="text"
+                              value={poForm.name}
+                              disabled
+                              className="purchase-input"
+                            />
+                          )}
+                        </div>
+                        <div className="purchase-form-field">
+                          <label className="purchase-label">Supplier Company</label>
+                          <input
+                            type="text"
+                            value={poForm.supplierCompany}
+                            disabled
+                            className="purchase-input"
+                          />
+                        </div>
+                        <div className="purchase-form-field">
+                          <label className="purchase-label">Company *</label>
+                          <input
+                            type="text"
+                            value={poForm.company}
+                            onChange={(e) => handlePoFormChange('company', e.target.value)}
+                            className="purchase-input"
+                            required
+                          />
+                        </div>
+                      </div>
+                      <h3>Items</h3>
+                      <table className="purchase-table">
+                        <thead>
+                          <tr>
+                            <th>No</th>
+                            <th>Item Code *</th>
+                            <th>Quantity *</th>
+                            <th>UOM *</th>
+                            <th>Rate (${poForm.currency})</th>
+                            <th>Amount (${poForm.currency})</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {poForm.items.map((item, index) => {
+                            const selectedItem = items.find(i => i._id === item.itemId);
+                            const uomDisplay = item.uom === 'master' ? (selectedItem ? selectedItem.masterUnit : 'Master') :
+                                               item.uom === 'outer' ? (selectedItem ? selectedItem.outerUnit : 'Outer') :
+                                               item.uom === 'nos' ? (selectedItem ? selectedItem.nosUnit : 'Nos') : 'Grams';
+                            return (
+                              <tr key={index}>
+                                <td>{index + 1}</td>
+                                <td>
+                                  <div className="purchase-item-select">
+                                    <select
+                                      value={item.itemId}
+                                      onChange={(e) => handlePoItemChange(index, 'itemId', e.target.value)}
+                                      className="purchase-input select"
+                                      required
+                                    >
+                                      <option value="">Select Item</option>
+                                      {items.map(i => <option key={i._id} value={i._id}>{i.name}</option>)}
+                                      <option value="create_new">Create New Item</option>
+                                    </select>
+                                    {item.itemId && (
+                                      <button onClick={() => {
+                                        setEditingItem(selectedItem);
+                                        setEditingFrom('order');
+                                        setActiveTab('item');
+                                      }} className="purchase-button edit">
+                                        <FaEdit />
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                                <td>
+                                  <input
+                                    type="number"
+                                    value={item.quantity}
+                                    onChange={(e) => handlePoItemChange(index, 'quantity', e.target.value)}
+                                    className="purchase-input"
+                                    required
+                                  />
+                                </td>
+                                <td>
+                                  <select
+                                    value={item.uom}
+                                    onChange={(e) => handlePoItemChange(index, 'uom', e.target.value)}
+                                    className="purchase-input select"
+                                  >
+                                    <option value="master">{selectedItem ? selectedItem.masterUnit : 'Master'}</option>
+                                    <option value="outer">{selectedItem ? selectedItem.outerUnit : 'Outer'}</option>
+                                    <option value="nos">{selectedItem ? selectedItem.nosUnit : 'Nos'}</option>
+                                    <option value="grams">Grams</option>
+                                  </select>
+                                </td>
+                                <td>
+                                  <input
+                                    type="number"
+                                    value={item.rate}
+                                    onChange={(e) => handlePoItemChange(index, 'rate', e.target.value)}
+                                    className="purchase-input"
+                                  />
+                                </td>
+                                <td className="purchase-calculated">
+                                  {poForm.currency} {(item.amount || 0).toFixed(2)}
+                                </td>
+                                <td>
+                                  <button
+                                    type="button"
+                                    onClick={() => removePoItem(index)}
+                                    className="purchase-button delete"
+                                    disabled={poForm.items.length === 1}
+                                  >
+                                    <FaTrash />
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                      <div className="purchase-form-buttons">
+                        <button type="button" onClick={addPoItem} className="purchase-button add-row">
+                          Add Row
+                        </button>
+                      </div>
+                      <div className="purchase-totals">
+                        <div>Total Quantity: {poForm.totalQuantity}</div>
+                        <div>Total (${poForm.currency}): {poForm.currency} {(poForm.subtotal || 0).toFixed(2)}</div>
+                      </div>
+                      <h3>Purchase Taxes and Charges</h3>
+                      <table className="purchase-table">
+                        <thead>
+                          <tr>
+                            <th>No.</th>
+                            <th>Type *</th>
+                            <th>Tax Rate</th>
+                            <th>Amount (${poForm.currency})</th>
+                            <th>Total (${poForm.currency})</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {poForm.taxes.length === 0 ? (
+                            <tr>
+                              <td colSpan="5">No Data</td>
+                            </tr>
+                          ) : (
+                            poForm.taxes.map((tax, index) => (
+                              <tr key={index}>
+                                <td>{index + 1}</td>
+                                <td>
+                                  <select
+                                    value={tax.type}
+                                    onChange={(e) => handlePoTaxChange(index, 'type', e.target.value)}
+                                    className="purchase-input select"
+                                    required
+                                  >
+                                    <option value="On Net Total">On Net Total</option>
+                                  </select>
+                                </td>
+                                <td>
+                                  <input
+                                    type="number"
+                                    value={tax.taxRate}
+                                    onChange={(e) => handlePoTaxChange(index, 'taxRate', e.target.value)}
+                                    className="purchase-input"
+                                    required
+                                  />
+                                </td>
+                                <td className="purchase-calculated">
+                                  {poForm.currency} {(tax.amount || 0).toFixed(2)}
+                                </td>
+                                <td className="purchase-calculated">
+                                  {poForm.currency} {(tax.total || 0).toFixed(2)}
+                                </td>
+                                <td>
+                                  <button
+                                    type="button"
+                                    onClick={() => removePoTax(index)}
+                                    className="purchase-button delete"
+                                    disabled={poForm.taxes.length === 1}
+                                  >
+                                    <FaTrash />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                      <div className="purchase-form-buttons">
+                        <button type="button" onClick={addPoTax} className="purchase-button add-row">
+                          Add Row
+                        </button>
+                      </div>
+                      <div className="purchase-totals">
+                        <div>Total Qty {poForm.commonUOM || 'Carton'} {poForm.totalQtyInCommon.toFixed(0)}</div>
+                        <div>Gross Amount {poForm.currency} {(poForm.subtotal || 0).toFixed(0)}</div>
+                        {poForm.taxes.map((tax, index) => (
+                          <div key={index}>GST {tax.taxRate}% {poForm.currency} {(tax.amount || 0).toFixed(0)}</div>
+                        ))}
+                        <div>Net Total {poForm.currency} {(poForm.grandTotal || 0).toFixed(0)}</div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="purchase-totals">
-                    <div>Total Quantity: {poForm.totalQuantity}</div>
-                    <div>Total (${poForm.currency}): {poForm.currency} {(poForm.subtotal || 0).toFixed(2)}</div>
+              )}
+              {activeTab === 'receipt' && (
+                <div className="purchase-section">
+                  <div className="purchase-header">
+                    <h3>Purchase Receipt</h3>
+                    <div className="purchase-filter-group-center">
+                      <FaFilter className="purchase-icon" onClick={() => setShowPrFilters(!showPrFilters)} />
+                      {showPrFilters && (
+                        <div className="purchase-filter-dropdown">
+                          <button onClick={() => setShowPrDateFilter(!showPrDateFilter)} className="purchase-button filter-option">
+                            {showPrDateFilter ? 'Hide' : 'Show'} Date Filter
+                          </button>
+                          <button onClick={() => setShowPrSupplierFilter(!showPrSupplierFilter)} className="purchase-button filter-option">
+                            {showPrSupplierFilter ? 'Hide' : 'Show'} Supplier Filter
+                          </button>
+                          <button onClick={() => setShowPrItemFilter(!showPrItemFilter)} className="purchase-button filter-option">
+                            {showPrItemFilter ? 'Hide' : 'Show'} Item Filter
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <div className="purchase-active-filters">
+                      {showPrDateFilter && (
+                        <>
+                          <label>From: <input type="date" value={prDateFrom} onChange={(e) => setPrDateFrom(e.target.value)} className="purchase-input" /></label>
+                          <label>To: <input type="date" value={prDateTo} onChange={(e) => setPrDateTo(e.target.value)} className="purchase-input" /></label>
+                        </>
+                      )}
+                      {showPrSupplierFilter && (
+                        <select
+                          value={prSelectedSupplier}
+                          onChange={(e) => setPrSelectedSupplier(e.target.value)}
+                          className="purchase-input select"
+                        >
+                          <option value="">All Suppliers</option>
+                          {suppliers.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+                        </select>
+                      )}
+                      {showPrItemFilter && (
+                        <select
+                          value={prSelectedItem}
+                          onChange={(e) => setPrSelectedItem(e.target.value)}
+                          className="purchase-input select"
+                        >
+                          <option value="">All Items</option>
+                          {items.map(i => <option key={i._id} value={i._id}>{i.name}</option>)}
+                        </select>
+                      )}
+                    </div>
+                    <div className="purchase-filter-group-right">
+                      <button type="button" onClick={handlePrSave} className="purchase-button save">Save</button>
+                      <button type="button" onClick={handlePrSubmit} className="purchase-button submit">Submit</button>
+                    </div>
                   </div>
-                  <h3>Purchase Taxes and Charges</h3>
-                  <table className="purchase-table">
-                    <thead>
-                      <tr>
-                        <th>No.</th>
-                        <th>Type *</th>
-                        <th>Tax Rate</th>
-                        <th>Amount (${poForm.currency})</th>
-                        <th>Total (${poForm.currency})</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {poForm.taxes.length === 0 ? (
+                  <div className="purchase-form">
+                    <div className="purchase-form-grid">
+                      <div className="purchase-form-field">
+                        <label className="purchase-label">Series *</label>
+                        <input
+                          type="text"
+                          value={prForm.series}
+                          onChange={(e) => handlePrFormChange('series', e.target.value)}
+                          className="purchase-input"
+                          required
+                        />
+                      </div>
+                      <div className="purchase-form-field">
+                        <label className="purchase-label">Date *</label>
+                        <input
+                          type="date"
+                          value={prForm.date}
+                          onChange={(e) => handlePrFormChange('date', e.target.value)}
+                          className="purchase-input"
+                          required
+                        />
+                      </div>
+                      <div className="purchase-form-field">
+                        <label className="purchase-label">Company *</label>
+                        <input
+                          type="text"
+                          value={prForm.company}
+                          onChange={(e) => handlePrFormChange('company', e.target.value)}
+                          className="purchase-input"
+                          required
+                        />
+                      </div>
+                      <div className="purchase-form-field">
+                        <label className="purchase-label">Purchase Order *</label>
+                        <select
+                          value={prForm.poId}
+                          onChange={(e) => {
+                            const poId = e.target.value;
+                            const po = purchaseOrders.find(p => p.series === poId);
+                            if (po) {
+                              const supplier = suppliers.find(s => s._id === po.supplierId);
+                              const contact = supplier ? (supplier.contacts && supplier.contacts.length > 0 ? supplier.contacts[0] : { address: '', phone: '', email: '' }) : { address: '', phone: '', email: '' };
+                              const newItems = po.items.map(item => ({
+                                itemId: item.itemId,
+                                originalQuantity: item.quantity,
+                                acceptedQuantity: item.quantity,
+                                rejectedQuantity: 0,
+                                rate: item.rate,
+                                amount: item.quantity * item.rate,
+                                unit: item.uom
+                              }));
+                              setCurrentPrSupplier(supplier);
+                              const newForm = {
+                                ...prForm,
+                                poId,
+                                supplierId: po.supplierId,
+                                name: po.name,
+                                supplierCompany: po.supplierCompany,
+                                address: contact.address || po.address,
+                                phone: contact.phone || po.phone,
+                                email: contact.email || po.email,
+                                items: newItems,
+                                taxes: po.taxes,
+                                currency: po.currency
+                              };
+                              setPrForm({ ...newForm, ...calculatePrTotals(newForm) });
+                            }
+                          }}
+                          className="purchase-input select"
+                          required
+                        >
+                          <option value="">Select PO</option>
+                          {purchaseOrders.filter(po => po.status === 'Submitted').map(po => (
+                            <option key={po.series} value={po.series}>{po.series}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="purchase-form-field">
+                        <label className="purchase-label">Supplier Code</label>
+                        <input
+                          type="text"
+                          value={suppliers.find(s => s._id === prForm.supplierId)?.code || ''}
+                          disabled
+                          className="purchase-input"
+                        />
+                      </div>
+                      <div className="purchase-form-field">
+                        <label className="purchase-label">Supplier Name *</label>
+                        {currentPrSupplier ? (
+                          <select
+                            value={prForm.name}
+                            onChange={(e) => handlePrFormChange('name', e.target.value)}
+                            className="purchase-input select"
+                            required
+                          >
+                            { (currentPrSupplier.supplier_names.length > 0 ? currentPrSupplier.supplier_names : [currentPrSupplier.company]).map(name => (
+                                <option key={name} value={name}>{name}</option>
+                              ))}
+                          </select>
+                        ) : (
+                          <input
+                            type="text"
+                            value={prForm.name}
+                            disabled
+                            className="purchase-input"
+                          />
+                        )}
+                      </div>
+                      <div className="purchase-form-field">
+                        <label className="purchase-label">Supplier Company</label>
+                        <input
+                          type="text"
+                          value={prForm.supplierCompany}
+                          disabled
+                          className="purchase-input"
+                        />
+                      </div>
+                    </div>
+                    <h3>Items</h3>
+                    <table className="purchase-table">
+                      <thead>
                         <tr>
-                          <td colSpan="5">No Data</td>
+                          <th>No.</th>
+                          <th>Item Code *</th>
+                          <th>Accepted Quantity</th>
+                          <th>Rejected Q...</th>
+                          <th>Rate (${prForm.currency})</th>
+                          <th>Amount (${prForm.currency})</th>
+                          <th>UOM</th>
+                          <th>Actions</th>
                         </tr>
-                      ) : (
-                        poForm.taxes.map((tax, index) => (
+                      </thead>
+                      <tbody>
+                        {prForm.items.map((item, index) => {
+                          const selectedItem = items.find(i => i._id === item.itemId);
+                          const uomDisplay = item.unit === 'master' ? (selectedItem ? selectedItem.masterUnit : 'Master') :
+                                             item.unit === 'outer' ? (selectedItem ? selectedItem.outerUnit : 'Outer') :
+                                             item.unit === 'nos' ? (selectedItem ? selectedItem.nosUnit : 'Nos') : 'Grams';
+                          return (
+                            <tr key={index}>
+                              <td>{index + 1}</td>
+                              <td>
+                                <div className="purchase-item-select">
+                                  <select
+                                    value={item.itemId}
+                                    onChange={(e) => handlePrItemChange(index, 'itemId', e.target.value)}
+                                    className="purchase-input select"
+                                    required
+                                  >
+                                    <option value="">Select Item</option>
+                                    {items.map(i => <option key={i._id} value={i._id}>{i.name}</option>)}
+                                    <option value="create_new">Create New Item</option>
+                                  </select>
+                                  {item.itemId && (
+                                    <button onClick={() => {
+                                      setEditingItem(selectedItem);
+                                      setEditingFrom('receipt');
+                                      setActiveTab('item');
+                                    }} className="purchase-button edit">
+                                      <FaEdit />
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                              <td>
+                                <input
+                                  type="number"
+                                  value={item.acceptedQuantity}
+                                  onChange={(e) => handlePrItemChange(index, 'acceptedQuantity', e.target.value)}
+                                  className="purchase-input"
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  type="number"
+                                  value={item.rejectedQuantity}
+                                  onChange={(e) => handlePrItemChange(index, 'rejectedQuantity', e.target.value)}
+                                  className="purchase-input"
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  type="number"
+                                  value={item.rate}
+                                  onChange={(e) => handlePrItemChange(index, 'rate', e.target.value)}
+                                  className="purchase-input"
+                                />
+                              </td>
+                              <td className="purchase-calculated">
+                                {prForm.currency} {(item.amount || 0).toFixed(2)}
+                              </td>
+                              <td>
+                                <select
+                                  value={item.unit}
+                                  onChange={(e) => handlePrItemChange(index, 'unit', e.target.value)}
+                                  className="purchase-input select"
+                                >
+                                  <option value="master">{selectedItem ? selectedItem.masterUnit : 'Master'}</option>
+                                  <option value="outer">{selectedItem ? selectedItem.outerUnit : 'Outer'}</option>
+                                  <option value="nos">{selectedItem ? selectedItem.nosUnit : 'Nos'}</option>
+                                  <option value="grams">Grams</option>
+                                </select>
+                              </td>
+                              <td>
+                                <button
+                                  type="button"
+                                  onClick={() => removePrItem(index)}
+                                  className="purchase-button delete"
+                                  disabled={prForm.items.length === 1}
+                                >
+                                  <FaTrash />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    <div className="purchase-form-buttons">
+                      <button type="button" onClick={addPrItem} className="purchase-button add-row">
+                        Add Row
+                      </button>
+                    </div>
+                    <div className="purchase-totals">
+                      <div>Net Total (${prForm.currency}): {prForm.currency} {(prForm.subtotal || 0).toFixed(2)}</div>
+                    </div>
+                    <h3>Purchase Taxes and Charges</h3>
+                    <table className="purchase-table">
+                      <thead>
+                        <tr>
+                          <th>No.</th>
+                          <th>Type *</th>
+                          <th>Tax Rate</th>
+                          <th>Amount (${prForm.currency})</th>
+                          <th>Total (${prForm.currency})</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {prForm.taxes.map((tax, index) => (
                           <tr key={index}>
                             <td>{index + 1}</td>
                             <td>
                               <select
                                 value={tax.type}
-                                onChange={(e) => handlePoTaxChange(index, 'type', e.target.value)}
+                                onChange={(e) => handlePrTaxChange(index, 'type', e.target.value)}
                                 className="purchase-input select"
                                 required
                               >
@@ -3270,1328 +3654,979 @@ function Purchase() {
                               <input
                                 type="number"
                                 value={tax.taxRate}
-                                onChange={(e) => handlePoTaxChange(index, 'taxRate', e.target.value)}
+                                onChange={(e) => handlePrTaxChange(index, 'taxRate', e.target.value)}
                                 className="purchase-input"
-                                required
                               />
                             </td>
                             <td className="purchase-calculated">
-                              {poForm.currency} {(tax.amount || 0).toFixed(2)}
+                              {prForm.currency} {(tax.amount || 0).toFixed(2)}
                             </td>
                             <td className="purchase-calculated">
-                              {poForm.currency} {(tax.total || 0).toFixed(2)}
+                              {prForm.currency} {(tax.total || 0).toFixed(2)}
                             </td>
                             <td>
                               <button
                                 type="button"
-                                onClick={() => removePoTax(index)}
+                                onClick={() => removePrTax(index)}
                                 className="purchase-button delete"
-                                disabled={poForm.taxes.length === 1}
+                                disabled={prForm.taxes.length === 1}
                               >
                                 <FaTrash />
                               </button>
                             </td>
                           </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                  <div className="purchase-form-buttons">
-                    <button type="button" onClick={addPoTax} className="purchase-button add-row">
-                      Add Row
-                    </button>
-                  </div>
-                  <div className="purchase-totals">
-                    <div>Total Qty {poForm.commonUOM || 'Carton'} {poForm.totalQtyInCommon.toFixed(0)}</div>
-                    <div>Gross Amount {poForm.currency} {(poForm.subtotal || 0).toFixed(0)}</div>
-                    {poForm.taxes.map((tax, index) => (
-                      <div key={index}>GST {tax.taxRate}% {poForm.currency} {(tax.amount || 0).toFixed(0)}</div>
-                    ))}
-                    <div>Net Total {poForm.currency} {(poForm.grandTotal || 0).toFixed(0)}</div>
-                  </div>
-                </div>
-              </div>
-          )}
-          {activeTab === 'receipt' && (
-            <div className="purchase-section">
-              <div className="purchase-header">
-                <h3>Purchase Receipt</h3>
-                <div className="purchase-filter-group-center">
-                  <FaFilter className="purchase-icon" onClick={() => setShowPrFilters(!showPrFilters)} />
-                  {showPrFilters && (
-                    <div className="purchase-filter-dropdown">
-                      <button onClick={() => setShowPrDateFilter(!showPrDateFilter)} className="purchase-button filter-option">
-                        {showPrDateFilter ? 'Hide' : 'Show'} Date Filter
-                      </button>
-                      <button onClick={() => setShowPrSupplierFilter(!showPrSupplierFilter)} className="purchase-button filter-option">
-                        {showPrSupplierFilter ? 'Hide' : 'Show'} Supplier Filter
-                      </button>
-                      <button onClick={() => setShowPrItemFilter(!showPrItemFilter)} className="purchase-button filter-option">
-                        {showPrItemFilter ? 'Hide' : 'Show'} Item Filter
+                        ))}
+                      </tbody>
+                    </table>
+                    <div className="purchase-form-buttons">
+                      <button type="button" onClick={addPrTax} className="purchase-button add-row">
+                        Add Row
                       </button>
                     </div>
-                  )}
-                </div>
-                <div className="purchase-active-filters">
-                  {showPrDateFilter && (
-                    <>
-                      <label>From: <input type="date" value={prDateFrom} onChange={(e) => setPrDateFrom(e.target.value)} className="purchase-input" /></label>
-                      <label>To: <input type="date" value={prDateTo} onChange={(e) => setPrDateTo(e.target.value)} className="purchase-input" /></label>
-                    </>
-                  )}
-                  {showPrSupplierFilter && (
-                    <select
-                      value={prSelectedSupplier}
-                      onChange={(e) => setPrSelectedSupplier(e.target.value)}
-                      className="purchase-input select"
-                    >
-                      <option value="">All Suppliers</option>
-                      {suppliers.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
-                    </select>
-                  )}
-                  {showPrItemFilter && (
-                    <select
-                      value={prSelectedItem}
-                      onChange={(e) => setPrSelectedItem(e.target.value)}
-                      className="purchase-input select"
-                    >
-                      <option value="">All Items</option>
-                      {items.map(i => <option key={i._id} value={i._id}>{i.name}</option>)}
-                    </select>
-                  )}
-                </div>
-                <div className="purchase-filter-group-right">
-                  <button type="button" onClick={handlePrSave} className="purchase-button save">Save</button>
-                  <button type="button" onClick={handlePrSubmit} className="purchase-button submit">Submit</button>
-                </div>
-              </div>
-              <div className="purchase-form">
-                <div className="purchase-form-grid">
-                  <div className="purchase-form-field">
-                    <label className="purchase-label">Series *</label>
-                    <input
-                      type="text"
-                      value={prForm.series}
-                      onChange={(e) => handlePrFormChange('series', e.target.value)}
-                      className="purchase-input"
-                      required
-                    />
-                  </div>
-                  <div className="purchase-form-field">
-                    <label className="purchase-label">Date *</label>
-                    <input
-                      type="date"
-                      value={prForm.date}
-                      onChange={(e) => handlePrFormChange('date', e.target.value)}
-                      className="purchase-input"
-                      required
-                    />
-                  </div>
-                  <div className="purchase-form-field">
-                    <label className="purchase-label">Company *</label>
-                    <input
-                      type="text"
-                      value={prForm.company}
-                      onChange={(e) => handlePrFormChange('company', e.target.value)}
-                      className="purchase-input"
-                      required
-                    />
-                  </div>
-                  <div className="purchase-form-field">
-                    <label className="purchase-label">Purchase Order *</label>
-                    <select
-                      value={prForm.poId}
-                      onChange={(e) => {
-                        const poId = e.target.value;
-                        const po = purchaseOrders.find(p => p.series === poId);
-                        if (po) {
-                          const supplier = suppliers.find(s => s._id === po.supplierId);
-                          const contact = supplier ? (supplier.contacts && supplier.contacts.length > 0 ? supplier.contacts[0] : { address: '', phone: '', email: '' }) : { address: '', phone: '', email: '' };
-                          const newItems = po.items.map(item => ({
-                            itemId: item.itemId,
-                            originalQuantity: item.quantity,
-                            acceptedQuantity: item.quantity,
-                            rejectedQuantity: 0,
-                            rate: item.rate,
-                            amount: item.quantity * item.rate,
-                            unit: item.uom
-                          }));
-                          setCurrentPrSupplier(supplier);
-                          const newForm = {
-                            ...prForm,
-                            poId,
-                            supplierId: po.supplierId,
-                            name: po.name,
-                            supplierCompany: po.supplierCompany,
-                            address: contact.address || po.address,
-                            phone: contact.phone || po.phone,
-                            email: contact.email || po.email,
-                            items: newItems,
-                            taxes: po.taxes,
-                            currency: po.currency
-                          };
-                          setPrForm({ ...newForm, ...calculatePrTotals(newForm) });
-                        }
-                      }}
-                      className="purchase-input select"
-                      required
-                    >
-                      <option value="">Select PO</option>
-                      {purchaseOrders.filter(po => po.status === 'Submitted').map(po => (
-                        <option key={po.series} value={po.series}>{po.series}</option>
+                    <div className="purchase-totals">
+                      <div>Total Qty {prForm.commonUOM || 'Carton'} {prForm.totalQtyInCommon.toFixed(0)}</div>
+                      <div>Gross Amount {prForm.currency} {(prForm.subtotal || 0).toFixed(0)}</div>
+                      {prForm.taxes.map((tax, index) => (
+                        <div key={index}>GST {tax.taxRate}% {prForm.currency} {(tax.amount || 0).toFixed(0)}</div>
                       ))}
-                    </select>
-                  </div>
-                  <div className="purchase-form-field">
-                    <label className="purchase-label">Supplier Code</label>
-                    <input
-                      type="text"
-                      value={suppliers.find(s => s._id === prForm.supplierId)?.code || ''}
-                      disabled
-                      className="purchase-input"
-                    />
-                  </div>
-                  <div className="purchase-form-field">
-                    <label className="purchase-label">Supplier Name *</label>
-                    {currentPrSupplier ? (
-                      <select
-                        value={prForm.name}
-                        onChange={(e) => handlePrFormChange('name', e.target.value)}
-                        className="purchase-input select"
-                        required
-                      >
-                        { (currentPrSupplier.supplier_names.length > 0 ? currentPrSupplier.supplier_names : [currentPrSupplier.company]).map(name => (
-                          <option key={name} value={name}>{name}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input
-                        type="text"
-                        value={prForm.name}
-                        disabled
-                        className="purchase-input"
-                      />
-                    )}
-                  </div>
-                  <div className="purchase-form-field">
-                    <label className="purchase-label">Supplier Company</label>
-                    <input
-                      type="text"
-                      value={prForm.supplierCompany}
-                      disabled
-                      className="purchase-input"
-                    />
+                      <div>Net Total {prForm.currency} {(prForm.grandTotal || 0).toFixed(0)}</div>
+                    </div>
                   </div>
                 </div>
-                <h3>Items</h3>
-                <table className="purchase-table">
-                  <thead>
-                    <tr>
-                      <th>No.</th>
-                      <th>Item Code *</th>
-                      <th>Accepted Quantity</th>
-                      <th>Rejected Q...</th>
-                      <th>Rate (${prForm.currency})</th>
-                      <th>Amount (${prForm.currency})</th>
-                      <th>UOM</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {prForm.items.map((item, index) => {
-                      const selectedItem = items.find(i => i._id === item.itemId);
-                      const uomDisplay = item.unit === 'master' ? (selectedItem ? selectedItem.masterUnit : 'Master') :
-                                         item.unit === 'outer' ? (selectedItem ? selectedItem.outerUnit : 'Outer') :
-                                         item.unit === 'nos' ? (selectedItem ? selectedItem.nosUnit : 'Nos') : 'Grams';
-                      return (
-                        <tr key={index}>
-                          <td>{index + 1}</td>
-                          <td>
-                            <div className="purchase-item-select">
-                              <select
-                                value={item.itemId}
-                                onChange={(e) => handlePrItemChange(index, 'itemId', e.target.value)}
-                                className="purchase-input select"
-                                required
-                              >
-                                <option value="">Select Item</option>
-                                {items.map(i => <option key={i._id} value={i._id}>{i.name}</option>)}
-                                <option value="create_new">Create New Item</option>
-                              </select>
-                              {item.itemId && (
-                                <button onClick={() => {
-                                  setEditingItem(selectedItem);
-                                  setEditingFrom('receipt');
-                                  setActiveTab('item');
-                                }} className="purchase-button edit">
-                                  <FaEdit />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                          <td>
-                            <input
-                              type="number"
-                              value={item.acceptedQuantity}
-                              onChange={(e) => handlePrItemChange(index, 'acceptedQuantity', e.target.value)}
-                              className="purchase-input"
-                            />
-                          </td>
-                          <td>
-                            <input
-                              type="number"
-                              value={item.rejectedQuantity}
-                              onChange={(e) => handlePrItemChange(index, 'rejectedQuantity', e.target.value)}
-                              className="purchase-input"
-                            />
-                          </td>
-                          <td>
-                            <input
-                              type="number"
-                              value={item.rate}
-                              onChange={(e) => handlePrItemChange(index, 'rate', e.target.value)}
-                              className="purchase-input"
-                            />
-                          </td>
-                          <td className="purchase-calculated">
-                            {prForm.currency} {(item.amount || 0).toFixed(2)}
-                          </td>
-                          <td>
-                            <select
-                              value={item.unit}
-                              onChange={(e) => handlePrItemChange(index, 'unit', e.target.value)}
-                              className="purchase-input select"
-                            >
-                              <option value="master">{selectedItem ? selectedItem.masterUnit : 'Master'}</option>
-                              <option value="outer">{selectedItem ? selectedItem.outerUnit : 'Outer'}</option>
-                              <option value="nos">{selectedItem ? selectedItem.nosUnit : 'Nos'}</option>
-                              <option value="grams">Grams</option>
-                            </select>
-                          </td>
-                          <td>
-                            <button
-                              type="button"
-                              onClick={() => removePrItem(index)}
-                              className="purchase-button delete"
-                              disabled={prForm.items.length === 1}
-                            >
-                              <FaTrash />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                <div className="purchase-form-buttons">
-                  <button type="button" onClick={addPrItem} className="purchase-button add-row">
-                    Add Row
-                  </button>
-                </div>
-                <div className="purchase-totals">
-                  <div>Net Total (${prForm.currency}): {prForm.currency} {(prForm.subtotal || 0).toFixed(2)}</div>
-                </div>
-                <h3>Purchase Taxes and Charges</h3>
-                <table className="purchase-table">
-                  <thead>
-                    <tr>
-                      <th>No.</th>
-                      <th>Type *</th>
-                      <th>Tax Rate</th>
-                      <th>Amount (${prForm.currency})</th>
-                      <th>Total (${prForm.currency})</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {prForm.taxes.map((tax, index) => (
-                      <tr key={index}>
-                        <td>{index + 1}</td>
-                        <td>
+              )}
+              {activeTab === 'invoice' && (
+                <div className="purchase-section">
+                  <div className="purchase-header">
+                    <h3>Purchase Invoice</h3>
+                    <div className="purchase-filter-group-center">
+                      <FaFilter className="purchase-icon" onClick={() => setShowPiFilters(!showPiFilters)} />
+                      {showPiFilters && (
+                        <div className="purchase-filter-dropdown">
+                          <button onClick={() => setShowPiDateFilter(!showPiDateFilter)} className="purchase-button filter-option">
+                            {showPiDateFilter ? 'Hide' : 'Show'} Date Filter
+                          </button>
+                          <button onClick={() => setShowPiSupplierFilter(!showPiSupplierFilter)} className="purchase-button filter-option">
+                            {showPiSupplierFilter ? 'Hide' : 'Show'} Supplier Filter
+                          </button>
+                          <button onClick={() => setShowPiItemFilter(!showPiItemFilter)} className="purchase-button filter-option">
+                            {showPiItemFilter ? 'Hide' : 'Show'} Item Filter
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <div className="purchase-active-filters">
+                      {showPiDateFilter && (
+                        <>
+                          <label>From: <input type="date" value={piDateFrom} onChange={(e) => setPiDateFrom(e.target.value)} className="purchase-input" /></label>
+                          <label>To: <input type="date" value={piDateTo} onChange={(e) => setPiDateTo(e.target.value)} className="purchase-input" /></label>
+                        </>
+                      )}
+                      {showPiSupplierFilter && (
+                        <select
+                          value={piSelectedSupplier}
+                          onChange={(e) => setPiSelectedSupplier(e.target.value)}
+                          className="purchase-input select"
+                        >
+                          <option value="">All Suppliers</option>
+                          {suppliers.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+                        </select>
+                      )}
+                      {showPiItemFilter && (
+                        <select
+                          value={piSelectedItem}
+                          onChange={(e) => setPiSelectedItem(e.target.value)}
+                          className="purchase-input select"
+                        >
+                          <option value="">All Items</option>
+                          {items.map(i => <option key={i._id} value={i._id}>{i.name}</option>)}
+                        </select>
+                      )}
+                    </div>
+                    <div className="purchase-filter-group-right">
+                      <button type="button" onClick={handlePiSave} className="purchase-button save">Save</button>
+                      <button type="button" onClick={handlePiSubmit} className="purchase-button submit">Submit</button>
+                    </div>
+                  </div>
+                  <div className="purchase-form">
+                    <div className="purchase-form-grid">
+                      <div className="purchase-form-field">
+                        <label className="purchase-label">Series *</label>
+                        <input
+                          type="text"
+                          value={piForm.series}
+                          onChange={(e) => handlePiFormChange('series', e.target.value)}
+                          className="purchase-input"
+                          required
+                        />
+                      </div>
+                      <div className="purchase-form-field">
+                        <label className="purchase-label">Date *</label>
+                        <input
+                          type="date"
+                          value={piForm.date}
+                          onChange={(e) => handlePiFormChange('date', e.target.value)}
+                          className="purchase-input"
+                          required
+                        />
+                      </div>
+                      <div className="purchase-form-field">
+                        <label className="purchase-label">Supplier Code *</label>
+                        <select
+                          value={piForm.supplierId}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (value === 'create_new') {
+                              setCreatingSupplierForPi(true);
+                              setActiveTab('supplier');
+                              return;
+                            }
+                            const supplier = suppliers.find(s => s._id === value);
+                            if (supplier) {
+                              const contact = supplier.contacts && supplier.contacts.length > 0 ? supplier.contacts[0] : { address: '', phone: '', email: '' };
+                              setCurrentPiSupplier(supplier);
+                              setPiForm(prev => ({
+                                ...prev,
+                                supplierId: value,
+                                name: supplier.supplier_names.length > 0 ? supplier.supplier_names[0] : supplier.company,
+                                supplierCompany: supplier.company,
+                                address: contact.address,
+                                phone: contact.phone,
+                                email: contact.email
+                              }));
+                            } else {
+                              setCurrentPiSupplier(null);
+                            }
+                          }}
+                          className="purchase-input select"
+                          required
+                        >
+                          <option value="">Select Supplier Code</option>
+                          {suppliers.map(s => <option key={s._id} value={s._id}>{`${s.code} - ${s.company}`}</option>)}
+                          <option value="create_new">Create New Supplier</option>
+                        </select>
+                      </div>
+                      <div className="purchase-form-field">
+                        <label className="purchase-label">Supplier Name *</label>
+                        {currentPiSupplier ? (
                           <select
-                            value={tax.type}
-                            onChange={(e) => handlePrTaxChange(index, 'type', e.target.value)}
+                            value={piForm.name}
+                            onChange={(e) => handlePiFormChange('name', e.target.value)}
                             className="purchase-input select"
                             required
                           >
-                            <option value="On Net Total">On Net Total</option>
+                            { (currentPiSupplier.supplier_names.length > 0 ? currentPiSupplier.supplier_names : [currentPiSupplier.company]).map(name => (
+                                <option key={name} value={name}>{name}</option>
+                              ))}
                           </select>
-                        </td>
-                        <td>
+                        ) : (
                           <input
-                            type="number"
-                            value={tax.taxRate}
-                            onChange={(e) => handlePrTaxChange(index, 'taxRate', e.target.value)}
+                            type="text"
+                            value={piForm.name}
+                            disabled
                             className="purchase-input"
                           />
-                        </td>
-                        <td className="purchase-calculated">
-                          {prForm.currency} {(tax.amount || 0).toFixed(2)}
-                        </td>
-                        <td className="purchase-calculated">
-                          {prForm.currency} {(tax.total || 0).toFixed(2)}
-                        </td>
-                        <td>
-                          <button
-                            type="button"
-                            onClick={() => removePrTax(index)}
-                            className="purchase-button delete"
-                            disabled={prForm.taxes.length === 1}
-                          >
-                            <FaTrash />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div className="purchase-form-buttons">
-                  <button type="button" onClick={addPrTax} className="purchase-button add-row">
-                    Add Row
-                  </button>
-                </div>
-                <div className="purchase-totals">
-                  <div>Total Qty {prForm.commonUOM || 'Carton'} {prForm.totalQtyInCommon.toFixed(0)}</div>
-                  <div>Gross Amount {prForm.currency} {(prForm.subtotal || 0).toFixed(0)}</div>
-                  {prForm.taxes.map((tax, index) => (
-                    <div key={index}>GST {tax.taxRate}% {prForm.currency} {(tax.amount || 0).toFixed(0)}</div>
-                  ))}
-                  <div>Net Total {prForm.currency} {(prForm.grandTotal || 0).toFixed(0)}</div>
-                </div>
-              </div>
-            </div>
-          )}
-          {activeTab === 'invoice' && (
-            <div className="purchase-section">
-              <div className="purchase-header">
-                <h3>Purchase Invoice</h3>
-                <div className="purchase-filter-group-center">
-                  <FaFilter className="purchase-icon" onClick={() => setShowPiFilters(!showPiFilters)} />
-                  {showPiFilters && (
-                    <div className="purchase-filter-dropdown">
-                      <button onClick={() => setShowPiDateFilter(!showPiDateFilter)} className="purchase-button filter-option">
-                        {showPiDateFilter ? 'Hide' : 'Show'} Date Filter
-                      </button>
-                      <button onClick={() => setShowPiSupplierFilter(!showPiSupplierFilter)} className="purchase-button filter-option">
-                        {showPiSupplierFilter ? 'Hide' : 'Show'} Supplier Filter
-                      </button>
-                      <button onClick={() => setShowPiItemFilter(!showPiItemFilter)} className="purchase-button filter-option">
-                        {showPiItemFilter ? 'Hide' : 'Show'} Item Filter
+                        )}
+                      </div>
+                      <div className="purchase-form-field">
+                        <label className="purchase-label">Supplier Company</label>
+                        <input
+                          type="text"
+                          value={piForm.supplierCompany}
+                          disabled
+                          className="purchase-input"
+                        />
+                      </div>
+                      <div className="purchase-form-field">
+                        <label className="purchase-label">Purchase Order</label>
+                        <select
+                          value={piForm.poId}
+                          onChange={(e) => handlePiFormChange('poId', e.target.value)}
+                          className="purchase-input select"
+                        >
+                          <option value="">Select PO</option>
+                          {purchaseOrders.filter(po => po.status === 'Submitted').map(po => (
+                            <option key={po.series} value={po.series}>{po.series}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="purchase-form-field">
+                        <label className="purchase-label">Purchase Receipt *</label>
+                        <select
+                          value={piForm.prId}
+                          onChange={(e) => {
+                            const prId = e.target.value;
+                            const pr = purchaseReceipts.find(p => p.series === prId);
+                            if (pr) {
+                              const supplier = suppliers.find(s => s._id === pr.supplierId);
+                              const contact = supplier ? (supplier.contacts && supplier.contacts.length > 0 ? supplier.contacts[0] : { address: '', phone: '', email: '' }) : { address: '', phone: '', email: '' };
+                              const newItems = pr.items.map(item => ({
+                                itemId: item.itemId,
+                                acceptedQuantity: item.acceptedQuantity,
+                                rate: item.rate,
+                                amount: item.acceptedQuantity * item.rate,
+                                unit: item.unit
+                              }));
+                              setCurrentPiSupplier(supplier);
+                              const newForm = {
+                                ...piForm,
+                                prId,
+                                poId: pr.poId,
+                                supplierId: pr.supplierId,
+                                name: pr.name,
+                                supplierCompany: pr.supplierCompany,
+                                address: contact.address || pr.address,
+                                phone: contact.phone || pr.phone,
+                                email: contact.email || pr.email,
+                                items: newItems,
+                                taxes: pr.taxes,
+                                currency: pr.currency
+                              };
+                              setPiForm({ ...newForm, ...calculatePiTotals(newForm) });
+                            }
+                          }}
+                          className="purchase-input select"
+                          required
+                        >
+                         <option value="">Select PR</option>
+                          {purchaseReceipts.filter(pr => pr.status === 'Submitted').map(pr => (
+                            <option key={pr.series} value={pr.series}>{pr.series}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="purchase-form-field">
+                        <label className="purchase-label">Company *</label>
+                        <input
+                          type="text"
+                          value={piForm.company}
+                         onChange={(e) => handlePiFormChange('company', e.target.value)}
+                          className="purchase-input"
+                          required
+                        />
+                      </div>
+                    </div>
+                    <h3>Items</h3>
+                    <table className="purchase-table">
+                      <thead>
+                        <tr>
+                          <th>No.</th>
+                          <th>Item Code *</th>
+                          <th>Accepted Quantity *</th>
+                          <th>UOM</th>
+                          <th>Rate (${piForm.currency})</th>
+                          <th>Amount (${piForm.currency})</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {piForm.items.map((item, index) => {
+                          const selectedItem = items.find(i => i._id === item.itemId);
+                          const uomDisplay = item.unit === 'master' ? (selectedItem ? selectedItem.masterUnit : 'Master') :
+                                             item.unit === 'outer' ? (selectedItem ? selectedItem.outerUnit : 'Outer') :
+                                             item.unit === 'nos' ? (selectedItem ? selectedItem.nosUnit : 'Nos') : 'Grams';
+                          return (
+                            <tr key={index}>
+                              <td>{index + 1}</td>
+                              <td>
+                                <div className="purchase-item-select">
+                                  <select
+                                    value={item.itemId}
+                                    onChange={(e) => handlePiItemChange(index, 'itemId', e.target.value)}
+                                    className="purchase-input select"
+                                    required
+                                  >
+                                    <option value="">Select Item</option>
+                                    {items.map(i => <option key={i._id} value={i._id}>{i.name}</option>)}
+                                    <option value="create_new">Create New Item</option>
+                                  </select>
+                                  {item.itemId && (
+                                    <button onClick={() => {
+                                      setEditingItem(selectedItem);
+                                      setEditingFrom('invoice');
+                                      setActiveTab('item');
+                                    }} className="purchase-button edit">
+                                      <FaEdit />
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                              <td>
+                                <input
+                                  type="number"
+                                  value={item.acceptedQuantity}
+                                  onChange={(e) => handlePiItemChange(index, 'acceptedQuantity', e.target.value)}
+                                  className="purchase-input"
+                                  required
+                                />
+                              </td>
+                              <td>
+                                <select
+                                  value={item.unit}
+                                  onChange={(e) => handlePiItemChange(index, 'unit', e.target.value)}
+                                  className="purchase-input select"
+                                >
+                                  <option value="master">{selectedItem ? selectedItem.masterUnit : 'Master'}</option>
+                                  <option value="outer">{selectedItem ? selectedItem.outerUnit : 'Outer'}</option>
+                                  <option value="nos">{selectedItem ? selectedItem.nosUnit : 'Nos'}</option>
+                                  <option value="grams">Grams</option>
+                                </select>
+                              </td>
+                              <td>
+                                <input
+                                  type="number"
+                                  value={item.rate}
+                                  onChange={(e) => handlePiItemChange(index, 'rate', e.target.value)}
+                                  className="purchase-input"
+                                />
+                              </td>
+                              <td className="purchase-calculated">
+                                {piForm.currency} {(item.amount || 0).toFixed(2)}
+                              </td>
+                              <td>
+                                <button
+                                  type="button"
+                                  onClick={() => removePiItem(index)}
+                                  className="purchase-button delete"
+                                  disabled={piForm.items.length === 1}
+                                >
+                                  <FaTrash />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    <div className="purchase-form-buttons">
+                      <button type="button" onClick={addPiItem} className="purchase-button add-row">
+                        Add Row
                       </button>
                     </div>
-                  )}
-                </div>
-                <div className="purchase-active-filters">
-                  {showPiDateFilter && (
-                    <>
-                      <label>From: <input type="date" value={piDateFrom} onChange={(e) => setPiDateFrom(e.target.value)} className="purchase-input" /></label>
-                      <label>To: <input type="date" value={piDateTo} onChange={(e) => setPiDateTo(e.target.value)} className="purchase-input" /></label>
-                    </>
-                  )}
-                  {showPiSupplierFilter && (
-                    <select
-                      value={piSelectedSupplier}
-                      onChange={(e) => setPiSelectedSupplier(e.target.value)}
-                      className="purchase-input select"
-                    >
-                      <option value="">All Suppliers</option>
-                      {suppliers.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
-                    </select>
-                  )}
-                  {showPiItemFilter && (
-                    <select
-                      value={piSelectedItem}
-                      onChange={(e) => setPiSelectedItem(e.target.value)}
-                      className="purchase-input select"
-                    >
-                      <option value="">All Items</option>
-                      {items.map(i => <option key={i._id} value={i._id}>{i.name}</option>)}
-                    </select>
-                  )}
-                </div>
-                <div className="purchase-filter-group-right">
-                  <button type="button" onClick={handlePiSave} className="purchase-button save">Save</button>
-                  <button type="button" onClick={handlePiSubmit} className="purchase-button submit">Submit</button>
-                </div>
-              </div>
-              <div className="purchase-form">
-                <div className="purchase-form-grid">
-                  <div className="purchase-form-field">
-                    <label className="purchase-label">Series *</label>
-                    <input
-                      type="text"
-                      value={piForm.series}
-                      onChange={(e) => handlePiFormChange('series', e.target.value)}
-                      className="purchase-input"
-                      required
-                    />
+                    <div className="purchase-totals">
+                      <div>Total Quantity: {piForm.totalQuantity}</div>
+                      <div>Total (${piForm.currency}): {piForm.currency} {(piForm.subtotal || 0).toFixed(2)}</div>
+                    </div>
+                    <h3>Purchase Taxes and Charges</h3>
+                    <table className="purchase-table">
+                      <thead>
+                        <tr>
+                          <th>No.</th>
+                          <th>Type *</th>
+                          <th>Tax Rate</th>
+                          <th>Amount (${piForm.currency})</th>
+                          <th>Total (${piForm.currency})</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {piForm.taxes.length === 0 ? (
+                          <tr>
+                            <td colSpan="5">No Data</td>
+                          </tr>
+                        ) : (
+                          piForm.taxes.map((tax, index) => (
+                            <tr key={index}>
+                              <td>{index + 1}</td>
+                              <td>
+                                <select
+                                  value={tax.type}
+                                  onChange={(e) => handlePiTaxChange(index, 'type', e.target.value)}
+                                  className="purchase-input select"
+                                  required
+                                >
+                                  <option value="On Net Total">On Net Total</option>
+                                </select>
+                              </td>
+                              <td>
+                                <input
+                                  type="number"
+                                  value={tax.taxRate}
+                                  onChange={(e) => handlePiTaxChange(index, 'taxRate', e.target.value)}
+                                  className="purchase-input"
+                                  required
+                                />
+                              </td>
+                              <td className="purchase-calculated">
+                                {piForm.currency} {(tax.amount || 0).toFixed(2)}
+                              </td>
+                              <td className="purchase-calculated">
+                                {piForm.currency} {(tax.total || 0).toFixed(2)}
+                              </td>
+                              <td>
+                                <button
+                                  type="button"
+                                  onClick={() => removePiTax(index)}
+                                  className="purchase-button delete"
+                                  disabled={piForm.taxes.length === 1}
+                                >
+                                  <FaTrash />
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                    <div className="purchase-form-buttons">
+                      <button type="button" onClick={addPiTax} className="purchase-button add-row">
+                        Add Row
+                      </button>
+                    </div>
+                    <div className="purchase-totals">
+                      <div>Total Qty {piForm.commonUOM || 'Carton'} {piForm.totalQtyInCommon.toFixed(0)}</div>
+                      <div>Gross Amount {piForm.currency} {(piForm.subtotal || 0).toFixed(0)}</div>
+                      {piForm.taxes.map((tax, index) => (
+                        <div key={index}>GST {tax.taxRate}% {piForm.currency} {(tax.amount || 0).toFixed(0)}</div>
+                      ))}
+                      <div>Net Total {piForm.currency} {(piForm.grandTotal || 0).toFixed(0)}</div>
+                    </div>
                   </div>
-                  <div className="purchase-form-field">
-                    <label className="purchase-label">Date *</label>
-                    <input
-                      type="date"
-                      value={piForm.date}
-                      onChange={(e) => handlePiFormChange('date', e.target.value)}
-                      className="purchase-input"
-                      required
-                    />
-                  </div>
-                  <div className="purchase-form-field">
-                    <label className="purchase-label">Supplier Code *</label>
-                    <select
-                      value={piForm.supplierId}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        if (value === 'create_new') {
-                          setCreatingSupplierForPi(true);
-                          setActiveTab('supplier');
-                          return;
-                        }
-                        const supplier = suppliers.find(s => s._id === value);
-                        if (supplier) {
-                          const contact = supplier.contacts && supplier.contacts.length > 0 ? supplier.contacts[0] : { address: '', phone: '', email: '' };
-                          setCurrentPiSupplier(supplier);
-                          setPiForm(prev => ({
-                            ...prev,
-                            supplierId: value,
-                            name: supplier.supplier_names.length > 0 ? supplier.supplier_names[0] : supplier.company,
-                            supplierCompany: supplier.company,
-                            address: contact.address,
-                            phone: contact.phone,
-                            email: contact.email
-                          }));
-                        } else {
-                          setCurrentPiSupplier(null);
-                        }
-                      }}
-                      className="purchase-input select"
-                      required
-                    >
-                      <option value="">Select Supplier Code</option>
-                      {suppliers.map(s => <option key={s._id} value={s._id}>{`${s.code} - ${s.company}`}</option>)}
-                      <option value="create_new">Create New Supplier</option>
-                    </select>
-                  </div>
-                  <div className="purchase-form-field">
-                    <label className="purchase-label">Supplier Name *</label>
-                    {currentPiSupplier ? (
-                      <select
-                        value={piForm.name}
-                        onChange={(e) => handlePiFormChange('name', e.target.value)}
-                        className="purchase-input select"
-                        required
-                      >
-                        { (currentPiSupplier.supplier_names.length > 0 ? currentPiSupplier.supplier_names : [currentPiSupplier.company]).map(name => (
-                          <option key={name} value={name}>{name}</option>
-                        ))}
-                      </select>
-                    ) : (
+                </div>
+              )}
+              {activeTab === 'report' && (
+                <div className="purchase-section">
+                  <div className="purchase-header">
+                    <h3>Reports</h3>
+                    {/* NEW: Reports Internal Search */}
+                    <div className="purchase-report-search" style={{ position: 'absolute', top: '20px', right: '20px', width: '300px' }}>
                       <input
                         type="text"
-                        value={piForm.name}
-                        disabled
+                        placeholder="Search reports (Stock Balance, Purchase Orders, etc.)..."
+                        value={reportSearchTerm}
+                        onChange={(e) => setReportSearchTerm(e.target.value)}
                         className="purchase-input"
                       />
-                    )}
-                  </div>
-                  <div className="purchase-form-field">
-                    <label className="purchase-label">Supplier Company</label>
-                    <input
-                      type="text"
-                      value={piForm.supplierCompany}
-                      disabled
-                      className="purchase-input"
-                    />
-                  </div>
-                  <div className="purchase-form-field">
-                    <label className="purchase-label">Purchase Order</label>
-                    <select
-                      value={piForm.poId}
-                      onChange={(e) => handlePiFormChange('poId', e.target.value)}
-                      className="purchase-input select"
-                    >
-                      <option value="">Select PO</option>
-                      {purchaseOrders.filter(po => po.status === 'Submitted').map(po => (
-                        <option key={po.series} value={po.series}>{po.series}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="purchase-form-field">
-                    <label className="purchase-label">Purchase Receipt *</label>
-                    <select
-                      value={piForm.prId}
-                      onChange={(e) => {
-                        const prId = e.target.value;
-                        const pr = purchaseReceipts.find(p => p.series === prId);
-                        if (pr) {
-                          const supplier = suppliers.find(s => s._id === pr.supplierId);
-                          const contact = supplier ? (supplier.contacts && supplier.contacts.length > 0 ? supplier.contacts[0] : { address: '', phone: '', email: '' }) : { address: '', phone: '', email: '' };
-                          const newItems = pr.items.map(item => ({
-                            itemId: item.itemId,
-                            acceptedQuantity: item.acceptedQuantity,
-                            rate: item.rate,
-                            amount: item.acceptedQuantity * item.rate,
-                            unit: item.unit
-                          }));
-                          setCurrentPiSupplier(supplier);
-                          const newForm = {
-                            ...piForm,
-                            prId,
-                            poId: pr.poId,
-                            supplierId: pr.supplierId,
-                            name: pr.name,
-                            supplierCompany: pr.supplierCompany,
-                            address: contact.address || pr.address,
-                            phone: contact.phone || pr.phone,
-                            email: contact.email || pr.email,
-                            items: newItems,
-                            taxes: pr.taxes,
-                            currency: pr.currency
-                          };
-                          setPiForm({ ...newForm, ...calculatePiTotals(newForm) });
-                        }
-                      }}
-                      className="purchase-input select"
-                      required
-                    >
-                     <option value="">Select PR</option>
-                      {purchaseReceipts.filter(pr => pr.status === 'Submitted').map(pr => (
-                        <option key={pr.series} value={pr.series}>{pr.series}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="purchase-form-field">
-                    <label className="purchase-label">Company *</label>
-                    <input
-                      type="text"
-                      value={piForm.company}
-                     onChange={(e) => handlePiFormChange('company', e.target.value)}
-                      className="purchase-input"
-                      required
-                    />
-                  </div>
-                </div>
-                <h3>Items</h3>
-                <table className="purchase-table">
-                  <thead>
-                    <tr>
-                      <th>No.</th>
-                      <th>Item Code *</th>
-                      <th>Accepted Quantity *</th>
-                      <th>UOM</th>
-                      <th>Rate (${piForm.currency})</th>
-                      <th>Amount (${piForm.currency})</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {piForm.items.map((item, index) => {
-                      const selectedItem = items.find(i => i._id === item.itemId);
-                      const uomDisplay = item.unit === 'master' ? (selectedItem ? selectedItem.masterUnit : 'Master') :
-                                         item.unit === 'outer' ? (selectedItem ? selectedItem.outerUnit : 'Outer') :
-                                         item.unit === 'nos' ? (selectedItem ? selectedItem.nosUnit : 'Nos') : 'Grams';
-                      return (
-                        <tr key={index}>
-                          <td>{index + 1}</td>
-                          <td>
-                            <div className="purchase-item-select">
-                              <select
-                                value={item.itemId}
-                                onChange={(e) => handlePiItemChange(index, 'itemId', e.target.value)}
-                                className="purchase-input select"
-                                required
-                              >
-                                <option value="">Select Item</option>
-                                {items.map(i => <option key={i._id} value={i._id}>{i.name}</option>)}
-                                <option value="create_new">Create New Item</option>
-                              </select>
-                              {item.itemId && (
-                                <button onClick={() => {
-                                  setEditingItem(selectedItem);
-                                  setEditingFrom('invoice');
-                                  setActiveTab('item');
-                                }} className="purchase-button edit">
-                                  <FaEdit />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                          <td>
-                            <input
-                              type="number"
-                              value={item.acceptedQuantity}
-                              onChange={(e) => handlePiItemChange(index, 'acceptedQuantity', e.target.value)}
-                              className="purchase-input"
-                              required
-                            />
-                          </td>
-                          <td>
-                            <select
-                              value={item.unit}
-                              onChange={(e) => handlePiItemChange(index, 'unit', e.target.value)}
-                              className="purchase-input select"
-                            >
-                              <option value="master">{selectedItem ? selectedItem.masterUnit : 'Master'}</option>
-                              <option value="outer">{selectedItem ? selectedItem.outerUnit : 'Outer'}</option>
-                              <option value="nos">{selectedItem ? selectedItem.nosUnit : 'Nos'}</option>
-                              <option value="grams">Grams</option>
-                            </select>
-                          </td>
-                          <td>
-                            <input
-                              type="number"
-                              value={item.rate}
-                              onChange={(e) => handlePiItemChange(index, 'rate', e.target.value)}
-                              className="purchase-input"
-                            />
-                          </td>
-                          <td className="purchase-calculated">
-                            {piForm.currency} {(item.amount || 0).toFixed(2)}
-                          </td>
-                          <td>
-                            <button
-                              type="button"
-                              onClick={() => removePiItem(index)}
-                              className="purchase-button delete"
-                              disabled={piForm.items.length === 1}
-                            >
-                              <FaTrash />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                <div className="purchase-form-buttons">
-                  <button type="button" onClick={addPiItem} className="purchase-button add-row">
-                    Add Row
-                  </button>
-                </div>
-                <div className="purchase-totals">
-                  <div>Total Quantity: {piForm.totalQuantity}</div>
-                  <div>Total (${piForm.currency}): {piForm.currency} {(piForm.subtotal || 0).toFixed(2)}</div>
-                </div>
-                <h3>Purchase Taxes and Charges</h3>
-                <table className="purchase-table">
-                  <thead>
-                    <tr>
-                      <th>No.</th>
-                      <th>Type *</th>
-                      <th>Tax Rate</th>
-                      <th>Amount (${piForm.currency})</th>
-                      <th>Total (${piForm.currency})</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {piForm.taxes.length === 0 ? (
-                      <tr>
-                        <td colSpan="5">No Data</td>
-                      </tr>
-                    ) : (
-                      piForm.taxes.map((tax, index) => (
-                        <tr key={index}>
-                          <td>{index + 1}</td>
-                          <td>
-                            <select
-                              value={tax.type}
-                              onChange={(e) => handlePiTaxChange(index, 'type', e.target.value)}
-                              className="purchase-input select"
-                              required
-                            >
-                              <option value="On Net Total">On Net Total</option>
-                            </select>
-                          </td>
-                          <td>
-                            <input
-                              type="number"
-                              value={tax.taxRate}
-                              onChange={(e) => handlePiTaxChange(index, 'taxRate', e.target.value)}
-                              className="purchase-input"
-                              required
-                            />
-                          </td>
-                          <td className="purchase-calculated">
-                            {piForm.currency} {(tax.amount || 0).toFixed(2)}
-                          </td>
-                          <td className="purchase-calculated">
-                            {piForm.currency} {(tax.total || 0).toFixed(2)}
-                          </td>
-                          <td>
-                            <button
-                              type="button"
-                              onClick={() => removePiTax(index)}
-                              className="purchase-button delete"
-                              disabled={piForm.taxes.length === 1}
-                            >
-                              <FaTrash />
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-                <div className="purchase-form-buttons">
-                  <button type="button" onClick={addPiTax} className="purchase-button add-row">
-                    Add Row
-                  </button>
-                </div>
-                <div className="purchase-totals">
-                  <div>Total Qty {piForm.commonUOM || 'Carton'} {piForm.totalQtyInCommon.toFixed(0)}</div>
-                  <div>Gross Amount {piForm.currency} {(piForm.subtotal || 0).toFixed(0)}</div>
-                  {piForm.taxes.map((tax, index) => (
-                    <div key={index}>GST {tax.taxRate}% {piForm.currency} {(tax.amount || 0).toFixed(0)}</div>
-                  ))}
-                  <div>Net Total {piForm.currency} {(piForm.grandTotal || 0).toFixed(0)}</div>
-                </div>
-              </div>
-            </div>
-          )}
-          {activeTab === 'report' && (
-            <div className="purchase-section">
-              <div className="purchase-header">
-                <h3>Reports</h3>
-                {/* NEW: Reports Internal Search */}
-                <div className="purchase-report-search" style={{ position: 'absolute', top: '20px', right: '20px', width: '300px' }}>
-                  <input
-                    type="text"
-                    placeholder="Search reports (Stock Balance, Purchase Orders, etc.)..."
-                    value={reportSearchTerm}
-                    onChange={(e) => setReportSearchTerm(e.target.value)}
-                    className="purchase-input"
-                  />
-                </div>
-                <div className="purchase-report-buttons">
-                  {reportTabs
-                    .filter(rt => rt.name.toLowerCase().includes(reportSearchTerm.toLowerCase()))
-                    .map(rt => (
-                      <button
-                        key={rt.key}
-                        onClick={() => setActiveReport(rt.key)}
-                        className={`purchase-button report ${activeReport === rt.key ? 'active' : ''}`}
-                      >
-                        {rt.name}
-                      </button>
-                    ))}
-                </div>
-              </div>
-              {activeReport === 'stock' && (
-                <>
-                  <div className="purchase-report-top">
-                    <div className="purchase-report-filters">
-                      <div className="purchase-report-filters-left">
-                        <label>Search:
-                          <input
-                            type="text"
-                            placeholder="Search items by name"
-                            value={reportSearch}
-                            onChange={(e) => setReportSearch(e.target.value)}
-                            className="purchase-input"
-                          />
-                        </label>
-                      </div>
+                    </div>
+                    <div className="purchase-report-buttons">
+                      {reportTabs
+                        .filter(rt => rt.name.toLowerCase().includes(reportSearchTerm.toLowerCase()))
+                        .map(rt => (
+                          <button
+                            key={rt.key}
+                            onClick={() => setActiveReport(rt.key)}
+                            className={`purchase-button report ${activeReport === rt.key ? 'active' : ''}`}
+                          >
+                            {rt.name}
+                          </button>
+                        ))}
                     </div>
                   </div>
-                  <h4>Stock Balance</h4>
-                  <table className="purchase-table">
-                    <thead>
-                      <tr>
-                        <th>Item</th>
-                        <th>Total Stock (Carton)</th>
-                        <th>Total Stock (Packet)</th>
-                        <th>Total Stock (Patties)</th>
-                        <th>Total Purchased (Patties)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredReportItems.map(item => (
-                        <tr key={item._id}>
-                          <td>{item.name}</td>
-                          <td>{item.stockMaster} {item.masterUnit}</td>
-                          <td>{item.stockOuter} {item.outerUnit}</td>
-                          <td>{item.stockNos} {item.nosUnit}</td>
-                          <td>{item.totalPurchased || (item.totalStock + (item.soldNos || 0))} {item.nosUnit}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </>
-              )}
-              {activeReport === 'sales' && (
-                <>
-                  <div className="purchase-report-top">
-                    <div className="purchase-report-filters">
-                      <div className="purchase-report-filters-left">
-                        <label>Search:
-                          <input
-                            type="text"
-                            placeholder="Search items by name"
-                            value={reportSearch}
-                            onChange={(e) => setReportSearch(e.target.value)}
-                            className="purchase-input"
-                          />
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-                  <h4>Sales Report</h4>
-                  <table className="purchase-table">
-                    <thead>
-                      <tr>
-                        <th>Item</th>
-                        <th>Total Sold (Patty)</th>
-                        <th>Total Purchased (Patty)</th>
-                        <th>Remaining Stock (Patty)</th>
-                        <th>Nos (patty)</th>
-                        <th>Quantity (patty)</th>
-                        <th>Record Sale</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredReportItems.map(item => {
-                        const totalPurchased = item.totalPurchased || (item.totalStock + (item.soldNos || 0));
-                        const remainingPatties = item.totalStock;
-                        const uom = saleUoms[item._id] || 'nos';
-                        const uomLabel = uom === 'master' ? item.masterUnit : uom === 'outer' ? item.outerUnit : item.nosUnit;
-                        return (
-                          <tr key={item._id}>
-                            <td>{item.name}</td>
-                            <td>{item.soldNos} {item.nosUnit}</td>
-                            <td>{totalPurchased} {item.nosUnit}</td>
-                            <td>{remainingPatties} {item.nosUnit}</td>
-                            <td>
-                              <select
-                                value={uom}
-                                onChange={(e) => setSaleUoms({ ...saleUoms, [item._id]: e.target.value })}
-                                className="purchase-input select"
-                              >
-                                <option value="master">Master ({item.masterUnit})</option>
-                                <option value="outer">Outer ({item.outerUnit})</option>
-                                <option value="nos">Nos ({item.nosUnit})</option>
-                              </select>
-                            </td>
-                            <td>
+                  {activeReport === 'stock' && (
+                    <>
+                      <div className="purchase-report-top">
+                        <div className="purchase-report-filters">
+                          <div className="purchase-report-filters-left">
+                            <label>Search:
                               <input
-                                type="number"
-                                value={saleQuantities[item._id] || ''}
-                                onChange={(e) => setSaleQuantities({ ...saleQuantities, [item._id]: e.target.value })}
-                                placeholder={`Quantity (${uomLabel})`}
+                                type="text"
+                                placeholder="Search items by name"
+                                value={reportSearch}
+                                onChange={(e) => setReportSearch(e.target.value)}
                                 className="purchase-input"
                               />
-                            </td>
-                            <td>
-                              <button onClick={() => handleRecordSale(item._id)} className="purchase-button submit">
-                                Record Sale
-                              </button>
-                            </td>
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                      <h4>Stock Balance</h4>
+                      <table className="purchase-table">
+                        <thead>
+                          <tr>
+                            <th>Item</th>
+                            <th>Total Stock (Carton)</th>
+                            <th>Total Stock (Packet)</th>
+                            <th>Total Stock (Patties)</th>
+                            <th>Total Purchased (Patties)</th>
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </>
-              )}
-              {activeReport === 'po' && (
-                <>
-                  <div className="purchase-report-top">
-                    <div className="purchase-report-filters">
-                      <div className="purchase-report-filters-left">
-                        <label>Search:
-                          <input
-                            type="text"
-                            placeholder="Search by PO Number"
-                            value={reportPoSearch}
-                            onChange={(e) => setReportPoSearch(e.target.value)}
-                            className="purchase-input"
-                          />
-                        </label>
-                        <label>Supplier:
-                          <select
-                            value={reportPoSupplier}
-                            onChange={(e) => setReportPoSupplier(e.target.value)}
-                            className="purchase-input select"
-                          >
-                            <option value="">All Suppliers</option>
-                            {suppliers.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
-                          </select>
-                        </label>
-                        <label>Status:
-                          <select
-                            value={reportPoStatus}
-                            onChange={(e) => setReportPoStatus(e.target.value)}
-                            className="purchase-input select"
-                          >
-                            <option value="">All Status</option>
-                            <option value="Draft">Draft</option>
-                            <option value="Submitted">Submitted</option>
-                          </select>
-                        </label>
+                        </thead>
+                        <tbody>
+                          {filteredReportItems.map(item => (
+                            <tr key={item._id}>
+                              <td>{item.name}</td>
+                              <td>{item.stockMaster} {item.masterUnit}</td>
+                              <td>{item.stockOuter} {item.outerUnit}</td>
+                              <td>{item.stockNos} {item.nosUnit}</td>
+                              <td>{item.totalPurchased || (item.totalStock + (item.soldNos || 0))} {item.nosUnit}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </>
+                  )}
+                  {activeReport === 'sales' && (
+                    <>
+                      <div className="purchase-report-top">
+                        <div className="purchase-report-filters">
+                          <div className="purchase-report-filters-left">
+                            <label>Search:
+                              <input
+                                type="text"
+                                placeholder="Search items by name"
+                                value={reportSearch}
+                                onChange={(e) => setReportSearch(e.target.value)}
+                                className="purchase-input"
+                              />
+                            </label>
+                          </div>
+                        </div>
                       </div>
-                      <div className="purchase-report-filters-right">
-                        <label>From: <input type="date" value={reportPoDateFrom} onChange={(e) => setReportPoDateFrom(e.target.value)} className="purchase-input" /></label>
-                        <label>To: <input type="date" value={reportPoDateTo} onChange={(e) => setReportPoDateTo(e.target.value)} className="purchase-input" /></label>
+                      <h4>Sales Report</h4>
+                      <table className="purchase-table">
+                        <thead>
+                          <tr>
+                            <th>Item</th>
+                            <th>Total Sold (Patty)</th>
+                            <th>Total Purchased (Patty)</th>
+                            <th>Remaining Stock (Patty)</th>
+                            <th>Nos (patty)</th>
+                            <th>Quantity (patty)</th>
+                            <th>Record Sale</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredReportItems.map(item => {
+                            const totalPurchased = item.totalPurchased || (item.totalStock + (item.soldNos || 0));
+                            const remainingPatties = item.totalStock;
+                            const uom = saleUoms[item._id] || 'nos';
+                            const uomLabel = uom === 'master' ? item.masterUnit : uom === 'outer' ? item.outerUnit : item.nosUnit;
+                            return (
+                              <tr key={item._id}>
+                                <td>{item.name}</td>
+                                <td>{item.soldNos} {item.nosUnit}</td>
+                                <td>{totalPurchased} {item.nosUnit}</td>
+                                <td>{remainingPatties} {item.nosUnit}</td>
+                                <td>
+                                  <select
+                                    value={uom}
+                                    onChange={(e) => setSaleUoms({ ...saleUoms, [item._id]: e.target.value })}
+                                    className="purchase-input select"
+                                  >
+                                    <option value="master">Master ({item.masterUnit})</option>
+                                    <option value="outer">Outer ({item.outerUnit})</option>
+                                    <option value="nos">Nos ({item.nosUnit})</option>
+                                  </select>
+                                </td>
+                                <td>
+                                  <input
+                                    type="number"
+                                    value={saleQuantities[item._id] || ''}
+                                    onChange={(e) => setSaleQuantities({ ...saleQuantities, [item._id]: e.target.value })}
+                                    placeholder={`Quantity (${uomLabel})`}
+                                    className="purchase-input"
+                                  />
+                                </td>
+                                <td>
+                                  <button onClick={() => handleRecordSale(item._id)} className="purchase-button submit">
+                                    Record Sale
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </>
+                  )}
+                  {activeReport === 'po' && (
+                    <>
+                      <div className="purchase-report-top">
+                        <div className="purchase-report-filters">
+                          <div className="purchase-report-filters-left">
+                            <label>Search:
+                              <input
+                                type="text"
+                                placeholder="Search by PO Number"
+                                value={reportPoSearch}
+                                onChange={(e) => setReportPoSearch(e.target.value)}
+                                className="purchase-input"
+                              />
+                            </label>
+                            <label>Supplier:
+                              <select
+                                value={reportPoSupplier}
+                                onChange={(e) => setReportPoSupplier(e.target.value)}
+                                className="purchase-input select"
+                              >
+                                <option value="">All Suppliers</option>
+                                {suppliers.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+                              </select>
+                            </label>
+                            <label>Status:
+                              <select
+                                value={reportPoStatus}
+                                onChange={(e) => setReportPoStatus(e.target.value)}
+                                className="purchase-input select"
+                              >
+                                <option value="">All Status</option>
+                                <option value="Draft">Draft</option>
+                                <option value="Submitted">Submitted</option>
+                              </select>
+                            </label>
+                          </div>
+                          <div className="purchase-report-filters-right">
+                            <label>From: <input type="date" value={reportPoDateFrom} onChange={(e) => setReportPoDateFrom(e.target.value)} className="purchase-input" /></label>
+                            <label>To: <input type="date" value={reportPoDateTo} onChange={(e) => setReportPoDateTo(e.target.value)} className="purchase-input" /></label>
+                          </div>
+                        </div>
+                        <div className="purchase-report-actions">
+                          <button onClick={() => handleExportCSV('po')} className="purchase-button export">
+                            <FaFileExcel /> Export CSV
+                          </button>
+                          <button onClick={() => handlePrintTable('po')} className="purchase-button print">
+                            <FaPrint /> Print
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                    <div className="purchase-report-actions">
-                      <button onClick={() => handleExportCSV('po')} className="purchase-button export">
-                        <FaFileExcel /> Export CSV
-                      </button>
-                      <button onClick={() => handlePrintTable('po')} className="purchase-button print">
-                        <FaPrint /> Print
-                      </button>
-                    </div>
-                  </div>
-                  <h4>Purchase Orders Report</h4>
-                  <table className="purchase-table">
-                    <thead>
-                      <tr>
-                        <th>PO Number</th>
-                        <th>Date</th>
-                        <th>Supplier Name</th>
-                        <th>Items</th>
-                        <th>Total Amount</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredPurchaseOrdersReport.map(po => (
-                        <tr key={po._id} onClick={() => editPo(po._id)}>
-                          <td>{po.series}</td>
-                          <td>{new Date(po.date).toLocaleDateString()}</td>
-                          <td>{po.name}</td>
-                          <td>{po.items.map(item => <div key={item.itemId}>{renderItemQuantity(item, 'po')}</div>)}</td>
-                          <td>{po.currency} {(po.grandTotal || 0).toFixed(2)}</td>
-                          <td>{po.status}</td>
-                          <td className="purchase-action-buttons">
-                            {po.status === 'Draft' && (
-                              <>
-                                <button onClick={(e) => { e.stopPropagation(); editPo(po._id); }} className="purchase-button edit">
+                      <h4>Purchase Orders Report</h4>
+                      <table className="purchase-table">
+                        <thead>
+                          <tr>
+                            <th>PO Number</th>
+                            <th>Date</th>
+                            <th>Supplier Name</th>
+                            <th>Items</th>
+                            <th>Total Amount</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredPurchaseOrdersReport.map(po => (
+                            <tr key={po._id} onClick={() => editPo(po._id)}>
+                              <td>{po.series}</td>
+                              <td>{new Date(po.date).toLocaleDateString()}</td>
+                              <td>{po.name}</td>
+                              <td>{po.items.map(item => <div key={item.itemId}>{renderItemQuantity(item, 'po')}</div>)}</td>
+                              <td>{po.currency} {(po.grandTotal || 0).toFixed(2)}</td>
+                              <td>{po.status}</td>
+                              <td className="purchase-action-buttons">
+                                {po.status === 'Draft' && (
+                                  <>
+                                    <button onClick={(e) => { e.stopPropagation(); editPo(po._id); }} className="purchase-button edit">
+                                      <FaEdit /> Edit
+                                    </button>
+                                    <button onClick={(e) => { e.stopPropagation(); submitPo(po._id); }} className="purchase-button submit">
+                                      <FaCheck /> Submit
+                                    </button>
+                                  </>
+                                )}
+                                <button onClick={(e) => { e.stopPropagation(); handlePrintRow('po', po); }} className="purchase-button print">
+                                  <FaPrint /> Print
+                                </button>
+                                <button onClick={(e) => { e.stopPropagation(); deletePo(po._id); }} className="purchase-button delete">
+                                  <FaTrash /> Delete
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr>
+                            <td colSpan="4"><strong>Grand Total</strong></td>
+                            <td><strong>{calculateGrandTotal(filteredPurchaseOrdersReport).toFixed(2)}</strong></td>
+                            <td colSpan="2"></td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </>
+                  )}
+                  {activeReport === 'pr' && (
+                    <>
+                      <div className="purchase-report-top">
+                        <div className="purchase-report-filters">
+                          <div className="purchase-report-filters-left">
+                            <label>Search:
+                              <input
+                                type="text"
+                                placeholder="Search by PR Number"
+                                value={reportPrSearch}
+                                onChange={(e) => setReportPrSearch(e.target.value)}
+                                className="purchase-input"
+                              />
+                            </label>
+                            <label>Supplier:
+                              <select
+                                value={reportPrSupplier}
+                                onChange={(e) => setReportPrSupplier(e.target.value)}
+                                className="purchase-input select"
+                              >
+                                <option value="">All Suppliers</option>
+                                {suppliers.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+                              </select>
+                            </label>
+                            <label>Status:
+                              <select
+                                value={reportPrStatus}
+                                onChange={(e) => setReportPrStatus(e.target.value)}
+                                className="purchase-input select"
+                              >
+                                <option value="">All Status</option>
+                                <option value="Draft">Draft</option>
+                                <option value="Submitted">Submitted</option>
+                              </select>
+                            </label>
+                          </div>
+                          <div className="purchase-report-filters-right">
+                            <label>From: <input type="date" value={reportPrDateFrom} onChange={(e) => setReportPrDateFrom(e.target.value)} className="purchase-input" /></label>
+                            <label>To: <input type="date" value={reportPrDateTo} onChange={(e) => setReportPrDateTo(e.target.value)} className="purchase-input" /></label>
+                          </div>
+                        </div>
+                        <div className="purchase-report-actions">
+                          <button onClick={() => handleExportCSV('pr')} className="purchase-button export">
+                            <FaFileExcel /> Export CSV
+                          </button>
+                          <button onClick={() => handlePrintTable('pr')} className="purchase-button print">
+                            <FaPrint /> Print
+                          </button>
+                        </div>
+                      </div>
+                      <h4>Purchase Receipts Report</h4>
+                      <table className="purchase-table">
+                        <thead>
+                          <tr>
+                            <th>PR Number</th>
+                            <th>PO Reference</th>
+                            <th>Date</th>
+                            <th>Supplier Name</th>
+                            <th>Items</th>
+                            <th>Total Amount</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredPurchaseReceiptsReport.map(pr => (
+                            <tr key={pr.series} onClick={() => editPr(pr.series)}>
+                              <td>{pr.series}</td>
+                              <td>{pr.poId}</td>
+                              <td>{new Date(pr.date).toLocaleDateString()}</td>
+                              <td>{pr.name}</td>
+                              <td>{pr.items.map(item => <div key={item.itemId}>{renderItemQuantity(item, 'pr')}</div>)}</td>
+                              <td>{pr.currency} {(pr.grandTotal || 0).toFixed(2)}</td>
+                              <td>{pr.status}</td>
+                              <td className="purchase-action-buttons">
+                                {pr.status === 'Draft' && (
+                                  <>
+                                    <button onClick={(e) => { e.stopPropagation(); editPr(pr.series); }} className="purchase-button edit">
+                                      <FaEdit /> Edit
+                                    </button>
+                                    <button onClick={(e) => { e.stopPropagation(); submitPr(pr.series); }} className="purchase-button submit">
+                                      <FaCheck /> Submit
+                                    </button>
+                                  </>
+                                )}
+                                <button onClick={(e) => { e.stopPropagation(); handlePrintRow('pr', pr); }} className="purchase-button print">
+                                  <FaPrint /> Print
+                                </button>
+                                <button onClick={(e) => { e.stopPropagation(); deletePr(pr.series); }} className="purchase-button delete">
+                                  <FaTrash /> Delete
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr>
+                            <td colSpan="5"><strong>Grand Total</strong></td>
+                            <td><strong>{calculateGrandTotal(filteredPurchaseReceiptsReport).toFixed(2)}</strong></td>
+                            <td colSpan="2"></td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </>
+                  )}
+                  {activeReport === 'pi' && (
+                    <>
+                      <div className="purchase-report-top">
+                        <div className="purchase-report-filters">
+                          <div className="purchase-report-filters-left">
+                            <label>Search:
+                              <input
+                                type="text"
+                                placeholder="Search by PI Number"
+                                value={reportPiSearch}
+                                onChange={(e) => setReportPiSearch(e.target.value)}
+                                className="purchase-input"
+                              />
+                            </label>
+                            <label>Supplier:
+                              <select
+                                value={reportPiSupplier}
+                                onChange={(e) => setReportPiSupplier(e.target.value)}
+                                className="purchase-input select"
+                              >
+                                <option value="">All Suppliers</option>
+                                {suppliers.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+                              </select>
+                            </label>
+                            <label>Status:
+                              <select
+                                value={reportPiStatus}
+                                onChange={(e) => setReportPiStatus(e.target.value)}
+                                className="purchase-input select"
+                              >
+                                <option value="">All Status</option>
+                                <option value="Draft">Draft</option>
+                                <option value="Submitted">Submitted</option>
+                              </select>
+                            </label>
+                          </div>
+                          <div className="purchase-report-filters-right">
+                            <label>From: <input type="date" value={reportPiDateFrom} onChange={(e) => setReportPiDateFrom(e.target.value)} className="purchase-input" /></label>
+                            <label>To: <input type="date" value={reportPiDateTo} onChange={(e) => setReportPiDateTo(e.target.value)} className="purchase-input" /></label>
+                          </div>
+                        </div>
+                        <div className="purchase-report-actions">
+                          <button onClick={() => handleExportCSV('pi')} className="purchase-button export">
+                            <FaFileExcel /> Export CSV
+                          </button>
+                          <button onClick={() => handlePrintTable('pi')} className="purchase-button print">
+                            <FaPrint /> Print
+                          </button>
+                        </div>
+                      </div>
+                      <h4>Purchase Invoices Report</h4>
+                      <table className="purchase-table">
+                        <thead>
+                          <tr>
+                            <th>PI Number</th>
+                            <th>Date</th>
+                            <th>Supplier Name</th>
+                            <th>PO Reference</th>
+                            <th>PR Reference</th>
+                            <th>Total Amount</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredPurchaseInvoicesReport.map(pi => (
+                            <tr key={pi.series} onClick={() => editPi(pi.series)}>
+                              <td>{pi.series}</td>
+                              <td>{new Date(pi.date).toLocaleDateString()}</td>
+                              <td>{pi.name}</td>
+                              <td>{pi.poId}</td>
+                              <td>{pi.prId}</td>
+                              <td>{pi.currency} {(pi.grandTotal || 0).toFixed(2)}</td>
+                              <td>{pi.status}</td>
+                              <td className="purchase-action-buttons">
+                                {pi.status === 'Draft' && (
+                                  <>
+                                    <button onClick={(e) => { e.stopPropagation(); editPi(pi.series); }} className="purchase-button edit">
+                                      <FaEdit /> Edit
+                                    </button>
+                                    <button onClick={(e) => { e.stopPropagation(); submitPi(pi.series); }} className="purchase-button submit">
+                                      <FaCheck /> Submit
+                                    </button>
+                                  </>
+                                )}
+                                <button onClick={(e) => { e.stopPropagation(); handlePrintRow('pi', pi); }} className="purchase-button print">
+                                  <FaPrint /> Print
+                                </button>
+                                <button onClick={(e) => { e.stopPropagation(); deletePi(pi.series); }} className="purchase-button delete">
+                                  <FaTrash /> Delete
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr>
+                            <td colSpan="5"><strong>Grand Total</strong></td>
+                            <td><strong>{calculateGrandTotal(filteredPurchaseInvoicesReport).toFixed(2)}</strong></td>
+                            <td colSpan="2"></td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </>
+                  )}
+                  {activeReport === 'supplier' && (
+                    <>
+                      <div className="purchase-report-top">
+                        <div className="purchase-report-filters">
+                          <div className="purchase-report-filters-left">
+                            <label>Search:
+                              <input
+                                type="text"
+                                placeholder="Search by Name or Code"
+                                value={reportSupplierSearch}
+                                onChange={(e) => setReportSupplierSearch(e.target.value)}
+                                className="purchase-input"
+                              />
+                            </label>
+                            <label>Group:
+                              <input
+                                type="text"
+                                placeholder="Filter by Group"
+                                value={reportSupplierGroup}
+                                onChange={(e) => setReportSupplierGroup(e.target.value)}
+                                className="purchase-input"
+                              />
+                            </label>
+                            <label>Country:
+                              <input
+                                type="text"
+                                placeholder="Filter by Country"
+                                value={reportSupplierCountry}
+                                onChange={(e) => setReportSupplierCountry(e.target.value)}
+                                className="purchase-input"
+                              />
+                            </label>
+                          </div>
+                        </div>
+                        <div className="purchase-report-actions">
+                          <button onClick={() => handleExportCSV('supplier')} className="purchase-button export">
+                            <FaFileExcel /> Export CSV
+                          </button>
+                          <button onClick={() => handlePrintTable('supplier')} className="purchase-button print">
+                            <FaPrint /> Print
+                          </button>
+                        </div>
+                      </div>
+                      <h4>Suppliers Report</h4>
+                      <table className="purchase-table">
+                        <thead>
+                          <tr>
+                            <th>Code</th>
+                            <th>Company Name</th>
+                            <th>Supplier Names</th>
+                            <th>Group</th>
+                            <th>Country</th>
+                            <th>Currency</th>
+                            <th>Tax ID</th>
+                            <th>Contacts</th>
+                            <th>Last Purchase Date</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredSuppliersReport.map(supplier => (
+                            <tr key={supplier._id} onClick={() => { setEditingSupplier(supplier); setSupplierNames(supplier.supplier_names || ['']); setActiveTab('supplier'); }}>
+                              <td>{supplier.code}</td>
+                              <td>{supplier.company}</td>
+                              <td>{(supplier.supplier_names || []).join(', ')}</td>
+                              <td>{supplier.group}</td>
+                              <td>{supplier.country}</td>
+                              <td>{supplier.currency}</td>
+                              <td>{supplier.taxId}</td>
+                              <td>{Array.isArray(supplier.contacts) ? supplier.contacts.map(c => `${c.contactPerson} (${c.phone}, ${c.address})`).join(', ') : ''}</td>
+                              <td>{supplier.lastPurchaseDate ? new Date(supplier.lastPurchaseDate).toLocaleDateString() : '-'}</td>
+                              <td className="purchase-action-buttons">
+                                <button onClick={(e) => { e.stopPropagation(); setEditingSupplier(supplier); setSupplierNames(supplier.supplier_names || ['']); setActiveTab('supplier'); }} className="purchase-button edit">
                                   <FaEdit /> Edit
                                 </button>
-                                <button onClick={(e) => { e.stopPropagation(); submitPo(po._id); }} className="purchase-button submit">
-                                  <FaCheck /> Submit
+                                <button onClick={(e) => { e.stopPropagation(); deleteSupplier(supplier._id); }} className="purchase-button delete">
+                                  <FaTrash /> Delete
                                 </button>
-                              </>
-                            )}
-                            <button onClick={(e) => { e.stopPropagation(); handlePrintRow('po', po); }} className="purchase-button print">
-                              <FaPrint /> Print
-                            </button>
-                            <button onClick={(e) => { e.stopPropagation(); deletePo(po._id); }} className="purchase-button delete">
-                              <FaTrash /> Delete
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr>
-                        <td colSpan="4"><strong>Grand Total</strong></td>
-                        <td><strong>{calculateGrandTotal(filteredPurchaseOrdersReport).toFixed(2)}</strong></td>
-                        <td colSpan="2"></td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </>
+                  )}
+                </div>
               )}
-              {activeReport === 'pr' && (
-                <>
-                  <div className="purchase-report-top">
-                    <div className="purchase-report-filters">
-                      <div className="purchase-report-filters-left">
-                        <label>Search:
-                          <input
-                            type="text"
-                            placeholder="Search by PR Number"
-                            value={reportPrSearch}
-                            onChange={(e) => setReportPrSearch(e.target.value)}
-                            className="purchase-input"
-                          />
-                        </label>
-                        <label>Supplier:
-                          <select
-                            value={reportPrSupplier}
-                            onChange={(e) => setReportPrSupplier(e.target.value)}
-                            className="purchase-input select"
-                          >
-                            <option value="">All Suppliers</option>
-                            {suppliers.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
-                          </select>
-                        </label>
-                        <label>Status:
-                          <select
-                            value={reportPrStatus}
-                            onChange={(e) => setReportPrStatus(e.target.value)}
-                            className="purchase-input select"
-                          >
-                            <option value="">All Status</option>
-                            <option value="Draft">Draft</option>
-                            <option value="Submitted">Submitted</option>
-                          </select>
-                        </label>
-                      </div>
-                      <div className="purchase-report-filters-right">
-                        <label>From: <input type="date" value={reportPrDateFrom} onChange={(e) => setReportPrDateFrom(e.target.value)} className="purchase-input" /></label>
-                        <label>To: <input type="date" value={reportPrDateTo} onChange={(e) => setReportPrDateTo(e.target.value)} className="purchase-input" /></label>
-                      </div>
-                    </div>
-                    <div className="purchase-report-actions">
-                      <button onClick={() => handleExportCSV('pr')} className="purchase-button export">
-                        <FaFileExcel /> Export CSV
-                      </button>
-                      <button onClick={() => handlePrintTable('pr')} className="purchase-button print">
-                        <FaPrint /> Print
-                      </button>
-                    </div>
-                  </div>
-                  <h4>Purchase Receipts Report</h4>
-                  <table className="purchase-table">
-                    <thead>
-                      <tr>
-                        <th>PR Number</th>
-                        <th>PO Reference</th>
-                        <th>Date</th>
-                        <th>Supplier Name</th>
-                        <th>Items</th>
-                        <th>Total Amount</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredPurchaseReceiptsReport.map(pr => (
-                        <tr key={pr.series} onClick={() => editPr(pr.series)}>
-                          <td>{pr.series}</td>
-                          <td>{pr.poId}</td>
-                          <td>{new Date(pr.date).toLocaleDateString()}</td>
-                          <td>{pr.name}</td>
-                          <td>{pr.items.map(item => <div key={item.itemId}>{renderItemQuantity(item, 'pr')}</div>)}</td>
-                          <td>{pr.currency} {(pr.grandTotal || 0).toFixed(2)}</td>
-                          <td>{pr.status}</td>
-                          <td className="purchase-action-buttons">
-                            {pr.status === 'Draft' && (
-                              <>
-                                <button onClick={(e) => { e.stopPropagation(); editPr(pr.series); }} className="purchase-button edit">
-                                  <FaEdit /> Edit
-                                </button>
-                                <button onClick={(e) => { e.stopPropagation(); submitPr(pr.series); }} className="purchase-button submit">
-                                  <FaCheck /> Submit
-                                </button>
-                              </>
-                            )}
-                            <button onClick={(e) => { e.stopPropagation(); handlePrintRow('pr', pr); }} className="purchase-button print">
-                              <FaPrint /> Print
-                            </button>
-                            <button onClick={(e) => { e.stopPropagation(); deletePr(pr.series); }} className="purchase-button delete">
-                              <FaTrash /> Delete
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr>
-                        <td colSpan="5"><strong>Grand Total</strong></td>
-                        <td><strong>{calculateGrandTotal(filteredPurchaseReceiptsReport).toFixed(2)}</strong></td>
-                        <td colSpan="2"></td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </>
-              )}
-              {activeReport === 'pi' && (
-                <>
-                  <div className="purchase-report-top">
-                    <div className="purchase-report-filters">
-                      <div className="purchase-report-filters-left">
-                        <label>Search:
-                          <input
-                            type="text"
-                            placeholder="Search by PI Number"
-                            value={reportPiSearch}
-                            onChange={(e) => setReportPiSearch(e.target.value)}
-                            className="purchase-input"
-                          />
-                        </label>
-                        <label>Supplier:
-                          <select
-                            value={reportPiSupplier}
-                            onChange={(e) => setReportPiSupplier(e.target.value)}
-                            className="purchase-input select"
-                          >
-                            <option value="">All Suppliers</option>
-                            {suppliers.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
-                          </select>
-                        </label>
-                        <label>Status:
-                          <select
-                            value={reportPiStatus}
-                            onChange={(e) => setReportPiStatus(e.target.value)}
-                            className="purchase-input select"
-                          >
-                            <option value="">All Status</option>
-                            <option value="Draft">Draft</option>
-                            <option value="Submitted">Submitted</option>
-                          </select>
-                        </label>
-                      </div>
-                      <div className="purchase-report-filters-right">
-                        <label>From: <input type="date" value={reportPiDateFrom} onChange={(e) => setReportPiDateFrom(e.target.value)} className="purchase-input" /></label>
-                        <label>To: <input type="date" value={reportPiDateTo} onChange={(e) => setReportPiDateTo(e.target.value)} className="purchase-input" /></label>
-                      </div>
-                    </div>
-                    <div className="purchase-report-actions">
-                      <button onClick={() => handleExportCSV('pi')} className="purchase-button export">
-                        <FaFileExcel /> Export CSV
-                      </button>
-                      <button onClick={() => handlePrintTable('pi')} className="purchase-button print">
-                        <FaPrint /> Print
-                      </button>
-                    </div>
-                  </div>
-                  <h4>Purchase Invoices Report</h4>
-                  <table className="purchase-table">
-                    <thead>
-                      <tr>
-                        <th>PI Number</th>
-                        <th>Date</th>
-                        <th>Supplier Name</th>
-                        <th>PO Reference</th>
-                        <th>PR Reference</th>
-                        <th>Total Amount</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredPurchaseInvoicesReport.map(pi => (
-                        <tr key={pi.series} onClick={() => editPi(pi.series)}>
-                          <td>{pi.series}</td>
-                          <td>{new Date(pi.date).toLocaleDateString()}</td>
-                          <td>{pi.name}</td>
-                          <td>{pi.poId}</td>
-                          <td>{pi.prId}</td>
-                          <td>{pi.currency} {(pi.grandTotal || 0).toFixed(2)}</td>
-                          <td>{pi.status}</td>
-                          <td className="purchase-action-buttons">
-                            {pi.status === 'Draft' && (
-                              <>
-                                <button onClick={(e) => { e.stopPropagation(); editPi(pi.series); }} className="purchase-button edit">
-                                  <FaEdit /> Edit
-                                </button>
-                                <button onClick={(e) => { e.stopPropagation(); submitPi(pi.series); }} className="purchase-button submit">
-                                  <FaCheck /> Submit
-                                </button>
-                              </>
-                            )}
-                            <button onClick={(e) => { e.stopPropagation(); handlePrintRow('pi', pi); }} className="purchase-button print">
-                              <FaPrint /> Print
-                            </button>
-                            <button onClick={(e) => { e.stopPropagation(); deletePi(pi.series); }} className="purchase-button delete">
-                              <FaTrash /> Delete
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr>
-                        <td colSpan="5"><strong>Grand Total</strong></td>
-                        <td><strong>{calculateGrandTotal(filteredPurchaseInvoicesReport).toFixed(2)}</strong></td>
-                        <td colSpan="2"></td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </>
-              )}
-              {activeReport === 'supplier' && (
-                <>
-                  <div className="purchase-report-top">
-                    <div className="purchase-report-filters">
-                      <div className="purchase-report-filters-left">
-                        <label>Search:
-                          <input
-                            type="text"
-                            placeholder="Search by Name or Code"
-                            value={reportSupplierSearch}
-                            onChange={(e) => setReportSupplierSearch(e.target.value)}
-                            className="purchase-input"
-                          />
-                        </label>
-                        <label>Group:
-                          <input
-                            type="text"
-                            placeholder="Filter by Group"
-                            value={reportSupplierGroup}
-                            onChange={(e) => setReportSupplierGroup(e.target.value)}
-                            className="purchase-input"
-                          />
-                        </label>
-                        <label>Country:
-                          <input
-                            type="text"
-                            placeholder="Filter by Country"
-                            value={reportSupplierCountry}
-                            onChange={(e) => setReportSupplierCountry(e.target.value)}
-                            className="purchase-input"
-                          />
-                        </label>
-                      </div>
-                    </div>
-                    <div className="purchase-report-actions">
-                      <button onClick={() => handleExportCSV('supplier')} className="purchase-button export">
-                        <FaFileExcel /> Export CSV
-                      </button>
-                      <button onClick={() => handlePrintTable('supplier')} className="purchase-button print">
-                        <FaPrint /> Print
-                      </button>
-                    </div>
-                  </div>
-                  <h4>Suppliers Report</h4>
-                  <table className="purchase-table">
-                    <thead>
-                      <tr>
-                        <th>Code</th>
-                        <th>Company Name</th>
-                        <th>Supplier Names</th>
-                        <th>Group</th>
-                        <th>Country</th>
-                        <th>Currency</th>
-                        <th>Tax ID</th>
-                        <th>Contacts</th>
-                        <th>Last Purchase Date</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredSuppliersReport.map(supplier => (
-                        <tr key={supplier._id} onClick={() => { setEditingSupplier(supplier); setSupplierNames(supplier.supplier_names || ['']); setActiveTab('supplier'); }}>
-                          <td>{supplier.code}</td>
-                          <td>{supplier.company}</td>
-                          <td>{(supplier.supplier_names || []).join(', ')}</td>
-                          <td>{supplier.group}</td>
-                          <td>{supplier.country}</td>
-                          <td>{supplier.currency}</td>
-                          <td>{supplier.taxId}</td>
-                          <td>{Array.isArray(supplier.contacts) ? supplier.contacts.map(c => `${c.contactPerson} (${c.phone}, ${c.address})`).join(', ') : ''}</td>
-                          <td>{supplier.lastPurchaseDate ? new Date(supplier.lastPurchaseDate).toLocaleDateString() : '-'}</td>
-                          <td className="purchase-action-buttons">
-                            <button onClick={(e) => { e.stopPropagation(); setEditingSupplier(supplier); setSupplierNames(supplier.supplier_names || ['']); setActiveTab('supplier'); }} className="purchase-button edit">
-                              <FaEdit /> Edit
-                            </button>
-                            <button onClick={(e) => { e.stopPropagation(); deleteSupplier(supplier._id); }} className="purchase-button delete">
-                              <FaTrash /> Delete
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </>
-              )}
-            </div>
+            </>
           )}
         </div>
       </div>

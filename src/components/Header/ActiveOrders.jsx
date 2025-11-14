@@ -1,6 +1,3 @@
-// ActiveOrders.jsx - Full Updated Code with Mark Delivered Moving to Trip Reports and Updating Sales Record with deliveryPersonName. 
-// Changes: Replaced window.confirm in handleMarkDelivered with the warning confirmation system (setWarningMessage, setIsConfirmation, setPendingAction).
-// All other confirmations already use the warning system. Suppressed non-confirmation UI messages as before. No window.alerts or confirms used.
 import React, { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
@@ -24,6 +21,7 @@ function ActiveOrders() {
   const [secretKeyInput, setSecretKeyInput] = useState(''); // For secret key entry
   const [filterType, setFilterType] = useState("Dine In"); // Updated filters
   const [baseUrl, setBaseUrl] = useState(""); // Dynamic base URL for client/server mode
+  const [currency, setCurrency] = useState("INR"); // NEW: Currency from settings, default INR
   const [vatRate, setVatRate] = useState(0.10); // UPDATED: Dynamic VAT rate like in FrontPage
   const navigate = useNavigate();
 
@@ -47,6 +45,23 @@ function ActiveOrders() {
     fetchConfig();
   }, []);
 
+  // UPDATED: Fetch currency from settings (default INR with symbol handling)
+  useEffect(() => {
+    const fetchCurrency = async () => {
+      try {
+        const apiPath = baseUrl ? `${baseUrl}/api/settings` : '/api/settings';
+        const response = await axios.get(apiPath);
+        const { currency: fetchedCurrency = "INR" } = response.data;
+        setCurrency(fetchedCurrency.toUpperCase()); // Ensure uppercase like INR, AED
+        console.log("Fetched currency:", fetchedCurrency); // Debug
+      } catch (error) {
+        console.error("Failed to fetch currency settings:", error);
+        setCurrency("INR"); // Fallback to INR
+      }
+    };
+    fetchCurrency();
+  }, [baseUrl]);
+
   // UPDATED: Fetch VAT rate dynamically like in FrontPage
   useEffect(() => {
     const fetchVat = async () => {
@@ -60,6 +75,27 @@ function ActiveOrders() {
     };
     fetchVat();
   }, [baseUrl]);
+
+  // NEW: Helper to get currency symbol (from FrontPage)
+  const getCurrencySymbol = (currCode) => {
+    const symbols = {
+      'INR': '₹',
+      'USD': '$',
+      'EUR': '€',
+      'GBP': '£',
+      'AED': 'د.إ',
+      // Add more as needed
+    };
+    return symbols[currCode?.toUpperCase()] || '₹'; // Default to ₹ (INR) if not found
+  };
+
+  // FIXED: Updated formatPrice to handle string inputs by converting to Number first
+  const formatPrice = (price) => {
+    const symbol = getCurrencySymbol(currency); // Get symbol based on current currency
+    const numPrice = Number(price); // Convert to number to handle strings like "10.00"
+    if (isNaN(numPrice) || numPrice === 0) return `${symbol}0.00`;
+    return `${symbol}${numPrice.toFixed(2)}`;
+  };
 
   const fetchData = async () => {
     try {
@@ -76,6 +112,10 @@ function ActiveOrders() {
               originalBasePrice: item.originalBasePrice || null,
               served: item.served !== undefined ? item.served : false,
               servedQuantity: item.servedQuantity || (item.served ? (item.quantity || 1) : 0),
+              // FIXED: Map from backend fields excl_amount and tax_amount to preserve saved values
+              exclTotal: Number(item.excl_amount) || Number(item.exclTotal) || 0,
+              taxTotal: Number(item.tax_amount) || Number(item.taxTotal) || 0,
+              taxBreakdown: item.tax_breakdown || item.taxBreakdown || {}, // If saved in backend
               // FIXED: Ensure combo offer flag is preserved
               isCombo: item.isCombo || item.is_combo_offer || false,
             }))
@@ -119,7 +159,7 @@ function ActiveOrders() {
     fetchTables();
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
-  }, [baseUrl, vatRate]); // Re-fetch after baseUrl and vatRate are set
+  }, [baseUrl, currency]); // Re-fetch after baseUrl and currency are set
 
   const getFloor = (tableNumber) => {
     const table = tables.find((t) => String(t.table_number) === String(tableNumber));
@@ -458,6 +498,10 @@ function ActiveOrders() {
         basePrice: Number(item.basePrice) || (Number(item.totalPrice) / (Number(item.quantity) || 1)) || 0,
         originalBasePrice: item.originalBasePrice || null,
         totalPrice: Number(item.totalPrice) || (Number(item.basePrice) * (Number(item.quantity) || 1)) || 0,
+        // FIXED: Preserve saved exclTotal and taxTotal without recalculating with current vatRate
+        exclTotal: Number(item.exclTotal) || Number(item.excl_amount) || 0,
+        taxTotal: Number(item.taxTotal) || Number(item.tax_amount) || 0,
+        taxBreakdown: item.taxBreakdown || item.tax_breakdown || {}, // Preserve if saved
         selectedSize: item.selectedSize || "M",
         icePreference: item.icePreference || "without_ice",
         isSpicy: item.isSpicy || false,
@@ -645,27 +689,10 @@ function ActiveOrders() {
           ? item.image
           : `${baseURL}${item.image}`
         : "/static/images/default-item.jpg") + cacheBuster;
-      // Recalculate totalPrice for consistency
-      let itemSubtotal = formattedItem.basePrice * formattedItem.quantity;
-      let addonTotal = 0;
-      if (formattedItem.addonPrices && formattedItem.addonQuantities) {
-        Object.keys(formattedItem.addonPrices).forEach((key) => {
-          const price = formattedItem.addonPrices[key];
-          const qty = formattedItem.addonQuantities[key] || 0;
-          addonTotal += price * qty;
-        });
-      }
-      itemSubtotal += addonTotal;
-      let comboTotal = 0;
-      if (formattedItem.comboPrices && formattedItem.comboQuantities) {
-        Object.keys(formattedItem.comboPrices).forEach((key) => {
-          const price = formattedItem.comboPrices[key];
-          const qty = formattedItem.comboQuantities[key] || 0;
-          comboTotal += price * qty;
-        });
-      }
-      itemSubtotal += comboTotal;
-      formattedItem.totalPrice = itemSubtotal;
+      // FIXED: No fallback recalculation - preserve saved exclTotal and taxTotal
+      formattedItem.exclTotal = Number(item.exclTotal) || 0;
+      formattedItem.taxTotal = Number(item.taxTotal) || 0;
+      formattedItem.totalPrice = formattedItem.exclTotal + formattedItem.taxTotal; // Ensure totalPrice is incl
       return formattedItem;
     });
     const orderType = order.orderType || inferOrderType(order);
@@ -738,7 +765,7 @@ function ActiveOrders() {
             const tick = getPickedUpTick(item, kitchen);
             return (
               <li key={idx}>
-                + Addon: {addonName} x{qty} (₹{price.toFixed(2)}, Kitchen: {kitchen})
+                + Addon: {addonName} x{qty} ({formatPrice(price)}, Kitchen: {kitchen})
                 {tick}
               </li>
             );
@@ -761,7 +788,7 @@ function ActiveOrders() {
             return (
               <li key={idx}>
                 <strong>+ Combo: </strong>
-                {comboName} ({combo.size || "M"}) x{qty} (₹{price.toFixed(2)}
+                {comboName} ({combo.size || "M"}) x{qty} ({formatPrice(price)}
                 {combo.spicy ? " (Spicy)" : ""}, Kitchen: {kitchen})
                 {tick}
               </li>
@@ -782,7 +809,7 @@ function ActiveOrders() {
           const tick = getPickedUpTick(item, kitchen);
           return (
             <li key={idx} className="active-orders-combooffer-subitem">
-              - {citem.name} x{itemQuantity} (₹{subPrice.toFixed(2)}, Kitchen: {kitchen})
+              - {citem.name} x{itemQuantity} ({formatPrice(subPrice)}, Kitchen: {kitchen})
               {tick}
             </li>
           );
@@ -791,17 +818,22 @@ function ActiveOrders() {
     );
   };
 
-  const calculateOrderTotal = (cartItems) => {
-    if (!Array.isArray(cartItems)) return "0.00";
-    return cartItems.reduce((sum, item) => sum + (Number(item.totalPrice) || 0), 0).toFixed(2);
+  // UPDATED: FIXED Calculation - Subtotal (excl VAT sum of exclTotal), Grand Total (subtotal + sum taxTotal)
+  const calculateSubtotal = (cartItems) => {
+    if (!Array.isArray(cartItems)) return 0; // Return number instead of string for consistency
+    return cartItems.reduce((sum, item) => sum + (Number(item.exclTotal) || 0), 0);
   };
 
-  // UPDATED: Use dynamic vatRate for grand total calculation
+  const calculateTotalVat = (cartItems) => {
+    if (!Array.isArray(cartItems)) return 0; // Return number instead of string
+    return cartItems.reduce((sum, item) => sum + (Number(item.taxTotal) || 0), 0);
+  };
+
   const calculateGrandTotal = (cartItems) => {
-    if (!Array.isArray(cartItems)) return "0.00";
-    const subtotal = cartItems.reduce((sum, item) => sum + (Number(item.totalPrice) || 0), 0);
-    const vat = subtotal * vatRate;
-    return (subtotal + vat).toFixed(2);
+    if (!Array.isArray(cartItems)) return 0; // Return number instead of string
+    const subtotal = calculateSubtotal(cartItems);
+    const vat = calculateTotalVat(cartItems);
+    return subtotal + vat;
   };
 
   const getItemStatus = (item) => {
@@ -947,8 +979,8 @@ function ActiveOrders() {
                     <th>Order Type</th>
                     <th>Phone</th>
                     <th>Timestamp</th>
-                    <th>Total (₹)</th>
-                    <th>Grand Total (₹)</th>
+                    <th>Total ({getCurrencySymbol(currency)})</th>
+                    <th>Grand Total ({getCurrencySymbol(currency)})</th>
                     <th>Payment Status</th>
                     <th>Delivery Person</th>
                     <th>Picked Up Time</th>
@@ -965,8 +997,8 @@ function ActiveOrders() {
                     <th>Phone</th>
                     <th>Chairs</th>
                     <th>Timestamp</th>
-                    <th>Total (₹)</th>
-                    <th>Grand Total (₹)</th>
+                    <th>Total ({getCurrencySymbol(currency)})</th>
+                    <th>Grand Total ({getCurrencySymbol(currency)})</th>
                     <th>Payment Status</th>
                     <th>Items</th>
                     <th>Actions</th>
@@ -992,8 +1024,8 @@ function ActiveOrders() {
                           <td>{order.orderType || inferOrderType(order)}</td>
                           <td>{order.phoneNumber || "Not provided"}</td>
                           <td>{formatTimestamp(order.timestamp)}</td>
-                          <td>{calculateOrderTotal(order.cartItems)}</td>
-                          <td>{calculateGrandTotal(order.cartItems)}</td>
+                          <td>{formatPrice(calculateSubtotal(order.cartItems))}</td>
+                          <td>{formatPrice(calculateGrandTotal(order.cartItems))}</td>
                           <td>
                             <select
                               value={order.paid ? "Paid" : "Unpaid"}
@@ -1048,8 +1080,8 @@ function ActiveOrders() {
                           <td>{order.phoneNumber || "Not provided"}</td>
                           <td>{formatChairsBooked(order.chairsBooked)}</td>
                           <td>{formatTimestamp(order.timestamp)}</td>
-                          <td>{calculateOrderTotal(order.cartItems)}</td>
-                          <td>{calculateGrandTotal(order.cartItems)}</td>
+                          <td>{formatPrice(calculateSubtotal(order.cartItems))}</td>
+                          <td>{formatPrice(calculateGrandTotal(order.cartItems))}</td>
                           <td>
                             <select
                               value={order.paid ? "Paid" : "Unpaid"}
@@ -1085,7 +1117,7 @@ function ActiveOrders() {
                                       {item.is_combo_offer ? (
                                         <>
                                           <strong>{item.offer_description || item.name || item.item_name}</strong> x{item.quantity} (Combo Offer)
-                                          <div>Price: {item.originalBasePrice ? <span style={{ textDecoration: "line-through" }}>₹{(item.originalBasePrice * item.quantity).toFixed(2)}</span> : ""} ₹{(item.basePrice * item.quantity).toFixed(2)}</div>
+                                          <div>Price: {item.originalBasePrice ? <span style={{ textDecoration: "line-through" }}>{formatPrice(item.originalBasePrice * item.quantity)}</span> : ""} {formatPrice(item.basePrice * item.quantity)}</div>
                                           <div>Served: {item.servedQuantity || 0}, Pending: {remainingQty}</div>
                                           {mainTick}
                                           {renderComboOfferSubItems(item.comboItems, item.quantity, item)}
@@ -1094,7 +1126,7 @@ function ActiveOrders() {
                                         <>
                                           <strong>{item.name || item.item_name}</strong> x{item.quantity} (Served: {item.servedQuantity || 0}, Pending: {remainingQty})
                                           {mainTick}
-                                          <div>Price: {item.originalBasePrice ? <span style={{ textDecoration: "line-through" }}>₹{item.originalBasePrice.toFixed(2)}</span> : ""} ₹{item.basePrice.toFixed(2)}</div>
+                                          <div>Price: {item.originalBasePrice ? <span style={{ textDecoration: "line-through" }}>{formatPrice(item.originalBasePrice)}</span> : ""} {formatPrice(item.basePrice)}</div>
                                         </>
                                       )}
                                       <div>Size: {item.selectedSize || "M"}</div>

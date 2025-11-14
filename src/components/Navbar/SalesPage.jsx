@@ -201,7 +201,7 @@ const SalesPage = () => {
             language: parsed.language || 'en-IN',
             dateFormat: parsed.dateFormat || 'yyyy-long-mm-dd',
             timeFormat: parsed.timeFormat || 'HH:mm:ss',
-            timeZone: parsed.timeZone || 'Asia/Dubai',
+            timeZone: parsed.dateFormat || 'Asia/Dubai',
           }));
         }
         // Keep default otherwise
@@ -616,8 +616,10 @@ const SalesPage = () => {
       setShowModal(true);
     }
   };
+  // UPDATED: calculateItemPrices - Prioritize basePrice over amount for historical accuracy (matches Cash.jsx)
   const calculateItemPrices = (item) => {
-    const baseAmount = parseFloat(item.amount) || parseFloat(item.basePrice) || 0;
+    // FIXED: Prioritize basePrice to show correct item price (e.g., 300 instead of inflated amount)
+    const baseAmount = parseFloat(item.basePrice) || parseFloat(item.amount) || 0;
     const addonTotal =
       item.addons && item.addons.length > 0
         ? item.addons.reduce(
@@ -654,14 +656,31 @@ const SalesPage = () => {
   const formatTotal = (value) => {
     return Number(value).toFixed(2);
   };
+  // UPDATED: Compute subtotal from item totals for consistency (matches Cash.jsx computed style)
   const calculateSubtotal = (sale) => {
-    return parseFloat(sale.total) || 0;
+    return sale.items.reduce((sum, item) => {
+      const { totalAmount } = calculateItemPrices(item);
+      return sum + totalAmount;
+    }, 0);
+  };
+  // NEW: VAT breakdown helper (matching Cash.jsx) - Uses item.taxBreakdown if available
+  const getVatByRate = (sale) => {
+    const byRate = {};
+    sale.items.forEach((item) => {
+      if (item.taxBreakdown) {
+        Object.entries(item.taxBreakdown).forEach(([rate, amt]) => {
+          byRate[rate] = (byRate[rate] || 0) + parseFloat(amt || 0);
+        });
+      }
+    });
+    return byRate;
   };
   const calculateVAT = (sale) => {
     return parseFloat(sale.vat_amount) || 0;
   };
+  // FIXED: Updated to compute grand total as subtotal + VAT for consistency (fixes display mismatch like 310 + 16 = 326 instead of using sale.grand_total=342)
   const calculateGrandTotal = (sale) => {
-    return parseFloat(sale.grand_total) || 0;
+    return calculateSubtotal(sale) + calculateVAT(sale);
   };
   // FIXED: Format currency using invoice-specific formatter if available - Ensure historical invoices use their original currency
   const formatCurrency = (value, sale = null) => {
@@ -679,11 +698,13 @@ const SalesPage = () => {
   // NEW: Handle combo offer display name
   // UPDATED: Full delivery address handling - multi-line HTML matching Cash.jsx
   // NEW: Added orderNo and deliveryPersonName display for Online Delivery in print
+  // UPDATED: Added VAT breakdown rows (matching Cash.jsx)
+  // FIXED: Use computed grandTotal = subtotal + vatAmount for consistency
   const generatePrintableContent = (sale, isPreview = false) => {
     if (!sale) return "";
     const subtotal = calculateSubtotal(sale);
     const vatAmount = calculateVAT(sale);
-    const grandTotal = calculateGrandTotal(sale);
+    const grandTotal = subtotal + vatAmount; // FIXED: Computed for consistency
     // FIXED: Calculate VAT rate for display (matching cash.jsx)
     const vatRate = subtotal > 0 ? (vatAmount / subtotal) : 0;
     // FIXED: Use invoice-specific formatter for historical accuracy in print
@@ -730,6 +751,14 @@ const SalesPage = () => {
       <tr>
         <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">${item.item_name}:</td>
         <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;"><span style="text-decoration: line-through;">${formatter.format((item.originalBasePrice * item.quantity))}</span> ${formatter.format((item.basePrice * item.quantity))}</td>
+      </tr>
+    `).join('');
+    // NEW: VAT breakdown rows (matching Cash.jsx)
+    const vatByRate = getVatByRate(sale);
+    const vatRows = Object.entries(vatByRate).map(([rate, amt]) => `
+      <tr>
+        <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">VAT (${rate}%):</td>
+        <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">${formatter.format(amt)}</td>
       </tr>
     `).join('');
     // Fix for missing variables `icePrice` and `spicyPrice` from user's original `calculateItemPrices`
@@ -979,8 +1008,9 @@ const SalesPage = () => {
               <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; font-weight: bold;">Subtotal:</td>
               <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; font-weight: bold;">${formatter.format(subtotal)}</td>
             </tr>
+            ${vatRows}
             <tr>
-              <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">VAT (${(vatRate * 100).toFixed(0)}%):</td>
+              <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">Total VAT:</td>
               <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">${formatter.format(vatAmount)}</td>
             </tr>
             <tr style="font-weight: bold; border-top: 2px solid #000;">
@@ -1015,7 +1045,7 @@ const SalesPage = () => {
       const amounts = {
         subtotal: calculateSubtotal(sale),
         vat: calculateVAT(sale),
-        grand: calculateGrandTotal(sale),
+        grand: calculateGrandTotal(sale), // FIXED: Now uses computed grand total
       };
       return `
         <tr style="border-bottom: 1px solid #d3d3d3;">
@@ -1107,7 +1137,7 @@ const SalesPage = () => {
       const amounts = {
         subtotal: calculateSubtotal(sale),
         vat: calculateVAT(sale),
-        grand: calculateGrandTotal(sale),
+        grand: calculateGrandTotal(sale), // FIXED: Uses computed grand total
       };
       return {
         'Invoice No': sale.invoice_no,
@@ -1182,7 +1212,7 @@ const SalesPage = () => {
       const amounts = {
         subtotal: calculateSubtotal(sale),
         vat: calculateVAT(sale),
-        grand: calculateGrandTotal(sale),
+        grand: calculateGrandTotal(sale), // FIXED: Uses computed grand total
       };
       const currency = sale.invoice_currency || settings.currency || 'INR';
       const precision = sale.invoice_currency_precision || settings.currencyPrecision || 2;
@@ -1783,7 +1813,7 @@ const SalesPage = () => {
                             {col.key === "vat_amount" && formatCurrency(calculateVAT(sale), sale)} {/* FIXED: Pass sale */}
                             {col.key === "grand_total" &&
                               <span style={getGrandTotalStyle(sale)}>
-                                {formatCurrency(calculateGrandTotal(sale), sale)} {/* UPDATED: Green if Delivered */}
+                                {formatCurrency(calculateGrandTotal(sale), sale)} {/* FIXED: Now uses computed grand total, green if Delivered */}
                               </span>
                             }
                             {col.key === "actions" && (
@@ -1824,6 +1854,8 @@ const SalesPage = () => {
       {/* UPDATED: Modal now mirrors Cash.jsx structure - Detailed table with delivery address, items, totals */}
       {/* NEW: Added orderNo and deliveryPersonName rows for Online Delivery */}
       {/* UPDATED: Grand total green if Delivered */}
+      {/* UPDATED: Added VAT breakdown rows matching Cash.jsx */}
+      {/* FIXED: Grand total now computed as subtotal + VAT for consistency */}
       <Modal
         show={showModal}
         onHide={() => setShowModal(false)}
@@ -1987,7 +2019,7 @@ const SalesPage = () => {
                                 <div style={{ fontSize: "12px", color: "#666" }}>+ Ice ({formatCurrency(icePrice, invoiceDetails)})</div>
                               </td>
                               <td>{item.quantity}</td>
-                              <td>{formatCurrency(icePrice, invoiceDetails)}</td>
+                              <td>{formatCurrency(icePrice * item.quantity, invoiceDetails)}</td>
                             </tr>
                           )}
                           {item.isSpicy && spicyPrice > 0 && (
@@ -1997,7 +2029,7 @@ const SalesPage = () => {
                                 <div style={{ fontSize: "12px", color: "#666" }}>+ Spicy ({formatCurrency(spicyPrice, invoiceDetails)})</div>
                               </td>
                               <td>{item.quantity}</td>
-                              <td>{formatCurrency(spicyPrice, invoiceDetails)}</td>
+                              <td>{formatCurrency(spicyPrice * item.quantity, invoiceDetails)}</td>
                             </tr>
                           )}
                           {item.customVariantsDetails &&
@@ -2011,7 +2043,7 @@ const SalesPage = () => {
                                   </div>
                                 </td>
                                 <td>{item.customVariantsQuantities?.[variantName] || 1}</td>
-                                <td>{formatCurrency(variant.price, invoiceDetails)}</td>
+                                <td>{formatCurrency(variant.price * (item.customVariantsQuantities?.[variantName] || 1), invoiceDetails)}</td>
                               </tr>
                             ))}
                           {item.addons &&
@@ -2027,18 +2059,18 @@ const SalesPage = () => {
                                         </div>
                                       </td>
                                       <td>{addon.addon_quantity}</td>
-                                      <td>{formatCurrency(addon.addon_price, invoiceDetails)}</td>
+                                      <td>{formatCurrency(addon.addon_price * addon.addon_quantity, invoiceDetails)}</td>
                                     </tr>
-                                    {addon.isSpicy && addon.spicyPrice > 0 && (
+                                    {addon.isSpicy && addon.spicy_price > 0 && (
                                       <tr>
                                         <td></td>
                                         <td>
                                           <div style={{ color: "#888", fontSize: "12px" }}>
-                                            + Spicy ({formatCurrency(addon.spicyPrice, invoiceDetails)})
+                                            + Spicy ({formatCurrency(addon.spicy_price, invoiceDetails)})
                                           </div>
                                         </td>
                                         <td>{addon.addon_quantity}</td>
-                                        <td>{formatCurrency(addon.spicyPrice * addon.addon_quantity, invoiceDetails)}</td>
+                                        <td>{formatCurrency(addon.spicy_price * addon.addon_quantity, invoiceDetails)}</td>
                                       </tr>
                                     )}
                                   </React.Fragment>
@@ -2057,18 +2089,18 @@ const SalesPage = () => {
                                         </div>
                                       </td>
                                       <td>{combo.combo_quantity}</td>
-                                      <td>{formatCurrency(combo.combo_price, invoiceDetails)}</td>
+                                      <td>{formatCurrency(combo.combo_price * combo.combo_quantity, invoiceDetails)}</td>
                                     </tr>
-                                    {combo.isSpicy && combo.spicyPrice > 0 && (
+                                    {combo.isSpicy && combo.spicy_price > 0 && (
                                       <tr>
                                         <td></td>
                                         <td>
                                           <div style={{ color: "#888", fontSize: "12px" }}>
-                                            + Spicy ({formatCurrency(combo.spicyPrice, invoiceDetails)})
+                                            + Spicy ({formatCurrency(combo.spicy_price, invoiceDetails)})
                                           </div>
                                         </td>
                                         <td>{combo.combo_quantity}</td>
-                                        <td>{formatCurrency(combo.spicyPrice * combo.combo_quantity, invoiceDetails)}</td>
+                                        <td>{formatCurrency(combo.spicy_price * combo.combo_quantity, invoiceDetails)}</td>
                                       </tr>
                                     )}
                                   </React.Fragment>
@@ -2080,7 +2112,8 @@ const SalesPage = () => {
                   </tbody>
                 </table>
               </div>
-              {/* UPDATED: Totals matching Cash.jsx */}
+              {/* UPDATED: Totals matching Cash.jsx - Added VAT breakdown */}
+              {/* FIXED: Grand total computed as subtotal + VAT */}
               <div className="mt-3">
                 <p>
                   <strong>Total Quantity:</strong> {invoiceDetails.items.reduce((sum, item) => sum + item.quantity, 0)}
@@ -2088,11 +2121,16 @@ const SalesPage = () => {
                 <p>
                   <strong>Subtotal:</strong> {formatCurrency(calculateSubtotal(invoiceDetails), invoiceDetails)}
                 </p>
+                {Object.entries(getVatByRate(invoiceDetails)).map(([rate, amt]) => (
+                  <p key={rate}>
+                    <strong>VAT {rate}%:</strong> {formatCurrency(amt, invoiceDetails)}
+                  </p>
+                ))}
                 <p>
-                  <strong>VAT ({(calculateVAT(invoiceDetails) / calculateSubtotal(invoiceDetails) * 100 || 0).toFixed(0)}%):</strong> {formatCurrency(calculateVAT(invoiceDetails), invoiceDetails)}
+                  <strong>Total VAT:</strong> {formatCurrency(calculateVAT(invoiceDetails), invoiceDetails)}
                 </p>
                 <p style={getGrandTotalStyle(invoiceDetails)}>
-                  <strong>Grand Total:</strong> {formatCurrency(calculateGrandTotal(invoiceDetails), invoiceDetails)} {/* UPDATED: Green if Delivered */}
+                  <strong>Grand Total:</strong> {formatCurrency(calculateGrandTotal(invoiceDetails), invoiceDetails)}
                 </p>
               </div>
             </div>

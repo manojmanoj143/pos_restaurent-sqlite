@@ -1,3 +1,4 @@
+// BackupPage.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaArrowLeft, FaDownload } from 'react-icons/fa';
@@ -13,6 +14,20 @@ function BackupPage() {
   const [backupInterval, setBackupInterval] = useState(6);
   const [newInterval, setNewInterval] = useState(6);
   const [baseUrl, setBaseUrl] = useState("");
+  const [companyDetails, setCompanyDetails] = useState(null);
+
+  const computeTotalHours = (opening, closing) => {
+    if (!opening || !closing) return 0;
+    const [oh, om] = opening.split(':').map(Number);
+    const [ch, cm] = closing.split(':').map(Number);
+    let totalMin = (ch * 60 + cm) - (oh * 60 + om);
+    if (totalMin < 0) totalMin += 1440;
+    return totalMin / 60;
+  };
+
+  const totalHours = companyDetails ? computeTotalHours(companyDetails.openingTime, companyDetails.closingTime) : 0;
+  const extendedHours = totalHours + 2;
+  const numBackupsPreview = newInterval > 0 ? Math.floor(extendedHours / newInterval) : 0;
 
   useEffect(() => {
     const fetchConfig = async () => {
@@ -33,6 +48,7 @@ function BackupPage() {
         // Fetch data using currentBaseUrl
         fetchBackupInfo(currentBaseUrl);
         fetchBackupInterval(currentBaseUrl);
+        fetchCompanyDetails(currentBaseUrl);
         // Set maxBackups from localStorage (local operation, no URL needed)
         const storedMax = parseInt(localStorage.getItem('numberOfBackups')) || 5;
         setMaxBackups(storedMax);
@@ -40,6 +56,18 @@ function BackupPage() {
     };
     fetchConfig();
   }, []);
+
+  const fetchCompanyDetails = async (currentBaseUrl) => {
+    try {
+      const response = await axios.get(`${currentBaseUrl}/api/company-details`);
+      if (response.data.companyDetails && response.data.companyDetails.length > 0) {
+        const latest = response.data.companyDetails[response.data.companyDetails.length - 1];
+        setCompanyDetails(latest);
+      }
+    } catch (error) {
+      console.error('Error fetching company details:', error);
+    }
+  };
 
   const fetchBackupInterval = async (currentBaseUrl) => {
     try {
@@ -210,6 +238,24 @@ function BackupPage() {
       >
         Backup Management
       </h2>
+      {/* Section for Company Operating Hours */}
+      <div className="row mb-4">
+        <div className="col-12">
+          <div className="card p-3">
+            <h5>Operating Hours from Company Details</h5>
+            {companyDetails ? (
+              <>
+                <p><strong>Opening Time:</strong> {companyDetails.openingTime || 'N/A'}</p>
+                <p><strong>Closing Time:</strong> {companyDetails.closingTime || 'N/A'}</p>
+                <p><strong>Total Operating Time:</strong> {companyDetails.totalTime || 'N/A'}</p>
+                <p><strong>Extended for Backups:</strong> {extendedHours.toFixed(1)} hours (+2 hours)</p>
+              </>
+            ) : (
+              <p className="text-muted">No company details available. Please save company details first.</p>
+            )}
+          </div>
+        </div>
+      </div>
       <div className="row mb-4">
         <div className="col-md-6">
           <div className="card p-3">
@@ -227,6 +273,13 @@ function BackupPage() {
               </button>
             </div>
             <p>Current interval: every {backupInterval} hours</p>
+            {companyDetails && (
+              <div className="mt-2 p-2 bg-light rounded">
+                <small>
+                  Preview: ~{numBackupsPreview} backups/day with {newInterval}h interval over {extendedHours.toFixed(1)}h extended hours
+                </small>
+              </div>
+            )}
           </div>
         </div>
         <div className="col-md-6">

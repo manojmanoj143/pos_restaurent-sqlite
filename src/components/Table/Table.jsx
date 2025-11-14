@@ -5,7 +5,6 @@ import "./table.css";
 import UserContext from "../../Context/UserContext";
 import { v4 as uuidv4 } from "uuid";
 import axios from "axios";
-
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
   state = { hasError: false, error: null };
@@ -33,7 +32,6 @@ class ErrorBoundary extends React.Component {
     return this.props.children;
   }
 }
-
 function Table() {
   const [tables, setTables] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -105,7 +103,6 @@ function Table() {
   const [showListPopup, setShowListPopup] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedOrder, setSelectedOrder] = useState(null);
-
   // System settings state with defaults
   const [settings, setSettings] = useState({
     country: 'Japan',
@@ -120,7 +117,6 @@ function Table() {
     floatPrecision: 3,
     currencyPrecision: 4,
   });
-
   // Load system settings on mount
   useEffect(() => {
     const storedSettings = JSON.parse(localStorage.getItem('systemSettings'));
@@ -128,7 +124,6 @@ function Table() {
       setSettings((prev) => ({ ...prev, ...storedSettings }));
     }
   }, []);
-
   // Currency formatter based on settings
   const getCurrencyFormatter = () => {
     return new Intl.NumberFormat(settings.language || 'en-US', {
@@ -138,7 +133,6 @@ function Table() {
       maximumFractionDigits: parseInt(settings.currencyPrecision) || 2,
     });
   };
-
   // Dynamic date formatting based on system settings
   const getFormattedDate = (date, dateFormat) => {
     if (!dateFormat) {
@@ -148,13 +142,11 @@ function Table() {
         day: 'numeric',
       });
     }
-
     const numericFormatter = new Intl.DateTimeFormat('en', { year: 'numeric', month: '2-digit', day: 'numeric' });
     const parts = numericFormatter.formatToParts(date);
     const year = parts.find((p) => p.type === 'year')?.value || '';
     const month = parts.find((p) => p.type === 'month')?.value || '';
     const day = parts.find((p) => p.type === 'day')?.value || '';
-
     switch (dateFormat) {
       case 'dd-mm-yyyy':
         return `${day.padStart(2, '0')}-${month}-${year}`;
@@ -183,7 +175,6 @@ function Table() {
         return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     }
   };
-
   useEffect(() => {
     const fetchVat = async () => {
       try {
@@ -195,7 +186,37 @@ function Table() {
     };
     fetchVat();
   }, []);
-
+  // UPDATED: Calculation functions to match ActiveOrders (use per-item exclTotal and taxTotal for accurate totals and breakdown)
+  const calculateOrderSubtotal = (cartItems) => {
+    if (!Array.isArray(cartItems)) return 0;
+    return cartItems.reduce((sum, item) => sum + (Number(item.exclTotal) || 0), 0);
+  };
+  const calculateOrderVat = (cartItems) => {
+    if (!Array.isArray(cartItems)) return 0;
+    return cartItems.reduce((sum, item) => sum + (Number(item.taxTotal) || 0), 0);
+  };
+  const calculateOrderGrandTotal = (cartItems) => {
+    return calculateOrderSubtotal(cartItems) + calculateOrderVat(cartItems);
+  };
+  // NEW: VAT breakdown by rate to match detailed display (groups tax by effective rate)
+  const calculateVatBreakdown = (cartItems) => {
+    const breakdown = {};
+    cartItems.forEach(item => {
+      const excl = Number(item.exclTotal) || 0;
+      const tax = Number(item.taxTotal) || 0;
+      if (excl > 0) {
+        const ratePercent = Math.round((tax / excl) * 100); // e.g., 5, 10
+        if (!breakdown[ratePercent]) breakdown[ratePercent] = 0;
+        breakdown[ratePercent] += tax;
+      } else if (tax > 0) {
+        // Fallback for tax without excl
+        const ratePercent = 0;
+        if (!breakdown[ratePercent]) breakdown[ratePercent] = 0;
+        breakdown[ratePercent] += tax;
+      }
+    });
+    return breakdown;
+  };
   useEffect(() => {
     const savedOrders = JSON.parse(localStorage.getItem("savedOrders")) || [];
     const paidOrders = JSON.parse(localStorage.getItem("paidOrders")) || [];
@@ -242,7 +263,6 @@ function Table() {
     setBookedGroups(savedOrders.filter(order => order.cartItems && order.cartItems.length > 0));
     setPaidGroups(paidOrders.filter(order => order.cartItems && order.cartItems.length > 0));
   }, []);
-
   useEffect(() => {
     const fetchConfig = async () => {
       try {
@@ -261,7 +281,6 @@ function Table() {
     };
     fetchConfig();
   }, []);
-
   useEffect(() => {
     const controller = new AbortController();
     const fetchTables = async () => {
@@ -295,7 +314,6 @@ function Table() {
     fetchTables();
     return () => controller.abort();
   }, []);
-
   useEffect(() => {
     const interval = setInterval(() => {
       const now = new Date();
@@ -323,21 +341,21 @@ function Table() {
     }, 60000);
     return () => clearInterval(interval);
   }, [reservations, verifiedReservations]);
-
+  // UPDATED: Use per-item VAT for grand total calculation (sum excl + sum tax across all filtered orders)
   useEffect(() => {
     const filteredGroups = [...bookedGroups, ...paidGroups].filter(order => {
       const table = tables.find(t => String(t.table_number) === String(order.tableNumber));
       return table && table.floor === selectedFloor;
     });
-    const total = filteredGroups.reduce((sum, order) => {
-      const subtotal = calculateOrderSubtotal(order.cartItems);
-      return sum + subtotal;
+    const totalSubtotal = filteredGroups.reduce((sum, order) => {
+      return sum + calculateOrderSubtotal(order.cartItems);
     }, 0);
-    const vat = total * vatRate;
-    const grandValue = total + vat;
+    const totalVat = filteredGroups.reduce((sum, order) => {
+      return sum + calculateOrderVat(order.cartItems);
+    }, 0);
+    const grandValue = totalSubtotal + totalVat;
     setGrandTotal(grandValue);
-  }, [selectedFloor, tables, bookedGroups, paidGroups, vatRate]);
-
+  }, [selectedFloor, tables, bookedGroups, paidGroups]);
   useEffect(() => {
     const updateScale = () => {
       if (floorPlanRef.current && tables.length > 0) {
@@ -359,7 +377,6 @@ function Table() {
     window.addEventListener('resize', updateScale);
     return () => window.removeEventListener('resize', updateScale);
   }, [selectedFloor, tables]);
-
   const getActiveReservations = (tableNumber, date) => {
     const now = new Date();
     const currentTime = now.getHours() * 60 + now.getMinutes();
@@ -388,7 +405,6 @@ function Table() {
       }
     });
   };
-
   const getReservedChairNumbers = (tableNumber, date) => {
     const now = new Date();
     const currentTime = now.getHours() * 60 + now.getMinutes();
@@ -420,7 +436,6 @@ function Table() {
     });
     return reservedChairs;
   };
-
   const getAvailableChairNumbers = (tableNumber, totalChairs, date) => {
     const now = new Date();
     const currentDate = now.toISOString().split("T")[0];
@@ -435,7 +450,6 @@ function Table() {
     }
     return availableChairs;
   };
-
   const getChairStatus = (table, chairNumber, date) => {
     const tableNumber = parseInt(table.table_number);
     const now = new Date();
@@ -448,7 +462,6 @@ function Table() {
     if (available) return "available";
     return "unknown";
   };
-
   const handleChairClick = (tableNumber, chairNumber, status) => {
     if (status === "reserved") {
       const reservation = reservations.find(
@@ -487,43 +500,23 @@ function Table() {
       });
     }
   };
-
-  const calculateOrderSubtotal = (items) => {
-    if (!Array.isArray(items)) {
-      console.warn("Invalid cartItems in calculateOrderSubtotal:", items);
-      return 0;
-    }
-    return items.reduce((sum, item) => {
-      const mainItemPrice = (Number(item.basePrice) || 0) + (Number(item.icePrice) || 0) + (Number(item.spicyPrice) || 0);
-      const customVariantsTotal = item.customVariantsDetails
-        ? Object.entries(item.customVariantsDetails).reduce((sum, [variantName, variant]) => {
-            const qty = item.customVariantsQuantities?.[variantName] || 1;
-            return sum + (Number(variant.price) || 0) * qty;
-          }, 0)
-        : 0;
-      const mainItemTotal = (mainItemPrice + customVariantsTotal) * (Number(item.quantity) || 1);
-      const addonsTotal = item.addonQuantities
-        ? Object.entries(item.addonQuantities).reduce((sum, [addonName, qty]) => {
-            const price = Number(item.addonPrices?.[addonName]) || 0;
-            return sum + price * qty;
-          }, 0)
-        : 0;
-      const combosTotal = item.comboQuantities
-        ? Object.entries(item.comboQuantities).reduce((sum, [comboName, qty]) => {
-            const price = Number(item.comboPrices?.[comboName]) || 0;
-            return sum + price * qty;
-          }, 0)
-        : 0;
-      return sum + mainItemTotal + addonsTotal + combosTotal;
-    }, 0);
+  // UPDATED: Preserve and set exclTotal/taxTotal if missing (to match ActiveOrders sanitization)
+  const ensureItemTotals = (item, vatRate) => {
+    if (Number(item.exclTotal) > 0 && Number(item.taxTotal) > 0) return item; // Already set
+    const basePrice = Number(item.basePrice) || 0;
+    const qty = Number(item.quantity) || 1;
+    const addonTotal = Object.entries(item.addonQuantities || {}).reduce((sum, [name, q]) => sum + (Number(item.addonPrices?.[name] || 0) * (Number(q) || 0)), 0);
+    const comboTotal = Object.entries(item.comboQuantities || {}).reduce((sum, [name, q]) => sum + (Number(item.comboPrices?.[name] || 0) * (Number(q) || 0)), 0);
+    const mainExcl = (basePrice * qty) + addonTotal + comboTotal;
+    const tax = mainExcl * vatRate;
+    return {
+      ...item,
+      exclTotal: mainExcl,
+      taxTotal: tax,
+      totalPrice: mainExcl + tax,
+    };
   };
-
-  const calculateOrderGrandTotal = (items) => {
-    const subtotal = calculateOrderSubtotal(items);
-    const vat = subtotal * vatRate;
-    return subtotal + vat;
-  };
-
+  // UPDATED: In handleViewOrder, ensure totals are set for cartItems
   const handleViewOrder = (tableNumber, chairsBooked) => {
     const savedOrders = JSON.parse(localStorage.getItem("savedOrders")) || [];
     const paidOrders = JSON.parse(localStorage.getItem("paidOrders")) || [];
@@ -538,7 +531,7 @@ function Table() {
       setWarningMessage("No existing order found for this table and chairs.");
       return;
     }
-    const formattedCartItems = existingOrder.cartItems.map((item) => ({
+    const formattedCartItems = existingOrder.cartItems.map((item) => ensureItemTotals({
       ...item,
       id: item.id || uuidv4(),
       item_name: item.item_name || item.name,
@@ -570,7 +563,7 @@ function Table() {
       customVariantsDetails: item.customVariantsDetails || {},
       customVariantsQuantities: item.customVariantsQuantities || {},
       image: item.image || "/static/images/default-item.jpg",
-    }));
+    }, vatRate));
     setCartItems(formattedCartItems);
     navigate(`/frontpage`, {
       state: {
@@ -591,7 +584,6 @@ function Table() {
       },
     });
   };
-
   const handleBookTable = (tableNumber, chairsBooked) => {
     const updatedBookedChairs = { ...bookedChairs };
     if (!updatedBookedChairs[tableNumber]) {
@@ -634,7 +626,6 @@ function Table() {
       },
     });
   };
-
   const handleReservedChairClick = (reservation) => {
     const savedOrders = JSON.parse(localStorage.getItem("savedOrders")) || [];
     const paidOrders = JSON.parse(localStorage.getItem("paidOrders")) || [];
@@ -672,7 +663,6 @@ function Table() {
       }
     }
   };
-
   const handleVerifyCustomer = () => {
     if (!selectedReservation) return;
     if (
@@ -706,7 +696,6 @@ function Table() {
       setWarningMessage("Verification failed. Please check the customer name and phone number.");
     }
   };
-
   const handleGoToOrder = () => {
     const tableNumbers = Object.keys(selectedChairs);
     if (tableNumbers.length !== 1) {
@@ -717,7 +706,6 @@ function Table() {
     const chairsBooked = selectedChairs[tableNumber];
     handleBookTable(tableNumber, chairsBooked);
   };
-
   // Assume this function is called after payment success from another component or event
   const handlePaymentSuccess = (tableNumber, chairsPaid) => {
     const savedOrders = JSON.parse(localStorage.getItem("savedOrders")) || [];
@@ -740,12 +728,10 @@ function Table() {
       setBookedGroups(remainingSavedOrders.filter(order => order.cartItems && order.cartItems.length > 0));
     }
   };
-
   const totalSelectedChairs = Object.values(selectedChairs).reduce(
     (sum, chairs) => sum + (Array.isArray(chairs) ? chairs.length : 0),
     0
   );
-
   const styles = {
     container: {
       minHeight: "100vh",
@@ -851,7 +837,6 @@ function Table() {
       boxShadow: "0 4px 6px rgba(0,0,0,0.1)",
     },
   };
-
   // Default chair positions based on table type (copied from AddTablePage for fallback)
   const getDefaultChairPositions = (type, numChairs, centerX = 120, centerY = 140, radius = 80, chairSize = 24) => {
     const positions = [];
@@ -908,7 +893,6 @@ function Table() {
     }
     return positions;
   };
-
   const TableItem = ({ table, onChairClick }) => {
     const currentDate = new Date().toISOString().split("T")[0];
     const centerX = 120;
@@ -1022,11 +1006,9 @@ function Table() {
       </div>
     );
   };
-
   if (loading) return <div className="text-center mt-5">Loading tables...</div>;
   if (error)
     return <div className="text-center mt-5 text-danger">Error: {error}</div>;
-
   const filteredGroups = [...bookedGroups, ...paidGroups].filter(order => {
     const table = tables.find(t => String(t.table_number) === String(order.tableNumber));
     return table && table.floor === selectedFloor;
@@ -1045,12 +1027,10 @@ function Table() {
     return currentTime >= preReservationTime && currentTime <= endTime;
   });
   const filteredTables = tables.filter((table) => table.floor === selectedFloor);
-
   const getMainItemTotal = (item) => {
     const mainItemPrice = (item.basePrice || 0) + (item.icePrice || 0) + (item.spicyPrice || 0) + getCustomVariantsTotal(item);
     return mainItemPrice * (item.quantity || 1);
   };
-
   const getCustomVariantsTotal = (item) => {
     if (!item.customVariantsDetails || !item.customVariantsQuantities) return 0;
     return Object.entries(item.customVariantsDetails).reduce((sum, [variantName, variant]) => {
@@ -1058,7 +1038,6 @@ function Table() {
       return sum + (variant.price || 0) * qty;
     }, 0);
   };
-
   const getAddonsTotal = (item) => {
     if (!item.addonQuantities || !item.addonPrices) return 0;
     return Object.entries(item.addonQuantities).reduce((sum, [addonName, qty]) => {
@@ -1066,7 +1045,6 @@ function Table() {
       return sum + price * qty;
     }, 0);
   };
-
   const getCombosTotal = (item) => {
     if (!item.comboQuantities || !item.comboPrices) return 0;
     return Object.entries(item.comboQuantities).reduce((sum, [comboName, qty]) => {
@@ -1074,19 +1052,16 @@ function Table() {
       return sum + price * qty;
     }, 0);
   };
-
   // Combine booked and paid groups with floor info
   const allGroups = [...bookedGroups, ...paidGroups].map(order => {
     const table = tables.find(t => String(t.table_number) === String(order.tableNumber));
     return { ...order, floor: table ? table.floor : 'Unknown' };
   });
-
   // Combine reservations with floor info
   const allReservations = reservations.map(res => {
     const table = tables.find(t => String(t.table_number) === String(res.tableNumber));
     return { ...res, floor: table ? table.floor : 'Unknown' };
   });
-
   // Filter based on search query
   const searchedGroups = allGroups.filter(order => {
     const lowerQuery = searchQuery.toLowerCase();
@@ -1096,7 +1071,6 @@ function Table() {
       order.customerName.toLowerCase().includes(lowerQuery)
     );
   });
-
   const searchedReservations = allReservations.filter(res => {
     const lowerQuery = searchQuery.toLowerCase();
     return (
@@ -1105,10 +1079,8 @@ function Table() {
       res.customerName.toLowerCase().includes(lowerQuery)
     );
   });
-
   const formatter = getCurrencyFormatter();
   const formattedGrandTotal = formatter.format(grandTotal);
-
   return (
     <ErrorBoundary>
       <div className="main-container" style={styles.container}>
@@ -1164,7 +1136,7 @@ function Table() {
           <div style={{ transform: `scale(${scale})`, transformOrigin: '0 0' }}>
             {filteredTables.map((table) => (
               <TableItem
-                key={`${table.floor}-${table.table_number}`}  // Unique key with floor
+                key={`${table.floor}-${table.table_number}`} // Unique key with floor
                 table={table}
                 onChairClick={handleChairClick}
               />
@@ -1422,7 +1394,10 @@ function Table() {
                             ))}
                             <hr />
                             <p><strong>Subtotal:</strong> {formatter.format(calculateOrderSubtotal(selectedOrder.cartItems))}</p>
-                            <p><strong>VAT ({(vatRate * 100).toFixed(0)}%):</strong> {formatter.format(calculateOrderSubtotal(selectedOrder.cartItems) * vatRate)}</p>
+                            {Object.entries(calculateVatBreakdown(selectedOrder.cartItems)).map(([rateStr, amount]) => (
+                              <p key={rateStr}><strong>VAT {rateStr}%:</strong> {formatter.format(amount)}</p>
+                            ))}
+                            <p><strong>Total VAT:</strong> {formatter.format(calculateOrderVat(selectedOrder.cartItems))}</p>
                             <p className="fw-bold"><strong>Grand Total:</strong> {formatter.format(calculateOrderGrandTotal(selectedOrder.cartItems))} <span className={`badge ${selectedOrder.paid ? 'bg-success' : 'bg-warning'}`}>{selectedOrder.paid ? "(Paid)" : "(Unpaid)"}</span></p>
                           </div>
                         </div>
@@ -1453,5 +1428,4 @@ function Table() {
     </ErrorBoundary>
   );
 }
-
 export default Table;

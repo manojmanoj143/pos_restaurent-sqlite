@@ -1,6 +1,8 @@
-// TripReport.jsx - Full Updated Code: Enhanced with overall totals (Total Grand Total, Total Collected, Total Pending) displayed in the Selected Delivery Person section.
+// TripReport.jsx - Full Updated Code: Enhanced with dynamic currency fetching (like ActiveOrders), overall totals (Total Grand Total, Total Collected, Total Pending) displayed in the Selected Delivery Person section.
 // All previous features preserved: payment amounts for Cash/Card/UPI, balance calculation, Pending Grand Total (sum of outstanding balances), Mark Delivered with full payment check,
-// inputs disabled for delivered orders, popup with details, dynamic VAT, etc.
+// inputs disabled for delivered orders, popup with details, dynamic VAT, etc. FIXED: Currency symbol now dynamic (fetched from /api/settings), timestamps use correct date format,
+// deliveryPersonName preserved and displayed, balance/payment calculations use preserved exclTotal/taxTotal from sales data, full details in popup including addons/combos/ingredients.
+// FIXED: Totals now correctly multiplied by quantity in calculations (was missing * qty, causing undercalculation). ADDED: Fallback calculation for exclTotal/taxTotal using item.amount and current vatRate if not preserved in backend (fixes 0.00 totals issue).
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
@@ -30,10 +32,24 @@ function TripReport() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const [vatRate, setVatRate] = useState(0.10); // UPDATED: Dynamic VAT rate like in FrontPage
+  const [currency, setCurrency] = useState("INR"); // NEW: Dynamic currency like in ActiveOrders
   const dropdownRef = useRef(null);
   const baseUrl = window.location.hostname === 'localhost' ? '' : `http://${window.location.hostname}:8000`;
 
-  // UPDATED: Fetch VAT rate dynamically like in FrontPage
+  // NEW: Helper to get currency symbol (from ActiveOrders)
+  const getCurrencySymbol = (currCode) => {
+    const symbols = {
+      'INR': '₹',
+      'USD': '$',
+      'EUR': '€',
+      'GBP': '£',
+      'AED': 'د.إ',
+      // Add more as needed
+    };
+    return symbols[currCode?.toUpperCase()] || '₹'; // Default to ₹ (INR) if not found
+  };
+
+  // UPDATED: Fetch VAT rate dynamically like in ActiveOrders
   useEffect(() => {
     const fetchVat = async () => {
       try {
@@ -45,6 +61,23 @@ function TripReport() {
       }
     };
     fetchVat();
+  }, [baseUrl]);
+
+  // NEW: Fetch currency from settings (like in ActiveOrders)
+  useEffect(() => {
+    const fetchCurrency = async () => {
+      try {
+        const apiPath = baseUrl ? `${baseUrl}/api/settings` : '/api/settings';
+        const response = await axios.get(apiPath);
+        const { currency: fetchedCurrency = "INR" } = response.data;
+        setCurrency(fetchedCurrency.toUpperCase()); // Ensure uppercase like INR, AED
+        console.log("Fetched currency:", fetchedCurrency); // Debug
+      } catch (error) {
+        console.error("Failed to fetch currency settings:", error);
+        setCurrency("INR"); // Fallback to INR
+      }
+    };
+    fetchCurrency();
   }, [baseUrl]);
 
   // Generate short UUID suffix for invoice number
@@ -71,6 +104,9 @@ function TripReport() {
   };
 
   // UPDATED: Fetch trip reports (now sales) for the selected employee from sales collection via backend
+  // FIXED: Sanitize to preserve exclTotal/taxTotal from backend for accurate calculations, use report.timestamp for display if available
+  // FIXED: Add fallback calculation for exclTotal/taxTotal if not present (using item.amount and current vatRate)
+  // FIXED: Ensure calculations multiply by quantity
   const fetchTripReports = async (employeeId, date, billNo, custName) => {
     if (!employeeId || !date) return;
     try {
@@ -102,21 +138,31 @@ function TripReport() {
             }
           });
         }
-        return {
-          ...report,
-          orderNo: report.orderNo || report.invoice_no || 'N/A', // Fallback to invoice_no
-          tripId: report._id || uuidv4(), // Ensure tripId for frontend
-          status: report.status || 'Pending', // UPDATED: Include status for filtering/delivered check
-          chairsBooked: Array.isArray(report.chairsBooked) ? report.chairsBooked : [],
-          cartItems: Array.isArray(report.cartItems)
-            ? report.cartItems.map((item) => ({
+        // FIXED: Preserve exclTotal and taxTotal from cartItems for accurate subtotal/vat/grand total
+        // ADDED: Fallback if exclTotal/taxTotal == 0 but amount > 0: calculate using vatRate (per unit)
+        const sanitizedCartItems = Array.isArray(report.cartItems)
+          ? report.cartItems.map((item) => {
+              let exclTotal = Number(item.excl_amount) || Number(item.exclTotal) || 0;
+              let taxTotal = Number(item.tax_amount) || Number(item.taxTotal) || 0;
+              const qty = Number(item.quantity) || 1;
+              const amount = Number(item.amount) || 0;
+              if ((exclTotal + taxTotal) === 0 && amount > 0) {
+                const unitIncl = amount / qty;
+                exclTotal = unitIncl / (1 + vatRate);
+                taxTotal = unitIncl - exclTotal;
+              }
+              return {
                 ...item,
                 id: item.id || uuidv4(),
                 item_name: item.item_name || item.name || 'Unknown',
                 name: item.name || item.item_name || 'Unknown',
-                quantity: Number(item.quantity) || 1,
-                basePrice: Number(item.basePrice) || (Number(item.amount) / (Number(item.quantity) || 1)) || 0,
-                totalPrice: Number(item.amount) || (Number(item.basePrice) * (Number(item.quantity) || 1)) || 0,
+                quantity: qty,
+                basePrice: Number(item.basePrice) || (amount / qty) || 0,
+                totalPrice: amount || ( (exclTotal + taxTotal) * qty ) || 0,
+                // FIXED: Preserve from backend (excl_amount, tax_amount) like in ActiveOrders, with fallback set above
+                exclTotal,
+                taxTotal,
+                taxBreakdown: item.tax_breakdown || item.taxBreakdown || {},
                 selectedSize: item.selectedSize || 'M',
                 icePreference: item.icePreference || 'without_ice',
                 icePrice: Number(item.icePrice) || 0,
@@ -134,8 +180,16 @@ function TripReport() {
                 ingredients: Array.isArray(item.ingredients) ? item.ingredients : [],
                 requiredKitchens: Array.isArray(item.requiredKitchens) ? item.requiredKitchens : [],
                 kitchenStatuses: item.kitchenStatuses || {},
-              }))
-            : [],
+              };
+            })
+          : [];
+        return {
+          ...report,
+          orderNo: report.orderNo || report.invoice_no || 'N/A', // Fallback to invoice_no
+          tripId: report._id || uuidv4(), // Ensure tripId for frontend
+          status: report.status || 'Pending', // UPDATED: Include status for filtering/delivered check
+          chairsBooked: Array.isArray(report.chairsBooked) ? report.chairsBooked : [],
+          cartItems: sanitizedCartItems, // Use sanitized cartItems with preserved/fallback totals
           pickedUpTime: report.pickedUpTime || null,
           paymentMethods, // Derived from payments
           paymentAmounts, // NEW: Payment amounts per method
@@ -145,7 +199,7 @@ function TripReport() {
           upiDetails, // From payments
           email: report.email || 'N/A',
           customerName: report.customer || 'N/A', // UPDATED: From sales.customer
-          timestamp: report.date, // UPDATED: Use report.date for filtering (string match)
+          timestamp: report.timestamp || report.date, // FIXED: Use timestamp if available, fallback to date
           // UPDATED: Ensure deliveryPersonName is always present
           deliveryPersonName: report.deliveryPersonName || selectedEmployee?.name || 'Unknown',
         };
@@ -163,6 +217,7 @@ function TripReport() {
   };
 
   // UPDATED: Filter reports by date (string match on report.date === date), bill number (orderNo), and customer name
+  // FIXED: Use report.timestamp or report.date for filtering if needed
   const filterReportsByDate = (reports, date, billNo, custName) => {
     console.log('Filtering reports by date:', date, 'billNo:', billNo, 'custName:', custName); // Debug log
     if (!date) {
@@ -183,6 +238,31 @@ function TripReport() {
     }
     console.log('Filtered reports:', filtered); // Debug log
     setFilteredReports(filtered);
+  };
+
+  // UPDATED: Helper to calculate subtotal (sum of exclTotal * quantity, like in ActiveOrders)
+  const calculateSubtotal = (cartItems) => {
+    if (!Array.isArray(cartItems)) return 0;
+    return cartItems.reduce((sum, item) => sum + ((Number(item.exclTotal) || 0) * (Number(item.quantity) || 1)), 0);
+  };
+
+  // UPDATED: Helper to calculate total VAT (sum of taxTotal * quantity)
+  const calculateTotalVat = (cartItems) => {
+    if (!Array.isArray(cartItems)) return 0;
+    return cartItems.reduce((sum, item) => sum + ((Number(item.taxTotal) || 0) * (Number(item.quantity) || 1)), 0);
+  };
+
+  // FIXED: Calculate grand total using preserved exclTotal + taxTotal * quantity (no recalculation)
+  const calculateGrandTotal = (cartItems) => {
+    if (!Array.isArray(cartItems)) return 0;
+    const subtotal = calculateSubtotal(cartItems);
+    const vat = calculateTotalVat(cartItems);
+    let total = (subtotal + vat).toFixed(2);
+    // ADDED: Fallback if still 0: sum item.amount (line totals)
+    if (parseFloat(total) === 0) {
+      total = cartItems.reduce((sum, item) => sum + Number(item.amount || 0), 0).toFixed(2);
+    }
+    return total;
   };
 
   // NEW: Helper to calculate total paid
@@ -208,7 +288,7 @@ function TripReport() {
     const grandTotalNum = parseFloat(calculateGrandTotal(report.cartItems));
     const totalPaid = calculateTotalPaid(report.paymentAmounts);
     if (totalPaid < grandTotalNum - 0.01) { // Tolerance for floating point
-      setWarningMessage(`Insufficient payment. Total Paid: ₹${totalPaid.toFixed(2)}, Required: ₹${grandTotalNum.toFixed(2)}`);
+      setWarningMessage(`Insufficient payment. Total Paid: ${getCurrencySymbol(currency)}${totalPaid.toFixed(2)}, Required: ${getCurrencySymbol(currency)}${grandTotalNum.toFixed(2)}`);
       setWarningType('warning');
       return;
     }
@@ -464,24 +544,18 @@ function TripReport() {
     setWarningType('warning');
   };
 
-  // UPDATED: Format timestamp - Use report.date if timestamp not available
+  // FIXED: Updated to use timestamp if available, format correctly
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return 'N/A';
     return new Date(timestamp).toLocaleString();
   };
 
-  // Calculate order total
-  const calculateOrderTotal = (cartItems) => {
-    if (!Array.isArray(cartItems)) return '0.00';
-    return cartItems.reduce((sum, item) => sum + (Number(item.totalPrice) || 0), 0).toFixed(2);
-  };
-
-  // UPDATED: Use dynamic vatRate for grand total calculation
-  const calculateGrandTotal = (cartItems) => {
-    if (!Array.isArray(cartItems)) return '0.00';
-    const subtotal = cartItems.reduce((sum, item) => sum + (Number(item.totalPrice) || 0), 0);
-    const vat = subtotal * vatRate;
-    return (subtotal + vat).toFixed(2);
+  // FIXED: Use preserved totals for order total display
+  const formatPrice = (price) => {
+    const symbol = getCurrencySymbol(currency);
+    const numPrice = Number(price);
+    if (isNaN(numPrice) || numPrice === 0) return `${symbol}0.00`;
+    return `${symbol}${numPrice.toFixed(2)}`;
   };
 
   // UPDATED: Calculate pending grand total as sum of balances for undelivered orders only
@@ -522,6 +596,48 @@ function TripReport() {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
+  // NEW: Render addons in popup (like in ActiveOrders)
+  const renderAddonsInPopup = (addons) => {
+    if (!addons || addons.length === 0) return null;
+    return (
+      <ul className="list-unstyled ms-3 mt-1">
+        {addons.map((addon, aIdx) => (
+          <li key={aIdx} className="text-muted small">
+            + {addon.addon_name || addon.name1} {addon.size ? `(${addon.size})` : ''} x{addon.addon_quantity} - {formatPrice((addon.addon_price * addon.addon_quantity) || 0)}
+          </li>
+        ))}
+      </ul>
+    );
+  };
+
+  // NEW: Render combos in popup (like in ActiveOrders)
+  const renderCombosInPopup = (selectedCombos) => {
+    if (!selectedCombos || selectedCombos.length === 0) return null;
+    return (
+      <ul className="list-unstyled ms-3 mt-1">
+        {selectedCombos.map((combo, cIdx) => (
+          <li key={cIdx} className="text-info small">
+            + {combo.name1} {combo.size ? `(${combo.size})` : ''} x{combo.combo_quantity} - {formatPrice((combo.combo_price * combo.combo_quantity) || 0)}
+          </li>
+        ))}
+      </ul>
+    );
+  };
+
+  // NEW: Render ingredients in popup
+  const renderIngredientsInPopup = (ingredients) => {
+    if (!ingredients || ingredients.length === 0) return null;
+    return (
+      <ul className="list-unstyled ms-3 mt-1">
+        {ingredients.map((ing, idx) => (
+          <li key={idx} className="text-muted small">
+            - {ing.name}: {ing.custom_weight || ing.weight || "N/A"}g ({formatPrice(ing.calculated_price || ing.base_price || 0)})
+          </li>
+        ))}
+      </ul>
+    );
+  };
 
   return (
     <div className="trip-main">
@@ -653,17 +769,17 @@ function TripReport() {
             <p>
               <strong>Delivery Person Name in Reports:</strong> {selectedEmployee.name}
             </p>{/* UPDATED: Show delivery person name */}
-            {/* UPDATED: Overall totals (Total Grand Total, Total Collected, Total Pending) shown here for visibility at the top */}
+            {/* UPDATED: Overall totals (Total Grand Total, Total Collected, Total Pending) shown here for visibility at the top, with dynamic currency */}
             {filteredReports.length > 0 && (
               <div className="mt-3">
                 <p>
-                  <strong>Total Grand Total:</strong> ₹{calculateOverallGrandTotal()}
+                  <strong>Total Grand Total:</strong> {formatPrice(calculateOverallGrandTotal())}
                 </p>
                 <p>
-                  <strong>Total Collected:</strong> ₹{calculateTotalCollected()}
+                  <strong>Total Collected:</strong> {formatPrice(calculateTotalCollected())}
                 </p>
                 <p>
-                  <strong>Total Pending:</strong> ₹{calculatePendingGrandTotal()}
+                  <strong>Total Pending:</strong> {formatPrice(calculatePendingGrandTotal())}
                 </p>
               </div>
             )}
@@ -681,8 +797,8 @@ function TripReport() {
                     <th>Customer</th>
                     <th>Email</th>
                     <th>Delivery Person Name</th>{/* UPDATED: Show delivery person name */}
-                    <th>Grand Total (₹)</th>
-                    <th>Balance (₹)</th> {/* NEW: Balance column */}
+                    <th>Grand Total ({getCurrencySymbol(currency)})</th> {/* FIXED: Dynamic currency */}
+                    <th>Balance ({getCurrencySymbol(currency)})</th> {/* NEW: Balance column, dynamic currency */}
                     <th>Payment Method</th>
                     <th>Actions</th>
                     <th>Status</th>{/* UPDATED: Status column instead of Delivered */}
@@ -692,12 +808,12 @@ function TripReport() {
                   {filteredReports.map((report) => (
                     <tr key={report.tripId}>
                       <td>{report.orderNo}</td>
-                      <td>{formatTimestamp(report.date)}</td>{/* UPDATED: Use report.date */}
+                      <td>{formatTimestamp(report.timestamp)}</td>{/* FIXED: Use timestamp */}
                       <td>{report.customerName || 'N/A'}</td>
                       <td>{report.email || 'N/A'}</td>
                       <td>{report.deliveryPersonName || 'Unknown'}</td>{/* UPDATED: Display delivery person name */}
-                      <td>{calculateGrandTotal(report.cartItems)}</td>
-                      <td>₹{getBalance(report)}</td> {/* NEW: Balance */}
+                      <td>{formatPrice(calculateGrandTotal(report.cartItems))}</td> {/* FIXED: Use formatPrice with dynamic currency */}
+                      <td>{formatPrice(getBalance(report))}</td> {/* NEW: Balance with formatPrice */}
                       <td>
                         {report.status === 'Delivered' ? (
                           <div className="d-flex flex-column gap-1 small">
@@ -705,11 +821,11 @@ function TripReport() {
                               .filter(([, amt]) => Number(amt) > 0)
                               .map(([method, amt]) => (
                                 <div key={method}>
-                                  <strong>{method}:</strong> ₹{amt.toFixed(2)}
+                                  <strong>{method}:</strong> {formatPrice(amt.toFixed(2))}
                                   {method === 'Cash' && report.tenderedAmount && (
                                     <span>
                                       {' '}
-                                      (Tendered: ₹{report.tenderedAmount}, Change: ₹{report.change.toFixed(2)})
+                                      (Tendered: {formatPrice(report.tenderedAmount)}, Change: {formatPrice(report.change.toFixed(2))})
                                     </span>
                                   )}
                                   {method === 'Card' && report.cardDetails && (
@@ -721,10 +837,10 @@ function TripReport() {
                                 </div>
                               ))}
                             <div className="mt-1">
-                              <strong>Total Paid: ₹{calculateTotalPaid(report.paymentAmounts).toFixed(2)}</strong>
+                              <strong>Total Paid: {formatPrice(calculateTotalPaid(report.paymentAmounts).toFixed(2))}</strong>
                             </div>
                             <div>
-                              <strong>Balance: ₹0.00</strong>
+                              <strong>Balance: {formatPrice(0.00)}</strong>
                             </div>
                           </div>
                         ) : (
@@ -753,7 +869,7 @@ function TripReport() {
                                   min={report.paymentAmounts.Cash || 0}
                                   step="0.01"
                                 />
-                                <small className="text-success">Change: ₹{report.change.toFixed(2)}</small>
+                                <small className="text-success">Change: {formatPrice(report.change.toFixed(2))}</small>
                               </div>
                             )}
                             <div className="d-flex align-items-center gap-2">
@@ -808,13 +924,13 @@ function TripReport() {
                             )}
                             <hr className="my-2" />
                             <div className="text-end">
-                              <strong>Total Paid: ₹{calculateTotalPaid(report.paymentAmounts).toFixed(2)}</strong>
+                              <strong>Total Paid: {formatPrice(calculateTotalPaid(report.paymentAmounts).toFixed(2))}</strong>
                             </div>
                             <div className="text-end">
                               <strong
                                 className={getBalance(report) > 0 ? 'text-warning' : 'text-success'}
                               >
-                                Balance: ₹{getBalance(report)}
+                                Balance: {formatPrice(getBalance(report))}
                               </strong>
                             </div>
                           </div>
@@ -839,9 +955,9 @@ function TripReport() {
                 </tbody>
               </table>
             </div>
-            {/* UPDATED: Footer now uses Pending Grand Total (sum of balances) */}
+            {/* UPDATED: Footer now uses Pending Grand Total (sum of balances) with dynamic currency */}
             <div className="mt-3 text-end">
-              <h5 className="text-success">Total Pending Orders: ₹{calculatePendingGrandTotal()}</h5>
+              <h5 className="text-success">Total Pending Orders: {formatPrice(calculatePendingGrandTotal())}</h5>
             </div>
           </div>
         )}
@@ -867,8 +983,8 @@ function TripReport() {
                     <strong>Order No:</strong> {selectedReport.orderNo}
                   </p>
                   <p>
-                    <strong>Date:</strong> {formatTimestamp(selectedReport.date)}
-                  </p>{/* UPDATED: Use date */}
+                    <strong>Date:</strong> {formatTimestamp(selectedReport.timestamp)}
+                  </p>{/* FIXED: Use timestamp */}
                   <p>
                     <strong>Customer:</strong> {selectedReport.customerName || 'N/A'}
                   </p>
@@ -885,16 +1001,22 @@ function TripReport() {
                     </span>
                   </p>
                   <p>
-                    <strong>Grand Total:</strong> ₹{calculateGrandTotal(selectedReport.cartItems)}
+                    <strong>Grand Total:</strong> {formatPrice(calculateGrandTotal(selectedReport.cartItems))}
                   </p>
-                  {/* NEW: Show total, paid, balance in popup */}
+                  {/* NEW: Show subtotal, VAT, total paid, balance in popup with dynamic currency */}
                   <p>
-                    <strong>Total Paid:</strong> ₹{calculateTotalPaid(selectedReport.paymentAmounts).toFixed(2)}
+                    <strong>Subtotal:</strong> {formatPrice(calculateSubtotal(selectedReport.cartItems))}
+                  </p>
+                  <p>
+                    <strong>VAT ({(vatRate * 100).toFixed(0)}%):</strong> {formatPrice(calculateTotalVat(selectedReport.cartItems))}
+                  </p>
+                  <p>
+                    <strong>Total Paid:</strong> {formatPrice(calculateTotalPaid(selectedReport.paymentAmounts).toFixed(2))}
                   </p>
                   <p>
                     <strong>Balance:</strong>{' '}
                     <span className={getBalance(selectedReport) > 0 ? 'text-warning' : 'text-success'}>
-                      ₹{getBalance(selectedReport)}
+                      {formatPrice(getBalance(selectedReport))}
                     </span>
                   </p>
                   {/* NEW: Detailed payments */}
@@ -906,11 +1028,11 @@ function TripReport() {
                           .filter(([, amt]) => Number(amt) > 0)
                           .map(([method, amt]) => (
                             <li key={method} className="mb-1">
-                              <strong>{method}:</strong> ₹{amt.toFixed(2)}
+                              <strong>{method}:</strong> {formatPrice(amt.toFixed(2))}
                               {method === 'Cash' && selectedReport.tenderedAmount && (
                                 <span>
                                   {' '}
-                                  (Tendered: ₹{selectedReport.tenderedAmount}, Change: ₹{selectedReport.change.toFixed(2)})
+                                  (Tendered: {formatPrice(selectedReport.tenderedAmount)}, Change: {formatPrice(selectedReport.change.toFixed(2))})
                                 </span>
                               )}
                               {method === 'Card' && selectedReport.cardDetails && (
@@ -924,45 +1046,30 @@ function TripReport() {
                       </ul>
                     </>
                   )}
-                  {/* UPDATED: Enhanced Items list with addons and combos */}
+                  {/* UPDATED: Enhanced Items list with addons, combos, ingredients, preserved prices */}
                   <h6>Items:</h6>
                   <ul className="list-unstyled">
                     {selectedReport.cartItems.map((item, idx) => (
                       <li key={idx} className="mb-3">
                         <strong>
-                          {item.name} x{item.quantity} - ₹{(item.basePrice * item.quantity).toFixed(2)}
+                          {item.name} x{item.quantity} - {formatPrice((item.exclTotal + item.taxTotal) * item.quantity)}
                         </strong>
+                        <div>Subtotal: {formatPrice(item.exclTotal * item.quantity)}, VAT: {formatPrice(item.taxTotal * item.quantity)}</div>
                         {/* Addons */}
-                        {item.addons && item.addons.length > 0 && (
-                          <ul className="list-unstyled ms-3 mt-1">
-                            {item.addons.map((addon, aIdx) => (
-                              <li key={aIdx} className="text-muted small">
-                                + {addon.addon_name} {addon.size ? `(${addon.size})` : ''} x{addon.addon_quantity} - ₹
-                                {(addon.addon_price * addon.addon_quantity).toFixed(2)}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
+                        {renderAddonsInPopup(item.addons)}
                         {/* Combos */}
-                        {item.selectedCombos && item.selectedCombos.length > 0 && (
-                          <ul className="list-unstyled ms-3 mt-1">
-                            {item.selectedCombos.map((combo, cIdx) => (
-                              <li key={cIdx} className="text-info small">
-                                + {combo.name1} {combo.size ? `(${combo.size})` : ''} x{combo.combo_quantity} - ₹
-                                {(combo.combo_price * combo.combo_quantity).toFixed(2)}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
+                        {renderCombosInPopup(item.selectedCombos)}
+                        {/* Ingredients */}
+                        {renderIngredientsInPopup(item.ingredients)}
                         {/* Ice/Spicy if applicable */}
                         {item.icePreference === 'with_ice' && item.icePrice > 0 && (
                           <div className="text-muted small ms-3">
-                            + Ice x{item.quantity} - ₹{(item.icePrice * item.quantity).toFixed(2)}
+                            + Ice x{item.quantity} - {formatPrice((item.icePrice * item.quantity))}
                           </div>
                         )}
                         {item.isSpicy && item.spicyPrice > 0 && (
                           <div className="text-danger small ms-3">
-                            + Spicy x{item.quantity} - ₹{(item.spicyPrice * item.quantity).toFixed(2)}
+                            + Spicy x{item.quantity} - {formatPrice((item.spicyPrice * item.quantity))}
                           </div>
                         )}
                       </li>

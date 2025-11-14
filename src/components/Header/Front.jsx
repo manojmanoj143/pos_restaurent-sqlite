@@ -1,4 +1,3 @@
-// FrontPage.jsx - Full detailed and completed (updated to include currency symbol display from settings)
 import React, { useEffect, useState, useRef } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { useSelector } from "react-redux"
@@ -7,7 +6,6 @@ import { v4 as uuidv4 } from "uuid"
 import axios from "axios"
 import { Card, Button } from 'react-bootstrap';
 import "./front.css"
-
 const SearchableSelect = ({ options = [], value = '', onChange, placeholder }) => {
   const [search, setSearch] = useState(value || '');
   const [showList, setShowList] = useState(false);
@@ -79,7 +77,6 @@ const SearchableSelect = ({ options = [], value = '', onChange, placeholder }) =
     </div>
   );
 };
-
 function FrontPage() {
   const [menuItems, setMenuItems] = useState([])
   const [comboList, setComboList] = useState([])
@@ -98,6 +95,9 @@ function FrontPage() {
   const [showCustomerSection, setShowCustomerSection] = useState(false)
   const [baseUrl, setBaseUrl] = useState(""); // Dynamic base URL for client/server mode
   const [currency, setCurrency] = useState("INR"); // NEW: Currency from settings, default INR
+  // NEW: Company tax details for fallback when item tax_rate is 0 but tax_applicable is true
+  const [companyTaxType, setCompanyTaxType] = useState('GST'); // Default to GST
+  const [companyTaxRate, setCompanyTaxRate] = useState(18); // Default fallback rate (e.g., 18% for GST)
   const [deliveryAddress, setDeliveryAddress] = useState({
     building_name: "",
     flat_villa_no: "",
@@ -115,7 +115,6 @@ function FrontPage() {
   const [orderNo, setOrderNo] = useState(null)
   const [bookedTables, setBookedTables] = useState([])
   const [bookedChairs, setBookedChairs] = useState({})
-  const [vatRate, setVatRate] = useState(0.1)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [showISDCodeDropdown, setShowISDCodeDropdown] = useState(false)
   const [selectedISDCode, setSelectedISDCode] = useState("+91")
@@ -187,6 +186,13 @@ function FrontPage() {
     const symbol = getCurrencySymbol(currency); // Get symbol based on current currency
     if (isNaN(price) || price === 0) return `${symbol}0.00`;
     return `${symbol}${price.toFixed(2)}`;
+  };
+  // NEW: Helper to get effective tax rate (use company tax if item rate is 0 but applicable)
+  const getEffectiveTaxRate = (taxApplicable, taxRate, isAddon = false, isCombo = false) => {
+    if (!taxApplicable) return 0;
+    if (taxRate > 0) return taxRate;
+    // If applicable but rate 0, fallback to company tax rate
+    return companyTaxRate;
   };
   const handleThemeChange = (theme) => {
     setCurrentTheme(theme)
@@ -264,6 +270,29 @@ function FrontPage() {
       }
     };
     fetchCurrency();
+  }, [baseUrl]);
+  // NEW: Fetch company details for tax fallback
+  useEffect(() => {
+    const fetchCompanyDetails = async () => {
+      try {
+        const apiPath = baseUrl ? `${baseUrl}/api/company-details` : '/api/company-details';
+        const response = await axios.get(apiPath);
+        if (response.data.companyDetails && response.data.companyDetails.length > 0) {
+          const latestDetails = response.data.companyDetails[response.data.companyDetails.length - 1];
+          const taxType = latestDetails.taxType || 'GST';
+          const taxPercentage = Number(latestDetails.taxPercentage) || 18; // Default 18% if not set
+          setCompanyTaxType(taxType);
+          setCompanyTaxRate(taxPercentage);
+          console.log("Fetched company tax:", taxType, taxPercentage); // Debug
+        }
+      } catch (error) {
+        console.error("Failed to fetch company details for tax:", error);
+        // Fallback to defaults
+        setCompanyTaxType('GST');
+        setCompanyTaxRate(18);
+      }
+    };
+    fetchCompanyDetails();
   }, [baseUrl]);
   // Handle clicks outside customer section
   useEffect(() => {
@@ -387,6 +416,8 @@ function FrontPage() {
             offer_price: Number(item.offer_price) || 0,
             offer_start_time: item.offer_start_time,
             offer_end_time: item.offer_end_time,
+            tax_applicable: item.tax_applicable || false,
+            tax_rate: item.tax_rate || 0,
             size: item.size || {
               enabled: true,
               small_price: Number(item.price_list_rate) - 10 || 0,
@@ -402,6 +433,8 @@ function FrontPage() {
                 name1: addon.name1,
                 addon_image: addon.addon_image ? `${baseUrl}${addon.addon_image}` : "/static/images/default-addon-image.jpg",
                 price: Number(addon.addon_price) || 0,
+                tax_applicable: addon.tax_applicable || false,
+                tax_rate: addon.tax_rate || 0,
                 size: addon.size || {
                   enabled: true,
                   small_price: Number(addon.addon_price) - 10 || 0,
@@ -419,6 +452,8 @@ function FrontPage() {
                 name1: combo.name1,
                 combo_image: combo.combo_image ? `${baseUrl}${combo.combo_image}` : "/static/images/default-combo-image.jpg",
                 price: Number(combo.combo_price) || 0,
+                tax_applicable: combo.tax_applicable || false,
+                tax_rate: combo.tax_rate || 0,
                 size: combo.size || {
                   enabled: true,
                   small_price: Number(combo.combo_price) - 10 || 0,
@@ -458,6 +493,8 @@ function FrontPage() {
             offer_price: Number(combo.offer_price) || 0,
             offer_start_time: combo.offer_start_time,
             offer_end_time: combo.offer_end_time,
+            tax_applicable: false, // Default for combo offers
+            tax_rate: 0,
             isCombo: true,
             comboItems: combo.items.map((citem) => ({
               name: citem.data.item_name || citem.data.name1,
@@ -517,19 +554,7 @@ function FrontPage() {
     }
     fetchGroups()
   }, [baseUrl])
-  // Fetch VAT rate
-  useEffect(() => {
-    const fetchVat = async () => {
-      try {
-        const apiPath = baseUrl ? `${baseUrl}/api/get-vat` : '/api/get-vat';
-        const response = await axios.get(apiPath);
-        setVatRate(response.data.vat / 100 || 0.1);
-      } catch (error) {
-        console.error('Failed to fetch VAT:', error);
-      }
-    };
-    fetchVat();
-  }, [baseUrl]);
+  // REMOVED: Fetch VAT rate - now per item
   // Filter menu items based on search query
   useEffect(() => {
     if (searchQuery.trim() === "") {
@@ -588,6 +613,10 @@ function FrontPage() {
     }
   }
   const handleItemUpdate = (updatedItem) => {
+    // FIXED: Preserve ID for updates to prevent duplication (e.g., when size changes)
+    if (selectedCartItem && !updatedItem.id) {
+      updatedItem = { ...updatedItem, id: selectedCartItem.id };
+    }
     // FIXED: Prioritize updating by ID if provided (for edits, preserves status)
     let existingItemIndex = -1;
     if (updatedItem.id) {
@@ -605,16 +634,30 @@ function FrontPage() {
       )
     }
     if (updatedItem.isCombo) {
-      const hasOffer = hasActiveOffer(updatedItem);
-      const finalPrice = hasOffer ? updatedItem.offer_price || 0 : updatedItem.basePrice || 0;
+      const menuItem = comboList.find(c => c.id === updatedItem.id) || updatedItem; // Use combo as menuItem
+      const hasOffer = hasActiveOffer(menuItem);
+      const finalPrice = hasOffer ? menuItem.offer_price || 0 : menuItem.basePrice || 0; // excl per unit
+      const quantity = Number(updatedItem.quantity) || 1;
+      // UPDATED: Use effective tax rate for combo
+      const effectiveTaxRate = getEffectiveTaxRate(menuItem.tax_applicable, menuItem.tax_rate);
+      const exclTotal = finalPrice * quantity;
+      const taxTotal = effectiveTaxRate > 0 ? exclTotal * (effectiveTaxRate / 100) : 0;
+      const taxBreakdown = taxTotal > 0 ? { [effectiveTaxRate]: taxTotal } : {};
+      const mainTaxTotal = taxTotal;
+      const mainTaxRate = effectiveTaxRate;
       const cartItem = {
         id: existingItemIndex !== -1 ? cartItems[existingItemIndex].id : uuidv4(),
         name: updatedItem.name,
         item_name: updatedItem.name,
-        quantity: Number(updatedItem.quantity) || 1, // FIXED: Explicit Number() || 1
+        quantity,
         originalBasePrice: hasOffer ? updatedItem.basePrice || 0 : null,
         basePrice: finalPrice,
-        totalPrice: finalPrice * (Number(updatedItem.quantity) || 1),
+        totalPrice: exclTotal + taxTotal, // incl
+        exclTotal,
+        taxTotal,
+        taxBreakdown,
+        mainTaxTotal,
+        mainTaxRate,
         isCombo: true,
         // FIXED: Set is_combo_offer and offer_description for backend recognition
         is_combo_offer: true,
@@ -656,14 +699,23 @@ function FrontPage() {
       originalBasePrice = size === "S" ? menuItem.size.small_price || 0 : size === "L" ? menuItem.size.large_price || 0 : menuItem.size.medium_price || 0;
       finalBasePrice = hasOffer ? calculateOfferSizePrice(menuItem.offer_price || 0, size) : originalBasePrice;
     }
+    // UPDATED: Use effective tax rate for main item
+    const effectiveMainTaxRate = getEffectiveTaxRate(menuItem.tax_applicable, menuItem.tax_rate);
     // FIXED: Handle addons and combos without recreation errors
     const addonVariants = {}
     const addonImages = {}
-    const addonPrices = {}
+    const addonPrices = {} // excl per unit
     const addonSizePrices = {}
     const addonIcePrices = {}
     const addonSpicyPrices = {}
     const addonCustomVariantsDetails = updatedItem.addonCustomVariantsDetails || {}
+    const addonTaxes = {}
+    const addonTaxRates = {}
+    const addonInclPrices = {} // per unit incl? No, total incl for the addon
+    const addonExclTotals = {}
+    let addonTaxTotal = 0
+    let addonExclTotal = 0 // FIXED: Add sum for excl total
+    let taxBreakdown = {}; // FIXED: Initialize early for loops
     Object.keys(updatedItem.addonQuantities || {}).forEach((addonName) => {
       const addon = menuItem?.addons.find((a) => a.name1 === addonName)
       const addonBasePrice = addon?.price || updatedItem.addonPrices?.[addonName] || 0
@@ -683,7 +735,18 @@ function FrontPage() {
       const customVariantsPrice = addonCustomVariantsDetails[addonName]
         ? Object.values(addonCustomVariantsDetails[addonName]).reduce((sum, variant) => sum + (variant.price || 0), 0)
         : 0
-      const totalAddonPrice = addonSizePrice + addonIcePrice + addonSpicyPrice + customVariantsPrice
+      const exclPerUnit = addonSizePrice + addonIcePrice + addonSpicyPrice + customVariantsPrice
+      const qty = Number(updatedItem.addonQuantities[addonName]) || 1
+      const exclTotal = exclPerUnit * qty
+      // UPDATED: Use effective tax rate for addon
+      const effectiveAddonTaxRate = getEffectiveTaxRate(addon?.tax_applicable, addon?.tax_rate, true);
+      const tax = effectiveAddonTaxRate > 0 ? exclTotal * (effectiveAddonTaxRate / 100) : 0
+      addonTaxTotal += tax
+      addonExclTotal += exclTotal // FIXED: Sum excl
+      addonTaxes[addonName] = tax
+      addonTaxRates[addonName] = effectiveAddonTaxRate
+      addonInclPrices[addonName] = exclTotal + tax
+      addonExclTotals[addonName] = exclTotal
       addonVariants[addonName] = {
         ...variants,
         size: addonSize,
@@ -693,18 +756,27 @@ function FrontPage() {
         sugar: variants.sugar || "medium",
       }
       addonImages[addonName] = addon?.addon_image || "/static/images/default-addon-image.jpg"
-      addonPrices[addonName] = totalAddonPrice
+      addonPrices[addonName] = exclPerUnit // per unit excl
       addonSizePrices[addonName] = addonSizePrice
       addonIcePrices[addonName] = addonIcePrice
       addonSpicyPrices[addonName] = addonSpicyPrice
+      if (tax > 0) {
+        taxBreakdown[effectiveAddonTaxRate] = (taxBreakdown[effectiveAddonTaxRate] || 0) + tax;
+      }
     })
     const comboVariants = {}
     const comboImages = {}
-    const comboPrices = {}
+    const comboPrices = {} // excl per unit
     const comboSizePrices = {}
     const comboIcePrices = {}
     const comboSpicyPrices = {}
     const comboCustomVariantsDetails = updatedItem.comboCustomVariantsDetails || {}
+    const comboTaxes = {}
+    const comboTaxRates = {}
+    const comboInclPrices = {}
+    const comboExclTotals = {}
+    let comboTaxTotal = 0
+    let comboExclTotal = 0 // FIXED: Add sum for excl total
     Object.keys(updatedItem.comboQuantities || {}).forEach((comboName) => {
       const combo = menuItem?.combos.find((c) => c.name1 === comboName)
       const comboBasePrice = combo?.price || updatedItem.comboPrices?.[comboName] || 0
@@ -724,7 +796,18 @@ function FrontPage() {
       const customVariantsPrice = comboCustomVariantsDetails[comboName]
         ? Object.values(comboCustomVariantsDetails[comboName]).reduce((sum, variant) => sum + (variant.price || 0), 0)
         : 0
-      const totalComboPrice = comboSizePrice + comboIcePrice + comboSpicyPrice + customVariantsPrice
+      const exclPerUnit = comboSizePrice + comboIcePrice + comboSpicyPrice + customVariantsPrice
+      const qty = Number(updatedItem.comboQuantities[comboName]) || 1
+      const exclTotal = exclPerUnit * qty
+      // UPDATED: Use effective tax rate for combo
+      const effectiveComboTaxRate = getEffectiveTaxRate(combo?.tax_applicable, combo?.tax_rate, false, true);
+      const tax = effectiveComboTaxRate > 0 ? exclTotal * (effectiveComboTaxRate / 100) : 0
+      comboTaxTotal += tax
+      comboExclTotal += exclTotal // FIXED: Sum excl
+      comboTaxes[comboName] = tax
+      comboTaxRates[comboName] = effectiveComboTaxRate
+      comboInclPrices[comboName] = exclTotal + tax
+      comboExclTotals[comboName] = exclTotal
       comboVariants[comboName] = {
         ...variants,
         size: comboSize,
@@ -734,14 +817,17 @@ function FrontPage() {
         sugar: variants.sugar || "medium",
       }
       comboImages[comboName] = combo?.combo_image || "/static/images/default-combo-image.jpg"
-      comboPrices[comboName] = totalComboPrice
+      comboPrices[comboName] = exclPerUnit // per unit excl
       comboSizePrices[comboName] = comboSizePrice
       comboIcePrices[comboName] = comboIcePrice
       comboSpicyPrices[comboName] = comboSpicyPrice
+      if (tax > 0) {
+        taxBreakdown[effectiveComboTaxRate] = (taxBreakdown[effectiveComboTaxRate] || 0) + tax;
+      }
     })
     const customVariantsDetails = {}
     const customVariantsQuantities = {}
-    let customVariantsTotalPrice = 0
+    let customVariantsTotalPrice = 0 // per unit
     if (updatedItem.selectedCustomVariants && menuItem?.custom_variants) {
       menuItem.custom_variants.forEach((variant) => {
         if (variant.enabled) {
@@ -755,17 +841,42 @@ function FrontPage() {
         }
       })
     }
+    const quantity = Number(updatedItem.quantity) || 1
+    const mainExclPerUnit = finalBasePrice + (Number(updatedItem.icePrice) || 0) + (Number(updatedItem.spicyPrice) || 0) + customVariantsTotalPrice
+    const mainExclTotal = mainExclPerUnit * quantity
+    const mainTaxTotal = effectiveMainTaxRate > 0 ? mainExclTotal * (effectiveMainTaxRate / 100) : 0
+    const mainTaxRate = effectiveMainTaxRate
+    if (mainTaxTotal > 0) {
+      taxBreakdown[effectiveMainTaxRate] = (taxBreakdown[effectiveMainTaxRate] || 0) + mainTaxTotal; // FIXED: Add to existing
+    }
+    // FIXED: Remove invalid merge, as we're building taxBreakdown incrementally
+    const totalExcl = mainExclTotal + addonExclTotal + comboExclTotal
+    const totalTax = mainTaxTotal + addonTaxTotal + comboTaxTotal
     const cartItem = {
       ...updatedItem,
       id: existingItemIndex !== -1 ? cartItems[existingItemIndex].id : uuidv4(),
       name: updatedItem.item_name || "Unnamed Item",
       item_name: updatedItem.item_name,
-      quantity: Number(updatedItem.quantity) || 1, // FIXED: Explicit Number() || 1
+      quantity,
       originalBasePrice: hasOffer ? originalBasePrice : null,
       basePrice: finalBasePrice,
       icePrice: Number(updatedItem.icePrice) || 0, // FIXED: Explicit Number()
       spicyPrice: Number(updatedItem.spicyPrice) || 0, // FIXED: Explicit Number()
-      totalPrice: Number(updatedItem.totalPrice) || 0, // FIXED: Explicit Number()
+      totalPrice: totalExcl + totalTax, // incl
+      exclTotal: totalExcl,
+      taxTotal: totalTax,
+      taxBreakdown,
+      mainTaxTotal,
+      mainTaxRate,
+      mainExclPerUnit, // FIXED: Store per unit for scaling
+      addonExclTotal, // FIXED: Store totals for scaling
+      comboExclTotal, // FIXED: Store totals for scaling
+      addonTaxes,
+      addonTaxRates,
+      addonInclPrices,
+      comboTaxes,
+      comboTaxRates,
+      comboInclPrices,
       addonQuantities: updatedItem.addonQuantities || {},
       addonVariants,
       addonPrices,
@@ -821,37 +932,79 @@ function FrontPage() {
         if (cartItem.id === itemId) {
           let updatedItem = { ...cartItem }
           if (cartItem.isCombo) {
+            const exclPerUnit = cartItem.basePrice || 0
+            const exclTotal = exclPerUnit * newQty
+            const taxTotal = cartItem.tax_applicable ? exclTotal * (cartItem.tax_rate / 100) : 0
             updatedItem = {
               ...updatedItem,
               quantity: newQty,
-              totalPrice: (updatedItem.basePrice || 0) * newQty,
+              exclTotal,
+              taxTotal,
+              totalPrice: exclTotal + taxTotal,
+              mainTaxTotal: taxTotal,
             }
             return updatedItem;
           }
           if (type === "item") {
-            const customVariantsTotalPrice = Object.entries(updatedItem.customVariantsDetails || {}).reduce(
-              (sum, [variantName, variant]) =>
-                sum + (variant.price || 0) * (updatedItem.customVariantsQuantities?.[variantName] || 1),
-              0,
-            )
+            // FIXED: Use stored mainExclPerUnit for scaling
+            const mainExclPerUnit = updatedItem.mainExclPerUnit || 0
+            const mainExclTotalNew = mainExclPerUnit * newQty
+            const mainTaxTotalNew = updatedItem.mainTaxRate > 0 ? mainExclTotalNew * (updatedItem.mainTaxRate / 100) : 0
+            const deltaMainExcl = mainExclTotalNew - (updatedItem.mainExclTotal || 0)
+            const deltaMainTax = mainTaxTotalNew - (updatedItem.mainTaxTotal || 0)
             updatedItem = {
               ...updatedItem,
               quantity: newQty,
-              totalPrice:
-                ((updatedItem.basePrice || 0) + (updatedItem.icePrice || 0) + (updatedItem.spicyPrice || 0) + customVariantsTotalPrice) *
-                newQty,
+              mainExclTotal: mainExclTotalNew,
+              mainTaxTotal: mainTaxTotalNew,
+              exclTotal: (updatedItem.exclTotal || 0) + deltaMainExcl,
+              taxTotal: (updatedItem.taxTotal || 0) + deltaMainTax,
+              totalPrice: updatedItem.totalPrice + deltaMainExcl + deltaMainTax,
             }
           } else if (type === "addon" && name) {
+            // Recalculate for this addon
+            const addon = menuItems.find(m => m.addons.some(a => a.name1 === name))?.addons.find(a => a.name1 === name)
+            const oldQty = Number(updatedItem.addonQuantities[name]) || 1
+            const exclPerUnit = updatedItem.addonPrices[name] || 0
+            const oldExcl = exclPerUnit * oldQty
+            const oldTax = updatedItem.addonTaxes[name] || 0
+            const newExcl = exclPerUnit * newQty
+            // UPDATED: Use effective tax rate for addon
+            const effectiveAddonTaxRate = getEffectiveTaxRate(addon?.tax_applicable, addon?.tax_rate, true);
+            const newTax = effectiveAddonTaxRate > 0 ? newExcl * (effectiveAddonTaxRate / 100) : 0
+            const deltaExcl = newExcl - oldExcl
+            const deltaTax = newTax - oldTax
             updatedItem = {
               ...updatedItem,
               addonQuantities: { ...updatedItem.addonQuantities, [name]: newQty },
+              addonTaxes: { ...updatedItem.addonTaxes, [name]: newTax },
+              exclTotal: (updatedItem.exclTotal || 0) + deltaExcl,
+              taxTotal: (updatedItem.taxTotal || 0) + deltaTax,
+              totalPrice: updatedItem.totalPrice + deltaExcl + deltaTax,
             }
           } else if (type === "combo" && name) {
+            // Similar for combo
+            const combo = menuItems.find(m => m.combos.some(c => c.name1 === name))?.combos.find(c => c.name1 === name)
+            const oldQty = Number(updatedItem.comboQuantities[name]) || 1
+            const exclPerUnit = updatedItem.comboPrices[name] || 0
+            const oldExcl = exclPerUnit * oldQty
+            const oldTax = updatedItem.comboTaxes[name] || 0
+            const newExcl = exclPerUnit * newQty
+            // UPDATED: Use effective tax rate for combo
+            const effectiveComboTaxRate = getEffectiveTaxRate(combo?.tax_applicable, combo?.tax_rate, false, true);
+            const newTax = effectiveComboTaxRate > 0 ? newExcl * (effectiveComboTaxRate / 100) : 0
+            const deltaExcl = newExcl - oldExcl
+            const deltaTax = newTax - oldTax
             updatedItem = {
               ...updatedItem,
               comboQuantities: { ...updatedItem.comboQuantities, [name]: newQty },
+              comboTaxes: { ...updatedItem.comboTaxes, [name]: newTax },
+              exclTotal: (updatedItem.exclTotal || 0) + deltaExcl,
+              taxTotal: (updatedItem.taxTotal || 0) + deltaTax,
+              totalPrice: updatedItem.totalPrice + deltaExcl + deltaTax,
             }
           } else if (type === "customVariant" && name) {
+            // Recalculate custom total
             const customVariantsTotalPrice = Object.entries(updatedItem.customVariantsDetails || {}).reduce(
               (sum, [variantName, variant]) =>
                 sum +
@@ -859,12 +1012,19 @@ function FrontPage() {
                 (variantName === name ? newQty : updatedItem.customVariantsQuantities?.[variantName] || 1),
               0,
             )
+            const mainExclPerUnitNew = (updatedItem.basePrice || 0) + (updatedItem.icePrice || 0) + (updatedItem.spicyPrice || 0) + customVariantsTotalPrice
+            const mainExclTotalNew = mainExclPerUnitNew * updatedItem.quantity
+            const mainTaxTotalNew = updatedItem.mainTaxRate > 0 ? mainExclTotalNew * (updatedItem.mainTaxRate / 100) : 0
+            const deltaMainExcl = mainExclTotalNew - (updatedItem.mainExclTotal || 0)
+            const deltaMainTax = mainTaxTotalNew - (updatedItem.mainTaxTotal || 0)
             updatedItem = {
               ...updatedItem,
               customVariantsQuantities: { ...updatedItem.customVariantsQuantities, [name]: newQty },
-              totalPrice:
-                ((updatedItem.basePrice || 0) + (updatedItem.icePrice || 0) + (updatedItem.spicyPrice || 0) + customVariantsTotalPrice) *
-                updatedItem.quantity,
+              mainExclTotal: mainExclTotalNew,
+              mainTaxTotal: mainTaxTotalNew,
+              exclTotal: (updatedItem.exclTotal || 0) + deltaMainExcl,
+              taxTotal: (updatedItem.taxTotal || 0) + deltaMainTax,
+              totalPrice: updatedItem.totalPrice + deltaMainExcl + deltaMainTax,
             }
           }
           return updatedItem
@@ -909,6 +1069,26 @@ function FrontPage() {
     }
     return getMainItemTotal(item)
   }
+  // UPDATED: Excl total calculation
+  const calculateExclTotal = (items) => {
+    return items.reduce((sum, item) => sum + (item.exclTotal || 0), 0)
+  }
+  // UPDATED: Tax total calculation
+  const calculateTaxTotal = (items) => {
+    return items.reduce((sum, item) => sum + (item.taxTotal || 0), 0)
+  }
+  // UPDATED: VAT by rate
+  const getVatByRate = (items) => {
+    const byRate = {};
+    items.forEach(item => {
+      if (item.taxBreakdown) {
+        Object.entries(item.taxBreakdown).forEach(([rate, amt]) => {
+          byRate[rate] = (byRate[rate] || 0) + amt;
+        });
+      }
+    });
+    return byRate;
+  }
   const removeFromCart = (item) => {
     setCartItems((prevItems) => prevItems.filter((cartItem) => cartItem.id !== item.id))
     setBillCartItems((prevItems) => prevItems.filter((cartItem) => cartItem.id !== item.id))
@@ -919,6 +1099,10 @@ function FrontPage() {
         if (cartItem.id === itemId) {
           let updatedItem = { ...cartItem }
           if (type === "addon") {
+            const oldQty = Number(updatedItem.addonQuantities[name]) || 1
+            const exclPerUnit = updatedItem.addonPrices[name] || 0
+            const oldExcl = exclPerUnit * oldQty
+            const oldTax = updatedItem.addonTaxes[name] || 0
             const { [name]: _, ...remainingAddons } = updatedItem.addonQuantities || {}
             const { [name]: __, ...remainingAddonVariants } = updatedItem.addonVariants || {}
             const { [name]: ___, ...remainingAddonPrices } = updatedItem.addonPrices || {}
@@ -926,6 +1110,9 @@ function FrontPage() {
             const { [name]: _____, ...remainingAddonSizePrices } = updatedItem.addonSizePrices || {}
             const { [name]: ______, ...remainingAddonIcePrices } = updatedItem.addonIcePrices || {}
             const { [name]: _______, ...remainingAddonSpicyPrices } = updatedItem.addonSpicyPrices || {}
+            const { [name]: ________, ...remainingAddonTaxes } = updatedItem.addonTaxes || {}
+            const { [name]: _________, ...remainingAddonTaxRates } = updatedItem.addonTaxRates || {}
+            const { [name]: __________, ...remainingAddonInclPrices } = updatedItem.addonInclPrices || {}
             updatedItem = {
               ...updatedItem,
               addonQuantities: remainingAddons,
@@ -935,9 +1122,19 @@ function FrontPage() {
               addonIcePrices: remainingAddonIcePrices,
               addonSpicyPrices: remainingAddonSpicyPrices,
               addonImages: remainingAddonImages,
+              addonTaxes: remainingAddonTaxes,
+              addonTaxRates: remainingAddonTaxRates,
+              addonInclPrices: remainingAddonInclPrices,
               addonCustomVariantsDetails: { ...updatedItem.addonCustomVariantsDetails, [name]: {} },
+              exclTotal: updatedItem.exclTotal - oldExcl,
+              taxTotal: updatedItem.taxTotal - oldTax,
+              totalPrice: updatedItem.totalPrice - oldExcl - oldTax,
             }
           } else if (type === "combo") {
+            const oldQty = Number(updatedItem.comboQuantities[name]) || 1
+            const exclPerUnit = updatedItem.comboPrices[name] || 0
+            const oldExcl = exclPerUnit * oldQty
+            const oldTax = updatedItem.comboTaxes[name] || 0
             const { [name]: _, ...remainingCombos } = updatedItem.comboQuantities || {}
             const { [name]: __, ...remainingComboVariants } = updatedItem.comboVariants || {}
             const { [name]: ___, ...remainingComboPrices } = updatedItem.comboPrices || {}
@@ -945,6 +1142,9 @@ function FrontPage() {
             const { [name]: _____, ...remainingComboSizePrices } = updatedItem.comboSizePrices || {}
             const { [name]: ______, ...remainingComboIcePrices } = updatedItem.comboIcePrices || {}
             const { [name]: _______, ...remainingComboSpicyPrices } = updatedItem.comboSpicyPrices || {}
+            const { [name]: ________, ...remainingComboTaxes } = updatedItem.comboTaxes || {}
+            const { [name]: _________, ...remainingComboTaxRates } = updatedItem.comboTaxRates || {}
+            const { [name]: __________, ...remainingComboInclPrices } = updatedItem.comboInclPrices || {}
             updatedItem = {
               ...updatedItem,
               comboQuantities: remainingCombos,
@@ -954,8 +1154,14 @@ function FrontPage() {
               comboIcePrices: remainingComboIcePrices,
               comboSpicyPrices: remainingComboSpicyPrices,
               comboImages: remainingComboImages,
+              comboTaxes: remainingComboTaxes,
+              comboTaxRates: remainingComboTaxRates,
+              comboInclPrices: remainingComboInclPrices,
               selectedCombos: updatedItem.selectedCombos.filter((combo) => combo.name1 !== name),
               comboCustomVariantsDetails: { ...updatedItem.comboCustomVariantsDetails, [name]: {} },
+              exclTotal: updatedItem.exclTotal - oldExcl,
+              taxTotal: updatedItem.taxTotal - oldTax,
+              totalPrice: updatedItem.totalPrice - oldExcl - oldTax,
             }
           }
           return updatedItem
@@ -976,14 +1182,21 @@ function FrontPage() {
             (sum, [vName, variant]) => sum + (variant.price || 0) * (remainingCustomVariantsQuantities[vName] || 1),
             0,
           )
+          const mainExclPerUnitNew = (cartItem.basePrice || 0) + (cartItem.icePrice || 0) + (cartItem.spicyPrice || 0) + customVariantsTotalPrice
+          const mainExclTotalNew = mainExclPerUnitNew * cartItem.quantity
+          const mainTaxTotalNew = cartItem.mainTaxRate > 0 ? mainExclTotalNew * (cartItem.mainTaxRate / 100) : 0
+          const deltaMainExcl = mainExclTotalNew - cartItem.mainExclTotal
+          const deltaMainTax = mainTaxTotalNew - cartItem.mainTaxTotal
           return {
             ...cartItem,
             selectedCustomVariants: remainingCustomVariants,
             customVariantsDetails: remainingCustomVariantsDetails,
             customVariantsQuantities: remainingCustomVariantsQuantities,
-            totalPrice:
-              ((cartItem.basePrice || 0) + (cartItem.icePrice || 0) + (cartItem.spicyPrice || 0) + customVariantsTotalPrice) *
-              (cartItem.quantity || 1),
+            mainExclTotal: mainExclTotalNew,
+            mainTaxTotal: mainTaxTotalNew,
+            exclTotal: cartItem.exclTotal + deltaMainExcl,
+            taxTotal: cartItem.taxTotal + deltaMainTax,
+            totalPrice: cartItem.totalPrice + deltaMainExcl + deltaMainTax,
           }
         }
         return cartItem
@@ -1011,18 +1224,8 @@ function FrontPage() {
     }
     setIsConfirmation(false)
   }
-  const calculateSubtotal = (items) => {
-    return items.reduce((sum, item) => {
-      if (item.isCombo) {
-        return sum + (Number(item.totalPrice) || 0) // FIXED: Explicit Number()
-      }
-      const mainItemPrice = (Number(item.basePrice) || 0) + (Number(item.icePrice) || 0) + (Number(item.spicyPrice) || 0) + getCustomVariantsTotal(item) // FIXED: Explicit Number()
-      const mainItemTotal = mainItemPrice * (Number(item.quantity) || 1) // FIXED: Explicit Number()
-      const addonsTotal = getAddonsTotal(item)
-      const combosTotal = getCombosTotal(item)
-      return sum + mainItemTotal + addonsTotal + combosTotal
-    }, 0)
-  }
+  // UPDATED: Use excl total for subtotal
+  const calculateSubtotal = (items) => calculateExclTotal(items)
   const calculateOriginalSubtotal = (items) => {
     return items.reduce((sum, item) => {
       let mainItemPrice = (Number(item.basePrice) || 0) + (Number(item.icePrice) || 0) + (Number(item.spicyPrice) || 0) + getCustomVariantsTotal(item) // FIXED: Explicit Number()
@@ -1046,15 +1249,17 @@ function FrontPage() {
       setWarningType("warning")
       return
     }
-    const subtotal = calculateSubtotal(billCartItems)
-    if (isNaN(subtotal) || subtotal === 0) {
+    const subtotal = calculateExclTotal(billCartItems)
+    const totalVat = calculateTaxTotal(billCartItems)
+    const grandTotal = subtotal + totalVat
+    if (isNaN(grandTotal) || grandTotal === 0) {
       setWarningMessage("Invalid total amount. Please check your cart items.")
       setWarningType("warning")
       return
     }
     const paymentDetails = {
       mode_of_payment: method,
-      amount: Number(subtotal.toFixed(2)),
+      amount: Number(grandTotal.toFixed(2)),
     }
     const { chairsBooked } = location.state || {}
     const billDetails = {
@@ -1074,7 +1279,9 @@ function FrontPage() {
         isSpicy: item.isSpicy,
         spicy_price: Number(item.spicyPrice) || 0,
         quantity: Number(item.quantity) || 1,
-        amount: Number((item.totalPrice || 0).toFixed(2)) || 0,
+        amount: Number((item.totalPrice || 0).toFixed(2)) || 0, // incl
+        tax_amount: Number(item.taxTotal || 0), // UPDATED: Add tax amount
+        excl_amount: Number(item.exclTotal || 0), // UPDATED: Add excl for backend if needed
         addons: Object.entries(item.addonQuantities || {}).map(([addonName, qty]) => ({
           name1: addonName,
           addon_image: item.addonImages?.[addonName] || "/static/images/default-addon-image.jpg",
@@ -1083,6 +1290,7 @@ function FrontPage() {
           addon_spicy_price: Number(item.addonSpicyPrices?.[addonName] || 0),
           addon_price: Number(item.addonPrices?.[addonName] || item.addonVariants?.[addonName]?.price || 0),
           addon_quantity: Number(qty) || 1, // FIXED: Explicit Number() || 1
+          tax_amount: Number(item.addonTaxes?.[addonName] || 0), // UPDATED: Add tax for addon
           size: item.addonVariants?.[addonName]?.size || "M",
           cold: item.addonVariants?.[addonName]?.cold || "without_ice",
           isSpicy: item.addonVariants?.[addonName]?.spicy || false,
@@ -1103,6 +1311,7 @@ function FrontPage() {
           kitchen: item.comboVariants?.[comboName]?.kitchen || "Main Kitchen",
           sugar: item.comboVariants?.[comboName]?.sugar || "medium",
           combo_quantity: Number(qty) || 1, // FIXED: Explicit Number() || 1
+          tax_amount: Number(item.comboTaxes?.[comboName] || 0), // UPDATED: Add tax for combo
           custom_variants: item.comboCustomVariantsDetails?.[comboName] || {},
         })),
         kitchen: item.kitchen,
@@ -1117,7 +1326,9 @@ function FrontPage() {
         offer_description: item.offer_description || null,
         kitchenStatuses: item.kitchenStatuses || {},
       })),
-      totalAmount: Number(subtotal.toFixed(2)),
+      subtotal: Number(subtotal.toFixed(2)),
+      vat_amount: Number(totalVat.toFixed(2)), // UPDATED: Add total VAT
+      totalAmount: Number(grandTotal.toFixed(2)), // UPDATED: Grand total incl VAT
       payments: [paymentDetails],
       invoice_no: `INV-${Date.now()}`,
       date: new Date().toISOString().split("T")[0],
@@ -1194,7 +1405,7 @@ function FrontPage() {
       setPendingAction(() => () => navigate("/table"));
     }
   }
-  // UPDATED: handleSaveToBackend - NEW: Include posOpeningEntry from localStorage
+  // UPDATED: handleSaveToBackend - NEW: Include posOpeningEntry from localStorage, use grand total
   const handleSaveToBackend = async (paymentDetails) => {
     if (billCartItems.length === 0) {
       setWarningMessage("Cart is empty. Please add items before saving.")
@@ -1212,7 +1423,9 @@ function FrontPage() {
       setWarningType("warning")
       throw new Error("Invalid item quantities")
     }
-    const subtotal = calculateSubtotal(billCartItems)
+    const subtotal = calculateExclTotal(billCartItems)
+    const totalVat = calculateTaxTotal(billCartItems)
+    const grandTotal = subtotal + totalVat
     // NEW: Get posOpeningEntry from localStorage (set in OpeningEntryWithNavbar.jsx)
     const posOpeningEntry = localStorage.getItem('posOpeningEntry') || '';
     console.log('Including posOpeningEntry in sales payload:', posOpeningEntry); // Debug log
@@ -1236,7 +1449,9 @@ function FrontPage() {
           isSpicy: item.isSpicy,
           spicy_price: Number(item.spicyPrice) || 0,
           quantity: Number(item.quantity) || 1,
-          amount: Number(item.totalPrice.toFixed(2)) || 0,
+          amount: Number(item.totalPrice.toFixed(2)) || 0, // incl
+          tax_amount: Number(item.taxTotal || 0), // UPDATED
+          excl_amount: Number(item.exclTotal || 0), // UPDATED
           addons: Object.entries(item.addonQuantities || {}).map(([addonName, qty]) => ({
             name1: addonName,
             addon_image: item.addonImages?.[addonName] || "/static/images/default-addon-image.jpg",
@@ -1245,6 +1460,7 @@ function FrontPage() {
             addon_spicy_price: Number(item.addonSpicyPrices?.[addonName] || 0),
             addon_price: Number(item.addonPrices?.[addonName] || item.addonVariants?.[addonName]?.price || 0),
             addon_quantity: Number(qty) || 1, // FIXED: Explicit Number() || 1
+            tax_amount: Number(item.addonTaxes?.[addonName] || 0), // UPDATED
             size: item.addonVariants?.[addonName]?.size || "M",
             cold: item.addonVariants?.[addonName]?.cold || "without_ice",
             isSpicy: item.addonVariants?.[addonName]?.spicy || false,
@@ -1265,6 +1481,7 @@ function FrontPage() {
             kitchen: item.comboVariants?.[comboName]?.kitchen || "Main Kitchen",
             sugar: item.comboVariants?.[comboName]?.sugar || "medium",
             combo_quantity: Number(qty) || 1, // FIXED: Explicit Number() || 1
+            tax_amount: Number(item.comboTaxes?.[comboName] || 0), // UPDATED
             custom_variants: item.comboCustomVariantsDetails?.[comboName] || {},
           })),
           kitchen: item.kitchen,
@@ -1280,7 +1497,9 @@ function FrontPage() {
           kitchenStatuses: item.kitchenStatuses || {},
         })
       }),
-      total: Number(subtotal.toFixed(2)),
+      subtotal: Number(subtotal.toFixed(2)),
+      vat_amount: Number(totalVat.toFixed(2)), // UPDATED
+      total: Number(grandTotal.toFixed(2)), // UPDATED: Grand total
       userId: user.email,
       payment_terms: [{ due_date: new Date().toISOString().split("T")[0], payment_terms: "Immediate" }],
       payments: [paymentDetails],
@@ -1612,6 +1831,8 @@ function FrontPage() {
         basePrice: Number(item.basePrice) || 0, // FIXED: Explicit Number()
         originalBasePrice: item.originalBasePrice || null,
         totalPrice: Number(item.totalPrice) || (Number(item.basePrice) * (Number(item.quantity) || 1)) || 0, // FIXED: Explicit Number()
+        exclTotal: item.exclTotal || 0,
+        taxTotal: item.taxTotal || 0,
         addonQuantities: item.addonQuantities || {},
         addonVariants: item.addonVariants || {},
         addonPrices: item.addonPrices || {},
@@ -1619,6 +1840,7 @@ function FrontPage() {
         addonIcePrices: item.addonIcePrices || {},
         addonSpicyPrices: item.addonSpicyPrices || {},
         addonImages: item.addonImages || {},
+        addonTaxes: item.addonTaxes || {},
         comboQuantities: item.comboQuantities || {},
         comboVariants: item.comboVariants || {},
         comboPrices: item.comboPrices || {},
@@ -1626,6 +1848,7 @@ function FrontPage() {
         comboIcePrices: item.comboIcePrices || {},
         comboSpicyPrices: item.comboSpicyPrices || {},
         comboImages: item.comboImages || {},
+        comboTaxes: item.comboTaxes || {},
         selectedCombos: item.selectedCombos || [],
         selectedSize: item.selectedSize || null,
         kitchen: item.kitchen || "Main Kitchen",
@@ -1757,9 +1980,10 @@ function FrontPage() {
   }
   const totalBookedChairs = bookedChairs[tableNumber]?.length || 0
   const availableChairs = totalChairs - totalBookedChairs
-  const subtotal = calculateSubtotal(cartItems)
-  const vat = subtotal * vatRate
-  const total = subtotal + vat
+  const subtotal = calculateExclTotal(cartItems)
+  const vatByRate = getVatByRate(cartItems)
+  const totalVat = calculateTaxTotal(cartItems)
+  const total = subtotal + totalVat
   const showKitchenColumn = orderType === "Dine In"
   const visibleCategories = categories.slice(startIndex, startIndex + 5)
   // FIXED: Function to get all names for combo bullet list (from ItemListPage)
@@ -1929,6 +2153,49 @@ function FrontPage() {
     color: "#ff4500",
     fontWeight: "bold",
   };
+  // UPDATED: Price display helper for cart rows - FIXED: Return excl price always (VAT at bottom only); for isComboSub return "Included" or 0
+  // FIXED: Add null checks and optional chaining to prevent undefined errors (e.g., item?.icePrice)
+  const getPriceDisplay = (item, isMain = false, addonName = null, comboName = null, isIce = false, isSpicy = false, isCustom = false, isComboSub = false, showBreakdown = false) => {
+    if (!item) return formatPrice(0); // FIXED: Guard against undefined item
+    if (isComboSub) {
+      // For combo subitem, included in combo price
+      return "Included";
+    }
+    let excl = 0
+    let tax = 0
+    let rate = 0
+    if (isMain) {
+      excl = getMainItemTotal(item)
+      tax = item.mainTaxTotal || 0
+      rate = item.mainTaxRate || 0
+    } else if (addonName) {
+      const qty = Number(item.addonQuantities?.[addonName]) || 1 // FIXED: Optional chaining
+      excl = (item.addonPrices?.[addonName] || 0) * qty // FIXED: Optional chaining
+      tax = item.addonTaxes?.[addonName] || 0 // FIXED: Optional chaining
+      rate = item.addonTaxRates?.[addonName] || 0 // FIXED: Optional chaining
+    } else if (comboName) {
+      const qty = Number(item.comboQuantities?.[comboName]) || 1 // FIXED: Optional chaining
+      excl = (item.comboPrices?.[comboName] || 0) * qty // FIXED: Optional chaining
+      tax = item.comboTaxes?.[comboName] || 0 // FIXED: Optional chaining
+      rate = item.comboTaxRates?.[comboName] || 0 // FIXED: Optional chaining
+    } else if (isIce) {
+      excl = (item?.icePrice || 0) * (item?.quantity || 1) // FIXED: Optional chaining for icePrice and quantity
+      tax = 0 // Part of main
+    } else if (isSpicy) {
+      excl = (item?.spicyPrice || 0) * (item?.quantity || 1) // FIXED: Optional chaining
+      tax = 0
+    } else if (isCustom) {
+      // For custom, per variant
+      excl = getCustomVariantsTotal(item)
+      tax = 0 // Part of main
+    }
+    if (showBreakdown && tax > 0) {
+      return `${formatPrice(excl)} + VAT ${rate}% (${formatPrice(tax)}) = ${formatPrice(excl + tax)}`
+    }
+    // FIXED: Always return excl price for cart rows (VAT shown only at bottom summary)
+    return formatPrice(excl)
+  }
+ 
   return (
     <div className="frontpage-container">
       <div className={`frontpage-sidebar ${isSidebarOpen ? "open" : ""}`}>
@@ -2463,17 +2730,18 @@ function FrontPage() {
               </tr>
             </thead>
             <tbody>
-              {cartItems.length === 0 ? (
+              {/* FIXED: Filter out undefined/invalid items to prevent render errors */}
+              {cartItems.filter(item => item && item.id).length === 0 ? (
                 <tr>
                   <td colSpan={showKitchenColumn ? 6 : 5} className="frontpage-empty-cart">
                     Cart is empty.
                   </td>
                 </tr>
               ) : (
-                cartItems.map((item, index) => (
+                cartItems.filter(item => item && item.id).map((item, index) => (
                   <React.Fragment key={item.id}>
                     <tr>
-                      <td>{tableNumber || index + 1}</td>
+                      <td>{tableNumber !== "N/A" ? tableNumber : index + 1}</td>
                       <td>
                         <div className="frontpage-cart-item-details">
                           <img
@@ -2500,14 +2768,14 @@ function FrontPage() {
                       <td>
                         {item.isCombo && item.originalBasePrice ? (
                           <>
-                            <span className="strikethroughStyle">{formatPrice(item.originalBasePrice * item.quantity)}</span> {formatPrice(item.basePrice * item.quantity)}
+                            <span className="strikethroughStyle">{formatPrice(item.originalBasePrice * item.quantity)}</span> {getPriceDisplay(item, true)}
                           </>
                         ) : item.originalBasePrice ? (
                           <>
-                            <span className="strikethroughStyle">{formatPrice(getOriginalMainItemTotal(item))}</span> {formatPrice(getMainItemTotal(item))}
+                            <span className="strikethroughStyle">{formatPrice(getOriginalMainItemTotal(item))}</span> {getPriceDisplay(item, true)}
                           </>
                         ) : (
-                          formatPrice(getMainItemTotal(item))
+                          getPriceDisplay(item, true)
                         )}
                       </td>
                       {showKitchenColumn && <td>{item.kitchen || "Main Kitchen"}</td>}
@@ -2532,7 +2800,7 @@ function FrontPage() {
                           </div>
                         </td>
                         <td>{item.quantity}</td>
-                        <td>{formatPrice((comboItem.price || 0) * item.quantity)}</td> {/* UPDATED: Use formatPrice */}
+                        <td>{getPriceDisplay(item, false, null, null, true)}</td>
                         {showKitchenColumn && <td>{comboItem.kitchen || "Main Kitchen"}</td>}
                         <td></td>
                       </tr>
@@ -2552,7 +2820,7 @@ function FrontPage() {
                             min="1"
                           />
                         </td>
-                        <td>{formatPrice((item.icePrice || 0) * item.quantity)}</td> {/* UPDATED: Use formatPrice */}
+                        <td>{formatPrice((item.icePrice || 0) * (item.quantity || 1))}</td>
                         {showKitchenColumn && <td></td>}
                         <td>
                           <button
@@ -2579,7 +2847,7 @@ function FrontPage() {
                             min="1"
                           />
                         </td>
-                        <td>{formatPrice((item.spicyPrice || 0) * item.quantity)}</td> {/* UPDATED: Use formatPrice */}
+                        <td>{formatPrice((item.spicyPrice || 0) * (item.quantity || 1))}</td>
                         {showKitchenColumn && <td></td>}
                         <td>
                           <button
@@ -2611,7 +2879,7 @@ function FrontPage() {
                               min="1"
                             />
                           </td>
-                          <td>{formatPrice((variant.price || 0) * (item.customVariantsQuantities?.[variantName] || 1))}</td> {/* UPDATED: Use formatPrice */}
+                          <td>{formatPrice((variant.price || 0) * (Number(item.customVariantsQuantities?.[variantName] || 1)) * (Number(item.quantity || 1)))}</td>
                           {showKitchenColumn && <td></td>}
                           <td>
                             <button
@@ -2626,7 +2894,7 @@ function FrontPage() {
                     {item.addonQuantities &&
                       Object.entries(item.addonQuantities).map(
                         ([addonName, qty]) =>
-                          qty > 0 && (
+                          Number(qty) > 0 && (
                             <React.Fragment key={`${item.id}-addon-${addonName}`}>
                               <tr>
                                 <td></td>
@@ -2652,7 +2920,7 @@ function FrontPage() {
                                     min="1"
                                   />
                                 </td>
-                                <td>{formatPrice((item.addonPrices ? item.addonPrices[addonName] : 0) * qty)}</td> {/* UPDATED: Use formatPrice */}
+                                <td>{getPriceDisplay(item, false, addonName)}</td>
                                 {showKitchenColumn && (
                                   <td>{item.addonVariants ? item.addonVariants[addonName]?.kitchen || "Main Kitchen" : "Main Kitchen"}</td>
                                 )}
@@ -2665,7 +2933,7 @@ function FrontPage() {
                                   </button>
                                 </td>
                               </tr>
-                              {item.addonVariants && item.addonVariants[addonName] && item.addonVariants[addonName].cold === 'with_ice' && (
+                              {item.addonVariants?.[addonName]?.cold === 'with_ice' && (
                                 <tr>
                                   <td></td>
                                   <td>
@@ -2682,7 +2950,7 @@ function FrontPage() {
                                       min="1"
                                     />
                                   </td>
-                                  <td>{formatPrice((item.addonIcePrices ? item.addonIcePrices[addonName] : 0) * qty)}</td> {/* UPDATED: Use formatPrice */}
+                                  <td>{formatPrice((item.addonIcePrices?.[addonName] || 0) * Number(qty || 1))}</td>
                                   {showKitchenColumn && <td></td>}
                                   <td>
                                     <button
@@ -2704,7 +2972,7 @@ function FrontPage() {
                                   </td>
                                 </tr>
                               )}
-                              {item.addonVariants && item.addonVariants[addonName] && item.addonVariants[addonName].spicy && (
+                              {item.addonVariants?.[addonName]?.spicy && (
                                 <tr>
                                   <td></td>
                                   <td>
@@ -2721,7 +2989,7 @@ function FrontPage() {
                                       min="1"
                                     />
                                   </td>
-                                  <td>{formatPrice((item.addonSpicyPrices ? item.addonSpicyPrices[addonName] : 0) * qty)}</td> {/* UPDATED: Use formatPrice */}
+                                  <td>{formatPrice((item.addonSpicyPrices?.[addonName] || 0) * Number(qty || 1))}</td>
                                   {showKitchenColumn && <td></td>}
                                   <td>
                                     <button
@@ -2743,7 +3011,7 @@ function FrontPage() {
                                   </td>
                                 </tr>
                               )}
-                              {item.addonVariants && item.addonVariants[addonName] && item.addonVariants[addonName].sugar &&
+                              {item.addonVariants?.[addonName]?.sugar &&
                                 item.addonVariants[addonName].sugar !== "medium" && (
                                   <tr>
                                     <td></td>
@@ -2808,7 +3076,7 @@ function FrontPage() {
                                           min="1"
                                         />
                                       </td>
-                                      <td>{formatPrice((variant.price || 0) * qty)}</td> {/* UPDATED: Use formatPrice */}
+                                      <td>{formatPrice((variant.price || 0) * Number(qty || 1))}</td>
                                       {showKitchenColumn && <td></td>}
                                       <td>
                                         <button
@@ -2834,7 +3102,7 @@ function FrontPage() {
                     {item.comboQuantities &&
                       Object.entries(item.comboQuantities).map(
                         ([comboName, qty]) =>
-                          qty > 0 && (
+                          Number(qty) > 0 && (
                             <React.Fragment key={`${item.id}-combo-${comboName}`}>
                               <tr>
                                 <td></td>
@@ -2860,7 +3128,7 @@ function FrontPage() {
                                     min="1"
                                   />
                                 </td>
-                                <td>{formatPrice((item.comboPrices ? item.comboPrices[comboName] : 0) * qty)}</td> {/* UPDATED: Use formatPrice */}
+                                <td>{getPriceDisplay(item, false, null, comboName)}</td>
                                 {showKitchenColumn && (
                                   <td>{item.comboVariants ? item.comboVariants[comboName]?.kitchen || "Main Kitchen" : "Main Kitchen"}</td>
                                 )}
@@ -2873,7 +3141,7 @@ function FrontPage() {
                                   </button>
                                 </td>
                               </tr>
-                              {item.comboVariants && item.comboVariants[comboName] && item.comboVariants[comboName].cold === 'with_ice' && (
+                              {item.comboVariants?.[comboName]?.cold === 'with_ice' && (
                                 <tr>
                                   <td></td>
                                   <td>
@@ -2890,7 +3158,7 @@ function FrontPage() {
                                       min="1"
                                     />
                                   </td>
-                                  <td>{formatPrice((item.comboIcePrices ? item.comboIcePrices[comboName] : 0) * qty)}</td> {/* UPDATED: Use formatPrice */}
+                                  <td>{formatPrice((item.comboIcePrices?.[comboName] || 0) * Number(qty || 1))}</td>
                                   {showKitchenColumn && <td></td>}
                                   <td>
                                     <button
@@ -2912,7 +3180,7 @@ function FrontPage() {
                                   </td>
                                 </tr>
                               )}
-                              {item.comboVariants && item.comboVariants[comboName] && item.comboVariants[comboName].spicy && (
+                              {item.comboVariants?.[comboName]?.spicy && (
                                 <tr>
                                   <td></td>
                                   <td>
@@ -2929,7 +3197,7 @@ function FrontPage() {
                                       min="1"
                                     />
                                   </td>
-                                  <td>{formatPrice((item.comboSpicyPrices ? item.comboSpicyPrices[comboName] : 0) * qty)}</td> {/* UPDATED: Use formatPrice */}
+                                  <td>{formatPrice((item.comboSpicyPrices?.[comboName] || 0) * Number(qty || 1))}</td>
                                   {showKitchenColumn && <td></td>}
                                   <td>
                                     <button
@@ -2951,7 +3219,7 @@ function FrontPage() {
                                   </td>
                                 </tr>
                               )}
-                              {item.comboVariants && item.comboVariants[comboName] && item.comboVariants[comboName].sugar &&
+                              {item.comboVariants?.[comboName]?.sugar &&
                                 item.comboVariants[comboName].sugar !== "medium" && (
                                   <tr>
                                     <td></td>
@@ -3016,7 +3284,7 @@ function FrontPage() {
                                           min="1"
                                         />
                                       </td>
-                                      <td>{formatPrice((variant.price || 0) * qty)}</td> {/* UPDATED: Use formatPrice */}
+                                      <td>{formatPrice((variant.price || 0) * Number(qty || 1))}</td>
                                       {showKitchenColumn && <td></td>}
                                       <td>
                                         <button
@@ -3048,13 +3316,13 @@ function FrontPage() {
         <div className="frontpage-billing-summary">
           <div className="frontpage-summary-row">
             <span>TOTAL QUANTITY:</span>
-            <span>{cartItems.reduce((total, item) => total + (item.quantity || 0), 0)}</span>
+            <span>{cartItems.reduce((total, item) => total + (item?.quantity || 0), 0)}</span>
           </div>
-          {cartItems.filter(item => item.originalBasePrice).map(item => (
+          {cartItems.filter(item => item && item.originalBasePrice).map(item => (
             <div className="frontpage-summary-row" key={item.id}>
               <span>{item.name}:</span>
               <span>
-                <span className="strikethroughStyle">{formatPrice(item.originalBasePrice * item.quantity)}</span> {formatPrice(item.basePrice * item.quantity)}
+                <span className="strikethroughStyle">{formatPrice(item.originalBasePrice * item.quantity)}</span> {getPriceDisplay(item, true)}
               </span>
             </div>
           ))}
@@ -3062,9 +3330,15 @@ function FrontPage() {
             <span>Subtotal:</span>
             <span>{formatPrice(subtotal)}</span> {/* UPDATED: Use formatPrice */}
           </div>
+          {Object.entries(vatByRate).map(([rate, amt]) => (
+            <div key={rate} className="frontpage-summary-row vat">
+              <span>VAT {rate}%:</span>
+              <span>{formatPrice(amt)}</span>
+            </div>
+          ))}
           <div className="frontpage-summary-row vat">
-            <span>VAT ({vatRate * 100}%):</span>
-            <span>{formatPrice(vat)}</span> {/* UPDATED: Use formatPrice */}
+            <span>Total VAT:</span>
+            <span>{formatPrice(totalVat)}</span> {/* Show 0 if no VAT */}
           </div>
           <div className="frontpage-summary-row total">
             <span>Grand Total:</span>
@@ -3339,5 +3613,4 @@ function FrontPage() {
     </div>
   )
 }
-
 export default FrontPage;

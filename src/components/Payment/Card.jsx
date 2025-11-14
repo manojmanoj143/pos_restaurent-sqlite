@@ -24,7 +24,6 @@ function Card() {
   const [error, setError] = useState(null);
   const [printSettings, setPrintSettings] = useState(null);
   const [logoUrl, setLogoUrl] = useState(null);
-  const [vatRate, setVatRate] = useState(0.2); // Default to 20% as per request
   const [settings, setSettings] = useState({});
   // Current time state for real-time updates (like OpeningEntry)
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -149,19 +148,6 @@ function Card() {
       maximumFractionDigits: precision,
     });
   };
-  // Fetch VAT rate - If API fails, keep default 20%
-  useEffect(() => {
-    const fetchVat = async () => {
-      try {
-        const response = await axios.get('http://localhost:8000/api/get-vat');
-        setVatRate(response.data.vat / 100);
-      } catch (error) {
-        console.error('Failed to fetch VAT:', error);
-        // Keep default 0.2 if fetch fails
-      }
-    };
-    fetchVat();
-  }, []);
   // Fetch active print settings
   useEffect(() => {
     const fetchPrintSettings = async () => {
@@ -180,6 +166,26 @@ function Card() {
   useEffect(() => {
     fetchLogo();
   }, []);
+  // UPDATED: Helper to get VAT by rate (from FrontPage)
+  const getVatByRate = (items) => {
+    const byRate = {};
+    items.forEach(item => {
+      if (item.taxBreakdown) {
+        Object.entries(item.taxBreakdown).forEach(([rate, amt]) => {
+          byRate[rate] = (byRate[rate] || 0) + amt;
+        });
+      }
+    });
+    return byRate;
+  };
+  // UPDATED: Calculate tax total (from FrontPage)
+  const calculateTaxTotal = (items) => {
+    return items.reduce((sum, item) => sum + (item.taxTotal || 0), 0);
+  };
+  // UPDATED: Calculate subtotal excl (from FrontPage)
+  const calculateExclTotal = (items) => {
+    return items.reduce((sum, item) => sum + (item.exclTotal || 0), 0);
+  };
   // Initialize bill details from location state or use hardcoded data
   useEffect(() => {
     if (inputRef.current) {
@@ -191,11 +197,14 @@ function Card() {
         minute: "2-digit",
         hour12: false
       });
+      const items = location.state.billDetails.items || [];
       const formattedBillDetails = {
         ...location.state.billDetails,
         invoice_no: location.state.billDetails.invoice_no || `INV-${Date.now()}`,
+        subtotal: Number(location.state.billDetails.subtotal) || calculateExclTotal(items),
+        vat_amount: Number(location.state.billDetails.vat_amount) || calculateTaxTotal(items),
         totalAmount: Number(location.state.billDetails.totalAmount) || 0,
-        customerName: location.state.billDetails.customerName || "N/A",
+        customerName: location.state.billDetails.customer || "N/A",
         phoneNumber: location.state.billDetails.phoneNumber || "N/A",
         email: location.state.billDetails.email || "N/A",
         whatsappNumber: location.state.billDetails.whatsappNumber || "N/A",
@@ -211,18 +220,21 @@ function Card() {
         date: location.state.billDetails.date || currentTime.toISOString().split("T")[0],
         time: location.state.billDetails.time || defaultTime,
         payments: location.state.billDetails.payments || [{ mode_of_payment: "CARD" }],
-        items: location.state.billDetails.items.map((item) => ({
+        items: items.map((item) => ({
           ...item,
           item_name: item.item_name || item.name || "Unnamed Item",
           quantity: Number(item.quantity) || 1,
           basePrice: Number(item.basePrice) || 0,
           originalBasePrice: item.originalBasePrice || null,
-          totalPrice: Number(item.totalPrice) || Number(item.basePrice) * Number(item.quantity) || 0,
+          totalPrice: Number(item.totalPrice) || 0,
+          exclTotal: Number(item.exclTotal) || 0,
+          taxTotal: Number(item.taxTotal) || 0,
+          taxBreakdown: item.taxBreakdown || {},
           selectedSize: item.selectedSize || null,
           icePreference: item.icePreference || "without_ice",
           icePrice: Number(item.icePrice) || 0,
           isSpicy: item.isSpicy || false,
-          spicyPrice: item.isSpicy ? Number(item.spicyPrice) || 20.00 : 0,
+          spicyPrice: Number(item.spicyPrice) || 0,
           addonQuantities: item.addonQuantities || {},
           addonVariants: item.addonVariants || {},
           addonPrices: item.addonPrices || {},
@@ -241,39 +253,12 @@ function Card() {
           selectedCustomVariants: item.selectedCustomVariants || {},
           customVariantsDetails: item.customVariantsDetails || {},
           customVariantsQuantities: item.customVariantsQuantities || {},
-          addons:
-            item.addons?.map((addon) => ({
-              addon_name: addon.name1,
-              addon_quantity: Number(addon.addon_quantity) || 0,
-              addon_price: Number(addon.addon_price) || 0,
-              addon_total_price: Number(addon.addon_total_price) || Number(addon.addon_price) * Number(addon.addon_quantity),
-              size: addon.size || "M",
-              isSpicy: addon.isSpicy || false,
-              spicyPrice: Number(addon.spicyPrice) || 0,
-              kitchen: addon.kitchen || "Main Kitchen",
-              addon_image: addon.addon_image || "/static/images/default-addon-image.jpg",
-            })) || [],
-          combos:
-            item.selectedCombos?.map((combo) => ({
-              name1: combo.name1,
-              combo_price: Number(combo.combo_price) || 0,
-              combo_total_price: Number(combo.combo_total_price) || Number(combo.combo_price) * Number(combo.combo_quantity),
-              size: combo.size || "M",
-              combo_quantity: Number(combo.combo_quantity) || 1,
-              isSpicy: combo.isSpicy || false,
-              spicyPrice: Number(combo.spicyPrice) || 0,
-              kitchen: combo.kitchen || "Main Kitchen",
-              combo_image: combo.combo_image || "/static/images/default-combo-image.jpg",
-            })) || [],
+          addons: item.addons || [],
+          combos: item.selectedCombos || [],
           isCombo: item.isCombo || false,
-          comboItems: item.comboItems?.map((citem) => ({
-            name: citem.name,
-            description: citem.description || "",
-            price: Number(citem.price) || 0,
-            image: citem.image,
-            kitchen: citem.kitchen,
-          })) || [],
+          comboItems: item.comboItems || [],
         })),
+        vatByRate: getVatByRate(items),
       };
       setBillDetails(formattedBillDetails);
       setEmailAddress(formattedBillDetails.email);
@@ -296,61 +281,43 @@ function Card() {
         date: currentTime.toISOString().split("T")[0],
         time: currentTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }),
         payments: [{ mode_of_payment: "CARD" }],
+        subtotal: 310.00,
+        vat_amount: 46.50,
+        totalAmount: 356.50,
+        vatByRate: { 15: 46.50 },
         items: [
           {
-            item_name: "Chicken Burger",
-            basePrice: 100.00,
+            item_name: "rice",
+            basePrice: 300.00,
+            exclTotal: 300.00,
+            taxTotal: 45.00,
+            taxBreakdown: { 15: 45.00 },
             quantity: 1,
-            selectedSize: "S",
+            selectedSize: null,
             icePreference: "without_ice",
             icePrice: 0,
             isSpicy: false,
             spicyPrice: 0,
-            originalBasePrice: 120.00,
-            kitchen: "journal kitchen",
+            originalBasePrice: null,
+            kitchen: "Main Kitchen",
             addons: [
-              { addon_name: "Patty", addon_quantity: 1, addon_price: 50.00, size: "M", isSpicy: true, spicyPrice: 20.00, kitchen: "journal kitchen" },
-              { addon_name: "Buffalo Sauce", addon_quantity: 1, addon_price: 50.00, size: "M", isSpicy: true, spicyPrice: 20.00, kitchen: "journal kitchen" },
+              { 
+                name1: "ice", 
+                addon_quantity: 1, 
+                addon_price: 10.00, 
+                addon_total_price: 10.00,
+                size: "M", 
+                isSpicy: false, 
+                spicyPrice: 0, 
+                kitchen: "Main Kitchen",
+                tax_amount: 1.50,
+              },
             ],
-            combos: [
-              { name1: "Burger & Fries", combo_price: 120.00, size: "S", combo_quantity: 1, isSpicy: true, spicyPrice: 30.00, kitchen: "journal kitchen" },
-            ],
-            customVariantsDetails: {},
-            customVariantsQuantities: {},
-          },
-          {
-            item_name: "ice",
-            basePrice: 15.00,
-            quantity: 1,
-            selectedSize: "S",
-            icePreference: "with_ice",
-            icePrice: 0,
-            isSpicy: false,
-            spicyPrice: 0,
-            originalBasePrice: null,
-            kitchen: "Juice Counter",
-            addons: [],
-            combos: [],
-            customVariantsDetails: {
-              flavour: { heading: "flavour", name: "vennila", price: 30.00 },
-            },
-            customVariantsQuantities: { flavour: 1 },
-          },
-          {
-            item_name: "Watermelon",
-            basePrice: 40.00,
-            quantity: 1,
-            selectedSize: "M",
-            icePreference: "without_ice",
-            icePrice: 0,
-            isSpicy: false,
-            spicyPrice: 0,
-            originalBasePrice: null,
-            kitchen: "Juice Counter",
-            addons: [],
             combos: [],
             customVariantsDetails: {},
             customVariantsQuantities: {},
+            isCombo: false,
+            comboItems: [],
           },
         ],
       };
@@ -419,21 +386,21 @@ function Card() {
     const sizeDisplay = item.selectedSize ? ` (${item.selectedSize})` : "";
     return `${item.item_name}${sizeDisplay}`;
   };
-  // Calculate subtotal for all items
+  // UPDATED: Use billDetails.subtotal for subtotal
   const calculateSubtotal = () => {
-    if (!billDetails || !billDetails.items) return 0;
-    return billDetails.items.reduce((sum, item) => {
-      const { totalAmount } = calculateItemPrices(item);
-      return sum + totalAmount;
-    }, 0);
+    return billDetails?.subtotal || 0;
   };
-  // Calculate VAT
+  // UPDATED: Use billDetails.vat_amount for VAT
   const calculateVAT = () => {
-    return Number(calculateSubtotal() * vatRate);
+    return billDetails?.vat_amount || 0;
   };
-  // Calculate grand total
+  // UPDATED: Use billDetails.totalAmount for grand total
   const calculateGrandTotal = () => {
-    return Number(calculateSubtotal() + calculateVAT());
+    return billDetails?.totalAmount || 0;
+  };
+  // UPDATED: Get VAT by rate from billDetails
+  const getVatByRateFromBill = () => {
+    return billDetails?.vatByRate || {};
   };
   // Parse bill date and time to Date object
   const parseBillDateTime = (dateStr, timeStr, timeZone) => {
@@ -605,12 +572,13 @@ function Card() {
       billDetails.deliveryAddress.field2 ||
       billDetails.deliveryAddress.field3);
   const formattedDeliveryAddress = formatDeliveryAddress(billDetails?.deliveryAddress);
-  // Generate printable receipt content - Updated for better alignment, matching image style, proper currency display
+  // UPDATED: Generate printable receipt content - with VAT breakdown
   const generatePrintableContent = (isPreview = false) => {
     if (!billDetails) return "";
     const subtotal = calculateSubtotal();
     const vatAmount = calculateVAT();
     const grandTotal = calculateGrandTotal();
+    const vatByRate = getVatByRateFromBill();
     // Use currentTime for date and time in receipt (real-time like OpeningEntry)
     const formattedDate = getFormattedDate(currentTime, settings.dateFormat);
     const formattedTime = getFormattedTime(currentTime, settings.timeFormat);
@@ -655,6 +623,12 @@ function Card() {
         </tr>
       `;
     }).join('');
+    const vatBreakdownRows = Object.entries(vatByRate).map(([rate, amt]) => `
+      <tr>
+        <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">VAT ${rate}%:</td>
+        <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">${formatter.format(amt)}</td>
+      </tr>
+    `).join('');
     return `
       <div style="font-family: Arial, sans-serif; width: 88mm; font-size: 12px; padding: 10px; color: #000000; ${borderStyle} box-sizing: border-box; line-height: 1.2;">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
@@ -887,8 +861,9 @@ function Card() {
               <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; font-weight: bold;">Subtotal:</td>
               <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; font-weight: bold;">${formatter.format(subtotal)}</td>
             </tr>
+            ${vatBreakdownRows}
             <tr>
-              <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">VAT (${(vatRate * 100).toFixed(0)}%):</td>
+              <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">Total VAT:</td>
               <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">${formatter.format(vatAmount)}</td>
             </tr>
             <tr style="font-weight: bold; border-top: 2px solid #000;">
@@ -1247,7 +1222,7 @@ function Card() {
                         </tbody>
                       </table>
                     </div>
-                    {/* Totals section */}
+                    {/* UPDATED: Totals section with VAT breakdown */}
                     <div className="totals-section p-3 bg-light rounded">
                       <div className="row">
                         <div className="col-6 text-start">Total Quantity:</div>
@@ -1264,7 +1239,13 @@ function Card() {
                         ))}
                         <div className="col-6 text-start">Subtotal:</div>
                         <div className="col-6 text-end">{formatCurrency(calculateSubtotal())}</div>
-                        <div className="col-6 text-start">VAT ({(vatRate * 100).toFixed(0)}%):</div>
+                        {Object.entries(getVatByRateFromBill()).map(([rate, amt]) => (
+                          <React.Fragment key={rate}>
+                            <div className="col-6 text-start">VAT {rate}%:</div>
+                            <div className="col-6 text-end">{formatCurrency(amt)}</div>
+                          </React.Fragment>
+                        ))}
+                        <div className="col-6 text-start">Total VAT:</div>
                         <div className="col-6 text-end">{formatCurrency(calculateVAT())}</div>
                         <div className="col-6 text-start fw-bold">Grand Total:</div>
                         <div className="col-6 text-end fw-bold">{formatCurrency(calculateGrandTotal())}</div>
@@ -1337,7 +1318,7 @@ function Card() {
           </div>
         </div>
       </div>
-      {/* Modal for bill details and actions */}
+      {/* UPDATED: Modal for bill details and actions - with VAT breakdown */}
       <Modal show={showModal} onHide={handleModalClose} size="lg" centered>
         <Modal.Header closeButton className="cash-modal-header">
           <Modal.Title>Bill Details</Modal.Title>
@@ -1585,12 +1566,18 @@ function Card() {
                   </tbody>
                 </table>
               </div>
+              {/* UPDATED: VAT breakdown in modal */}
               <div className="mt-3">
                 <p>
                   <strong>Subtotal:</strong> {formatCurrency(calculateSubtotal())}
                 </p>
+                {Object.entries(getVatByRateFromBill()).map(([rate, amt]) => (
+                  <p key={rate}>
+                    <strong>VAT {rate}%:</strong> {formatCurrency(amt)}
+                  </p>
+                ))}
                 <p>
-                  <strong>VAT (${(vatRate * 100).toFixed(0)}%):</strong> {formatCurrency(calculateVAT())}
+                  <strong>Total VAT:</strong> {formatCurrency(calculateVAT())}
                 </p>
                 <p>
                   <strong>Grand Total:</strong> {formatCurrency(calculateGrandTotal())}

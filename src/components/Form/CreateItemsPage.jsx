@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { FaArrowLeft } from "react-icons/fa";
 import "./createitempage.css";
-
 const Modal = ({ isOpen, onClose, children, title, className }) => {
   if (!isOpen) return null;
   return (
@@ -20,18 +19,18 @@ const Modal = ({ isOpen, onClose, children, title, className }) => {
     </div>
   );
 };
-
 const extractImageName = (imageUrl) => {
   if (!imageUrl) return "";
   const parts = imageUrl.split("/");
   return parts[parts.length - 1];
 };
-
 const initialFormState = {
   item_code: "",
   item_name: "",
   item_group: "",
   price_list_rate: 0,
+  tax_applicable: false,
+  tax_rate: 0,
   has_offer: false,
   offer_price: "",
   offer_start_time: "",
@@ -64,7 +63,6 @@ const initialFormState = {
     { ingredients_name: "", small: 0, medium: 0, large: 0, weight: 0, nutrition: [] },
   ],
 };
-
 const CreateItemPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -81,6 +79,8 @@ const CreateItemPage = () => {
       name1: "",
       newName: "",
       price: 0,
+      tax_applicable: false,
+      tax_rate: 0,
       image: "",
       imagePreview: "",
       kitchen: "",
@@ -126,14 +126,13 @@ const CreateItemPage = () => {
   const [warningMessage, setWarningMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [baseUrl, setBaseUrl] = useState("");
+  const [companyTaxRate, setCompanyTaxRate] = useState(0);
   const itemToEdit = location.state?.item;
   const isEditing = Boolean(itemToEdit);
-
   // Helper function to prevent scroll on number inputs
   const disableNumberInputScroll = (e) => {
     e.target.blur();
   };
-
   useEffect(() => {
     const fetchConfig = async () => {
       try {
@@ -151,7 +150,6 @@ const CreateItemPage = () => {
     };
     fetchConfig();
   }, []);
-
   // Function to refresh kitchens
   const refreshKitchens = async () => {
     try {
@@ -161,7 +159,6 @@ const CreateItemPage = () => {
       console.error("Failed to refresh kitchens:", error);
     }
   };
-
   // Function to refresh item groups
   const refreshItemGroups = async () => {
     try {
@@ -171,7 +168,6 @@ const CreateItemPage = () => {
       console.error("Failed to refresh item groups:", error);
     }
   };
-
   // Handle create new kitchen
   const handleCreateNewKitchen = async () => {
     if (!newKitchenName.trim()) {
@@ -189,7 +185,6 @@ const CreateItemPage = () => {
       setWarningMessage(`Failed to create kitchen: ${error.response?.data?.error || error.message}`);
     }
   };
-
   // Handle create new item group
   const handleCreateNewItemGroup = async () => {
     if (!newItemGroupName.trim()) {
@@ -207,7 +202,6 @@ const CreateItemPage = () => {
       setWarningMessage(`Failed to create item group: ${error.response?.data?.error || error.message}`);
     }
   };
-
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
@@ -220,6 +214,11 @@ const CreateItemPage = () => {
         setAllItems(itemsResponse.data);
         const variantsResponse = await axios.get(`${baseUrl}/api/variants`);
         setCustomVariants(variantsResponse.data);
+        // Fetch company tax rate
+        const companyResponse = await axios.get(`${baseUrl}/api/company-details`);
+        if (companyResponse.data.companyDetails && companyResponse.data.companyDetails.length > 0) {
+          setCompanyTaxRate(companyResponse.data.companyDetails[0].taxPercentage || 0);
+        }
       } catch (error) {
         setWarningMessage(`Error fetching data: ${error.message}`);
       } finally {
@@ -230,7 +229,6 @@ const CreateItemPage = () => {
       fetchData();
     }
   }, [baseUrl]);
-
   useEffect(() => {
     const fetchItemData = async () => {
       if (location.state?.formData) {
@@ -266,6 +264,8 @@ const CreateItemPage = () => {
                 const addonIngredients = addonNutritionResponse.data?.ingredients || [];
                 return {
                   ...addon,
+                  tax_applicable: addon.tax_applicable || false,
+                  tax_rate: addon.tax_rate || 0,
                   kitchen: addon.kitchen || itemToEdit.kitchen,
                   custom_variants: addon.custom_variants || [],
                   ingredients:
@@ -290,6 +290,8 @@ const CreateItemPage = () => {
               } catch (error) {
                 return {
                   ...addon,
+                  tax_applicable: addon.tax_applicable || false,
+                  tax_rate: addon.tax_rate || 0,
                   kitchen: addon.kitchen || itemToEdit.kitchen,
                   custom_variants: addon.custom_variants || [],
                   ingredients: addon.ingredients || [
@@ -308,6 +310,8 @@ const CreateItemPage = () => {
                 const comboIngredients = comboNutritionResponse.data?.ingredients || [];
                 return {
                   ...combo,
+                  tax_applicable: combo.tax_applicable || false,
+                  tax_rate: combo.tax_rate || 0,
                   kitchen: combo.kitchen || itemToEdit.kitchen,
                   custom_variants: combo.custom_variants || [],
                   ingredients:
@@ -332,6 +336,8 @@ const CreateItemPage = () => {
               } catch (error) {
                 return {
                   ...combo,
+                  tax_applicable: combo.tax_applicable || false,
+                  tax_rate: combo.tax_rate || 0,
                   kitchen: combo.kitchen || itemToEdit.kitchen,
                   custom_variants: combo.custom_variants || [],
                   ingredients: combo.ingredients || [
@@ -344,6 +350,8 @@ const CreateItemPage = () => {
           const updatedFormData = {
             ...initialFormState,
             ...itemToEdit,
+            tax_applicable: itemToEdit.tax_applicable || false,
+            tax_rate: itemToEdit.tax_rate || 0,
             image: extractImageName(itemToEdit.image) || "",
             images: itemToEdit.images || [],
             has_offer: !!itemToEdit.offer_price || !!itemToEdit.offer_start_time || !!itemToEdit.offer_end_time,
@@ -398,6 +406,8 @@ const CreateItemPage = () => {
           setFormData({
             ...initialFormState,
             ...itemToEdit,
+            tax_applicable: itemToEdit.tax_applicable || false,
+            tax_rate: itemToEdit.tax_rate || 0,
             image: extractImageName(itemToEdit.image) || "",
             images: itemToEdit.images || [],
             has_offer: !!itemToEdit.offer_price || !!itemToEdit.offer_start_time || !!itemToEdit.offer_end_time,
@@ -421,6 +431,8 @@ const CreateItemPage = () => {
             custom_variants: itemToEdit.custom_variants || [],
             addons: itemToEdit.addons?.map((addon) => ({
               ...addon,
+              tax_applicable: addon.tax_applicable || false,
+              tax_rate: addon.tax_rate || 0,
               kitchen: addon.kitchen || itemToEdit.kitchen,
               custom_variants: addon.custom_variants || [],
               ingredients: addon.ingredients || [
@@ -429,6 +441,8 @@ const CreateItemPage = () => {
             })) || [],
             combos: itemToEdit.combos?.map((combo) => ({
               ...combo,
+              tax_applicable: combo.tax_applicable || false,
+              tax_rate: combo.tax_rate || 0,
               kitchen: combo.kitchen || itemToEdit.kitchen,
               custom_variants: combo.custom_variants || [],
               ingredients: combo.ingredients || [
@@ -476,12 +490,18 @@ const CreateItemPage = () => {
       fetchItemData();
     }
   }, [baseUrl, location, isEditing, itemToEdit]);
-
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
     const newValue = type === "checkbox" ? checked : value;
     setFormData((prev) => {
       let updated = { ...prev, [name]: newValue };
+      if (name === "tax_applicable") {
+        if (newValue && !prev.tax_rate) {
+          updated.tax_rate = companyTaxRate;
+        } else if (!newValue) {
+          updated.tax_rate = 0;
+        }
+      }
       if (name === "has_offer" && !newValue) {
         updated.offer_price = "";
         updated.offer_start_time = "";
@@ -490,13 +510,11 @@ const CreateItemPage = () => {
       return updated;
     });
   };
-
   const handleNumericInputFocus = (e, defaultValue = 0) => {
     if (e.target.value === String(defaultValue)) {
       e.target.value = "";
     }
   };
-
   const handleNumericInputBlur = (e, name, defaultValue = 0) => {
     const value = e.target.value;
     if (value === "" || isNaN(value)) {
@@ -506,7 +524,6 @@ const CreateItemPage = () => {
       setFormData((prev) => ({ ...prev, [name]: Number(value) }));
     }
   };
-
   const handleVariantFieldChange = (variant, field, value) => {
     setFormData((prev) => ({
       ...prev,
@@ -516,13 +533,11 @@ const CreateItemPage = () => {
       },
     }));
   };
-
   const handleVariantNumericFieldFocus = (e, variant, field) => {
     if (e.target.value === "0") {
       e.target.value = "";
     }
   };
-
   const handleVariantNumericFieldBlur = (e, variant, field) => {
     const value = e.target.value;
     if (value === "" || isNaN(value)) {
@@ -538,7 +553,6 @@ const CreateItemPage = () => {
       handleVariantFieldChange(variant, field, value);
     }
   };
-
   const handleNestedChange = (field, index, key, value) => {
     setFormData((prev) => {
       const updated = [...prev[field]];
@@ -547,13 +561,11 @@ const CreateItemPage = () => {
       return { ...prev, [field]: updated };
     });
   };
-
   const handleNestedNumericFocus = (e, field, index, key) => {
     if (e.target.value === "0") {
       e.target.value = "";
     }
   };
-
   const handleNestedNumericBlur = (e, field, index, key) => {
     const value = e.target.value;
     if (value === "" || isNaN(value)) {
@@ -567,14 +579,12 @@ const CreateItemPage = () => {
       handleNestedChange(field, index, key, value);
     }
   };
-
   const addNewEntry = (field, template) => {
     setFormData((prev) => ({
       ...prev,
       [field]: [...prev[field], template],
     }));
   };
-
   const handleImageUpload = async (e, field, subField = null, variantId = null, subheading = null) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -680,7 +690,6 @@ const CreateItemPage = () => {
       setWarningMessage(`Failed to upload image: ${error.message}`);
     }
   };
-
   const handleImageDelete = async (field, subField = null, index = null, variantId = null, subheading = null) => {
     let filename;
     let oldPreview;
@@ -803,7 +812,6 @@ const CreateItemPage = () => {
       setWarningMessage(`Failed to delete ${subField ? subField.replace("_", " ") : field} image: ${error.message}`);
     }
   };
-
   const handleVariantSave = (variant) => {
     setWarningMessage("Saved");
     setFormData((prev) => ({
@@ -811,7 +819,6 @@ const CreateItemPage = () => {
       selectedVariant: "",
     }));
   };
-
   const handleCustomVariantSelection = async (variantId) => {
     if (!variantId) {
       setSelectedCustomVariantDetails(null);
@@ -848,7 +855,6 @@ const CreateItemPage = () => {
       setWarningMessage("Failed to fetch variant details");
     }
   };
-
   const handleCustomVariantFieldChange = (variantId, subheading, field, value) => {
     setFormData((prev) => ({
       ...prev,
@@ -866,13 +872,11 @@ const CreateItemPage = () => {
       ),
     }));
   };
-
   const handleCustomVariantSave = (variantId) => {
     setWarningMessage("Custom variant saved");
     setSelectedCustomVariantId("");
     setSelectedCustomVariantDetails(null);
   };
-
   const renderVariantFields = (variant) => {
     if (!variant || !variant.subheadings) return null;
     const activeSection = variant.activeSection;
@@ -948,7 +952,6 @@ const CreateItemPage = () => {
     }
     return null;
   };
-
   // Modal custom variant handlers
   const handleModalCustomVariantSelection = async (variantId) => {
     if (!variantId) {
@@ -962,7 +965,7 @@ const CreateItemPage = () => {
     try {
       const response = await axios.get(`${baseUrl}/api/variants/${variantId}`);
       const variantData = response.data;
-    
+  
       setModalState(prev => ({
         ...prev,
         modalCustomSelectedVariantId: variantId,
@@ -996,7 +999,6 @@ const CreateItemPage = () => {
       setWarningMessage("Failed to fetch variant details");
     }
   };
-
   const handleModalCustomVariantFieldChange = (variantId, subheading, field, value) => {
     setModalState(prev => ({
       ...prev,
@@ -1016,7 +1018,6 @@ const CreateItemPage = () => {
       }
     }));
   };
-
   const handleModalCustomVariantSave = () => {
     setWarningMessage("Custom variant saved");
     setModalState(prev => ({
@@ -1025,7 +1026,6 @@ const CreateItemPage = () => {
       modalCustomSelectedVariantDetails: null
     }));
   };
-
   const handleModalCustomVariantImageUpload = async (e, variantId, subheading) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -1084,7 +1084,6 @@ const CreateItemPage = () => {
       setWarningMessage(`Failed to upload image: ${error.message}`);
     }
   };
-
   const handleModalCustomVariantImageDelete = async (variantId, subheading) => {
     const variant = modalState.data.custom_variants.find(v => v._id === variantId);
     const sub = variant?.subheadings.find(s => s.name === subheading);
@@ -1126,10 +1125,8 @@ const CreateItemPage = () => {
       setWarningMessage(`Failed to delete image: ${error.message}`);
     }
   };
-
   const renderModalCustomVariantFields = (variant) => {
     if (!variant) return null;
-  
     return (
       <div className="variant-section">
         <div className="variant-toggle">
@@ -1150,7 +1147,7 @@ const CreateItemPage = () => {
             }}
           />
         </div>
-      
+    
         {variant.enabled && (
           <>
             <h6>{variant.heading} Options</h6>
@@ -1167,7 +1164,7 @@ const CreateItemPage = () => {
                   min="0"
                   step="0.01"
                 />
-              
+            
                 <label className="field-label">{`${sub.name} Image`}</label>
                 <input
                   type="file"
@@ -1175,7 +1172,7 @@ const CreateItemPage = () => {
                   onChange={e => handleModalCustomVariantImageUpload(e, variant._id, sub.name)}
                   className="field-input"
                 />
-              
+            
                 {(sub.image || sub.imageTemp) && (
                   <div className="image-container">
                     <img
@@ -1206,7 +1203,6 @@ const CreateItemPage = () => {
       </div>
     );
   };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     const filteredIngredients = formData.ingredients
@@ -1224,6 +1220,8 @@ const CreateItemPage = () => {
       }));
     const filteredAddons = formData.addons.map((addon) => ({
       ...addon,
+      tax_applicable: addon.tax_applicable || false,
+      tax_rate: addon.tax_applicable ? (addon.tax_rate || 0) : 0,
       custom_variants: addon.custom_variants.map((variant) => ({
         _id: variant._id,
         heading: variant.heading,
@@ -1252,6 +1250,8 @@ const CreateItemPage = () => {
     }));
     const filteredCombos = formData.combos.map((combo) => ({
       ...combo,
+      tax_applicable: combo.tax_applicable || false,
+      tax_rate: combo.tax_applicable ? (combo.tax_rate || 0) : 0,
       custom_variants: combo.custom_variants.map((variant) => ({
         _id: variant._id,
         heading: variant.heading,
@@ -1283,6 +1283,8 @@ const CreateItemPage = () => {
       item_name: formData.item_name,
       item_group: formData.item_group,
       price_list_rate: Number(formData.price_list_rate),
+      tax_applicable: formData.tax_applicable,
+      tax_rate: formData.tax_applicable ? formData.tax_rate : 0,
       offer_price: formData.offer_price ? Number(formData.offer_price) : null,
       offer_start_time: formData.offer_start_time ? new Date(formData.offer_start_time).toISOString() : null,
       offer_end_time: formData.offer_end_time ? new Date(formData.offer_end_time).toISOString() : null,
@@ -1327,7 +1329,6 @@ const CreateItemPage = () => {
       setWarningMessage(`Operation failed: ${error.response?.data?.error || error.message}`);
     }
   };
-
   const openModal = (type, index = null) => {
     if (index !== null) {
       const entry = formData[type][index];
@@ -1362,6 +1363,8 @@ const CreateItemPage = () => {
               name1: entry.name1 || "",
               newName: "",
               price: entry[type === "addons" ? "addon_price" : "combo_price"] || 0,
+              tax_applicable: entry.tax_applicable || false,
+              tax_rate: entry.tax_applicable ? (entry.tax_rate || 0) : 0,
               image: entry[type === "addons" ? "addon_image" : "combo_image"] || "",
               imagePreview: entry[type === "addons" ? "addon_image" : "combo_image"]
                 ? `${baseUrl}/api/images/${extractImageName(entry[type === "addons" ? "addon_image" : "combo_image"])}`
@@ -1398,6 +1401,8 @@ const CreateItemPage = () => {
               name1: entry.name1 || "",
               newName: "",
               price: entry[type === "addons" ? "addon_price" : "combo_price"] || 0,
+              tax_applicable: entry.tax_applicable || false,
+              tax_rate: entry.tax_applicable ? (entry.tax_rate || 0) : 0,
               image: entry[type === "addons" ? "addon_image" : "combo_image"] || "",
               imagePreview: entry[type === "addons" ? "addon_image" : "combo_image"]
                 ? `${baseUrl}/api/images/${extractImageName(entry[type === "addons" ? "addon_image" : "combo_image"])}`
@@ -1438,6 +1443,8 @@ const CreateItemPage = () => {
           name1: "",
           newName: "",
           price: 0,
+          tax_applicable: false,
+          tax_rate: 0,
           image: "",
           imagePreview: "",
           kitchen: formData.kitchen,
@@ -1460,7 +1467,6 @@ const CreateItemPage = () => {
       });
     }
   };
-
   const handleModalInputChange = (e) => {
     const { name, value, type, checked } = e.target;
     if (name === "addonType") {
@@ -1476,6 +1482,8 @@ const CreateItemPage = () => {
             selectedData = {
               name1: addon.name1,
               price: addon.addon_price,
+              tax_applicable: addon.tax_applicable || false,
+              tax_rate: addon.tax_applicable ? (addon.tax_rate || 0) : 0,
               image: addon.addon_image || "",
               imagePreview: addon.addon_image
                 ? `${baseUrl}/api/images/${extractImageName(addon.addon_image)}`
@@ -1509,6 +1517,8 @@ const CreateItemPage = () => {
             selectedData = {
               name1: combo.name1,
               price: combo.combo_price,
+              tax_applicable: combo.tax_applicable || false,
+              tax_rate: combo.tax_applicable ? (combo.tax_rate || 0) : 0,
               image: combo.combo_image || "",
               imagePreview: combo.combo_image
                 ? `${baseUrl}/api/images/${extractImageName(combo.combo_image)}`
@@ -1539,6 +1549,8 @@ const CreateItemPage = () => {
           selectedData = {
             name1: selectedItem.item_name,
             price: selectedItem.price_list_rate,
+            tax_applicable: selectedItem.tax_applicable || false,
+            tax_rate: selectedItem.tax_applicable ? (selectedItem.tax_rate || 0) : 0,
             image: selectedItem.image || "",
             imagePreview: selectedItem.image
               ? `${baseUrl}/api/images/${extractImageName(selectedItem.image)}`
@@ -1584,6 +1596,22 @@ const CreateItemPage = () => {
         ...prev,
         data: { ...prev.data, price: Number(value) },
       }));
+    } else if (name === "tax_applicable") {
+      setModalState((prev) => {
+        const newChecked = checked;
+        let updatedData = { ...prev.data, tax_applicable: newChecked };
+        if (newChecked && !prev.data.tax_rate) {
+          updatedData.tax_rate = companyTaxRate;
+        } else if (!newChecked) {
+          updatedData.tax_rate = 0;
+        }
+        return { ...prev, data: updatedData };
+      });
+    } else if (name === "tax_rate") {
+      setModalState((prev) => ({
+        ...prev,
+        data: { ...prev.data, tax_rate: Number(value) },
+      }));
     } else if (name === "kitchen") {
       setModalState((prev) => ({
         ...prev,
@@ -1608,13 +1636,11 @@ const CreateItemPage = () => {
       setModalState((prev) => ({ ...prev, selectedVariant: value }));
     }
   };
-
   const handleModalNumericFocus = (e) => {
     if (e.target.value === "0") {
       e.target.value = "";
     }
   };
-
   const handleModalNumericBlur = (e, name) => {
     const value = e.target.value;
     if (value === "" || isNaN(value)) {
@@ -1630,13 +1656,11 @@ const CreateItemPage = () => {
       }));
     }
   };
-
   const handleModalVariantNumericFocus = (e, variant, field) => {
     if (e.target.value === "0") {
       e.target.value = "";
     }
   };
-
   const handleModalVariantNumericBlur = (e, variant, field) => {
     const value = e.target.value;
     if (value === "" || isNaN(value)) {
@@ -1664,7 +1688,6 @@ const CreateItemPage = () => {
       }));
     }
   };
-
   const handleModalImageUpload = async (e, variant = null, subField = null) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -1732,7 +1755,6 @@ const CreateItemPage = () => {
       setWarningMessage(`Failed to upload image in modal: ${error.message}`);
     }
   };
-
   const handleModalImageDelete = async (variant = null, subField = null) => {
     const filename = subField ? modalState.data.variants[variant][subField] : modalState.data.image;
     const oldPreview = subField ? modalState.data.variants[variant][subField + 'Temp'] || `${baseUrl}/api/images/${filename}` : modalState.data.imagePreview;
@@ -1794,13 +1816,14 @@ const CreateItemPage = () => {
       setWarningMessage(`Failed to delete modal image: ${error.message}`);
     }
   };
-
   const handleModalSave = () => {
     let newEntry;
     if (modalState.addonType === "existing") {
       newEntry = {
         name1: modalState.data.name1,
         [modalState.type === "addons" ? "addon_price" : "combo_price"]: modalState.data.price,
+        tax_applicable: modalState.data.tax_applicable,
+        tax_rate: modalState.data.tax_applicable ? modalState.data.tax_rate : 0,
         [modalState.type === "addons" ? "addon_image" : "combo_image"]: modalState.data.image,
         kitchen: modalState.data.kitchen,
         size: modalState.data.variants.size.enabled ? modalState.data.variants.size : undefined,
@@ -1831,6 +1854,8 @@ const CreateItemPage = () => {
       newEntry = {
         name1: modalState.data.newName,
         [modalState.type === "addons" ? "addon_price" : "combo_price"]: modalState.data.price,
+        tax_applicable: modalState.data.tax_applicable,
+        tax_rate: modalState.data.tax_applicable ? modalState.data.tax_rate : 0,
         [modalState.type === "addons" ? "addon_image" : "combo_image"]: modalState.data.image,
         kitchen: modalState.data.kitchen,
         size: modalState.data.variants.size.enabled ? modalState.data.variants.size : undefined,
@@ -1879,6 +1904,8 @@ const CreateItemPage = () => {
         name1: "",
         newName: "",
         price: 0,
+        tax_applicable: false,
+        tax_rate: 0,
         image: "",
         imagePreview: "",
         kitchen: "",
@@ -1900,7 +1927,6 @@ const CreateItemPage = () => {
       index: null,
     });
   };
-
   const handleDeleteEntry = () => {
     if (modalState.index === null) return;
     setFormData((prev) => {
@@ -1920,6 +1946,8 @@ const CreateItemPage = () => {
         name1: "",
         newName: "",
         price: 0,
+        tax_applicable: false,
+        tax_rate: 0,
         image: "",
         imagePreview: "",
         kitchen: "",
@@ -1942,7 +1970,6 @@ const CreateItemPage = () => {
     });
     setWarningMessage(`${modalState.type === "addons" ? "Addon" : "Combo"} deleted successfully!`);
   };
-
   const getVariantSummary = (item) => {
     const summaries = [];
     if (item.size?.enabled) {
@@ -1968,7 +1995,6 @@ const CreateItemPage = () => {
     }
     return summaries.join("; ") || "No variants";
   };
-
   const options = allItems.flatMap((item) => [
     { label: `${item.item_name} (Item)`, value: item._id, type: "item" },
     ...item.addons.map((addon, index) => ({
@@ -1982,12 +2008,10 @@ const CreateItemPage = () => {
       type: "combo",
     })),
   ]).sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
-
   const handleListButtonClick = () => {
     setAddonListModalOpen(true);
     setComboListModalOpen(true);
   };
-
   return (
     <div className="create-item-page">
       <div className="header">
@@ -2040,6 +2064,13 @@ const CreateItemPage = () => {
                 step: "0.01",
                 required: true,
               },
+              {
+                label: "GST/VAT Applicable",
+                name: "tax_applicable",
+                type: "select",
+                options: ["Yes", "No"],
+              },
+              { label: "GST/VAT Rate (%)", name: "tax_rate", type: "number", min: "0", step: "0.01" },
               { label: "Enable Promotion", name: "has_offer", type: "checkbox" },
               { label: "Promotional Price (₹)", name: "offer_price", type: "number", min: "0", step: "0.01" },
               { label: "Offer Start Time", name: "offer_start_time", type: "datetime-local" },
@@ -2055,6 +2086,9 @@ const CreateItemPage = () => {
               if (["offer_price", "offer_start_time", "offer_end_time"].includes(field.name) && !formData.has_offer) {
                 return null;
               }
+              if (field.name === "tax_rate" && !formData.tax_applicable) {
+                return null;
+              }
               return (
                 <div key={field.name} className="form-group">
                   <label>
@@ -2063,9 +2097,15 @@ const CreateItemPage = () => {
                   {field.type === "select" ? (
                     <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                       <select
-                        name={field.name}
-                        value={formData[field.name]}
-                        onChange={handleInputChange}
+                        name={field.name === "tax_applicable" ? "tax_applicable" : field.name}
+                        value={field.name === "tax_applicable" ? (formData.tax_applicable ? "Yes" : "No") : formData[field.name]}
+                        onChange={(e) => {
+                          if (field.name === "tax_applicable") {
+                            handleInputChange({ target: { name: "tax_applicable", value: e.target.value === "Yes", type: "checkbox", checked: e.target.value === "Yes" } });
+                          } else {
+                            handleInputChange(e);
+                          }
+                        }}
                         className="input"
                         required={field.required}
                       >
@@ -2704,6 +2744,8 @@ const CreateItemPage = () => {
                 <tr>
                   <th>Name</th>
                   <th>Price</th>
+                  <th>Tax Applicable</th>
+                  <th>Tax Rate (%)</th>
                   <th>Kitchen</th>
                   <th>Variants</th>
                   <th>Ingredients</th>
@@ -2722,6 +2764,8 @@ const CreateItemPage = () => {
                   >
                     <td>{addon.name1}</td>
                     <td>₹{addon.addon_price}</td>
+                    <td>{addon.tax_applicable ? "Yes" : "No"}</td>
+                    <td>{addon.tax_rate || 0}</td>
                     <td>{addon.kitchen || "Not Set"}</td>
                     <td>{getVariantSummary(addon)}</td>
                     <td>{addon.ingredients.length} ingredients</td>
@@ -2759,6 +2803,8 @@ const CreateItemPage = () => {
                 <tr>
                   <th>Name</th>
                   <th>Price</th>
+                  <th>Tax Applicable</th>
+                  <th>Tax Rate (%)</th>
                   <th>Kitchen</th>
                   <th>Variants</th>
                   <th>Ingredients</th>
@@ -2777,6 +2823,8 @@ const CreateItemPage = () => {
                   >
                     <td>{combo.name1}</td>
                     <td>₹{combo.combo_price}</td>
+                    <td>{combo.tax_applicable ? "Yes" : "No"}</td>
+                    <td>{combo.tax_rate || 0}</td>
                     <td>{combo.kitchen || "Not Set"}</td>
                     <td>{getVariantSummary(combo)}</td>
                     <td>{combo.ingredients.length} ingredients</td>
@@ -2815,6 +2863,8 @@ const CreateItemPage = () => {
               name1: "",
               newName: "",
               price: 0,
+              tax_applicable: false,
+              tax_rate: 0,
               image: "",
               imagePreview: "",
               kitchen: "",
@@ -2892,6 +2942,33 @@ const CreateItemPage = () => {
               min="0"
               step="0.01"
             />
+            <label>GST/VAT Applicable</label>
+            <select
+              name="tax_applicable"
+              value={modalState.data.tax_applicable ? "Yes" : "No"}
+              onChange={(e) => handleModalInputChange({ target: { name: "tax_applicable", value: e.target.value, type: "checkbox", checked: e.target.value === "Yes" } })}
+              className="input"
+            >
+              <option value="No">No</option>
+              <option value="Yes">Yes</option>
+            </select>
+            {modalState.data.tax_applicable && (
+              <div>
+                <label>GST/VAT Rate (%)</label>
+                <input
+                  type="number"
+                  name="tax_rate"
+                  value={modalState.data.tax_rate}
+                  onChange={handleModalInputChange}
+                  onFocus={handleModalNumericFocus}
+                  onBlur={(e) => handleModalNumericBlur(e, "tax_rate")}
+                  onWheel={disableNumberInputScroll}
+                  className="input"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+            )}
             <label>Kitchen</label>
             <select name="kitchen" value={modalState.data.kitchen} onChange={handleModalInputChange} className="input">
               <option value="">Select Kitchen</option>
@@ -3346,7 +3423,7 @@ const CreateItemPage = () => {
                 Manage Ingredients and Nutrition
               </button>
             </div>
-      
+    
             <div className="modal-actions">
               <button type="button" className="save-button" onClick={handleModalSave}>
                 Save
@@ -3363,5 +3440,4 @@ const CreateItemPage = () => {
     </div>
   );
 };
-
 export default CreateItemPage;

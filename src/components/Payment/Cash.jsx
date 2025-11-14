@@ -586,8 +586,10 @@ function Cash() {
       });
       const formattedBillDetails = {
         ...location.state.billDetails,
+        subtotal: location.state.billDetails.subtotal || 0,
+        vat_amount: location.state.billDetails.vat_amount || 0,
+        totalAmount: location.state.billDetails.totalAmount || 0,
         invoice_no: location.state.billDetails.invoice_no || `INV-${Date.now()}`,
-        totalAmount: Number(location.state.billDetails.totalAmount) || 0,
         customerName: location.state.billDetails.customerName || "N/A",
         phoneNumber: location.state.billDetails.phoneNumber || "N/A",
         email: location.state.billDetails.email || "N/A",
@@ -740,21 +742,29 @@ function Cash() {
     const sizeDisplay = item.selectedSize ? ` (${item.selectedSize})` : "";
     return `${item.item_name}${sizeDisplay}`;
   };
-  // Calculate subtotal for all items
+  // FIXED: Use passed subtotal (excl total)
   const calculateSubtotal = () => {
-    if (!billDetails || !billDetails.items) return 0;
-    return billDetails.items.reduce((sum, item) => {
-      const { totalAmount } = calculateItemPrices(item);
-      return sum + totalAmount;
-    }, 0);
+    return billDetails?.subtotal || 0;
   };
-  // Calculate VAT
+  // FIXED: Aggregate VAT by rate from items.taxBreakdown
+  const getVatByRate = () => {
+    const byRate = {};
+    billDetails?.items.forEach(item => {
+      if (item.taxBreakdown) {
+        Object.entries(item.taxBreakdown).forEach(([rate, amt]) => {
+          byRate[rate] = (byRate[rate] || 0) + amt;
+        });
+      }
+    });
+    return byRate;
+  };
+  // FIXED: Use passed vat_amount
   const calculateVAT = () => {
-    return Number(calculateSubtotal() * vatRate);
+    return billDetails?.vat_amount || 0;
   };
-  // Calculate grand total
+  // FIXED: Use passed totalAmount (incl)
   const calculateGrandTotal = () => {
-    return Number(calculateSubtotal() + calculateVAT());
+    return billDetails?.totalAmount || 0;
   };
   // Parse bill date and time to Date object
   const parseBillDateTime = (dateStr, timeStr, timeZone) => {
@@ -905,6 +915,12 @@ function Cash() {
         </tr>
       `;
     }).join('');
+    const vatRows = Object.entries(getVatByRate()).map(([rate, amt]) => `
+      <tr>
+        <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">VAT (${rate}%):</td>
+        <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">${formatter.format(amt)}</td>
+      </tr>
+    `).join('');
     return `
       <div style="font-family: Arial, sans-serif; width: 88mm; font-size: 12px; padding: 10px; color: #000000; ${borderStyle} box-sizing: border-box; line-height: 1.2;">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
@@ -1137,8 +1153,9 @@ function Cash() {
               <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; font-weight: bold;">Subtotal:</td>
               <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; font-weight: bold;">${formatter.format(subtotal)}</td>
             </tr>
+            ${vatRows}
             <tr>
-              <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">VAT (${(vatRate * 100).toFixed(0)}%):</td>
+              <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">Total VAT:</td>
               <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">${formatter.format(vatAmount)}</td>
             </tr>
             <tr style="font-weight: bold; border-top: 2px solid #000;">
@@ -1501,7 +1518,7 @@ function Cash() {
                       </tbody>
                     </table>
                   </div>
-                  {/* Totals section */}
+                  {/* Totals section - FIXED: Use breakdown for VAT like FrontPage */}
                   <div className="cash-totals">
                     <p>
                       <strong>Total Quantity:</strong> {billDetails.items.reduce((sum, item) => sum + item.quantity, 0)}
@@ -1515,8 +1532,13 @@ function Cash() {
                     <p>
                       <strong>Subtotal:</strong> {formatCurrency(calculateSubtotal())}
                     </p>
+                    {Object.entries(getVatByRate()).map(([rate, amt]) => (
+                      <p key={rate}>
+                        <strong>VAT {rate}%:</strong> {formatCurrency(amt)}
+                      </p>
+                    ))}
                     <p>
-                      <strong>VAT (${(vatRate * 100).toFixed(0)}%):</strong> {formatCurrency(calculateVAT())}
+                      <strong>Total VAT:</strong> {formatCurrency(calculateVAT())}
                     </p>
                     <p>
                       <strong>Grand Total:</strong> <span className="grand-total">{formatCurrency(calculateGrandTotal())}</span>
@@ -1795,8 +1817,13 @@ function Cash() {
                   <p>
                     <strong>Subtotal:</strong> {formatCurrency(calculateSubtotal())}
                   </p>
+                  {Object.entries(getVatByRate()).map(([rate, amt]) => (
+                    <p key={rate}>
+                      <strong>VAT {rate}%:</strong> {formatCurrency(amt)}
+                    </p>
+                  ))}
                   <p>
-                    <strong>VAT (${(vatRate * 100).toFixed(0)}%):</strong> {formatCurrency(calculateVAT())}
+                    <strong>Total VAT:</strong> {formatCurrency(calculateVAT())}
                   </p>
                   <p>
                     <strong>Grand Total:</strong> {formatCurrency(calculateGrandTotal())}
