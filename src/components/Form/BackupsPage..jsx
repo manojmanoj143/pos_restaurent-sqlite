@@ -188,7 +188,18 @@ function BackupPage() {
   };
 
   return (
-    <div className="container mt-5" style={{ maxWidth: '1200px' }}>
+    <div 
+      className="container mt-5" 
+      style={{ 
+        maxWidth: '1200px',
+        background: 'linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%)',
+        minHeight: '100vh',
+        padding: '20px',
+        borderRadius: '15px',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+        position: 'relative'
+      }}
+    >
       {warningMessage && (
         <div className={`alert alert-${warningType} text-center alert-dismissible fade show`} role="alert">
           {warningMessage}
@@ -241,25 +252,25 @@ function BackupPage() {
       {/* Section for Company Operating Hours */}
       <div className="row mb-4">
         <div className="col-12">
-          <div className="card p-3">
-            <h5>Operating Hours from Company Details</h5>
+          <div className="card p-3" style={{ backgroundColor: 'rgba(255, 255, 255, 0.9)', borderRadius: '10px' }}>
+            <h5 style={{ color: '#333', marginBottom: '15px' }}>Operating Hours from Company Details</h5>
             {companyDetails ? (
               <>
-                <p><strong>Opening Time:</strong> {companyDetails.openingTime || 'N/A'}</p>
-                <p><strong>Closing Time:</strong> {companyDetails.closingTime || 'N/A'}</p>
-                <p><strong>Total Operating Time:</strong> {companyDetails.totalTime || 'N/A'}</p>
-                <p><strong>Extended for Backups:</strong> {extendedHours.toFixed(1)} hours (+2 hours)</p>
+                <p style={{ marginBottom: '10px' }}><strong>Opening Time:</strong> {companyDetails.openingTime || 'N/A'}</p>
+                <p style={{ marginBottom: '10px' }}><strong>Closing Time:</strong> {companyDetails.closingTime || 'N/A'}</p>
+                <p style={{ marginBottom: '10px' }}><strong>Total Operating Time:</strong> {companyDetails.totalTime || 'N/A'}</p>
+                <p style={{ marginBottom: '0' }}><strong>Extended for Backups:</strong> {extendedHours.toFixed(1)} hours (+2 hours)</p>
               </>
             ) : (
-              <p className="text-muted">No company details available. Please save company details first.</p>
+              <p className="text-muted" style={{ marginBottom: '0' }}>No company details available. Please save company details first.</p>
             )}
           </div>
         </div>
       </div>
       <div className="row mb-4">
         <div className="col-md-6">
-          <div className="card p-3">
-            <h5>Set Automatic Backup Interval (hours)</h5>
+          <div className="card p-3" style={{ backgroundColor: 'rgba(255, 255, 255, 0.9)', borderRadius: '10px' }}>
+            <h5 style={{ color: '#333', marginBottom: '15px' }}>Set Automatic Backup Interval (hours)</h5>
             <div className="input-group mb-3">
               <input
                 type="number"
@@ -267,15 +278,16 @@ function BackupPage() {
                 value={newInterval}
                 onChange={(e) => setNewInterval(parseInt(e.target.value) || 1)}
                 min={1}
+                style={{ borderRadius: '5px 0 0 5px' }}
               />
-              <button className="btn btn-primary" onClick={handleSetInterval}>
+              <button className="btn btn-primary" onClick={handleSetInterval} style={{ borderRadius: '0 5px 5px 0' }}>
                 Save Interval
               </button>
             </div>
-            <p>Current interval: every {backupInterval} hours</p>
+            <p style={{ marginBottom: '10px', color: '#666' }}>Current interval: every {backupInterval} hours</p>
             {companyDetails && (
-              <div className="mt-2 p-2 bg-light rounded">
-                <small>
+              <div className="mt-2 p-2 bg-light rounded" style={{ backgroundColor: 'rgba(248, 249, 250, 0.8)', borderRadius: '5px' }}>
+                <small style={{ color: '#555' }}>
                   Preview: ~{numBackupsPreview} backups/day with {newInterval}h interval over {extendedHours.toFixed(1)}h extended hours
                 </small>
               </div>
@@ -283,8 +295,8 @@ function BackupPage() {
           </div>
         </div>
         <div className="col-md-6">
-          <div className="card p-3">
-            <h5>Set Number of Backups to Display</h5>
+          <div className="card p-3" style={{ backgroundColor: 'rgba(255, 255, 255, 0.9)', borderRadius: '10px' }}>
+            <h5 style={{ color: '#333', marginBottom: '15px' }}>Set Number of Backups to Display</h5>
             <div className="input-group mb-3">
               <input
                 type="number"
@@ -292,9 +304,10 @@ function BackupPage() {
                 value={maxBackups}
                 onChange={(e) => handleSetMaxBackups(parseInt(e.target.value) || 5)}
                 min={1}
+                style={{ borderRadius: '5px' }}
               />
             </div>
-            <p>Current display limit: {maxBackups}</p>
+            <p style={{ marginBottom: '0', color: '#666' }}>Current display limit: {maxBackups}</p>
           </div>
         </div>
       </div>
@@ -352,7 +365,7 @@ function BackupPage() {
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    backgroundColor: '#fff',
+                    backgroundColor: 'rgba(255, 255, 255, 0.9)',
                     borderRadius: '12px',
                     padding: '15px 20px',
                     marginBottom: '15px',
@@ -410,7 +423,7 @@ function BackupPage() {
               ))}
             </div>
           ) : (
-            <p style={{ color: '#666', fontStyle: 'italic' }}>No previous backups found</p>
+            <p style={{ color: '#666', fontStyle: 'italic', textAlign: 'center' }}>No previous backups found</p>
           )}
         </div>
       </div>
@@ -427,11 +440,14 @@ function BackupPage() {
           justify-content: center;
           padding: 15px;
           font-size: 1rem;
+          border-radius: 10px;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
         .alert .btn {
           margin-left: 15px;
           padding: 5px 20px;
           font-size: 0.9rem;
+          border-radius: 5px;
         }
         @media (max-width: 991px) {
           .alert {
