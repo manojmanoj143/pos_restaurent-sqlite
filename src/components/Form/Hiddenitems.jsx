@@ -175,27 +175,23 @@ const Hiddenitems = () => {
     padding: "20px",
     position: "relative",
   };
-
   const contentStyle = {
     marginLeft: "80px",
     marginTop: "80px",
     maxWidth: "1400px",
   };
-
   const headerStyle = {
     color: "#2c3e50",
     fontWeight: "bold",
     textShadow: "1px 1px 2px rgba(0,0,0,0.1)",
     marginBottom: "10px",
   };
-
   const descriptionStyle = {
     color: "#34495e",
     fontSize: "1.1rem",
     lineHeight: "1.5",
     marginBottom: "30px",
   };
-
   const tableStyle = {
     fontSize: "0.85rem",
     marginTop: "10px",
@@ -203,7 +199,6 @@ const Hiddenitems = () => {
     overflow: "hidden",
     boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
   };
-
   const summaryStyle = {
     marginTop: "20px",
     padding: "15px",
@@ -212,7 +207,6 @@ const Hiddenitems = () => {
     boxShadow: "0 2px 4px rgba(0, 0, 0, 0.05)",
     backdropFilter: "blur(10px)",
   };
-
   const cardStyle = {
     maxWidth: "100%",
     boxShadow: "0 8px 16px rgba(0, 0, 0, 0.1)",
@@ -222,12 +216,10 @@ const Hiddenitems = () => {
     background: "rgba(255, 255, 255, 0.95)",
     transition: "transform 0.3s ease, box-shadow 0.3s ease",
   };
-
   const cardHoverStyle = {
     transform: "translateY(-5px)",
     boxShadow: "0 12px 24px rgba(0, 0, 0, 0.15)",
   };
-
   const backButtonStyle = {
     position: "fixed",
     top: "20px",
@@ -245,7 +237,6 @@ const Hiddenitems = () => {
     transition: "all 0.3s ease",
     boxShadow: "0 4px 8px rgba(0, 0, 0, 0.2)",
   };
-
   const alertStyle = {
     marginLeft: "0",
     marginTop: "20px",
@@ -254,7 +245,6 @@ const Hiddenitems = () => {
     boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
     background: "rgba(255, 193, 7, 0.9)",
   };
-
   const noItemsStyle = {
     color: "#7f8c8d",
     fontSize: "1.2rem",
@@ -264,7 +254,6 @@ const Hiddenitems = () => {
     borderRadius: "8px",
     boxShadow: "0 2px 4px rgba(0, 0, 0, 0.05)",
   };
-
   // UPDATED: Style for item image in header - Ensured proper loading (Enhanced for consistency with ItemListPage)
   const itemImageStyle = {
     width: "60px",
@@ -274,7 +263,6 @@ const Hiddenitems = () => {
     marginRight: "15px",
     boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
   };
-
   // NEW: Style for sales toggle button
   const toggleButtonStyle = {
     background: "linear-gradient(135deg, #3498db 0%, #2980b9 100%)",
@@ -307,14 +295,12 @@ const Hiddenitems = () => {
         <FaArrowLeft style={{ fontSize: "18px", marginRight: "5px" }} />
         Back
       </button>
-
       {/* Main Content */}
       <div style={contentStyle}>
         <h2 style={headerStyle}>Hidden Items</h2>
         <p style={descriptionStyle}>
           These items are hidden because they have associated sales. They won't appear in the item list. Manage them here with options to unhide or force delete.
         </p>
-
         {warningMessage && (
           <Alert variant="warning" style={alertStyle}>
             {warningMessage}
@@ -338,7 +324,6 @@ const Hiddenitems = () => {
             </button>
           </Alert>
         )}
-
         {hiddenItems.length === 0 ? (
           <div style={noItemsStyle}>
             <FaEye style={{ fontSize: "4rem", color: "#bdc3c7", marginBottom: "15px", display: "block", margin: "0 auto" }} />
@@ -354,7 +339,13 @@ const Hiddenitems = () => {
                 const precision = 2;
                 return `${hiddenItem.summary?.currency || 'INR'} ${Number(value).toFixed(precision)}`;
               };
-
+              // UPDATED: Compute image src consistently with ItemListPage (using /api/images/ endpoint for reliability)
+              const getItemImageSrc = (imagePath) => {
+                if (!imagePath) return "https://via.placeholder.com/60x60?text=No+Img";
+                // Use /api/images/ endpoint to match custom fields handling in ItemListPage
+                const fullBaseUrl = baseUrl || '';
+                return `${fullBaseUrl}/api/images/${imagePath}`;
+              };
               return (
                 <Card
                   key={hiddenItem._id}
@@ -372,7 +363,7 @@ const Hiddenitems = () => {
                       <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
                         {hiddenItem.image && (
                           <img
-                            src={`${baseUrl}${hiddenItem.image}`}
+                            src={getItemImageSrc(hiddenItem.image)}
                             alt={hiddenItem.item_name}
                             style={itemImageStyle}
                             onError={(e) => {
@@ -422,7 +413,6 @@ const Hiddenitems = () => {
                         </Button>
                       </div>
                     </div>
-
                     {hiddenItem.sales && hiddenItem.sales.length > 0 ? (
                       <>
                         {/* UPDATED: Toggle button for sales history table only - Now uses matchingEntries.length */}
@@ -442,7 +432,6 @@ const Hiddenitems = () => {
                             </>
                           )}
                         </Button>
-
                         {/* UPDATED: Collapsible sales table only (Summary moved outside) - Now detailed like SalesReport item filter */}
                         <Collapse in={expandedSales[hiddenItem._id]}>
                           <div>
@@ -480,7 +469,6 @@ const Hiddenitems = () => {
                             </div>
                           </div>
                         </Collapse>
-
                         {/* UPDATED: Summary always visible (moved outside Collapse) */}
                         <div style={summaryStyle}>
                           <h6 style={{ marginBottom: "15px", color: "#2c3e50", fontWeight: "600" }}>

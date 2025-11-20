@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { FaArrowLeft, FaPlusCircle, FaUsers, FaEdit, FaTrash, FaKey } from 'react-icons/fa';
+import { FaArrowLeft, FaPlusCircle, FaUsers, FaEdit, FaTrash, FaKey, FaCheck, FaTimes } from 'react-icons/fa';
 
 function EmployeePage() {
   const navigate = useNavigate();
@@ -22,6 +22,10 @@ function EmployeePage() {
   const [error, setError] = useState(null);
   const [message, setMessage] = useState('');
   const [baseUrl, setBaseUrl] = useState(""); // Added baseUrl state similar to AdminPage
+  // New states for custom delete confirmation
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [employeeToDelete, setEmployeeToDelete] = useState(null);
+
   // List of country codes for dropdown
   const countryCodes = [
     { code: '+91', country: 'India' },
@@ -30,6 +34,7 @@ function EmployeePage() {
     { code: '+44', country: 'UK' },
     { code: '+61', country: 'Australia' },
   ];
+
   // Fetch config to determine baseUrl (similar to AdminPage)
   useEffect(() => {
     const fetchConfig = async () => {
@@ -53,6 +58,7 @@ function EmployeePage() {
     };
     fetchConfig();
   }, []);
+
   // Fetch employees (updated to use baseUrl)
   const fetchEmployees = async (currentBaseUrl = baseUrl) => {
     try {
@@ -69,10 +75,12 @@ function EmployeePage() {
       setLoading(false);
     }
   };
+
   // Validate 6-digit secret key
   const validateSecretKey = (key) => {
     return key.length === 6 && /^\d+$/.test(key);
   };
+
   // Handle form input changes
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -82,6 +90,7 @@ function EmployeePage() {
       setError(null);
     }
   };
+
   // Handle employee creation (updated to use baseUrl, manual secret key)
   const handleCreateEmployee = async (e) => {
     e.preventDefault();
@@ -118,6 +127,7 @@ function EmployeePage() {
       setLoading(false);
     }
   };
+
   // Handle employee edit
   const handleEditEmployee = (employee) => {
     setEditMode(true);
@@ -135,6 +145,7 @@ function EmployeePage() {
     });
     setSelectedEmployee(employee);
   };
+
   // Handle employee update (updated to use baseUrl, manual secret key)
   const handleUpdateEmployee = async (e) => {
     e.preventDefault();
@@ -179,14 +190,21 @@ function EmployeePage() {
       setLoading(false);
     }
   };
-  // Handle employee deletion (updated to use baseUrl)
-  const handleDeleteEmployee = async (employeeId) => {
-    if (!window.confirm('Are you sure you want to delete this employee?')) return;
+
+  // Updated handle employee deletion to trigger custom confirmation
+  const handleDeleteEmployee = (employeeId) => {
+    setEmployeeToDelete(employeeId);
+    setShowDeleteConfirm(true);
+  };
+
+  // Proceed with deletion after confirmation
+  const confirmDelete = async () => {
+    if (!employeeToDelete) return;
     try {
       setLoading(true);
       setError(null);
       setMessage('');
-      const apiUrl = baseUrl ? `${baseUrl}/api/employees/${employeeId}` : `/api/employees/${employeeId}`; // FIXED: Use relative if no baseUrl
+      const apiUrl = baseUrl ? `${baseUrl}/api/employees/${employeeToDelete}` : `/api/employees/${employeeToDelete}`; // FIXED: Use relative if no baseUrl
       await axios.delete(apiUrl);
       setMessage('Employee deleted successfully');
       setSelectedEmployee(null);
@@ -196,14 +214,24 @@ function EmployeePage() {
       setError(`Failed to delete employee: ${err.response?.data?.error || err.message}`);
     } finally {
       setLoading(false);
+      setShowDeleteConfirm(false);
+      setEmployeeToDelete(null);
     }
   };
+
+  // Cancel deletion
+  const cancelDelete = () => {
+    setShowDeleteConfirm(false);
+    setEmployeeToDelete(null);
+  };
+
   // Handle employee selection
   const handleSelectEmployee = (employee) => {
     setSelectedEmployee(employee);
     setEditMode(false);
     setFormData({ name: '', countryCode: '+91', phoneNumber: '', vehicleNumber: '', role: 'Delivery Boy', email: '', secretKey: '' });
   };
+
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f5f6fa', padding: '20px', marginLeft: '250px' }}>
       <div style={{ maxWidth: '1200px', margin: '40px auto 0' }}>
@@ -542,6 +570,89 @@ function EmployeePage() {
           </div>
         )}
       </div>
+
+      {/* Custom Delete Confirmation Dialog */}
+      {showDeleteConfirm && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#fff',
+              padding: '30px',
+              borderRadius: '8px',
+              boxShadow: '0 4px 10px rgba(0,0,0,0.2)',
+              maxWidth: '400px',
+              textAlign: 'center',
+              minWidth: '300px',
+            }}
+          >
+            <FaTrash style={{ fontSize: '48px', color: '#e74c3c', marginBottom: '15px' }} />
+            <h3 style={{ color: '#333', marginBottom: '10px', fontSize: '1.4rem' }}>Confirm Deletion</h3>
+            <p style={{ color: '#666', marginBottom: '20px', fontSize: '1rem' }}>
+              Are you sure you want to delete this employee? This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+              <button
+                onClick={confirmDelete}
+                disabled={loading}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: loading ? '#ccc' : '#e74c3c',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '5px',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  transition: 'background-color 0.3s',
+                }}
+                onMouseOver={(e) => !loading && (e.target.style.backgroundColor = '#c0392b')}
+                onMouseOut={(e) => !loading && (e.target.style.backgroundColor = '#e74c3c')}
+              >
+                <FaCheck />
+                Yes, Delete
+              </button>
+              <button
+                onClick={cancelDelete}
+                disabled={loading}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: loading ? '#ccc' : '#95a5a6',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '5px',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  transition: 'background-color 0.3s',
+                }}
+                onMouseOver={(e) => !loading && (e.target.style.backgroundColor = '#7f8c8d')}
+                onMouseOut={(e) => !loading && (e.target.style.backgroundColor = '#95a5a6')}
+              >
+                <FaTimes />
+                Cancel
+              </button>
+            </div>
+            {loading && (
+              <p style={{ color: '#666', fontSize: '0.9rem', marginTop: '10px' }}>Deleting...</p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

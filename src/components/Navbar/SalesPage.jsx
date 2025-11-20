@@ -201,7 +201,7 @@ const SalesPage = () => {
             language: parsed.language || 'en-IN',
             dateFormat: parsed.dateFormat || 'yyyy-long-mm-dd',
             timeFormat: parsed.timeFormat || 'HH:mm:ss',
-            timeZone: parsed.dateFormat || 'Asia/Dubai',
+            timeZone: parsed.timeZone || 'Asia/Dubai',
           }));
         }
         // Keep default otherwise
@@ -1817,10 +1817,10 @@ const SalesPage = () => {
                               </span>
                             }
                             {col.key === "actions" && (
-                              <>
+                              <div className="d-flex flex-column flex-sm-row gap-1">
                                 <Button
                                   size="sm"
-                                  className="me-2 action-btn"
+                                  className="action-btn flex-fill"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handlePrint(sale);
@@ -1830,7 +1830,7 @@ const SalesPage = () => {
                                 </Button>
                                 <Button
                                   size="sm"
-                                  className="action-btn"
+                                  className="action-btn flex-fill"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handleEmail(sale);
@@ -1838,7 +1838,7 @@ const SalesPage = () => {
                                 >
                                   <FaEnvelope /> Email
                                 </Button>
-                              </>
+                              </div>
                             )}
                           </td>
                         ))}
