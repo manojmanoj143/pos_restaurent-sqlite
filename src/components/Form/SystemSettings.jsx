@@ -1,4 +1,4 @@
-// Updated SystemSettings.jsx - Default currency changed to INR and country to India
+// Updated SystemSettings.jsx - Added new 'Working Days' tab with Total Working Days input and Apply Company Leaves checkbox
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaArrowLeft } from 'react-icons/fa';
@@ -42,13 +42,14 @@ const SystemSettings = () => {
     allowConsecutiveLoginAttempts: 0,
     allowLoginAfterFail: 0,
     enableTwoFactorAuth: false,
+    totalWorkingDays: 30, // NEW: Default total working days per month
+    applyCompanyLeaves: false, // NEW: Checkbox to apply company leaves deduction
   });
   const [clickCount, setClickCount] = useState(0);
   const [warningMessage, setWarningMessage] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
   const [baseUrl, setBaseUrl] = useState("");
-
   // Fetch config to determine baseUrl
   const fetchConfig = async () => {
     let currentBaseUrl = "";
@@ -75,7 +76,6 @@ const SystemSettings = () => {
       }
     }
   };
-
   const fetchUsers = async (currentBaseUrl) => {
     try {
       const url = currentBaseUrl ? `${currentBaseUrl}/api/users` : 'http://localhost:8000/api/users';
@@ -99,7 +99,6 @@ const SystemSettings = () => {
       setWarningMessage('Failed to fetch users');
     }
   };
-
   const fetchSettings = async (currentBaseUrl) => {
     try {
       const url = currentBaseUrl ? `${currentBaseUrl}/api/settings` : 'http://localhost:8000/api/settings';
@@ -115,7 +114,6 @@ const SystemSettings = () => {
       setWarningMessage('Failed to fetch settings');
     }
   };
-
   useEffect(() => {
     fetchConfig();
     const storedSettings = JSON.parse(localStorage.getItem('systemSettings'));
@@ -130,7 +128,6 @@ const SystemSettings = () => {
     }, 30000);
     return () => clearInterval(interval);
   }, [baseUrl]); // Depend on baseUrl to ensure it runs after baseUrl is set
-
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
     setSettings((prev) => ({
@@ -138,9 +135,7 @@ const SystemSettings = () => {
       [name]: type === 'checkbox' ? checked : value,
     }));
   };
-
   const handleGoBack = () => navigate('/admin');
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -158,24 +153,20 @@ const SystemSettings = () => {
       setWarningMessage(`Failed to save settings: ${error.message}`);
     }
   };
-
   const handleSearchChange = (e) => {
     const value = e.target.value;
     setSearchQuery(value);
     setShowDropdown(value.length > 0);
   };
-
   const handleDropdownClick = () => {
     setShowUserList(true);
     setSearchQuery('');
     setShowDropdown(false);
   };
-
   const handleNewUserChange = (e) => {
     const { name, value } = e.target;
     setNewUser((prev) => ({ ...prev, [name]: value }));
   };
-
   const handleAddUser = async () => {
     if (newUser.email && newUser.firstName && newUser.phoneNumber && newUser.password) {
       const newUserData = {
@@ -211,12 +202,10 @@ const SystemSettings = () => {
       setWarningMessage('Please fill in all required fields.');
     }
   };
-
   const handleDeleteUser = (email) => {
     setUserToDelete(email);
     setShowDeleteConfirm(true);
   };
-
   const confirmDelete = async () => {
     try {
       const url = baseUrl ? `${baseUrl}/api/users/${userToDelete}` : `http://localhost:8000/api/users/${userToDelete}`;
@@ -238,7 +227,6 @@ const SystemSettings = () => {
       setUserToDelete(null);
     }
   };
-
   const dateFormatOptions = [
     'dd-mm-yyyy',
     'mm-dd-yyyy',
@@ -248,18 +236,14 @@ const SystemSettings = () => {
     'yyyy/mm/dd',
     'yyyy-long-mm-dd' // New: yyyy longmonth dd, e.g., 2025 October 29
   ];
-
   const timeFormatOptions = [
     'HH:mm:ss', // 24-hour with seconds
     'hh:mm:ss a', // 12-hour with seconds and AM/PM
     'HH:mm', // 24-hour without seconds
     'hh:mm a' // 12-hour without seconds and AM/PM
   ];
-
   const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
   const roleProfileOptions = ['User', 'Admin', 'Bearer'];
-
   const renderUserList = () => (
     <div className="user-list-container">
       <div className="sidebar">
@@ -376,7 +360,6 @@ const SystemSettings = () => {
       </div>
     </div>
   );
-
   const renderTabContent = () => {
     if (showUserList) return renderUserList();
     switch (activeTab) {
@@ -507,13 +490,43 @@ const SystemSettings = () => {
             <button type="submit" className="save-settings-btn">Save Settings</button>
           </form>
         );
+      case 'Working Days': // NEW: Working Days tab
+        return (
+          <form onSubmit={handleSubmit} className="settings-form">
+            <div>
+              <label htmlFor="totalWorkingDays">Total Working Days per Month</label>
+              <input
+                type="number"
+                id="totalWorkingDays"
+                name="totalWorkingDays"
+                value={settings.totalWorkingDays}
+                onChange={handleInputChange}
+                min="1"
+                max="31"
+                placeholder="e.g., 30"
+              />
+              <small>Fixed number of working days used for daily rate calculation and attendance summary</small>
+            </div>
+            <div>
+              <label>
+                <input
+                  type="checkbox"
+                  name="applyCompanyLeaves"
+                  checked={settings.applyCompanyLeaves}
+                  onChange={handleInputChange}
+                />
+                Apply Company Leaves (Deduct from Total Working Days)
+              </label>
+              <small>If enabled, holidays from Working Days will be deducted to compute effective working days in Attendance</small>
+            </div>
+            <button type="submit" className="save-settings-btn">Save Settings</button>
+          </form>
+        );
       default:
         return <div className="coming-soon">Coming soon...</div>;
     }
   };
-
-  const tabs = ['Details', 'Login'];
-
+  const tabs = ['Details', 'Login', 'Working Days']; // UPDATED: Added 'Working Days' tab
   return (
     <div className="system-settings">
       <div className="header">

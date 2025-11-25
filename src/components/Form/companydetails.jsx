@@ -1,8 +1,8 @@
-// src/components/CompanyDetails.jsx
+// src/components/Form/companydetails.jsx (Updated CompanyDetails.jsx)
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { FaArrowLeft, FaBuilding, FaPlus } from 'react-icons/fa';
+import { FaArrowLeft, FaBuilding, FaPlus, FaClock } from 'react-icons/fa';
 const SearchableSelect = ({ options = [], value = '', onChange, placeholder }) => {
   const [search, setSearch] = useState(value || '');
   const [showList, setShowList] = useState(false);
@@ -414,25 +414,45 @@ function CompanyDetails() {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f4f6f9', padding: '20px' }}>
       <div style={{ maxWidth: '800px', margin: '40px auto', backgroundColor: '#fff', padding: '30px', borderRadius: '15px', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>
-        <button
-          onClick={() => navigate('/admin')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            padding: '10px 20px',
-            backgroundColor: '#3498db',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '15px',
-            cursor: 'pointer',
-            marginBottom: '20px',
-          }}
-          onMouseOver={(e) => (e.target.style.backgroundColor = '#2980b9')}
-          onMouseOut={(e) => (e.target.style.backgroundColor = '#3498db')}
-        >
-          <FaArrowLeft /> Back to Dashboard
-        </button>
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => navigate('/admin')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '10px 20px',
+              backgroundColor: '#3498db',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '15px',
+              cursor: 'pointer',
+            }}
+            onMouseOver={(e) => (e.target.style.backgroundColor = '#2980b9')}
+            onMouseOut={(e) => (e.target.style.backgroundColor = '#3498db')}
+          >
+            <FaArrowLeft /> Back to Dashboard
+          </button>
+          {/* NEW: Button for Company Working Hours at the top */}
+          <button
+            onClick={() => navigate('/working')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '10px 20px',
+              backgroundColor: '#27ae60',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '15px',
+              cursor: 'pointer',
+            }}
+            onMouseOver={(e) => (e.target.style.backgroundColor = '#229954')}
+            onMouseOut={(e) => (e.target.style.backgroundColor = '#27ae60')}
+          >
+            <FaClock /> Company Working Hours
+          </button>
+        </div>
         <h2 style={{ textAlign: 'center', color: '#2c3e50', fontSize: '2rem', fontWeight: '600', marginBottom: '30px' }}>
           <FaBuilding style={{ marginRight: '10px' }} /> Company Details
         </h2>
@@ -587,7 +607,7 @@ function CompanyDetails() {
                       No Logo Uploaded
                     </div>
                   )}
-             
+            
                   {/* Title */}
                   <h3 style={{ color: '#2c3e50', fontSize: '1.8rem', margin: 0, textAlign: 'right', fontWeight: '600' }}>
                     Company Details<br/>Application

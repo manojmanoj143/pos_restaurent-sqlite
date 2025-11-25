@@ -28,6 +28,8 @@ import {
   FaChartLine, // NEW: For Sales menu
   FaFileInvoiceDollar, // NEW: For Sales Invoice
   FaEyeSlash, // NEW: For Hidden Items
+  FaList, // NEW: For Employee List
+  FaClock, // NEW: For Attendance
 } from 'react-icons/fa';
 function AdminPage() {
   const navigate = useNavigate();
@@ -281,8 +283,12 @@ function AdminPage() {
       icon: <FaUserTie />,
       text: 'Employee',
       children: [
-        { icon: <FaUserTie />, text: 'Employees', path: '/employees' },
+        { icon: <FaList />, text: 'Employee List', path: '/employee-list' }, // NEW: Added Employee List
+        { icon: <FaUserTie />, text: 'Delivery Person', path: '/employees' },
         { icon: <FaUsers />, text: 'Users', path: '/users' },
+        { icon: <FaPlusCircle />, text: 'Add New Employee', path: '/add-employee' }, // NEW: Added Add New Employee
+        { icon: <FaClock />, text: 'Attendance', path: '/attendance' }, // NEW: Added Attendance
+        { icon: <FaFileInvoiceDollar />, text: 'Salary Slip', path: '/salary-slip' }, // NEW: Added Salary Slip
       ],
     },
     { icon: <FaTable />, text: 'Add New Table', path: '/add-table' },

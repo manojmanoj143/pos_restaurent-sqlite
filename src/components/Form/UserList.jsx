@@ -1,3 +1,4 @@
+// UserList.jsx (full code - no frontend changes needed, as backend handles dual delete; included for completeness as requested)
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaArrowLeft } from 'react-icons/fa';

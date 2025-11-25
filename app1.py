@@ -346,7 +346,7 @@ class SQLiteCollection:
             return doc
         return None
 def connect_to_sqlite():
-    global conn, items_collection, customers_collection, sales_collection, tables_collection, users_collection, settings_collection, email_tokens_collection, opening_collection, pos_closing_collection, kitchens_collection, item_groups_collection, kitchen_saved_collection, picked_up_collection, variants_collection, employees_collection, activeorders_collection, order_counters_collection, tripreports_collection, email_settings_collection, purchase_items_collection, suppliers_collection, purchase_orders_collection, purchase_receipts_collection, purchase_invoices_collection, uoms_collection, purchase_sales_collection, print_settings_collection, combo_offers_collection, vat_collection, customer_groups_collection, company_details_collection, logo_details_collection, supplier_group_collection,address_structures_collection
+    global conn, items_collection, customers_collection, sales_collection, tables_collection, users_collection, settings_collection, email_tokens_collection, opening_collection, pos_closing_collection, kitchens_collection, item_groups_collection, kitchen_saved_collection, picked_up_collection, variants_collection, employees_collection, activeorders_collection, order_counters_collection, tripreports_collection, email_settings_collection, purchase_items_collection, suppliers_collection, purchase_orders_collection, purchase_receipts_collection, purchase_invoices_collection, uoms_collection, purchase_sales_collection, print_settings_collection, combo_offers_collection, vat_collection, customer_groups_collection, company_details_collection, logo_details_collection, supplier_group_collection,address_structures_collection,worker_collection, employee_types_collection,working_days_collection,attendance_collection
     mode = config.get("mode", "server")
     if mode == 'server':
         db_path = os.path.join(CONFIG_DIR, 'restaurant.db')
@@ -355,7 +355,7 @@ def connect_to_sqlite():
         tables = [
             'active_orders', 'combo_offers', 'customers', 'email_settings', 'email_tokens', 'employees', 'item_groups', 'items', 'kitchen_saved_orders', 'kitchens',
             'order_counters', 'picked_up_items', 'pos_closing_entries', 'pos_opening_entries', 'print_settings', 'purchase_invoices', 'purchase_items', 'purchase_orders',
-            'purchase_receipts', 'purchase_sales', 'sales', 'suppliers', 'system_settings', 'tables', 'trip_reports', 'uoms', 'users', 'variants', 'vat', 'customer_groups', 'company_details', 'logo_details', 'supplier_groups','address_structures'
+            'purchase_receipts', 'purchase_sales', 'sales', 'suppliers', 'system_settings', 'tables', 'trip_reports', 'uoms', 'users', 'variants', 'vat', 'customer_groups', 'company_details', 'logo_details', 'supplier_groups','address_structures','new_employee','employee_types','working_days','attendance'
         ]
         for table in tables:
             cur.execute(f"CREATE TABLE IF NOT EXISTS {table} (id TEXT PRIMARY KEY, data TEXT)")
@@ -395,6 +395,10 @@ def connect_to_sqlite():
         logo_details_collection = SQLiteCollection(conn, 'logo_details')
         supplier_group_collection = SQLiteCollection(conn, 'supplier_groups')
         address_structures_collection = SQLiteCollection(conn, 'address_structures')
+        worker_collection = SQLiteCollection(conn, 'new_employee')
+        employee_types_collection = SQLiteCollection(conn, 'employee_types')
+        working_days_collection = SQLiteCollection(conn, 'working_days')
+        attendance_collection = SQLiteCollection(conn, 'attendance')
         ensure_test_users()
         return True
     else:
@@ -968,7 +972,7 @@ def import_mongodb():
         valid_collections = [
             'active_orders', 'combo_offers', 'customers', 'email_settings', 'email_tokens', 'employees', 'item_groups', 'items', 'kitchen_saved_orders', 'kitchens',
             'order_counters', 'picked_up_items', 'pos_closing_entries', 'pos_opening_entries', 'print_settings', 'purchase_invoices', 'purchase_items', 'purchase_orders',
-            'purchase_receipts', 'purchase_sales', 'sales', 'suppliers', 'system_settings', 'tables', 'trip_reports', 'uoms', 'users', 'variants', 'vat', 'customer_groups', 'company_details', 'logo_details', 'supplier_groups'
+            'purchase_receipts', 'purchase_sales', 'sales', 'suppliers', 'system_settings', 'tables', 'trip_reports', 'uoms', 'users', 'variants', 'vat', 'customer_groups', 'company_details', 'logo_details', 'supplier_groups', 'new_employee','working_days'
         ]
         if collection_name not in valid_collections:
             logger.error(f"Invalid collection name: {collection_name}")
@@ -1016,6 +1020,8 @@ def import_mongodb():
                 {'vat_rate': record.get('vat_rate')} if collection_name == 'vat' else
                 {'company_name': record.get('company_name')} if collection_name == 'company_details' else
                 {'logo': record.get('logo')} if collection_name == 'logo_details' else
+                {'name': record.get('name')} if collection_name == 'new_employee' else
+                {'year': record.get('year'), 'month': record.get('month')} if collection_name == 'working_days' else
                 {}
             )
             if not unique_key:
@@ -1179,7 +1185,9 @@ def export_all_to_excel():
             'customer_groups': customer_groups_collection,
             'company_details': company_details_collection,
             'logo_details': logo_details_collection,
-            'supplier_groups': supplier_group_collection
+            'supplier_groups': supplier_group_collection,
+            'new_employee': worker_collection,
+            'working_days': working_days_collection
         }
         for collection_name, collection in collections.items():
             ws = wb.create_sheet(title=collection_name)
@@ -1255,10 +1263,12 @@ def create_backup():
             'users': users_collection,
             'variants': variants_collection,
             'vat': vat_collection,
+            'new_employee': worker_collection,
             'customer_groups': customer_groups_collection,
             'company_details': company_details_collection,
             'logo_details': logo_details_collection,
-            'supplier_groups': supplier_group_collection
+            'supplier_groups': supplier_group_collection,
+            'working_days': working_days_collection
         }
         for collection_name, collection in collections.items():
             ws = wb.create_sheet(title=collection_name)
@@ -1672,12 +1682,18 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error fetching users: {str(e)}")
             return jsonify({"error": str(e)}), 500
+
     @app.route('/api/users/<email>', methods=['DELETE'])
     @db_required
     def delete_user(email):
         try:
             if email in [u['email'] for u in TEST_USERS]:
                 return jsonify({"message": "Cannot delete test users"}), 400
+            # ADD: Delete from worker_collection if exists (for employees)
+            worker = worker_collection.find_one({"email": email})
+            if worker:
+                worker_collection.delete_one({"email": email})
+                logger.info(f"Employee deleted from new_employee: {email}")
             result = users_collection.delete_one({"email": email})
             if result.deleted_count == 0:
                 return jsonify({"message": "User not found"}), 404
@@ -5092,6 +5108,599 @@ def mark_item_prepared(order_id, item_id):
         logger.error(f"Error in /api/kitchen-saved/{order_id}/items/{item_id}/mark-prepared: {str(e)}")
         logger.error(traceback.format_exc())
         return jsonify({'success': False, 'error': str(e)}), 500
+@app.route('/api/employee-types', methods=['GET', 'POST'])
+@db_required
+def employee_types():
+    if request.method == 'GET':
+        try:
+            if employee_types_collection is None:
+                logger.error("employee_types_collection not initialized")
+                return jsonify({"error": "Database not ready"}), 503
+            types = employee_types_collection.find()
+            return jsonify([{'id': str(t['_id']), 'name': t['name']} for t in types]), 200
+        except Exception as e:
+            logger.error(f"Error fetching employee types: {str(e)}")
+            return jsonify({"error": str(e)}), 500
+    elif request.method == 'POST':
+        try:
+            data = request.get_json()
+            if not isinstance(data, dict):
+                return jsonify({"error": "JSON data must be an object"}), 400
+            name = data.get('name')
+            if not name or not name.strip():
+                return jsonify({"error": "Name is required"}), 400
+            new_type = {
+                "_id": str(uuid.uuid4()),
+                "name": name.strip(),
+                "created_at": datetime.now(ZoneInfo("UTC")).isoformat()
+            }
+            if employee_types_collection is None:
+                logger.error("employee_types_collection not initialized")
+                return jsonify({"error": "Database not ready"}), 503
+            employee_types_collection.insert_one(new_type)
+            logger.info(f"Employee type created: {name}")
+            return jsonify(new_type), 201 # Return the full new_type
+        except Exception as e:
+            logger.error(f"Error creating employee type: {str(e)}")
+            return jsonify({"error": str(e)}), 500
+
+@app.route('/api/employee-types/<type_id>', methods=['PUT', 'DELETE'])
+@db_required
+def manage_employee_type(type_id):
+    if request.method == 'PUT':
+        try:
+            data = request.get_json()
+            if not isinstance(data, dict):
+                return jsonify({"error": "JSON data must be an object"}), 400
+            name = data.get('name')
+            if not name or not name.strip():
+                return jsonify({"error": "Name is required"}), 400
+            # Check if new name already exists
+            existing = employee_types_collection.find_one({"name": name.strip()})
+            if existing and str(existing['_id']) != type_id:
+                return jsonify({"error": "Employee type name already exists"}), 400
+            result = employee_types_collection.update_one(
+                {'_id': type_id},
+                {'$set': {'name': name.strip()}}
+            )
+            if result.modified_count == 0:
+                return jsonify({"error": "Employee type not found"}), 404
+            logger.info(f"Employee type updated: {type_id} to {name}")
+            return jsonify({"message": "Employee type updated successfully"}), 200
+        except Exception as e:
+            logger.error(f"Error updating employee type: {str(e)}")
+            return jsonify({"error": str(e)}), 500
+    elif request.method == 'DELETE':
+        try:
+            # Check if type is used in employees
+            type_doc = employee_types_collection.find_one({'_id': type_id})
+            if not type_doc:
+                return jsonify({"error": "Employee type not found"}), 404
+            used_in_employees = worker_collection.find({'employeeType': type_doc['name']})
+            if list(used_in_employees): # If any employees use this type
+                return jsonify({"error": "Cannot delete: This type is used by existing employees"}), 400
+            result = employee_types_collection.delete_one({'_id': type_id})
+            if result.deleted_count == 0:
+                return jsonify({"error": "Employee type not found"}), 404
+            logger.info(f"Employee type deleted: {type_doc['name']}")
+            return jsonify({"message": "Employee type deleted successfully"}), 200
+        except Exception as e:
+            logger.error(f"Error deleting employee type: {str(e)}")
+            return jsonify({"error": str(e)}), 500
+
+@app.route('/api/add-employee', methods=['GET', 'POST'])
+@db_required
+def add_employee():
+    mode = config.get("mode", "server")
+    if mode == 'client':
+        if request.method == 'GET':
+            server_url = f"http://{config['server_ip']}:8000/api/add-employee"
+            response = requests.get(server_url)
+            if response.status_code == 200:
+                return jsonify(response.json()), 200
+            else:
+                return jsonify({"error": "Proxy fetch failed"}), response.status_code
+        elif request.method == 'POST':
+            server_url = f"http://{config['server_ip']}:8000/api/add-employee"
+            response = requests.post(server_url, json=request.get_json())
+            if response.status_code in [200, 201]:
+                return jsonify(response.json()), response.status_code
+            else:
+                return jsonify({"error": "Proxy create failed"}), response.status_code
+    if request.method == 'GET':
+        try:
+            employees = worker_collection.find()
+            converted_employees = [convert_objectid_to_str(emp) for emp in employees]
+            return jsonify(converted_employees), 200
+        except Exception as e:
+            logger.error(f"Error fetching employees: {str(e)}")
+            return jsonify({"error": str(e)}), 500
+    elif request.method == 'POST':
+        try:
+            data = request.get_json()
+            if not isinstance(data, dict):
+                return jsonify({"error": "JSON data must be an object"}), 400
+            required_fields = ['name', 'phoneNumber', 'email', 'address', 'employeeType', 'salary', 'username', 'password', 'startTime', 'endTime']
+            if not all(field in data for field in required_fields):
+                return jsonify({"error": "Missing required fields"}), 400
+            # Check if email already exists
+            existing_worker = worker_collection.find_one({"email": data['email']})
+            existing_user = users_collection.find_one({"email": data['email']})
+            if existing_worker or existing_user:
+                return jsonify({"error": "Email already exists"}), 400
+            # Generate unique employeeId (e.g., EMP001)
+            existing_employees = list(worker_collection.find())
+            next_id = len(existing_employees) + 1
+            employee_id = f"EMP{next_id:03d}"
+            # Optional: Validate other fields if needed (e.g., dateOfBirth format)
+            date_of_birth = data.get('dateOfBirth', '')
+            if date_of_birth:
+                try:
+                    datetime.fromisoformat(date_of_birth)
+                except ValueError:
+                    return jsonify({"error": "Invalid Date of Birth format. Use YYYY-MM-DD."}), 400
+            hashed_password = bcrypt.hashpw(data['password'].encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            new_employee = {
+                "_id": str(uuid.uuid4()),
+                "employeeId": employee_id,
+                "name": data['name'],
+                "phoneNumber": data['phoneNumber'],
+                "gender": data.get('gender', ''),
+                "dateOfBirth": date_of_birth,
+                "email": data['email'],
+                "address": data['address'],
+                "employeeType": data['employeeType'],
+                "bankName": data.get('bankName', ''),
+                "accountHolderName": data.get('accountHolderName', ''),
+                "accountNumber": data.get('accountNumber', ''),
+                "ifscCode": data.get('ifscCode', ''),
+                "salary": float(data['salary']),
+                "username": data['username'],
+                "password": hashed_password,
+                "startTime": data['startTime'],
+                "endTime": data['endTime'],
+                "created_at": datetime.now(ZoneInfo("UTC")).isoformat()
+            }
+            worker_collection.insert_one(new_employee)
+            # Also add to users_collection for login
+            new_user = {
+                "email": data['email'],
+                "password": hashed_password,
+                "role": data['employeeType'].lower(),
+                "username": data['username'],
+                "firstName": data['name'],
+                "phone_number": data['phoneNumber'],
+                "company": "POS 8",
+                "pos_profile": "POS-001",
+                "status": "Active",
+                "created_at": datetime.now(ZoneInfo("UTC")).isoformat()
+            }
+            users_collection.insert_one(new_user)
+            logger.info(f"Employee created: {data['name']} ({data['email']}) with ID {employee_id}")
+            return jsonify({"message": "Employee created successfully", "id": new_employee['_id'], "employeeId": employee_id}), 201
+        except Exception as e:
+            logger.error(f"Error creating employee: {str(e)}")
+            return jsonify({"error": str(e)}), 500
+
+@app.route('/api/add-employee/<emp_id>', methods=['PUT', 'DELETE'])
+@db_required
+def manage_employee(emp_id):
+    mode = config.get("mode", "server")
+    if mode == 'client':
+        if request.method == 'PUT':
+            server_url = f"http://{config['server_ip']}:8000/api/add-employee/{emp_id}"
+            response = requests.put(server_url, json=request.get_json())
+            if response.status_code == 200:
+                return jsonify(response.json()), 200
+            else:
+                return jsonify({"error": "Proxy update failed"}), response.status_code
+        elif request.method == 'DELETE':
+            server_url = f"http://{config['server_ip']}:8000/api/add-employee/{emp_id}"
+            response = requests.delete(server_url)
+            if response.status_code == 200:
+                return jsonify(response.json()), 200
+            else:
+                return jsonify({"error": "Proxy delete failed"}), response.status_code
+    if request.method == 'PUT':
+        try:
+            data = request.get_json()
+            if not isinstance(data, dict):
+                return jsonify({"error": "JSON data must be an object"}), 400
+            if not data:
+                return jsonify({"error": "No data provided"}), 400
+            required_fields = ['name', 'phoneNumber', 'email', 'address', 'employeeType', 'salary', 'username', 'startTime', 'endTime']
+            if not all(field in data for field in required_fields):
+                return jsonify({"error": "Missing required fields"}), 400
+            # Check if email already exists (excluding current)
+            current_emp = worker_collection.find_one({'_id': emp_id})
+            if not current_emp:
+                return jsonify({"error": "Employee not found"}), 404
+            existing_worker = worker_collection.find_one({"email": data['email'], "_id": {"$ne": emp_id}})
+            existing_user = users_collection.find_one({"email": data['email']})
+            if (existing_worker and existing_worker['_id'] != emp_id) or (existing_user and existing_user['email'] != current_emp.get('email')):
+                return jsonify({"error": "Email already exists"}), 400
+            # Validate dateOfBirth if provided
+            date_of_birth = data.get('dateOfBirth', current_emp.get('dateOfBirth', ''))
+            if date_of_birth and date_of_birth != current_emp.get('dateOfBirth', ''):
+                try:
+                    datetime.fromisoformat(date_of_birth)
+                except ValueError:
+                    return jsonify({"error": "Invalid Date of Birth format. Use YYYY-MM-DD."}), 400
+            update_data = {
+                '$set': {
+                    'name': data['name'],
+                    'phoneNumber': data['phoneNumber'],
+                    'email': data['email'],
+                    'address': data['address'],
+                    'employeeType': data['employeeType'],
+                    'salary': float(data['salary']),
+                    'username': data['username'],
+                    'startTime': data['startTime'],
+                    'endTime': data['endTime'],
+                    'gender': data.get('gender', current_emp.get('gender', '')),
+                    'dateOfBirth': date_of_birth,
+                    'bankName': data.get('bankName', current_emp.get('bankName', '')),
+                    'accountHolderName': data.get('accountHolderName', current_emp.get('accountHolderName', '')),
+                    'accountNumber': data.get('accountNumber', current_emp.get('accountNumber', '')),
+                    'ifscCode': data.get('ifscCode', current_emp.get('ifscCode', '')),
+                }
+            }
+            if data.get('password') and data['password'].strip():
+                hashed_password = bcrypt.hashpw(data['password'].encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                update_data['$set']['password'] = hashed_password
+            result = worker_collection.update_one({'_id': emp_id}, update_data)
+            if result.modified_count == 0:
+                return jsonify({"error": "Employee not found"}), 404
+            # Update users_collection
+            user_update = {
+                '$set': {
+                    'firstName': data['name'],
+                    'phone_number': data['phoneNumber'],
+                    'role': data['employeeType'],
+                    'username': data['username'],
+                }
+            }
+            if 'password' in update_data['$set']:
+                user_update['$set']['password'] = update_data['$set']['password']
+            # Update user by current email (before change)
+            current_email = current_emp.get('email', data['email'])
+            users_collection.update_one({'email': current_email}, user_update)
+            # If email changed, update user's email too (delete old and insert new)
+            if current_email != data['email']:
+                user_doc = users_collection.find_one({'email': current_email})
+                if user_doc:
+                    users_collection.delete_one({'email': current_email})
+                    user_doc['email'] = data['email']
+                    users_collection.insert_one(user_doc)
+            logger.info(f"Employee updated: {emp_id}")
+            return jsonify({"message": "Employee updated successfully"}), 200
+        except Exception as e:
+            logger.error(f"Error updating employee: {str(e)}")
+            return jsonify({"error": str(e)}), 500
+    elif request.method == 'DELETE':
+        try:
+            emp = worker_collection.find_one({'_id': emp_id})
+            if not emp:
+                return jsonify({"error": "Employee not found"}), 404
+            worker_collection.delete_one({'_id': emp_id})
+            users_collection.delete_one({'email': emp['email']})
+            logger.info(f"Employee deleted: {emp['name']} ({emp['email']})")
+            return jsonify({"message": "Employee deleted successfully"}), 200
+        except Exception as e:
+            logger.error(f"Error deleting employee: {str(e)}")
+            return jsonify({"error": str(e)}), 500
+# FIXED: Updated /api/attendance GET handler to support month + employeeId filtering
+# FIXED: Updated /api/attendance GET handler to support month + employeeId filtering
+# UPDATED: In PUT, now also updates dailySalary if provided
+@app.route('/api/attendance', methods=['GET', 'POST', 'PUT', 'DELETE'])
+@db_required
+def attendance():
+    mode = config.get("mode", "server")
+    if mode == 'client':
+        if request.method == 'GET':
+            server_url = f"http://{config['server_ip']}:8000/api/attendance"
+            params = request.args
+            response = requests.get(server_url, params=params)
+            if response.status_code == 200:
+                return jsonify(response.json()), 200
+            else:
+                return jsonify({"error": "Proxy fetch failed"}), response.status_code
+        elif request.method == 'POST':
+            server_url = f"http://{config['server_ip']}:8000/api/attendance"
+            response = requests.post(server_url, json=request.get_json())
+            if response.status_code in [200, 201]:
+                return jsonify(response.json()), response.status_code
+            else:
+                return jsonify({"error": "Proxy create failed"}), response.status_code
+        elif request.method == 'PUT':
+            server_url = f"http://{config['server_ip']}:8000/api/attendance"
+            response = requests.put(server_url, json=request.get_json())
+            if response.status_code == 200:
+                return jsonify(response.json()), 200
+            else:
+                return jsonify({"error": "Proxy update failed"}), response.status_code
+        elif request.method == 'DELETE':
+            server_url = f"http://{config['server_ip']}:8000/api/attendance"
+            response = requests.delete(server_url, json=request.get_json())
+            if response.status_code == 200:
+                return jsonify(response.json()), 200
+            else:
+                return jsonify({"error": "Proxy delete failed"}), response.status_code
+    if request.method == 'GET':
+        try:
+            # FIXED: Handle month and employeeId params for filtering
+            month = request.args.get('month') # e.g., "2025-11"
+            employee_id = request.args.get('employeeId')
+            date = request.args.get('date') # Backward compat for single date
+            if employee_id and month:
+                # Filter by employeeId exactly, then Python-filter dates by month prefix
+                filter_dict = {"employeeId": employee_id}
+                all_records = attendance_collection.find(filter_dict)
+                records = [r for r in all_records if r.get('date', '').startswith(month)]
+                logger.info(f"Filtered {len(records)} attendance records for employee {employee_id} in month {month}")
+            elif employee_id:
+                # All records for employee (no month filter)
+                records = attendance_collection.find({"employeeId": employee_id})
+            elif month:
+                # All records in month (no employee filter) - fetch all and filter
+                all_records = attendance_collection.find()
+                records = [r for r in all_records if r.get('date', '').startswith(month)]
+            else:
+                # Fallback: Single exact date (backward compat)
+                date = date or datetime.now(ZoneInfo("UTC")).date().isoformat()
+                filter_date = {"date": date}
+                records = attendance_collection.find(filter_date)
+            converted_records = [convert_objectid_to_str(rec) for rec in records]
+            return jsonify(converted_records), 200
+        except Exception as e:
+            logger.error(f"Error fetching attendance: {str(e)}")
+            return jsonify({"error": str(e)}), 500
+    elif request.method == 'POST':
+        try:
+            data = request.get_json()
+            if not isinstance(data, dict):
+                return jsonify({"error": "JSON data must be an object"}), 400
+            required_fields = ['employeeId', 'date', 'status']
+            if not all(field in data for field in required_fields):
+                return jsonify({"error": "Missing required fields: employeeId, date, status"}), 400
+            # Check if record exists for this employee and date
+            existing = attendance_collection.find_one({"employeeId": data['employeeId'], "date": data['date']})
+            if existing:
+                return jsonify({"error": "Attendance already marked for this employee and date"}), 400
+            new_record = {
+                "_id": str(uuid.uuid4()),
+                "employeeId": data['employeeId'],
+                "employeeName": data.get('employeeName', ''),
+                "date": data['date'],
+                "status": data['status'], # 'Full Day' or 'Off Day'
+                "startTime": data.get('startTime', ''),
+                "endTime": data.get('endTime', ''),
+                "dailySalary": float(data.get('dailySalary', 0)), # One-day salary
+                "timeIn": data.get('timeIn', datetime.now(ZoneInfo("UTC")).isoformat()),
+                "timeOut": data.get('timeOut', ''),
+                "notes": data.get('notes', ''),
+                "created_at": datetime.now(ZoneInfo("UTC")).isoformat()
+            }
+            attendance_collection.insert_one(new_record)
+            logger.info(f"Attendance marked for {data['employeeName']} ({data['status']}) on {data['date']}")
+            return jsonify({"message": "Attendance marked successfully", "record": new_record}), 201
+        except Exception as e:
+            logger.error(f"Error marking attendance: {str(e)}")
+            return jsonify({"error": str(e)}), 500
+    elif request.method == 'PUT':
+        try:
+            data = request.get_json()
+            if not isinstance(data, dict):
+                return jsonify({"error": "JSON data must be an object"}), 400
+            required_fields = ['_id', 'status']
+            if not all(field in data for field in required_fields):
+                return jsonify({"error": "Missing required fields: _id, status"}), 400
+            update_data = {"$set": {"status": data['status'], "updated_at": datetime.now(ZoneInfo("UTC")).isoformat()}}
+            if 'notes' in data:
+                update_data["$set"]["notes"] = data['notes']
+            if 'dailySalary' in data:
+                update_data["$set"]["dailySalary"] = float(data['dailySalary'])
+            result = attendance_collection.update_one({"_id": data['_id']}, update_data)
+            if result.modified_count == 0:
+                return jsonify({"error": "Attendance record not found"}), 404
+            logger.info(f"Attendance updated for record {data['_id']}")
+            return jsonify({"message": "Attendance updated successfully"}), 200
+        except Exception as e:
+            logger.error(f"Error updating attendance: {str(e)}")
+            return jsonify({"error": str(e)}), 500
+    elif request.method == 'DELETE':
+        try:
+            data = request.get_json()
+            if not isinstance(data, dict) or '_id' not in data:
+                return jsonify({"error": "Missing _id in request body"}), 400
+            result = attendance_collection.delete_one({"_id": data['_id']})
+            if result.deleted_count == 0:
+                return jsonify({"error": "Attendance record not found"}), 404
+            logger.info(f"Attendance deleted for record {data['_id']}")
+            return jsonify({"message": "Attendance deleted successfully"}), 200
+        except Exception as e:
+            logger.error(f"Error deleting attendance: {str(e)}")
+            return jsonify({"error": str(e)}), 500
+
+@app.route('/api/working-days', methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
+@db_required
+def working_days_handler():
+    if request.method == 'OPTIONS':
+        response = jsonify({"success": True})
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response, 200
+    if request.method == 'GET':
+        try:
+            year = request.args.get('year')
+            month = request.args.get('month')
+            if not year:
+                return jsonify({"error": "Year is required"}), 400
+            year_str = str(year)
+            holidays = []
+            if month:
+                # Fetch for specific month
+                month_str = str(month)
+                doc = working_days_collection.find_one({"year": year_str, "month": month_str})
+                holidays = doc.get("holidays", []) if doc else []
+                total_working_days = doc.get("totalWorkingDays", 0) if doc else 0
+                return jsonify({"holidays": holidays, "totalWorkingDays": total_working_days}), 200
+            else:
+                # Fetch all holidays for the year (aggregate across months)
+                cursor = working_days_collection.find({"year": year_str})
+                for doc in cursor:
+                    holidays.extend(doc.get("holidays", []))
+                return jsonify({"holidays": holidays}), 200
+        except Exception as e:
+            logger.error(f"Error fetching working days: {str(e)}")
+            return jsonify({"error": str(e)}), 500
+    elif request.method == 'POST':
+        try:
+            data = request.get_json()
+            year = str(data.get('year')) # Ensure string
+            month = str(data.get('month')) # Ensure string, padded already in frontend
+            holidays = data.get('holidays', [])
+            total_working_days = data.get('totalWorkingDays')
+            if not year or not month:
+                return jsonify({"error": "Year and month are required"}), 400
+            doc = {
+                "year": year,
+                "month": month,
+                "holidays": holidays,
+                "totalWorkingDays": total_working_days,
+                "updated_at": datetime.now(ZoneInfo("UTC")).isoformat()
+            }
+            # Use replace_one with upsert to update or insert
+            result = working_days_collection.replace_one(
+                {"year": year, "month": month},
+                doc,
+                upsert=True
+            )
+            # FIXED: Use matched_count to check if new insert or update (avoids upserted_id attribute error in older PyMongo versions)
+            if result.matched_count == 0:
+                logger.info(f"New working days document inserted for {year}-{month}")
+            else:
+                logger.info(f"Working days updated for {year}-{month}")
+            return jsonify({"message": "Working days saved successfully"}), 200
+        except Exception as e:
+            logger.error(f"Error saving working days: {str(e)}")
+            return jsonify({"error": str(e)}), 500
+    elif request.method == 'PUT':
+        # Optional: For partial updates, e.g., update specific holidays
+        try:
+            data = request.get_json()
+            year = str(data.get('year'))
+            month = str(data.get('month'))
+            if not year or not month:
+                return jsonify({"error": "Year and month are required"}), 400
+            # Update holidays array
+            result = working_days_collection.update_one(
+                {"year": year, "month": month},
+                {"$set": {"holidays": data.get('holidays', []), "updated_at": datetime.now(ZoneInfo("UTC")).isoformat()}}
+            )
+            if result.modified_count > 0:
+                return jsonify({"message": "Working days updated successfully"}), 200
+            return jsonify({"message": "No changes made"}), 200
+        except Exception as e:
+            logger.error(f"Error updating working days: {str(e)}")
+            return jsonify({"error": str(e)}), 500
+    elif request.method == 'DELETE':
+        # Optional: Delete for a specific year-month
+        try:
+            year = request.args.get('year')
+            month = request.args.get('month')
+            if not year or not month:
+                return jsonify({"error": "Year and month are required"}), 400
+            result = working_days_collection.delete_one({"year": str(year), "month": str(month)})
+            if result.deleted_count > 0:
+                return jsonify({"message": "Working days deleted successfully"}), 200
+            return jsonify({"message": "No document found to delete"}), 200
+        except Exception as e:
+            logger.error(f"Error deleting working days: {str(e)}")
+            return jsonify({"error": str(e)}), 500
+    else:
+        return jsonify({"error": "Method not allowed"}), 405
+
+@app.route('/api/salary-slip', methods=['POST'])
+@db_required
+def salary_slip():
+    mode = config.get("mode", "server")
+    if mode == 'client':
+        server_url = f"http://{config['server_ip']}:8000/api/salary-slip"
+        response = requests.post(server_url, json=request.get_json())
+        if response.status_code in [200, 201]:
+            return jsonify(response.json()), response.status_code
+        else:
+            return jsonify({"error": "Proxy save failed"}), response.status_code
+    
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            if not isinstance(data, dict):
+                return jsonify({"error": "JSON data must be an object"}), 400
+            
+            required_fields = ['employeeId', 'month', 'grossSalary', 'totalSalary', 'netPay']
+            if not all(field in data for field in required_fields):
+                return jsonify({"error": "Missing required fields"}), 400
+            
+            # Fetch employee details including bank info
+            emp = worker_collection.find_one({"_id": data['employeeId']})
+            if not emp:
+                return jsonify({"error": "Employee not found"}), 404
+            
+            new_slip = {
+                "_id": str(uuid.uuid4()),
+                "employeeId": data['employeeId'],
+                "employeeName": emp.get('name', ''),
+                "month": data['month'],
+                "grossSalary": float(data['grossSalary']),
+                "fullCount": data.get('fullCount', 0),
+                "offCount": data.get('offCount', 0),
+                "leaveWithoutPay": data.get('leaveWithoutPay', 0),
+                "absentCount": data.get('absentCount', 0),
+                "paymentDays": data.get('paymentDays', 0),
+                "totalSalary": float(data['totalSalary']),
+                "deductions": float(data.get('deductions', 0)),
+                "netPay": float(data['netPay']),
+                "dailyRate": float(data.get('dailyRate', 0)),
+                "grossPay": float(data.get('grossPay', 0)),
+                "grossYearToDate": float(data.get('grossYearToDate', 0)),
+                "totalDeductions": float(data.get('totalDeductions', 0)),
+                "employeeType": emp.get('employeeType', ''),
+                "employeeIdCode": emp.get('employeeId', ''),
+                # Bank Details
+                "bankName": emp.get('bankName', ''),
+                "accountHolderName": emp.get('accountHolderName', ''),
+                "accountNumber": emp.get('accountNumber', ''),
+                "ifscCode": emp.get('ifscCode', ''),
+                # Earnings and Deductions arrays
+                "earnings": data.get('earnings', []),
+                "deductions": data.get('deductions', []),
+                "created_at": datetime.now(ZoneInfo("UTC")).isoformat()
+            }
+            
+            if salary_slips_collection is None:
+                logger.error("salary_slips_collection not initialized")
+                return jsonify({"error": "Database not ready"}), 503
+            
+            # Check if slip exists for employee and month
+            existing = salary_slips_collection.find_one({"employeeId": data['employeeId'], "month": data['month']})
+            if existing:
+                return jsonify({"error": "Salary slip already exists for this employee and month"}), 400
+            
+            salary_slips_collection.insert_one(new_slip)
+            logger.info(f"Salary slip saved for {new_slip['employeeName']} - {data['month']}")
+            return jsonify({"message": "Salary slip saved successfully", "slip": new_slip}), 201
+        except Exception as e:
+            logger.error(f"Error saving salary slip: {str(e)}")
+            return jsonify({"error": str(e)}), 500
+# NEW: Endpoint for /api/worker (alias or additional, as per request)
+@app.route('/api/worker', methods=['POST', 'GET'])
+@db_required
+def worker():
+    return add_employee() # Reuse the same logic
+
 
 # Catch-all for React app
 @app.route('/', defaults={'path': ''})
