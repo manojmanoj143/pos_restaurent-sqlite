@@ -161,7 +161,7 @@ const SalesReport = () => {
             language: parsed.language || 'en-IN',
             dateFormat: parsed.dateFormat || 'yyyy-long-mm-dd',
             timeFormat: parsed.timeFormat || 'HH:mm:ss',
-            timeZone: parsed.timeZone || 'Asia/Dubai',
+            timeZone: parsed.dateFormat || 'Asia/Dubai',
           }));
         }
         // Keep default otherwise
@@ -715,7 +715,6 @@ const SalesReport = () => {
   // Filter sales data based on user inputs (apply all set filters) - fixed item match to use name1 for combos
   const filteredSales = salesData.filter((sale) => {
     const saleDate = parseDate(sale.date);
-  
     // Convert filter dates (which are Date objects) to start/end of day for comparison
     const from = fromDate ? new Date(fromDate.setHours(0, 0, 0, 0)) : null;
     const to = toDate ? new Date(toDate.setHours(23, 59, 59, 999)) : null;
@@ -1004,26 +1003,259 @@ const SalesReport = () => {
      setWarningMessage("Excel export is currently unavailable.");
      setWarningType("warning");
   };
-  // Render loading, error, or empty states
-  if (loading || baseUrl === null)
-    return (
-      <Container className="text-center mt-5">
-        <Spinner animation="border" style={{ color: "#3498db" }} />
-        <p>Loading...</p>
-      </Container>
-    );
-  if (error) return <div className="alert alert-danger m-4">{error}</div>;
-  if (salesData.length === 0)
-    return (
-      <div className="text-center mt-5" style={{ color: "#000000" }}>
-        No sales data available.
-      </div>
-    );
   // Helper function to format Date object to "YYYY-MM-DD" for input
   const formatDateForInput = (date) => {
     if (!date) return "";
     return date.toISOString().split('T')[0];
   };
+
+  // UPDATED: Always render the full layout. Handle loading, error, and no data inside the main content.
+  // Render loading, error, or empty states inside the card body instead of early returns
+  const renderMainContent = () => {
+    if (loading || baseUrl === null) {
+      return (
+        <div className="text-center mt-5">
+          <Spinner animation="border" style={{ color: "#3498db" }} />
+          <p>Loading...</p>
+        </div>
+      );
+    }
+    if (error) {
+      return <div className="alert alert-danger m-4">{error}</div>;
+    }
+    const hasData = salesData.length > 0;
+    const hasFilteredData = (!isItemFilter && filteredSales.length > 0) || (isItemFilter && matchingEntries.length > 0);
+    const noDataMessage = hasData ? "No sales match the selected filters." : "No sales data available.";
+    if (!hasFilteredData) {
+      return (
+        <div className="text-center mt-5" style={{ color: "#000000" }}>
+          {noDataMessage}
+        </div>
+      );
+    }
+    // Rest of the table rendering...
+    return (
+      <>
+        <Table
+          responsive
+          striped
+          hover
+          className="sales-table"
+        >
+          <thead
+            className="table-header"
+          >
+            <tr>
+              {isItemFilter ? (
+                <>
+                  <th style={{ textAlign: "left", padding: "12px" }}>
+                    Invoice No
+                  </th>
+                  <th style={{ textAlign: "left", padding: "12px" }}>
+                    Customer
+                  </th>
+                  <th style={{ textAlign: "center", padding: "12px" }}>Date</th>
+                  <th style={{ textAlign: "center", padding: "12px" }}>Time</th>
+                  <th style={{ textAlign: "center", padding: "12px" }}>
+                    Mode of Payment
+                  </th>
+                  <th style={{ textAlign: "left", padding: "12px" }}>
+                    Type
+                  </th>
+                  <th style={{ textAlign: "left", padding: "12px" }}>
+                    Name
+                  </th>
+                  <th style={{ textAlign: "center", padding: "12px" }}>Qty</th>
+                  <th style={{ textAlign: "right", padding: "12px" }}>
+                    Total
+                  </th>
+                </>
+              ) : (
+                <>
+                  <th style={{ textAlign: "left", padding: "12px" }}>
+                    Invoice No
+                  </th>
+                  <th style={{ textAlign: "left", padding: "12px" }}>
+                    Customer
+                  </th>
+                  <th style={{ textAlign: "center", padding: "12px" }}>Date</th>
+                  <th style={{ textAlign: "center", padding: "12px" }}>Time</th>
+                  <th style={{ textAlign: "center", padding: "12px" }}>
+                    Mode of Payment
+                  </th>
+                  <th style={{ textAlign: "right", padding: "12px" }}>
+                    Total
+                  </th>
+                  <th style={{ textAlign: "right", padding: "12px" }}>
+                    VAT
+                  </th>
+                  <th style={{ textAlign: "right", padding: "12px" }}>
+                    Grand Total
+                  </th>
+                </>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {isItemFilter ? (
+              matchingEntries.map((entry, index) => (
+                <tr
+                  key={`${entry.invoice_no}-${entry.name}-${index}`}
+                  className="table-row"
+                >
+                  <td style={{ textAlign: "left", padding: "12px" }}>
+                    {entry.invoice_no}
+                  </td>
+                  <td style={{ textAlign: "left", padding: "12px" }}>
+                    {entry.customer}
+                  </td>
+                  <td style={{ textAlign: "center", padding: "12px" }}>
+                    {entry.date}
+                  </td>
+                  <td style={{ textAlign: "center", padding: "12px" }}>
+                    {entry.time}
+                  </td>
+                  <td style={{ textAlign: "center", padding: "12px" }}>
+                    {entry.paymentMode}
+                  </td>
+                  <td style={{ textAlign: "left", padding: "12px" }}>
+                    {entry.type} {entry.parentItem ? `(from ${entry.parentItem})` : ''}
+                  </td>
+                  <td style={{ textAlign: "left", padding: "12px" }}>
+                    {entry.name}
+                  </td>
+                  <td style={{ textAlign: "center", padding: "12px" }}>
+                    {entry.qty}
+                  </td>
+                  <td style={{ textAlign: "right", padding: "12px" }}>
+                    {formatCurrency(entry.total, entry.sale)}
+                  </td>
+                </tr>
+              ))
+            ) : (
+              filteredSales.map((sale) => {
+                const amounts = getSaleAmounts(sale, isItemFilter, filterItem);
+                return (
+                  <tr
+                    key={sale.invoice_no}
+                    className="table-row"
+                  >
+                    <td style={{ textAlign: "left", padding: "12px" }}>
+                      {sale.invoice_no}
+                    </td>
+                    <td style={{ textAlign: "left", padding: "12px" }}>
+                      {sale.customer || "N/A"}
+                    </td>
+                    <td style={{ textAlign: "center", padding: "12px" }}>
+                      {sale.date}
+                    </td>
+                    <td style={{ textAlign: "center", padding: "12px" }}>
+                      {sale.time}
+                    </td>
+                    <td style={{ textAlign: "center", padding: "12px" }}>
+                      {sale.payments?.[0]?.mode_of_payment || "CASH"}
+                    </td>
+                    <td style={{ textAlign: "right", padding: "12px" }}>
+                      {formatCurrency(amounts.subtotal, sale)}
+                    </td>
+                    <td style={{ textAlign: "right", padding: "12px" }}>
+                      {formatCurrency(amounts.vat, sale)}
+                    </td>
+                    <td style={{ textAlign: "right", padding: "12px" }}>
+                      {formatCurrency(amounts.grand, sale)}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+          <tfoot>
+            {isItemFilter && (
+              <tr>
+                <td
+                  colSpan={isItemFilter ? "8" : "8"}
+                  style={{
+                    textAlign: "left",
+                    padding: "12px",
+                    fontWeight: "bold",
+                    backgroundColor: "#f8f9fa",
+                  }}
+                >
+                  Total Records: {totalRecords}, Total Quantity Sold: {totalQuantity}
+                </td>
+              </tr>
+            )}
+            {Array.from(currencyTotals.entries()).map(([currency, totals]) => (
+              <tr key={currency} className="currency-total-row">
+                <td
+                  colSpan={isItemFilter ? "7" : "5"}
+                  style={{
+                    textAlign: "right",
+                    padding: "12px",
+                    fontWeight: "bold",
+                    backgroundColor: "#e9ecef",
+                  }}
+                >
+                  {currency} Grand Total:
+                </td>
+                <td
+                  style={{
+                    textAlign: "right",
+                    padding: "12px",
+                    fontWeight: "bold",
+                    backgroundColor: "#e9ecef",
+                  }}
+                >
+                  {getCurrencyFormatter(currency, totals.precision).format(totals.subtotal)}
+                </td>
+                <td
+                  style={{
+                    textAlign: "right",
+                    padding: "12px",
+                    fontWeight: "bold",
+                    backgroundColor: "#e9ecef",
+                  }}
+                >
+                  {getCurrencyFormatter(currency, totals.precision).format(totals.vat)}
+                </td>
+                <td
+                  style={{
+                    textAlign: "right",
+                    padding: "12px",
+                    fontWeight: "bold",
+                    backgroundColor: "#e9ecef",
+                  }}
+                >
+                  {getCurrencyFormatter(currency, totals.precision).format(totals.grand)}
+                </td>
+              </tr>
+            ))}
+          </tfoot>
+        </Table>
+        {isItemFilter && (
+          <div className="summary mt-3 p-3 bg-light rounded">
+            <h5 className="text-primary">Item Summary</h5>
+            <div className="row">
+              <div className="col-md-3">
+                <strong>Total Records:</strong> {totalRecords}
+              </div>
+              <div className="col-md-3">
+                <strong>Total Quantity Sold:</strong> {totalQuantity}
+              </div>
+            </div>
+            <div className="row mt-2">
+              {Array.from(currencyTotals.entries()).map(([currency, totals]) => (
+                <div key={currency} className="col-md-4 mb-2">
+                  <strong>{currency}:</strong> Subtotal {getCurrencyFormatter(currency, totals.precision).format(totals.subtotal)}, VAT {getCurrencyFormatter(currency, totals.precision).format(totals.vat)}, Grand Total {getCurrencyFormatter(currency, totals.precision).format(totals.grand)}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </>
+    );
+  };
+
   return (
     <>
       {/* Inline styles to replace ./salesreport.css */}
@@ -1098,7 +1330,7 @@ const SalesReport = () => {
           </div>
         )}
         <Row>
-          {/* Sidebar for Filters */}
+          {/* Sidebar for Filters - ALWAYS SHOWN */}
           <Col
             md={3}
             className="sidebar"
@@ -1295,7 +1527,7 @@ const SalesReport = () => {
               </Card.Body>
             </Card>
           </Col>
-          {/* Main Content */}
+          {/* Main Content - ALWAYS SHOWN WITH RENDERED CONTENT */}
           <Col md={9} style={{ padding: "20px" }}>
             <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
               <Button
@@ -1354,230 +1586,7 @@ const SalesReport = () => {
                     ? `Year-wise Sales Report: ${filterYear}`
                     : "All Sales Report"}
                 </Card.Title>
-                {(!isItemFilter && filteredSales.length === 0) || (isItemFilter && matchingEntries.length === 0) ? (
-                  <div className="text-center" style={{ color: "#000000" }}>
-                    No sales match the selected filters.
-                  </div>
-                ) : (
-                  <>
-                    <Table
-                      responsive
-                      striped
-                      hover
-                      className="sales-table"
-                    >
-                      <thead
-                        className="table-header"
-                      >
-                        <tr>
-                          {isItemFilter ? (
-                            <>
-                              <th style={{ textAlign: "left", padding: "12px" }}>
-                                Invoice No
-                              </th>
-                              <th style={{ textAlign: "left", padding: "12px" }}>
-                                Customer
-                              </th>
-                              <th style={{ textAlign: "center", padding: "12px" }}>Date</th>
-                              <th style={{ textAlign: "center", padding: "12px" }}>Time</th>
-                              <th style={{ textAlign: "center", padding: "12px" }}>
-                                Mode of Payment
-                              </th>
-                              <th style={{ textAlign: "left", padding: "12px" }}>
-                                Type
-                              </th>
-                              <th style={{ textAlign: "left", padding: "12px" }}>
-                                Name
-                              </th>
-                              <th style={{ textAlign: "center", padding: "12px" }}>Qty</th>
-                              <th style={{ textAlign: "right", padding: "12px" }}>
-                                Total
-                              </th>
-                            </>
-                          ) : (
-                            <>
-                              <th style={{ textAlign: "left", padding: "12px" }}>
-                                Invoice No
-                              </th>
-                              <th style={{ textAlign: "left", padding: "12px" }}>
-                                Customer
-                              </th>
-                              <th style={{ textAlign: "center", padding: "12px" }}>Date</th>
-                              <th style={{ textAlign: "center", padding: "12px" }}>Time</th>
-                              <th style={{ textAlign: "center", padding: "12px" }}>
-                                Mode of Payment
-                              </th>
-                              <th style={{ textAlign: "right", padding: "12px" }}>
-                                Total
-                              </th>
-                              <th style={{ textAlign: "right", padding: "12px" }}>
-                                VAT
-                              </th>
-                              <th style={{ textAlign: "right", padding: "12px" }}>
-                                Grand Total
-                              </th>
-                            </>
-                          )}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {isItemFilter ? (
-                          matchingEntries.map((entry, index) => (
-                            <tr
-                              key={`${entry.invoice_no}-${entry.name}-${index}`}
-                              className="table-row"
-                            >
-                              <td style={{ textAlign: "left", padding: "12px" }}>
-                                {entry.invoice_no}
-                              </td>
-                              <td style={{ textAlign: "left", padding: "12px" }}>
-                                {entry.customer}
-                              </td>
-                              <td style={{ textAlign: "center", padding: "12px" }}>
-                                {entry.date}
-                              </td>
-                              <td style={{ textAlign: "center", padding: "12px" }}>
-                                {entry.time}
-                              </td>
-                              <td style={{ textAlign: "center", padding: "12px" }}>
-                                {entry.paymentMode}
-                              </td>
-                              <td style={{ textAlign: "left", padding: "12px" }}>
-                                {entry.type} {entry.parentItem ? `(from ${entry.parentItem})` : ''}
-                              </td>
-                              <td style={{ textAlign: "left", padding: "12px" }}>
-                                {entry.name}
-                              </td>
-                              <td style={{ textAlign: "center", padding: "12px" }}>
-                                {entry.qty}
-                              </td>
-                              <td style={{ textAlign: "right", padding: "12px" }}>
-                                {formatCurrency(entry.total, entry.sale)}
-                              </td>
-                            </tr>
-                          ))
-                        ) : (
-                          filteredSales.map((sale) => {
-                            const amounts = getSaleAmounts(sale, isItemFilter, filterItem);
-                            return (
-                              <tr
-                                key={sale.invoice_no}
-                                className="table-row"
-                              >
-                                <td style={{ textAlign: "left", padding: "12px" }}>
-                                  {sale.invoice_no}
-                                </td>
-                                <td style={{ textAlign: "left", padding: "12px" }}>
-                                  {sale.customer || "N/A"}
-                                </td>
-                                <td style={{ textAlign: "center", padding: "12px" }}>
-                                  {sale.date}
-                                </td>
-                                <td style={{ textAlign: "center", padding: "12px" }}>
-                                  {sale.time}
-                                </td>
-                                <td style={{ textAlign: "center", padding: "12px" }}>
-                                  {sale.payments?.[0]?.mode_of_payment || "CASH"}
-                                </td>
-                                <td style={{ textAlign: "right", padding: "12px" }}>
-                                  {formatCurrency(amounts.subtotal, sale)}
-                                </td>
-                                <td style={{ textAlign: "right", padding: "12px" }}>
-                                  {formatCurrency(amounts.vat, sale)}
-                                </td>
-                                <td style={{ textAlign: "right", padding: "12px" }}>
-                                  {formatCurrency(amounts.grand, sale)}
-                                </td>
-                              </tr>
-                            );
-                          })
-                        )}
-                      </tbody>
-                      <tfoot>
-                        {isItemFilter && (
-                          <tr>
-                            <td
-                              colSpan={isItemFilter ? "8" : "8"}
-                              style={{
-                                textAlign: "left",
-                                padding: "12px",
-                                fontWeight: "bold",
-                                backgroundColor: "#f8f9fa",
-                              }}
-                            >
-                              Total Records: {totalRecords}, Total Quantity Sold: {totalQuantity}
-                            </td>
-                          </tr>
-                        )}
-                        {Array.from(currencyTotals.entries()).map(([currency, totals]) => (
-                          <tr key={currency} className="currency-total-row">
-                            <td
-                              colSpan={isItemFilter ? "7" : "5"}
-                              style={{
-                                textAlign: "right",
-                                padding: "12px",
-                                fontWeight: "bold",
-                                backgroundColor: "#e9ecef",
-                              }}
-                            >
-                              {currency} Grand Total:
-                            </td>
-                            <td
-                              style={{
-                                textAlign: "right",
-                                padding: "12px",
-                                fontWeight: "bold",
-                                backgroundColor: "#e9ecef",
-                              }}
-                            >
-                              {getCurrencyFormatter(currency, totals.precision).format(totals.subtotal)}
-                            </td>
-                            <td
-                              style={{
-                                textAlign: "right",
-                                padding: "12px",
-                                fontWeight: "bold",
-                                backgroundColor: "#e9ecef",
-                              }}
-                            >
-                              {getCurrencyFormatter(currency, totals.precision).format(totals.vat)}
-                            </td>
-                            <td
-                              style={{
-                                textAlign: "right",
-                                padding: "12px",
-                                fontWeight: "bold",
-                                backgroundColor: "#e9ecef",
-                              }}
-                            >
-                              {getCurrencyFormatter(currency, totals.precision).format(totals.grand)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tfoot>
-                    </Table>
-                    {isItemFilter && (
-                      <div className="summary mt-3 p-3 bg-light rounded">
-                        <h5 className="text-primary">Item Summary</h5>
-                        <div className="row">
-                          <div className="col-md-3">
-                            <strong>Total Records:</strong> {totalRecords}
-                          </div>
-                          <div className="col-md-3">
-                            <strong>Total Quantity Sold:</strong> {totalQuantity}
-                          </div>
-                        </div>
-                        <div className="row mt-2">
-                          {Array.from(currencyTotals.entries()).map(([currency, totals]) => (
-                            <div key={currency} className="col-md-4 mb-2">
-                              <strong>{currency}:</strong> Subtotal {getCurrencyFormatter(currency, totals.precision).format(totals.subtotal)}, VAT {getCurrencyFormatter(currency, totals.precision).format(totals.vat)}, Grand Total {getCurrencyFormatter(currency, totals.precision).format(totals.grand)}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
+                {renderMainContent()}
               </Card.Body>
             </Card>
           </Col>

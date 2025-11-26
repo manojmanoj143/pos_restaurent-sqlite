@@ -298,8 +298,7 @@ function AdminPage() {
       children: [
         { icon: <FaBuilding />, text: 'Company Details', path: '/company-details' },
         { icon: <FaPrint />, text: 'Print Settings', path: '/print-settings' },
-        { icon: <FaEnvelope />, text: 'Email Settings', path: '/email-settings' },
-        { icon: <FaMoneyBill />, text: 'Vat', path: '/vat' }, // MOVED: Vat added to Settings
+        { icon: <FaEnvelope />, text: 'Email Settings', path: '/email-settings' },       
         { icon: <FaDatabase />, text: 'Backups', path: '/backup' },
         { icon: <FaCog />, text: 'System Settings', path: '/system-settings' }, // MOVED: System Settings added here
       ],

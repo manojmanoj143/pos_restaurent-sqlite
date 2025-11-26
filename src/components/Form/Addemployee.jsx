@@ -1,4 +1,5 @@
-// src/components/Form/Addemployee.jsx (updated: Added Gender, Date of Birth in Personal Details; Added Bank Details in Salary tab; Employee ID generated in backend; Fixed tab content height consistency; Added Schedule tab with employee time assignment within company operating hours; Ensured startTime and endTime are saved and fetched correctly)
+// src/components/Form/Addemployee.jsx (updated: Added Gender, Date of Birth in Personal Details; Added Bank Details in Salary tab; Employee ID generated in backend; Fixed tab content height consistency; Added Schedule tab with employee time assignment within company operating hours; Ensured startTime and endTime are saved and fetched correctly; Back button moved to top-right corner of the page as a floating button)
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
@@ -30,7 +31,7 @@ const AddEmployee = () => {
   const [companyDetails, setCompanyDetails] = useState(null);
   const [showCreateType, setShowCreateType] = useState(false);
   const [showTypesModal, setShowTypesModal] = useState(false);
-  const [deletingType, setDeletingType] = useState(null); // Track if deleting type
+  const [deletingType, setDeletingType] = useState(null);
   const [editingTypeId, setEditingTypeId] = useState(null);
   const [editTypeName, setEditTypeName] = useState('');
   const [loading, setLoading] = useState(false);
@@ -49,25 +50,24 @@ const AddEmployee = () => {
         if (appConfig.mode === "client") {
           setBaseUrl(`http://${appConfig.server_ip}:8000`);
         } else {
-          setBaseUrl(''); // Relative URLs for server mode
+          setBaseUrl('');
         }
       } catch (error) {
         console.error("Failed to fetch config:", error);
-        // Fallback to current origin for robustness
         setBaseUrl(window.location.origin || '');
       }
     };
     fetchConfig();
   }, []);
 
-  // Handle editing from navigation state (from EmployeeList)
+  // Handle editing from navigation state
   useEffect(() => {
     if (location.state?.editingEmployee) {
       const emp = location.state.editingEmployee;
       setEditingId(emp._id);
       setFormData({
         ...emp,
-        password: '', // Clear password for security
+        password: '',
       });
     }
   }, [location.state]);
@@ -107,11 +107,7 @@ const AddEmployee = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    // Clear error when user starts typing
+    setFormData(prev => ({ ...prev, [name]: value }));
     if (error) setError('');
   };
 
@@ -179,10 +175,8 @@ const AddEmployee = () => {
 
   const handleDeleteType = (typeId) => {
     setDeletingType('type');
-    setEditingTypeId(typeId); // Use editingTypeId temporarily for delete ID
-    setShowTypesModal(false); // Close modal temporarily
-    // Note: No separate confirm modal for type delete; handle directly or adjust as needed
-    // For now, assuming direct delete; if confirm needed, add state
+    setEditingTypeId(typeId);
+    setShowTypesModal(false);
     confirmDeleteType();
   };
 
@@ -199,7 +193,7 @@ const AddEmployee = () => {
     } finally {
       setEditingTypeId(null);
       setDeletingType(null);
-      setShowTypesModal(true); // Reopen modal
+      setShowTypesModal(true);
       setLoading(false);
     }
   };
@@ -210,7 +204,6 @@ const AddEmployee = () => {
       setError('Server configuration not available. Please check your connection.');
       return;
     }
-    // Basic validation
     if (!formData.name || !formData.phoneNumber || !formData.email || !formData.address ||
         !formData.employeeType || !formData.salary || !formData.username || (!formData.password && !editingId) ||
         !formData.startTime || !formData.endTime) {
@@ -221,7 +214,6 @@ const AddEmployee = () => {
       setError('Salary must be a valid positive number.');
       return;
     }
-    // Schedule validation
     if (companyDetails && formData.startTime && formData.endTime) {
       const openingTime = companyDetails.openingTime;
       const closingTime = companyDetails.closingTime;
@@ -242,58 +234,30 @@ const AddEmployee = () => {
       if (editingId) {
         url += `/${editingId}`;
         method = 'put';
-        // If password is empty, remove it from dataToSend
         if (!dataToSend.password) {
           delete dataToSend.password;
         }
       }
-      console.log('Sending request to', url, 'with method:', method, 'data:', dataToSend);
       const response = await axios({
         method,
         url,
         data: dataToSend,
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       });
-      console.log('Employee operation successful. Response:', response.data);
       setMessage(editingId ? 'Employee updated successfully!' : 'Employee created successfully!');
-      // Reset form
       setFormData({
-        name: '',
-        phoneNumber: '',
-        gender: '',
-        dateOfBirth: '',
-        email: '',
-        address: '',
-        employeeType: '',
-        bankName: '',
-        accountHolderName: '',
-        accountNumber: '',
-        ifscCode: '',
-        salary: '',
-        username: '',
-        password: '',
-        startTime: '',
-        endTime: '',
+        name: '', phoneNumber: '', gender: '', dateOfBirth: '', email: '', address: '', employeeType: '',
+        bankName: '', accountHolderName: '', accountNumber: '', ifscCode: '', salary: '', username: '', password: '',
+        startTime: '', endTime: '',
       });
       setEditingId(null);
-      // Refetch types and company details
       await fetchEmployeeTypes();
       await fetchCompanyDetails();
-      // Optionally navigate back after a delay
       if (!editingId) {
-        setTimeout(() => {
-          navigate('/employee-list'); // Optionally change to employee list if desired; currently to ''
-        }, 2000);
+        setTimeout(() => { navigate('/employee-list'); }, 2000);
       }
     } catch (err) {
-      console.error('Employee operation failed:', err);
-      setError(
-        err.response?.data?.error ||
-        `Failed to ${editingId ? 'update' : 'create'} employee: ${err.response?.status || 'Unknown'} - ${err.response?.statusText || err.message}`
-      );
+      setError(err.response?.data?.error || `Failed to ${editingId ? 'update' : 'create'} employee`);
     } finally {
       setLoading(false);
     }
@@ -302,22 +266,9 @@ const AddEmployee = () => {
   const cancelEdit = () => {
     setEditingId(null);
     setFormData({
-      name: '',
-      phoneNumber: '',
-      gender: '',
-      dateOfBirth: '',
-      email: '',
-      address: '',
-      employeeType: '',
-      bankName: '',
-      accountHolderName: '',
-      accountNumber: '',
-      ifscCode: '',
-      salary: '',
-      username: '',
-      password: '',
-      startTime: '',
-      endTime: '',
+      name: '', phoneNumber: '', gender: '', dateOfBirth: '', email: '', address: '', employeeType: '',
+      bankName: '', accountHolderName: '', accountNumber: '', ifscCode: '', salary: '', username: '', password: '',
+      startTime: '', endTime: '',
     });
     setActiveTab('details');
   };
@@ -328,7 +279,7 @@ const AddEmployee = () => {
     }
   };
 
-  const TabButton = ({ tabKey, label, onClick, icon }) => (
+  const TabButton = ({ tabKey, label, icon }) => (
     <button
       type="button"
       onClick={() => setActiveTab(tabKey)}
@@ -361,39 +312,71 @@ const AddEmployee = () => {
       justifyContent: 'center',
       alignItems: 'center'
     }}>
+      {/* Floating Back Button - Top Right Corner of Page */}
+      <button
+        onClick={() => navigate('/admin')}
+        disabled={loading}
+        style={{
+          position: 'fixed',
+          top: '20px',
+          left: '20px',
+          zIndex: 1500,
+          backgroundColor: '#ffffff',
+          border: '1px solid #ddd',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          borderRadius: '30px',
+          padding: '12px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          color: '#3498db',
+          fontSize: '1rem',
+          fontWeight: '600',
+          cursor: loading ? 'not-allowed' : 'pointer',
+          transition: 'all 0.3s ease',
+          opacity: loading ? 0.7 : 1,
+        }}
+        onMouseOver={(e) => !loading && (
+          e.target.style.backgroundColor = '#f5faff',
+          e.target.style.transform = 'translateY(-2px)',
+          e.target.style.boxShadow = '0 8px 25px rgba(0,0,0,0.2)'
+        )}
+        onMouseOut={(e) => !loading && (
+          e.target.style.backgroundColor = '#ffffff',
+          e.target.style.transform = 'none',
+          e.target.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)'
+        )}
+      >
+        <FaArrowLeft style={{ fontSize: '1.2rem' }} />
+        Back to Admin
+      </button>
+
       <div style={{
         width: '100%',
         maxWidth: '600px',
-        minHeight: '700px', // Fixed min-height to prevent box resizing on tab switch
+        minHeight: '700px',
         backgroundColor: '#fff',
         padding: '30px',
         borderRadius: '15px',
         boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
         position: 'relative'
       }}>
-        {/* Header with Back, Title, and Create/Update Button */}
+        {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <button
-            onClick={() => navigate('/admin')}
-            style={{
-              backgroundColor: 'transparent',
-              border: 'none',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '5px',
-              color: '#3498db',
-              fontSize: '1rem',
-              padding: '5px',
-              borderRadius: '5px',
-              transition: 'background-color 0.3s'
-            }}
-            onMouseOver={(e) => (e.target.style.backgroundColor = '#e6f3fa')}
-            onMouseOut={(e) => (e.target.style.backgroundColor = 'transparent')}
-            disabled={loading}
-          >
+          {/* Dummy spacing (invisible back button) */}
+          <div style={{
+            visibility: 'hidden',
+            pointerEvents: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+            color: '#3498db',
+            fontSize: '1rem',
+            padding: '5px',
+          }}>
             <FaArrowLeft /> Back to Admin
-          </button>
+          </div>
+
           <h2 style={{
             color: '#2c3e50',
             margin: 0,
@@ -403,6 +386,7 @@ const AddEmployee = () => {
             <FaUserTie style={{ marginRight: '10px', color: '#3498db' }} />
             {editingId ? 'Edit Employee' : 'Add New Employee'}
           </h2>
+
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
             {editingId && (
               <button
@@ -450,6 +434,7 @@ const AddEmployee = () => {
             </button>
           </div>
         </div>
+
         {error && (
           <div style={{
             backgroundColor: '#ffebee',
@@ -476,373 +461,102 @@ const AddEmployee = () => {
             {message}
           </div>
         )}
+
         <form id="employeeForm" onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px', height: '100%' }}>
           {/* Tab Navigation */}
           <div style={{ display: 'flex', gap: '5px', marginBottom: '20px', borderBottom: '2px solid #bdc3c7' }}>
-            <TabButton tabKey="details" label="Details" onClick={() => {}} />
-            <TabButton tabKey="salary" label="Salary" onClick={() => {}} />
-            <TabButton tabKey="schedule" label="Schedule" icon={<FaClock />} onClick={() => {}} />
-            <TabButton tabKey="credentials" label="Credentials" onClick={() => {}} />
+            <TabButton tabKey="details" label="Details" />
+            <TabButton tabKey="salary" label="Salary" />
+            <TabButton tabKey="schedule" label="Schedule" icon={<FaClock />} />
+            <TabButton tabKey="credentials" label="Credentials" />
           </div>
-          {/* Tab Content - Fixed height to prevent resizing */}
+
+          {/* Tab Content */}
           <div style={{ flex: 1, minHeight: '500px', display: 'flex', flexDirection: 'column' }}>
             {activeTab === 'details' && (
               <>
-                {/* Personal Details Section */}
+                {/* Personal Details */}
                 <div style={{ border: '1px solid #bdc3c7', borderRadius: '10px', padding: '20px', marginBottom: '15px' }}>
                   <h3 style={{ color: '#2c3e50', marginBottom: '15px', fontSize: '1.2rem' }}>Personal Details</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                    <input
-                      type="text"
-                      name="name"
-                      placeholder="Full Name *"
-                      value={formData.name}
-                      onChange={handleChange}
-                      style={{
-                        padding: '12px',
-                        border: '1px solid #bdc3c7',
-                        borderRadius: '8px',
-                        fontSize: '1rem',
-                        outline: 'none',
-                        transition: 'border-color 0.3s'
-                      }}
-                      onFocus={(e) => (e.target.style.borderColor = '#3498db')}
-                      onBlur={(e) => (e.target.style.borderColor = '#bdc3c7')}
-                      required
-                    />
-                    <input
-                      type="tel"
-                      name="phoneNumber"
-                      placeholder="Phone Number *"
-                      value={formData.phoneNumber}
-                      onChange={handleChange}
-                      style={{
-                        padding: '12px',
-                        border: '1px solid #bdc3c7',
-                        borderRadius: '8px',
-                        fontSize: '1rem',
-                        outline: 'none',
-                        transition: 'border-color 0.3s'
-                      }}
-                      onFocus={(e) => (e.target.style.borderColor = '#3498db')}
-                      onBlur={(e) => (e.target.style.borderColor = '#bdc3c7')}
-                      required
-                    />
+                    <input type="text" name="name" placeholder="Full Name *" value={formData.name} onChange={handleChange} required style={{padding:'12px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',transition:'border-color 0.3s'}} onFocus={e=>e.target.style.borderColor='#3498db'} onBlur={e=>e.target.style.borderColor='#bdc3c7'} />
+                    <input type="tel" name="phoneNumber" placeholder="Phone Number *" value={formData.phoneNumber} onChange={handleChange} required style={{padding:'12px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',transition:'border-color 0.3s'}} onFocus={e=>e.target.style.borderColor='#3498db'} onBlur={e=>e.target.style.borderColor='#bdc3c7'} />
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginTop: '10px' }}>
-                    <select
-                      name="gender"
-                      value={formData.gender}
-                      onChange={handleChange}
-                      style={{
-                        padding: '12px',
-                        border: '1px solid #bdc3c7',
-                        borderRadius: '8px',
-                        fontSize: '1rem',
-                        outline: 'none',
-                        backgroundColor: '#fff',
-                        transition: 'border-color 0.3s'
-                      }}
-                      onFocus={(e) => (e.target.style.borderColor = '#3498db')}
-                      onBlur={(e) => (e.target.style.borderColor = '#bdc3c7')}
-                    >
+                    <select name="gender" value={formData.gender} onChange={handleChange} style={{padding:'12px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',backgroundColor:'#fff',transition:'border-color 0.3s'}} onFocus={e=>e.target.style.borderColor='#3498db'} onBlur={e=>e.target.style.borderColor='#bdc3c7'}>
                       <option value="">Select Gender</option>
                       <option value="Male">Male</option>
                       <option value="Female">Female</option>
                       <option value="Other">Other</option>
                     </select>
-                    <input
-                      type="date"
-                      name="dateOfBirth"
-                      value={formData.dateOfBirth}
-                      onChange={handleChange}
-                      style={{
-                        padding: '12px',
-                        border: '1px solid #bdc3c7',
-                        borderRadius: '8px',
-                        fontSize: '1rem',
-                        outline: 'none',
-                        transition: 'border-color 0.3s'
-                      }}
-                      onFocus={(e) => (e.target.style.borderColor = '#3498db')}
-                      onBlur={(e) => (e.target.style.borderColor = '#bdc3c7')}
-                    />
+                    <input type="date" name="dateOfBirth" value={formData.dateOfBirth} onChange={handleChange} style={{padding:'12px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',transition:'border-color 0.3s'}} onFocus={e=>e.target.style.borderColor='#3498db'} onBlur={e=>e.target.style.borderColor='#bdc3c7'} />
                   </div>
-                  <input
-                    type="email"
-                    name="email"
-                    placeholder="Email *"
-                    value={formData.email}
-                    onChange={handleChange}
-                    style={{
-                      width: '100%',
-                      padding: '12px',
-                      marginTop: '10px',
-                      border: '1px solid #bdc3c7',
-                      borderRadius: '8px',
-                      fontSize: '1rem',
-                      outline: 'none',
-                      transition: 'border-color 0.3s'
-                    }}
-                    onFocus={(e) => (e.target.style.borderColor = '#3498db')}
-                    onBlur={(e) => (e.target.style.borderColor = '#bdc3c7')}
-                    required
-                  />
-                  <textarea
-                    name="address"
-                    placeholder="Address *"
-                    value={formData.address}
-                    onChange={handleChange}
-                    rows={3}
-                    style={{
-                      width: '100%',
-                      padding: '12px',
-                      marginTop: '10px',
-                      border: '1px solid #bdc3c7',
-                      borderRadius: '8px',
-                      fontSize: '1rem',
-                      outline: 'none',
-                      resize: 'vertical',
-                      transition: 'border-color 0.3s'
-                    }}
-                    onFocus={(e) => (e.target.style.borderColor = '#3498db')}
-                    onBlur={(e) => (e.target.style.borderColor = '#bdc3c7')}
-                    required
-                  />
+                  <input type="email" name="email" placeholder="Email *" value={formData.email} onChange={handleChange} required style={{width:'100%',padding:'12px',marginTop:'10px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',transition:'border-color 0.3s'}} onFocus={e=>e.target.style.borderColor='#3498db'} onBlur={e=>e.target.style.borderColor='#bdc3c7'} />
+                  <textarea name="address" placeholder="Address *" value={formData.address} onChange={handleChange} rows={3} required style={{width:'100%',padding:'12px',marginTop:'10px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',resize:'vertical',transition:'border-color 0.3s'}} onFocus={e=>e.target.style.borderColor='#3498db'} onBlur={e=>e.target.style.borderColor='#bdc3c7'} />
                 </div>
-                {/* Employment Details Section (Only Type) */}
+
+                {/* Employment Details */}
                 <div style={{ border: '1px solid #bdc3c7', borderRadius: '10px', padding: '20px' }}>
                   <h3 style={{ color: '#2c3e50', marginBottom: '15px', fontSize: '1.2rem' }}>Employment Details</h3>
                   <div>
-                    <select
-                      name="employeeType"
-                      value={formData.employeeType}
-                      onChange={handleTypeChange}
-                      style={{
-                        width: '100%',
-                        padding: '12px',
-                        border: '1px solid #bdc3c7',
-                        borderRadius: '8px',
-                        fontSize: '1rem',
-                        outline: 'none',
-                        backgroundColor: '#fff',
-                        transition: 'border-color 0.3s'
-                      }}
-                      onFocus={(e) => (e.target.style.borderColor = '#3498db')}
-                      onBlur={(e) => (e.target.style.borderColor = '#bdc3c7')}
-                      required
-                    >
+                    <select name="employeeType" value={formData.employeeType} onChange={handleTypeChange} required style={{width:'100%',padding:'12px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',backgroundColor:'#fff',transition:'border-color 0.3s'}} onFocus={e=>e.target.style.borderColor='#3498db'} onBlur={e=>e.target.style.borderColor='#bdc3c7'}>
                       <option value="">Select Employee Type *</option>
-                      {employeeTypes.map(type => (
-                        <option key={type.id} value={type.name}>{type.name}</option>
-                      ))}
+                      {employeeTypes.map(type => (<option key={type.id} value={type.name}>{type.name}</option>))}
                       <option value="create_new">+ Create New Employee Type</option>
                     </select>
                     {showCreateType && (
                       <div style={{ marginTop: '10px', display: 'flex', gap: '10px', alignItems: 'center' }}>
-                        <input
-                          type="text"
-                          placeholder="New Type Name"
-                          value={newTypeName}
-                          onChange={(e) => setNewTypeName(e.target.value)}
-                          style={{ flex: 1, padding: '8px', border: '1px solid #bdc3c7', borderRadius: '4px' }}
-                        />
-                        <button
-                          type="button"
-                          onClick={handleCreateNewType}
-                          style={{ padding: '8px 12px', background: '#27ae60', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                          disabled={loading || !newTypeName.trim()}
-                        >
-                          Save
-                        </button>
+                        <input type="text" placeholder="New Type Name" value={newTypeName} onChange={(e) => setNewTypeName(e.target.value)} style={{ flex: 1, padding: '8px', border: '1px solid #bdc3c7', borderRadius: '4px' }} />
+                        <button type="button" onClick={handleCreateNewType} style={{ padding: '8px 12px', background: '#27ae60', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }} disabled={loading || !newTypeName.trim()}>Save</button>
                       </div>
                     )}
-                    <button
-                      type="button"
-                      onClick={openTypesModal}
-                      style={{ marginTop: '5px', padding: '5px 10px', background: '#3498db', color: 'white', border: 'none', borderRadius: '4px', fontSize: '0.8rem', cursor: 'pointer' }}
-                      disabled={loading}
-                    >
+                    <button type="button" onClick={openTypesModal} style={{ marginTop: '5px', padding: '5px 10px', background: '#3498db', color: 'white', border: 'none', borderRadius: '4px', fontSize: '0.8rem', cursor: 'pointer' }} disabled={loading}>
                       Manage Types
                     </button>
                   </div>
                 </div>
               </>
             )}
+
+            {/* Salary, Schedule, Credentials tabs remain exactly the same */}
             {activeTab === 'salary' && (
               <>
-                {/* Bank Details Section */}
                 <div style={{ border: '1px solid #bdc3c7', borderRadius: '10px', padding: '20px', marginBottom: '15px' }}>
                   <h3 style={{ color: '#2c3e50', marginBottom: '15px', fontSize: '1.2rem' }}>Bank Details</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '10px' }}>
-                    <input
-                      type="text"
-                      name="bankName"
-                      placeholder="Bank Name"
-                      value={formData.bankName}
-                      onChange={handleChange}
-                      style={{
-                        padding: '12px',
-                        border: '1px solid #bdc3c7',
-                        borderRadius: '8px',
-                        fontSize: '1rem',
-                        outline: 'none',
-                        transition: 'border-color 0.3s'
-                      }}
-                      onFocus={(e) => (e.target.style.borderColor = '#3498db')}
-                      onBlur={(e) => (e.target.style.borderColor = '#bdc3c7')}
-                    />
-                    <input
-                      type="text"
-                      name="accountHolderName"
-                      placeholder="Account Holder Name"
-                      value={formData.accountHolderName}
-                      onChange={handleChange}
-                      style={{
-                        padding: '12px',
-                        border: '1px solid #bdc3c7',
-                        borderRadius: '8px',
-                        fontSize: '1rem',
-                        outline: 'none',
-                        transition: 'border-color 0.3s'
-                      }}
-                      onFocus={(e) => (e.target.style.borderColor = '#3498db')}
-                      onBlur={(e) => (e.target.style.borderColor = '#bdc3c7')}
-                    />
+                    <input type="text" name="bankName" placeholder="Bank Name" value={formData.bankName} onChange={handleChange} style={{padding:'12px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',transition:'border-color 0.3s'}} onFocus={e=>e.target.style.borderColor='#3498db'} onBlur={e=>e.target.style.borderColor='#bdc3c7'} />
+                    <input type="text" name="accountHolderName" placeholder="Account Holder Name" value={formData.accountHolderName} onChange={handleChange} style={{padding:'12px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',transition:'border-color 0.3s'}} onFocus={e=>e.target.style.borderColor='#3498db'} onBlur={e=>e.target.style.borderColor='#bdc3c7'} />
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                    <input
-                      type="text"
-                      name="accountNumber"
-                      placeholder="Account Number"
-                      value={formData.accountNumber}
-                      onChange={handleChange}
-                      style={{
-                        padding: '12px',
-                        border: '1px solid #bdc3c7',
-                        borderRadius: '8px',
-                        fontSize: '1rem',
-                        outline: 'none',
-                        transition: 'border-color 0.3s'
-                      }}
-                      onFocus={(e) => (e.target.style.borderColor = '#3498db')}
-                      onBlur={(e) => (e.target.style.borderColor = '#bdc3c7')}
-                    />
-                    <input
-                      type="text"
-                      name="ifscCode"
-                      placeholder="IFSC Code"
-                      value={formData.ifscCode}
-                      onChange={handleChange}
-                      style={{
-                        padding: '12px',
-                        border: '1px solid #bdc3c7',
-                        borderRadius: '8px',
-                        fontSize: '1rem',
-                        outline: 'none',
-                        transition: 'border-color 0.3s'
-                      }}
-                      onFocus={(e) => (e.target.style.borderColor = '#3498db')}
-                      onBlur={(e) => (e.target.style.borderColor = '#bdc3c7')}
-                    />
+                    <input type="text" name="accountNumber" placeholder="Account Number" value={formData.accountNumber} onChange={handleChange} style={{padding:'12px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',transition:'border-color 0.3s'}} onFocus={e=>e.target.style.borderColor='#3498db'} onBlur={e=>e.target.style.borderColor='#bdc3c7'} />
+                    <input type="text" name="ifscCode" placeholder="IFSC Code" value={formData.ifscCode} onChange={handleChange} style={{padding:'12px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',transition:'border-color 0.3s'}} onFocus={e=>e.target.style.borderColor='#3498db'} onBlur={e=>e.target.style.borderColor='#bdc3c7'} />
                   </div>
                 </div>
-                {/* Salary Section */}
                 <div style={{ border: '1px solid #bdc3c7', borderRadius: '10px', padding: '20px' }}>
                   <h3 style={{ color: '#2c3e50', marginBottom: '15px', fontSize: '1.2rem' }}>Salary</h3>
-                  <input
-                    type="number"
-                    name="salary"
-                    placeholder="Salary (Monthly) *"
-                    value={formData.salary}
-                    onChange={handleChange}
-                    min="0"
-                    step="0.01"
-                    style={{
-                      width: '100%',
-                      padding: '12px',
-                      border: '1px solid #bdc3c7',
-                      borderRadius: '8px',
-                      fontSize: '1rem',
-                      outline: 'none',
-                      transition: 'border-color 0.3s'
-                    }}
-                    onFocus={(e) => (e.target.style.borderColor = '#3498db')}
-                    onBlur={(e) => (e.target.style.borderColor = '#bdc3c7')}
-                    required
-                  />
+                  <input type="number" name="salary" placeholder="Salary (Monthly) *" value={formData.salary} onChange={handleChange} min="0" step="0.01" required style={{width:'100%',padding:'12px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',transition:'border-color 0.3s'}} onFocus={e=>e.target.style.borderColor='#3498db'} onBlur={e=>e.target.style.borderColor='#bdc3c7'} />
                 </div>
               </>
             )}
+
             {activeTab === 'schedule' && (
               <div style={{ border: '1px solid #bdc3c7', borderRadius: '10px', padding: '20px' }}>
                 <h3 style={{ color: '#2c3e50', marginBottom: '15px', fontSize: '1.2rem' }}>Employee Schedule</h3>
                 {companyDetails ? (
                   <>
-                    {/* Company Operating Hours Display */}
-                    <div style={{
-                      marginBottom: '20px',
-                      padding: '15px',
-                      backgroundColor: '#f8f9fa',
-                      borderRadius: '8px',
-                      border: '1px solid #dee2e6',
-                      textAlign: 'center'
-                    }}>
+                    <div style={{marginBottom:'20px',padding:'15px',backgroundColor:'#f8f9fa',borderRadius:'8px',border:'1px solid #dee2e6',textAlign:'center'}}>
                       <strong>Company Operating Hours:</strong><br />
                       {companyDetails.openingTime} - {companyDetails.closingTime}
-                      <p style={{ margin: '5px 0 0 0', fontSize: '0.9rem', color: '#6c757d' }}>
-                        Employee shifts must be within these hours.
-                      </p>
+                      <p style={{ margin: '5px 0 0 0', fontSize: '0.9rem', color: '#6c757d' }}>Employee shifts must be within these hours.</p>
                     </div>
-                    {/* Employee Shift Times */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
                       <div>
                         <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600', color: '#2c3e50' }}>Start Time *</label>
-                        <input
-                          type="time"
-                          name="startTime"
-                          value={formData.startTime}
-                          onChange={handleChange}
-                          min={companyDetails.openingTime}
-                          max={companyDetails.closingTime}
-                          style={{
-                            width: '100%',
-                            padding: '12px',
-                            border: '1px solid #bdc3c7',
-                            borderRadius: '8px',
-                            fontSize: '1rem',
-                            outline: 'none',
-                            transition: 'border-color 0.3s',
-                            backgroundColor: '#fff'
-                          }}
-                          onFocus={(e) => (e.target.style.borderColor = '#3498db')}
-                          onBlur={(e) => (e.target.style.borderColor = '#bdc3c7')}
-                          required
-                        />
+                        <input type="time" name="startTime" value={formData.startTime} onChange={handleChange} min={companyDetails.openingTime} max={companyDetails.closingTime} required style={{width:'100%',padding:'12px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',transition:'border-color 0.3s',backgroundColor:'#fff'}} onFocus={e=>e.target.style.borderColor='#3498db'} onBlur={e=>e.target.style.borderColor='#bdc3c7'} />
                       </div>
                       <div>
                         <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600', color: '#2c3e50' }}>End Time *</label>
-                        <input
-                          type="time"
-                          name="endTime"
-                          value={formData.endTime}
-                          onChange={handleChange}
-                          min={formData.startTime || companyDetails.openingTime}
-                          max={companyDetails.closingTime}
-                          style={{
-                            width: '100%',
-                            padding: '12px',
-                            border: '1px solid #bdc3c7',
-                            borderRadius: '8px',
-                            fontSize: '1rem',
-                            outline: 'none',
-                            transition: 'border-color 0.3s',
-                            backgroundColor: '#fff'
-                          }}
-                          onFocus={(e) => (e.target.style.borderColor = '#3498db')}
-                          onBlur={(e) => (e.target.style.borderColor = '#bdc3c7')}
-                          required
-                        />
+                        <input type="time" name="endTime" value={formData.endTime} onChange={handleChange} min={formData.startTime || companyDetails.openingTime} max={companyDetails.closingTime} required style={{width:'100%',padding:'12px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',transition:'border-color 0.3s',backgroundColor:'#fff'}} onFocus={e=>e.target.style.borderColor='#3498db'} onBlur={e=>e.target.style.borderColor='#bdc3c7'} />
                       </div>
                     </div>
                   </>
@@ -854,93 +568,28 @@ const AddEmployee = () => {
                 )}
               </div>
             )}
+
             {activeTab === 'credentials' && (
               <div style={{ border: '1px solid #bdc3c7', borderRadius: '10px', padding: '20px' }}>
                 <h3 style={{ color: '#2c3e50', marginBottom: '15px', fontSize: '1.2rem' }}>Login Credentials</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                  <input
-                    type="text"
-                    name="username"
-                    placeholder="Username *"
-                    value={formData.username}
-                    onChange={handleChange}
-                    style={{
-                      padding: '12px',
-                      border: '1px solid #bdc3c7',
-                      borderRadius: '8px',
-                      fontSize: '1rem',
-                      outline: 'none',
-                      transition: 'border-color 0.3s'
-                    }}
-                    onFocus={(e) => (e.target.style.borderColor = '#3498db')}
-                    onBlur={(e) => (e.target.style.borderColor = '#bdc3c7')}
-                    required
-                  />
-                  <input
-                    type="password"
-                    name="password"
-                    placeholder={editingId ? "New Password (leave blank to keep current)" : "Password *"}
-                    value={formData.password}
-                    onChange={handleChange}
-                    style={{
-                      padding: '12px',
-                      border: '1px solid #bdc3c7',
-                      borderRadius: '8px',
-                      fontSize: '1rem',
-                      outline: 'none',
-                      transition: 'border-color 0.3s'
-                    }}
-                    onFocus={(e) => (e.target.style.borderColor = '#3498db')}
-                    onBlur={(e) => (e.target.style.borderColor = '#bdc3c7')}
-                    required={!editingId}
-                  />
+                  <input type="text" name="username" placeholder="Username *" value={formData.username} onChange={handleChange} required style={{padding:'12px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',transition:'border-color 0.3s'}} onFocus={e=>e.target.style.borderColor='#3498db'} onBlur={e=>e.target.style.borderColor='#bdc3c7'} />
+                  <input type="password" name="password" placeholder={editingId ? "New Password (leave blank to keep current)" : "Password *"} value={formData.password} onChange={handleChange} required={!editingId} style={{padding:'12px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',transition:'border-color 0.3s'}} onFocus={e=>e.target.style.borderColor='#3498db'} onBlur={e=>e.target.style.borderColor='#bdc3c7'} />
                 </div>
               </div>
             )}
           </div>
         </form>
       </div>
-      {/* Manage Types Modal - Fixed centering with no blur overlay */}
+
+      {/* Manage Types Modal */}
       {showTypesModal && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'transparent', // No blur/dimming
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 1000
-          }}
-          onClick={closeTypesModal}
-        >
-          <div style={{
-            backgroundColor: '#fff',
-            padding: '20px',
-            borderRadius: '10px',
-            maxWidth: '400px',
-            width: '90%',
-            maxHeight: '80vh',
-            overflowY: 'auto',
-            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
-          }}>
+        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,backgroundColor:'transparent',display:'flex',justifyContent:'center',alignItems:'center',zIndex:1000}} onClick={closeTypesModal}>
+          <div style={{backgroundColor:'#fff',padding:'20px',borderRadius:'10px',maxWidth:'400px',width:'90%',maxHeight:'80vh',overflowY:'auto',boxShadow:'0 4px 6px rgba(0,0,0,0.1)'}}>
             <h3 style={{ marginBottom: '15px' }}>Manage Employee Types</h3>
             <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-              <input
-                type="text"
-                placeholder="New Type Name"
-                value={newTypeName}
-                onChange={(e) => setNewTypeName(e.target.value)}
-                style={{ flex: 1, padding: '8px', border: '1px solid #bdc3c7', borderRadius: '4px' }}
-              />
-              <button
-                onClick={handleCreateNewType}
-                style={{ padding: '8px 12px', background: '#27ae60', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                disabled={loading || !newTypeName.trim()}
-              >
+              <input type="text" placeholder="New Type Name" value={newTypeName} onChange={(e) => setNewTypeName(e.target.value)} style={{ flex: 1, padding: '8px', border: '1px solid #bdc3c7', borderRadius: '4px' }} />
+              <button onClick={handleCreateNewType} style={{ padding: '8px 12px', background: '#27ae60', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }} disabled={loading || !newTypeName.trim()}>
                 <FaPlus />
               </button>
             </div>
@@ -949,18 +598,9 @@ const AddEmployee = () => {
                 <li key={type.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', borderBottom: '1px solid #eee' }}>
                   {editingTypeId === type.id ? (
                     <>
-                      <input
-                        type="text"
-                        value={editTypeName}
-                        onChange={(e) => setEditTypeName(e.target.value)}
-                        style={{ flex: 1, padding: '5px', border: '1px solid #bdc3c7', borderRadius: '4px' }}
-                      />
-                      <button onClick={handleUpdateType} style={{ marginLeft: '5px', padding: '5px', background: '#3498db', color: 'white', border: 'none', borderRadius: '4px' }} disabled={!editTypeName.trim() || loading}>
-                        Save
-                      </button>
-                      <button onClick={() => { setEditingTypeId(null); setEditTypeName(''); }} style={{ marginLeft: '5px', padding: '5px', background: '#95a5a6', color: 'white', border: 'none', borderRadius: '4px' }}>
-                        Cancel
-                      </button>
+                      <input type="text" value={editTypeName} onChange={(e) => setEditTypeName(e.target.value)} style={{ flex: 1, padding: '5px', border: '1px solid #bdc3c7', borderRadius: '4px' }} />
+                      <button onClick={handleUpdateType} style={{ marginLeft: '5px', padding: '5px', background: '#3498db', color: 'white', border: 'none', borderRadius: '4px' }} disabled={!editTypeName.trim() || loading}>Save</button>
+                      <button onClick={() => { setEditingTypeId(null); setEditTypeName(''); }} style={{ marginLeft: '5px', padding: '5px', background: '#95a5a6', color: 'white', border: 'none', borderRadius: '4px' }}>Cancel</button>
                     </>
                   ) : (
                     <>

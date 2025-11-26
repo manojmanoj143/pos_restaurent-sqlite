@@ -16,6 +16,7 @@ const SalarySlip = () => {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
+  const [companyName, setCompanyName] = useState('My Company'); // Fetched from company details
   const [currency, setCurrency] = useState('AED'); // Updated default to AED
   const [totalWorkingDays, setTotalWorkingDays] = useState(30);
   const [applyCompanyLeaves, setApplyCompanyLeaves] = useState(false);
@@ -40,30 +41,53 @@ const SalarySlip = () => {
   const [grossYearToDate, setGrossYearToDate] = useState(106285.71);
   const totalDeductions = 0.00; // Fixed to 0 since deductions removed
 
-  // Fetch base URL and settings
+  // Fetch base URL, settings, and company name
   useEffect(() => {
     const fetchConfig = async () => {
+      let currentBaseUrl = "";
       try {
         const response = await axios.get("http://localhost:8000/api/network_info");
         const { config: appConfig } = response.data;
         if (appConfig.mode === "client") {
-          const currentBaseUrl = `http://${appConfig.server_ip}:8000`;
+          currentBaseUrl = `http://${appConfig.server_ip}:8000`;
           setBaseUrl(currentBaseUrl);
-          await fetchSettings(currentBaseUrl);
-          await fetchEmployees(currentBaseUrl);
         } else {
-          setBaseUrl('');
-          await fetchSettings('');
-          await fetchEmployees('');
+          setBaseUrl("");
         }
+        // Fetch settings with baseUrl
+        await fetchSettings(currentBaseUrl);
+        // Fetch company name with baseUrl
+        await fetchCompanyName(currentBaseUrl);
+        // Fetch employees with baseUrl
+        await fetchEmployees(currentBaseUrl);
       } catch (error) {
         console.error("Failed to fetch config:", error);
         setBaseUrl('');
         setError('Failed to load configuration');
+        // Fallback fetches
+        await fetchSettings('');
+        await fetchCompanyName('');
+        await fetchEmployees('');
       }
     };
     fetchConfig();
   }, []);
+
+  // Fetch company name from company details
+  const fetchCompanyName = async (currentBaseUrl) => {
+    try {
+      const response = await axios.get(`${currentBaseUrl}/api/company-details`);
+      if (response.data.companyDetails && response.data.companyDetails.length > 0) {
+        const latestDetails = response.data.companyDetails[response.data.companyDetails.length - 1];
+        setCompanyName(latestDetails.restaurantName || 'My Company');
+      } else {
+        setCompanyName('My Company');
+      }
+    } catch (err) {
+      console.error('Failed to fetch company name:', err);
+      setCompanyName('My Company');
+    }
+  };
 
   const fetchSettings = async (currentBaseUrl) => {
     try {
@@ -289,6 +313,7 @@ const SalarySlip = () => {
     doc.setFontSize(20);
     doc.text('Salary Slip', 105, 20, { align: 'center' });
     doc.setFontSize(12);
+    doc.text(`Company: ${companyName}`, 20, 30);
     doc.text(`Employee: ${selectedEmployee.name}`, 20, 40);
     doc.text(`Month: ${selectedMonth}`, 20, 50);
     doc.text(`Employee ID: ${selectedEmployee.employeeId}`, 20, 60);
@@ -355,10 +380,9 @@ const SalarySlip = () => {
   const employeeDetails = selectedEmployee ? {
     employeeId: selectedEmployee.employeeId,
     employeeName: selectedEmployee.name,
-    company: 'My Company', // Placeholder - can be fetched from settings if available
+    company: companyName, // Use fetched company name
     designation: selectedEmployee.employeeType,
     postingDate: selectedEmployee.created_at ? new Date(selectedEmployee.created_at).toLocaleDateString() : '2025-11-01', // Use created_at as proxy for posting date
-    letterHead: 'My Company Letterhead', // Placeholder
     status: 'Submitted',
     currency: currency
   } : null;
@@ -629,10 +653,6 @@ const SalarySlip = () => {
                       <tr>
                         <td style={{ padding: '12px', border: '1px solid #dee2e6', fontWeight: 'bold', fontSize: '1rem', backgroundColor: '#e9ecef' }}>Posting Date</td>
                         <td style={{ padding: '12px', border: '1px solid #dee2e6', fontSize: '1rem' }}>{employeeDetails.postingDate}</td>
-                      </tr>
-                      <tr>
-                        <td style={{ padding: '12px', border: '1px solid #dee2e6', fontWeight: 'bold', fontSize: '1rem', backgroundColor: '#e9ecef' }}>Letter Head</td>
-                        <td style={{ padding: '12px', border: '1px solid #dee2e6', fontSize: '1rem' }}>{employeeDetails.letterHead}</td>
                       </tr>
                       <tr>
                         <td style={{ padding: '12px', border: '1px solid #dee2e6', fontWeight: 'bold', fontSize: '1rem', backgroundColor: '#e9ecef' }}>Status</td>
