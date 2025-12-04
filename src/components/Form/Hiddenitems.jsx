@@ -5,14 +5,12 @@ import { FaArrowLeft, FaEye, FaTrash, FaChevronDown, FaChevronUp } from "react-i
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import 'bootstrap/dist/css/bootstrap.min.css';
-
 const Hiddenitems = () => {
   const [hiddenItems, setHiddenItems] = useState([]);
   const [baseUrl, setBaseUrl] = useState("");
   const [warningMessage, setWarningMessage] = useState("");
   const [expandedSales, setExpandedSales] = useState({}); // State to track expanded sales for each item
   const navigate = useNavigate();
-
   useEffect(() => {
     const fetchConfig = async () => {
       try {
@@ -30,7 +28,6 @@ const Hiddenitems = () => {
     };
     fetchConfig();
   }, []);
-
   // Fetch hidden items
   const handleFetchHiddenItems = async () => {
     try {
@@ -47,7 +44,6 @@ const Hiddenitems = () => {
       setWarningMessage("Error while fetching hidden items");
     }
   };
-
   // Toggle sales expansion for a specific item
   const toggleSalesExpansion = (itemId) => {
     setExpandedSales(prev => ({
@@ -55,7 +51,6 @@ const Hiddenitems = () => {
       [itemId]: !prev[itemId]
     }));
   };
-
   // Unhide an item
   const handleUnhideItem = async (itemId) => {
     try {
@@ -69,7 +64,6 @@ const Hiddenitems = () => {
       setWarningMessage(error.response?.data?.error || 'Error while unhiding item');
     }
   };
-
   // Force delete hidden item
   const handleForceDelete = async (itemId) => {
     if (window.confirm("Are you sure you want to permanently delete this item? Sales history will remain.")) {
@@ -82,12 +76,10 @@ const Hiddenitems = () => {
       }
     }
   };
-
   // UPDATED: Go back to AdminPage
   const goBack = () => {
     navigate('/admin');
   };
-
   // NEW: Function to get matching entries for the specific hidden item (similar to SalesReport's getMatchingEntries)
   const getMatchingEntriesForItem = (sales, filterItem) => {
     const lowerFilter = filterItem.toLowerCase();
@@ -160,37 +152,46 @@ const Hiddenitems = () => {
     // Sort by date descending
     return entries.sort((a, b) => new Date(b.date) - new Date(a.date));
   };
-
   // Initial fetch
   useEffect(() => {
     if (baseUrl !== null) {
       handleFetchHiddenItems();
     }
   }, [baseUrl]);
-
   // Enhanced styles for better design and alignment
   const containerStyle = {
-    background: "linear-gradient(135deg, rgb(161, 196, 253) 0%, rgb(194, 233, 251) 100%)",
+    background: 'linear-gradient(135deg, #ffffff 0%, #3498db 100%)',
     minHeight: "100vh",
     padding: "20px",
-    position: "relative",
+    position: "relative"
   };
   const contentStyle = {
-    marginLeft: "80px",
-    marginTop: "80px",
-    maxWidth: "1400px",
+    maxWidth: "1250px",
+    margin: "80px auto 20px",
+    backgroundColor: '#ffffff',
+    padding: '30px',
+    borderRadius: '15px',
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+    overflow: 'hidden'
   };
   const headerStyle = {
     color: "#2c3e50",
     fontWeight: "bold",
     textShadow: "1px 1px 2px rgba(0,0,0,0.1)",
     marginBottom: "10px",
+    textAlign: 'center',
+    fontSize: '1.8rem',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '10px'
   };
   const descriptionStyle = {
     color: "#34495e",
     fontSize: "1.1rem",
     lineHeight: "1.5",
     marginBottom: "30px",
+    textAlign: 'center'
   };
   const tableStyle = {
     fontSize: "0.85rem",
@@ -224,18 +225,20 @@ const Hiddenitems = () => {
     position: "fixed",
     top: "20px",
     left: "20px",
-    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-    border: "none",
-    color: "#fff",
-    borderRadius: "50px",
-    padding: "12px 16px",
+    backgroundColor: 'transparent',
+    border: '2px solid #3498db',
+    color: '#3498db',
     cursor: "pointer",
-    zIndex: 1000,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    transition: "all 0.3s ease",
-    boxShadow: "0 4px 8px rgba(0, 0, 0, 0.2)",
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '8px 20px',
+    borderRadius: '50px',
+    fontSize: '16px',
+    fontWeight: '600',
+    boxShadow: '0 2px 10px rgba(52, 152, 219, 0.2)',
+    zIndex: 1001,
+    transition: 'all 0.3s ease'
   };
   const alertStyle = {
     marginLeft: "0",
@@ -276,24 +279,24 @@ const Hiddenitems = () => {
     alignItems: "center",
     marginBottom: "15px",
   };
-
   return (
     <div style={containerStyle} className="container-fluid p-4">
       {/* Enhanced Back Button */}
       <button
         onClick={goBack}
         style={backButtonStyle}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.transform = "translateY(-2px)";
-          e.currentTarget.style.boxShadow = "0 6px 12px rgba(0, 0, 0, 0.3)";
+        onMouseOver={(e) => {
+          e.target.style.backgroundColor = '#3498db';
+          e.target.style.color = '#ffffff';
+          e.target.style.transform = 'scale(1.05)';
         }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.transform = "translateY(0)";
-          e.currentTarget.style.boxShadow = "0 4px 8px rgba(0, 0, 0, 0.2)";
+        onMouseOut={(e) => {
+          e.target.style.backgroundColor = 'transparent';
+          e.target.style.color = '#3498db';
+          e.target.style.transform = 'scale(1)';
         }}
       >
-        <FaArrowLeft style={{ fontSize: "18px", marginRight: "5px" }} />
-        Back
+        <FaArrowLeft /> Back to Admin
       </button>
       {/* Main Content */}
       <div style={contentStyle}>
@@ -506,5 +509,4 @@ const Hiddenitems = () => {
     </div>
   );
 };
-
 export default Hiddenitems;

@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import axios from 'axios';
-
-const SearchableSelect = ({ options = [], value = '', onChange, placeholder }) => {
+import { FaArrowLeft } from 'react-icons/fa'; // NEW: Import FaArrowLeft for back button
+const SearchableSelect = ({ options = [], value = '', onChange, placeholder, allowCreateNew = false, onAddNewValue = null }) => {
   const [search, setSearch] = useState(value || '');
   const [showList, setShowList] = useState(false);
   useEffect(() => {
@@ -25,6 +25,22 @@ const SearchableSelect = ({ options = [], value = '', onChange, placeholder }) =
     }
     setShowList(false);
   };
+  const handleCreateNewOption = async () => {
+    if (!search.trim()) {
+      setShowList(false);
+      return;
+    }
+    if (onAddNewValue) {
+      const success = await onAddNewValue(search);
+      if (success) {
+        setSearch(search);
+        if (onChange) {
+          onChange(search);
+        }
+        setShowList(false);
+      }
+    }
+  };
   const handleFocus = () => {
     setShowList(true);
   };
@@ -45,6 +61,18 @@ const SearchableSelect = ({ options = [], value = '', onChange, placeholder }) =
       />
       {showList && (
         <ul className="searchable-list">
+          {allowCreateNew && (
+            <li
+              key="create-new"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                handleCreateNewOption();
+              }}
+              style={{ fontStyle: 'italic', color: '#007bff' }}
+            >
+              Create New: "{search.trim() || 'value'}"
+            </li>
+          )}
           {filteredOptions.length > 0 ? (
             filteredOptions.map((option, index) => (
               <li
@@ -58,14 +86,16 @@ const SearchableSelect = ({ options = [], value = '', onChange, placeholder }) =
               </li>
             ))
           ) : (
-            <li className="no-options">No matching options</li>
+            !allowCreateNew && <li className="no-options">No matching options</li>
+          )}
+          {allowCreateNew && filteredOptions.length === 0 && search.trim() && (
+            <li className="no-options">Type above and select Create New</li>
           )}
         </ul>
       )}
     </div>
   );
 };
-
 const CreateCustomerPage = () => {
   /* ────────────────────── BASIC STATE ────────────────────── */
   const [activeTab, setActiveTab] = useState("details");
@@ -109,16 +139,14 @@ const CreateCustomerPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [baseUrl, setBaseUrl] = useState(""); // NEW: Added baseUrl state from AdminPage
-  
   // UPDATED: Digit lengths per country for dynamic validation
   const digitLengths = {
-    '+91': 10,    // India
-    '+1': 10,     // USA/Canada
-    '+44': 10,    // UK
-    '+971': 9,    // UAE
-    '+61': 9,     // Australia
+    '+91': 10, // India
+    '+1': 10, // USA/Canada
+    '+44': 10, // UK
+    '+971': 9, // UAE
+    '+61': 9, // Australia
   };
-  
   const isdCodes = [
     { code: "+91", country: "India" },
     { code: "+1", country: "USA" },
@@ -146,18 +174,13 @@ const CreateCustomerPage = () => {
         setBaseUrl("");
       } finally {
         // Fetch data after baseUrl is set
-        if (currentBaseUrl) {
-          fetchCustomerGroups(currentBaseUrl);
-          fetchAddressStructure(currentBaseUrl);
-        } else {
-          fetchCustomerGroups("");
-          fetchAddressStructure("");
-        }
+        const url = currentBaseUrl || "";
+        fetchCustomerGroups(url);
+        fetchAddressStructure(url);
       }
     };
     fetchConfig();
-    if (location.state?.newGroupId) setSelectedGroup(location.state.newGroupId);
-  }, [location.state]);
+  }, []);
   const fetchCustomerGroups = async (currentBaseUrl) => {
     try {
       const res = await axios.get(`${currentBaseUrl}/api/customer-groups`);
@@ -176,6 +199,84 @@ const CreateCustomerPage = () => {
       console.warn("Failed to load address structure", e);
     }
   };
+  /* ────────────────────── DYNAMIC ADD HANDLERS ────────────────────── */
+  const handleAddNewField1 = useCallback(async (newValue) => {
+    if (!deliveryAddress.country) {
+      setWarningMessage("Please select a country first.");
+      setWarningType("warning");
+      return false;
+    }
+    try {
+      await axios.post(`${baseUrl}/api/add-address-value`, {
+        country: deliveryAddress.country,
+        field: 'field1',
+        value: newValue
+      });
+      await fetchAddressStructure(baseUrl);
+      setWarningMessage(`New ${addressStructure.countries[deliveryAddress.country]?.field1?.label || 'State'} added: ${newValue}`);
+      setWarningType("success");
+      return true;
+    } catch (e) {
+      console.error(e);
+      setWarningMessage(`Failed to add new ${addressStructure.countries[deliveryAddress.country]?.field1?.label || 'value'}`);
+      setWarningType("warning");
+      return false;
+    }
+  }, [deliveryAddress.country, baseUrl, fetchAddressStructure, addressStructure]);
+  const handleAddNewField2 = useCallback(async (newValue) => {
+    if (!deliveryAddress.country) {
+      setWarningMessage("Please select a country first.");
+      return false;
+    }
+    if (!deliveryAddress.field1) {
+      setWarningMessage("Please select State first.");
+      return false;
+    }
+    try {
+      await axios.post(`${baseUrl}/api/add-address-value`, {
+        country: deliveryAddress.country,
+        field: 'field2',
+        value: newValue,
+        parent_value: deliveryAddress.field1
+      });
+      await fetchAddressStructure(baseUrl);
+      setWarningMessage(`New ${addressStructure.countries[deliveryAddress.country]?.field2?.label || 'Area'} added: ${newValue}`);
+      setWarningType("success");
+      return true;
+    } catch (e) {
+      console.error(e);
+      setWarningMessage(`Failed to add new ${addressStructure.countries[deliveryAddress.country]?.field2?.label || 'value'}`);
+      setWarningType("warning");
+      return false;
+    }
+  }, [deliveryAddress.country, deliveryAddress.field1, baseUrl, fetchAddressStructure, addressStructure]);
+  const handleAddNewField3 = useCallback(async (newValue) => {
+    if (!deliveryAddress.country) {
+      setWarningMessage("Please select a country first.");
+      return false;
+    }
+    if (!deliveryAddress.field1) {
+      setWarningMessage("Please select State first.");
+      return false;
+    }
+    try {
+      await axios.post(`${baseUrl}/api/add-address-value`, {
+        country: deliveryAddress.country,
+        field: 'field3',
+        value: newValue,
+        parent_value: deliveryAddress.field1
+      });
+      await fetchAddressStructure(baseUrl);
+      setWarningMessage(`New ${addressStructure.countries[deliveryAddress.country]?.field3?.label || 'District'} added: ${newValue}`);
+      setWarningType("success");
+      return true;
+    } catch (e) {
+      console.error(e);
+      setWarningMessage(`Failed to add new ${addressStructure.countries[deliveryAddress.country]?.field3?.label || 'value'}`);
+      setWarningType("warning");
+      return false;
+    }
+  }, [deliveryAddress.country, deliveryAddress.field1, baseUrl, fetchAddressStructure, addressStructure]);
   /* ────────────────────── BASIC HANDLERS ────────────────────── */
   const handleISDCodeSelect = (code) => {
     setSelectedISDCode(code);
@@ -186,31 +287,48 @@ const CreateCustomerPage = () => {
     setSelectedWhatsappISDCode(code);
     setShowWhatsappISDCodeDropdown(false);
   };
-  const handleGroupSelect = (id) => {
-    if (id === "create-new") {
-      navigate("/create-customer-group", { state: { fromCreateCustomer: true } });
+  // UPDATED: Inline create group
+  const handleGroupNameChange = (name) => {
+    const group = customerGroups.find(g => g.group_name === name);
+    if (group) {
+      setSelectedGroup(group._id);
     } else {
-      setSelectedGroup(id);
+      setSelectedGroup('');
     }
   };
-  
+  const handleCreateNewGroup = async (newName) => {
+    try {
+      const res = await axios.post(`${baseUrl}/api/customer-groups`, { group_name: newName });
+      if (res.status === 201) {
+        const newId = res.data._id;
+        setSelectedGroup(newId);
+        setCustomerGroups(prev => [...prev, { _id: newId, group_name: newName }]);
+        setWarningMessage(`Group "${newName}" created!`);
+        setWarningType("success");
+        return true;
+      }
+    } catch (e) {
+      console.error(e);
+      setWarningMessage("Failed to create group");
+      setWarningType("warning");
+      return false;
+    }
+    return false;
+  };
   // UPDATED: Dynamic max digits based on selected ISD code
   const getMaxDigits = (isdCode) => digitLengths[isdCode] || 10;
-  
   // UPDATED: Phone number change with dynamic limit
   const handlePhoneNumberChange = (e) => {
     const v = e.target.value.replace(/\D/g, "");
     const maxDigits = getMaxDigits(selectedISDCode);
     if (v.length <= maxDigits) setPhoneNumber(v);
   };
-  
   // UPDATED: WhatsApp number change with dynamic limit
   const handleWhatsappNumberChange = (e) => {
     const v = e.target.value.replace(/\D/g, "");
     const maxDigits = getMaxDigits(selectedWhatsappISDCode);
     if (v.length <= maxDigits) setWhatsappNumber(v);
   };
-  
   // NEW: Handler to copy phone to WhatsApp
   const handleCopyToWhatsapp = () => {
     setWhatsappNumber(phoneNumber);
@@ -219,8 +337,8 @@ const CreateCustomerPage = () => {
   const handleDeliveryAddressChange = (field, value) => {
     setDeliveryAddress((p) => ({ ...p, [field]: value }));
   };
-  
   // UPDATED: Validation with dynamic exact length per country
+  // UPDATED: Enhanced error handling for duplicate phone number
   const handleCreateCustomer = async () => {
     if (!customerName.trim()) {
       setWarningMessage("Customer name is required.");
@@ -251,7 +369,7 @@ const CreateCustomerPage = () => {
     };
     try {
       const res = await axios.post(`${baseUrl}/api/customers`, payload);
-      if (res.status === 200 || res.status === 201) {
+      if (res.status === 201) {
         setWarningMessage("Customer created successfully!");
         setWarningType("success");
       } else {
@@ -260,8 +378,14 @@ const CreateCustomerPage = () => {
         setWarningType("warning");
       }
     } catch (e) {
-      setWarningMessage("Error while creating customer");
-      setWarningType("warning");
+      if (e.response && e.response.status === 409) {
+        const err = e.response.data;
+        setWarningMessage(`Phone number already saved for customer: ${err.customer_name || 'existing customer'}`);
+        setWarningType("warning");
+      } else {
+        setWarningMessage("Error while creating customer");
+        setWarningType("warning");
+      }
     }
   };
   const handleWarningOk = () => {
@@ -292,12 +416,39 @@ const CreateCustomerPage = () => {
     setSelectedCountryForEdit(country);
     setTempCountry(country);
     setTempField1Label(data.field1?.label || "");
-    setTempField1Value("");
+    setTempField1Value((data.field1?.values || []).join(", "));
     setTempField2Label(data.field2?.label || "");
-    setTempField2Value("");
+    setTempField2Value((data.field2?.values || []).join(", "));
     setTempField3Label(data.field3?.label || "");
-    setTempField3Value("");
+    setTempField3Value((data.field3?.values || []).join(", "));
     document.querySelector(".structure-builder-modal")?.scrollTo(0, 0);
+  };
+  // NEW: Delete entire country (REMOVED window.confirm, directly delete and show app warning message)
+  const handleDeleteCountry = async (country) => {
+    const updated = { ...addressStructure };
+    delete updated.countries[country];
+    const newLinks = { ...linkedValues };
+    delete newLinks[country];
+    const payload = {
+      structure: updated,
+      linkedValues: newLinks
+    };
+    try {
+      const res = await axios.put(`${baseUrl}/api/address-structures`, payload);
+      if (res.status === 200) {
+        setAddressStructure(updated);
+        setLinkedValues(newLinks);
+        setWarningMessage(`"${country}" structure deleted successfully!`);
+        setWarningType("success");
+        resetTempInputs();
+      } else {
+        throw new Error('Delete failed');
+      }
+    } catch (e) {
+      console.error(e);
+      setWarningMessage(`Failed to delete "${country}" structure`);
+      setWarningType("warning");
+    }
   };
   // UPDATED: Click a saved Field1 value → fill Field1, Field2 & Field3
   const handleField1ValueClick = (value) => {
@@ -320,36 +471,47 @@ const CreateCustomerPage = () => {
       updated.countries[country] = { field1: null, field2: null, field3: null };
     }
     const countryData = updated.countries[country];
-    // ---- Field 1 (MULTIPLE VALUES, COMMA-SEPARATED) ----
+    const f1Arr = tempField1Value.trim().split(",").map((s) => s.trim()).filter(Boolean);
+    const f2Arr = tempField2Value.trim().split(",").map((s) => s.trim()).filter(Boolean);
+    const f3Arr = tempField3Value.trim().split(",").map((s) => s.trim()).filter(Boolean);
+    // ---- Handle Field 1 ----
     if (tempField1Label.trim()) {
       const label = tempField1Label.trim();
-      const f1Arr = tempField1Value.trim().split(",").map((s) => s.trim()).filter(Boolean);
-      let existingValues = countryData.field1?.values || [];
-      const newValues = [...new Set([...existingValues, ...f1Arr])];
-      countryData.field1 = { label, values: newValues };
+      const newF1Values = [...new Set(f1Arr)]; // Replace with input values (unique)
+      countryData.field1 = { label, values: newF1Values.length > 0 ? newF1Values : [] };
+    } else if (selectedCountryForEdit) {
+      countryData.field1 = null;
     }
-    // ---- Field 2 ----
+    // ---- Handle Field 2 ----
     if (tempField2Label.trim()) {
       const label = tempField2Label.trim();
-      const f2Arr = tempField2Value.trim().split(",").map((s) => s.trim()).filter(Boolean);
-      let existingF2 = countryData.field2?.values || [];
-      const newF2 = [...new Set([...existingF2, ...f2Arr])];
-      countryData.field2 = { label, values: newF2 };
+      const newF2Values = [...new Set(f2Arr)]; // Replace
+      countryData.field2 = { label, values: newF2Values.length > 0 ? newF2Values : [] };
+    } else if (selectedCountryForEdit) {
+      countryData.field2 = null;
     }
-    // ---- Field 3 ----
+    // ---- Handle Field 3 ----
     if (tempField3Label.trim()) {
       const label = tempField3Label.trim();
-      const f3Arr = tempField3Value.trim().split(",").map((s) => s.trim()).filter(Boolean);
-      let existingF3 = countryData.field3?.values || [];
-      const newF3 = [...new Set([...existingF3, ...f3Arr])];
-      countryData.field3 = { label, values: newF3 };
+      const newF3Values = [...new Set(f3Arr)]; // Replace
+      countryData.field3 = { label, values: newF3Values.length > 0 ? newF3Values : [] };
+    } else if (selectedCountryForEdit) {
+      countryData.field3 = null;
     }
     // ---- LINKED VALUES (Field1 → Field2/Field3) ----
     let newLinks = { ...linkedValues };
-    if (tempField1Value.trim() && (tempField2Value.trim() || tempField3Value.trim())) {
-      const f1 = tempField1Value.trim(); // Single value for key
-      const f2Arr = tempField2Value.trim().split(",").map((s) => s.trim()).filter(Boolean);
-      const f3Arr = tempField3Value.trim().split(",").map((s) => s.trim()).filter(Boolean);
+    if (selectedCountryForEdit) {
+      // Remove linked for deleted field1 values
+      const oldF1s = addressStructure.countries[country]?.field1?.values || [];
+      for (let oldF1 of oldF1s) {
+        if (!f1Arr.includes(oldF1)) {
+          delete newLinks[country]?.[oldF1];
+        }
+      }
+    }
+    // Set linked only if single f1 selected
+    if (f1Arr.length === 1) {
+      const f1 = f1Arr[0];
       if (!newLinks[country]) newLinks[country] = {};
       newLinks[country][f1] = { field2: f2Arr, field3: f3Arr };
     }
@@ -391,6 +553,13 @@ const CreateCustomerPage = () => {
   /* ────────────────────── RENDER ────────────────────── */
   return (
     <div className="create-customer-container">
+      {/* ── FIXED BACK BUTTON (NEW: Styled like EmployeeList) ── */}
+      <button
+        onClick={handleBackToAdmin}
+        className="fixed-back-btn"
+      >
+        <FaArrowLeft /> Back to Admin
+      </button>
       {/* ── ALERT ── */}
       {warningMessage && (
         <div
@@ -401,254 +570,259 @@ const CreateCustomerPage = () => {
           <button type="button" className="btn-close" onClick={handleWarningOk} />
         </div>
       )}
-      {/* ── HEADER ── */}
-      <div className="header-section">
-        <button className="back-btn" onClick={handleBackToAdmin}>
-          Back to Admin
-        </button>
-        <h1>Create a New Customer</h1>
-        <div className="header-buttons">
-          <button className="address-structure-btn" onClick={startStructureBuilder}>
-            Address Structure
-          </button>
-          <button className="save-btn" onClick={handleCreateCustomer}>
-            Save
-          </button>
-        </div>
-      </div>
-      {/* ── TABS ── */}
-      <div className="tabs-section">
-        <div className="tabs-container">
-          {tabs.map((tab, i) => {
-            const key = getTabKey(tab);
-            return (
-              <button
-                key={i}
-                className={`tab-btn ${activeTab === key ? "active" : ""}`}
-                onClick={() => setActiveTab(key)}
-              >
-                {tab}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-      {/* ── FORM CONTENT ── */}
-      <div className="form-section">
-        {/* DETAILS TAB */}
-        {activeTab === "details" && (
-          <div className="form-grid">
-            {/* LEFT */}
-            <div className="form-column left">
-              <div className="form-group">
-                <label>
-                  Customer Name <span className="required">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                />
-              </div>
-              <div className="form-group">
-                <label>WhatsApp Number</label>
-                <div className="phone-input-group">
-                  <div className="isd-wrapper">
-                    <button
-                      className="isd-btn"
-                      type="button"
-                      onClick={() => setShowWhatsappISDCodeDropdown(!showWhatsappISDCodeDropdown)}
-                    >
-                      {selectedWhatsappISDCode}
-                    </button>
-                    {showWhatsappISDCodeDropdown && (
-                      <ul className="isd-dropdown">
-                        {isdCodes.map((c, i) => (
-                          <li key={i}>
-                            <button
-                              className="dropdown-item"
-                              type="button"
-                              onClick={() => handleWhatsappISDCodeSelect(c.code)}
-                            >
-                              {c.code} ({c.country})
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                  {/* UPDATED: Dynamic placeholder based on digits */}
-                  <input
-                    type="text"
-                    placeholder={`${getMaxDigits(selectedWhatsappISDCode)}-digit WhatsApp Number`}
-                    value={whatsappNumber}
-                    onChange={handleWhatsappNumberChange}
-                  />
-                </div>
-              </div>
-              <div className="form-group">
-                <label>Customer Group</label>
-                <select
-                  value={selectedGroup}
-                  onChange={(e) => handleGroupSelect(e.target.value)}
-                >
-                  <option value="">Select Group</option>
-                  {customerGroups.map((g) => (
-                    <option key={g._id} value={g._id}>
-                      {g.group_name}
-                    </option>
-                  ))}
-                  <option value="create-new">Create New Group</option>
-                </select>
-              </div>
-            </div>
-            {/* RIGHT */}
-            <div className="form-column right">
-              <div className="form-group">
-                <label>
-                  Phone Number <span className="required">*</span>
-                </label>
-                <div className="phone-input-group">
-                  <div className="isd-wrapper">
-                    <button
-                      className="isd-btn"
-                      type="button"
-                      onClick={() => setShowISDCodeDropdown(!showISDCodeDropdown)}
-                    >
-                      {selectedISDCode}
-                    </button>
-                    {showISDCodeDropdown && (
-                      <ul className="isd-dropdown">
-                        {isdCodes.map((c, i) => (
-                          <li key={i}>
-                            <button
-                              className="dropdown-item"
-                              type="button"
-                              onClick={() => handleISDCodeSelect(c.code)}
-                            >
-                              {c.code} ({c.country})
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                  {/* UPDATED: Dynamic placeholder based on digits */}
-                  <input
-                    type="text"
-                    placeholder={`${getMaxDigits(selectedISDCode)}-digit Phone Number`}
-                    value={phoneNumber}
-                    onChange={handlePhoneNumberChange}
-                  />
-                </div>
-                {/* NEW: Copy to WhatsApp Suggestion */}
-                {phoneNumber && !whatsappNumber && (
-                  <div className="copy-suggestion">
-                    <span>Use the same number for WhatsApp?</span>
-                    <button type="button" className="copy-btn" onClick={handleCopyToWhatsapp}>
-                      Copy
-                    </button>
-                  </div>
-                )}
-              </div>
-              <div className="form-group">
-                <label>Email</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-              <div className="form-group empty-align" />
-            </div>
+      {/* ── MAIN CONTENT CARD (NEW: Wrapped with margin for fixed button) ── */}
+      <div className="main-content-card">
+        {/* ── HEADER ── */}
+        <div className="header-section">
+          <div></div> {/* Empty left for balance */}
+          <h1>Create a New Customer</h1>
+          <div className="header-buttons">
+            <button className="address-structure-btn" onClick={startStructureBuilder}>
+              Address Structure
+            </button>
+            <button className="save-btn" onClick={handleCreateCustomer}>
+              Save
+            </button>
           </div>
-        )}
-        {/* ADDRESS & CONTACT TAB */}
-        {activeTab === "address-and-contact" && (
-          <div className="form-grid">
-            {/* LEFT */}
-            <div className="form-column left">
-              <div className="form-group">
-                <label>Country</label>
-                <SearchableSelect
-                  options={countryList}
-                  value={deliveryAddress.country}
-                  onChange={(value) => {
-                    handleDeliveryAddressChange("country", value);
-                    handleDeliveryAddressChange("field1", "");
-                    handleDeliveryAddressChange("field2", "");
-                    handleDeliveryAddressChange("field3", "");
-                  }}
-                  placeholder="Select Country"
-                />
-              </div>
-              {/* FIELD 1 */}
-              {deliveryAddress.country && addressStructure.countries[deliveryAddress.country]?.field1 && (
+        </div>
+        {/* ── TABS ── */}
+        <div className="tabs-section">
+          <div className="tabs-container">
+            {tabs.map((tab, i) => {
+              const key = getTabKey(tab);
+              return (
+                <button
+                  key={i}
+                  className={`tab-btn ${activeTab === key ? "active" : ""}`}
+                  onClick={() => setActiveTab(key)}
+                >
+                  {tab}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        {/* ── FORM CONTENT ── */}
+        <div className="form-section">
+          {/* DETAILS TAB */}
+          {activeTab === "details" && (
+            <div className="form-grid">
+              {/* LEFT */}
+              <div className="form-column left">
                 <div className="form-group">
-                  <label>{addressStructure.countries[deliveryAddress.country].field1.label}</label>
+                  <label>
+                    Customer Name <span className="required">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>WhatsApp Number</label>
+                  <div className="phone-input-group">
+                    <div className="isd-wrapper">
+                      <button
+                        className="isd-btn"
+                        type="button"
+                        onClick={() => setShowWhatsappISDCodeDropdown(!showWhatsappISDCodeDropdown)}
+                      >
+                        {selectedWhatsappISDCode}
+                      </button>
+                      {showWhatsappISDCodeDropdown && (
+                        <ul className="isd-dropdown">
+                          {isdCodes.map((c, i) => (
+                            <li key={i}>
+                              <button
+                                className="dropdown-item"
+                                type="button"
+                                onClick={() => handleWhatsappISDCodeSelect(c.code)}
+                              >
+                                {c.code} ({c.country})
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                    {/* UPDATED: Dynamic placeholder based on digits */}
+                    <input
+                      type="text"
+                      placeholder={`${getMaxDigits(selectedWhatsappISDCode)}-digit WhatsApp Number`}
+                      value={whatsappNumber}
+                      onChange={handleWhatsappNumberChange}
+                    />
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label>Customer Group</label>
                   <SearchableSelect
-                    options={addressStructure.countries[deliveryAddress.country].field1.values || []}
-                    value={deliveryAddress.field1}
+                    options={customerGroups.map(g => g.group_name)}
+                    value={selectedGroup ? customerGroups.find(g => g._id === selectedGroup)?.group_name || '' : ''}
+                    onChange={handleGroupNameChange}
+                    placeholder="Select or Create Group"
+                    allowCreateNew={true}
+                    onAddNewValue={handleCreateNewGroup}
+                  />
+                </div>
+              </div>
+              {/* RIGHT */}
+              <div className="form-column right">
+                <div className="form-group">
+                  <label>
+                    Phone Number <span className="required">*</span>
+                  </label>
+                  <div className="phone-input-group">
+                    <div className="isd-wrapper">
+                      <button
+                        className="isd-btn"
+                        type="button"
+                        onClick={() => setShowISDCodeDropdown(!showISDCodeDropdown)}
+                      >
+                        {selectedISDCode}
+                      </button>
+                      {showISDCodeDropdown && (
+                        <ul className="isd-dropdown">
+                          {isdCodes.map((c, i) => (
+                            <li key={i}>
+                              <button
+                                className="dropdown-item"
+                                type="button"
+                                onClick={() => handleISDCodeSelect(c.code)}
+                              >
+                                {c.code} ({c.country})
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                    {/* UPDATED: Dynamic placeholder based on digits */}
+                    <input
+                      type="text"
+                      placeholder={`${getMaxDigits(selectedISDCode)}-digit Phone Number`}
+                      value={phoneNumber}
+                      onChange={handlePhoneNumberChange}
+                    />
+                  </div>
+                  {/* NEW: Copy to WhatsApp Suggestion */}
+                  {phoneNumber && !whatsappNumber && (
+                    <div className="copy-suggestion">
+                      <span>Use the same number for WhatsApp?</span>
+                      <button type="button" className="copy-btn" onClick={handleCopyToWhatsapp}>
+                        Copy
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="form-group">
+                  <label>Email</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </div>
+                <div className="form-group empty-align" />
+              </div>
+            </div>
+          )}
+          {/* ADDRESS & CONTACT TAB */}
+          {activeTab === "address-and-contact" && (
+            <div className="form-grid">
+              {/* LEFT: Country, State (field1), Area (field2), Flat */}
+              <div className="form-column left">
+                <div className="form-group">
+                  <label>Country</label>
+                  <SearchableSelect
+                    options={countryList}
+                    value={deliveryAddress.country}
                     onChange={(value) => {
-                      handleDeliveryAddressChange("field1", value);
-                      // UPDATED: Clear Field2 and Field3 when Field1 changes (including to empty)
+                      handleDeliveryAddressChange("country", value);
+                      handleDeliveryAddressChange("field1", "");
                       handleDeliveryAddressChange("field2", "");
                       handleDeliveryAddressChange("field3", "");
                     }}
-                    placeholder={`Select ${addressStructure.countries[deliveryAddress.country].field1.label}`}
+                    placeholder="Select Country"
                   />
                 </div>
-              )}
-              {/* FIELD 3 (shown always if defined) */}
-              {deliveryAddress.country && addressStructure.countries[deliveryAddress.country]?.field3 && (
+                {/* FIELD 1 (State) */}
+                {deliveryAddress.country && addressStructure.countries[deliveryAddress.country]?.field1 && (
+                  <div className="form-group">
+                    <label>{addressStructure.countries[deliveryAddress.country].field1.label}</label>
+                    <SearchableSelect
+                      options={addressStructure.countries[deliveryAddress.country].field1.values || []}
+                      value={deliveryAddress.field1}
+                      onChange={(value) => {
+                        handleDeliveryAddressChange("field1", value);
+                        // UPDATED: Clear Field2 and Field3 when Field1 changes (including to empty)
+                        handleDeliveryAddressChange("field2", "");
+                        handleDeliveryAddressChange("field3", "");
+                      }}
+                      placeholder={`Select ${addressStructure.countries[deliveryAddress.country].field1.label}`}
+                      allowCreateNew={true}
+                      onAddNewValue={handleAddNewField1}
+                    />
+                  </div>
+                )}
+                {/* FIELD 2 (Area) */}
+                {deliveryAddress.country && addressStructure.countries[deliveryAddress.country]?.field2 && (
+                  <div className="form-group">
+                    <label>{addressStructure.countries[deliveryAddress.country].field2.label}</label>
+                    <SearchableSelect
+                      options={getFilteredValues("field2").length > 0
+                        ? getFilteredValues("field2")
+                        : (addressStructure.countries[deliveryAddress.country].field2.values || [])}
+                      value={deliveryAddress.field2}
+                      onChange={(value) => handleDeliveryAddressChange("field2", value)}
+                      placeholder={`Select ${addressStructure.countries[deliveryAddress.country].field2.label}`}
+                      allowCreateNew={true}
+                      onAddNewValue={handleAddNewField2}
+                    />
+                  </div>
+                )}
                 <div className="form-group">
-                  <label>{addressStructure.countries[deliveryAddress.country].field3.label}</label>
-                  <SearchableSelect
-                    options={getFilteredValues("field3").length > 0
-                      ? getFilteredValues("field3")
-                      : (addressStructure.countries[deliveryAddress.country].field3.values || [])}
-                    value={deliveryAddress.field3}
-                    onChange={(value) => handleDeliveryAddressChange("field3", value)}
-                    placeholder={`Select ${addressStructure.countries[deliveryAddress.country].field3.label}`}
+                  <label>Flat / Villa No</label>
+                  <input
+                    type="text"
+                    value={deliveryAddress.flat_villa_no}
+                    onChange={(e) => handleDeliveryAddressChange("flat_villa_no", e.target.value)}
                   />
                 </div>
-              )}
-              <div className="form-group">
-                <label>Flat / Villa No</label>
-                <input
-                  type="text"
-                  value={deliveryAddress.flat_villa_no}
-                  onChange={(e) => handleDeliveryAddressChange("flat_villa_no", e.target.value)}
-                />
+              </div>
+              {/* RIGHT: District (field3), Building Name */}
+              <div className="form-column right">
+                {/* FIELD 3 (District) */}
+                {deliveryAddress.country && addressStructure.countries[deliveryAddress.country]?.field3 && (
+                  <div className="form-group">
+                    <label>{addressStructure.countries[deliveryAddress.country].field3.label}</label>
+                    <SearchableSelect
+                      options={getFilteredValues("field3").length > 0
+                        ? getFilteredValues("field3")
+                        : (addressStructure.countries[deliveryAddress.country].field3.values || [])}
+                      value={deliveryAddress.field3}
+                      onChange={(value) => handleDeliveryAddressChange("field3", value)}
+                      placeholder={`Select ${addressStructure.countries[deliveryAddress.country].field3.label}`}
+                      allowCreateNew={true}
+                      onAddNewValue={handleAddNewField3}
+                    />
+                  </div>
+                )}
+                <div className="form-group">
+                  <label>Building Name</label>
+                  <input
+                    type="text"
+                    value={deliveryAddress.building_name}
+                    onChange={(e) => handleDeliveryAddressChange("building_name", e.target.value)}
+                  />
+                </div>
+                <div className="form-group empty-align" />
+                <div className="form-group empty-align" />
               </div>
             </div>
-            {/* RIGHT */}
-            <div className="form-column right">
-              {/* FIELD 2 (filtered by selected Field1) */}
-              {deliveryAddress.country && addressStructure.countries[deliveryAddress.country]?.field2 && (
-                <div className="form-group">
-                  <label>{addressStructure.countries[deliveryAddress.country].field2.label}</label>
-                  <SearchableSelect
-                    options={getFilteredValues("field2").length > 0
-                      ? getFilteredValues("field2")
-                      : (addressStructure.countries[deliveryAddress.country].field2.values || [])}
-                    value={deliveryAddress.field2}
-                    onChange={(value) => handleDeliveryAddressChange("field2", value)}
-                    placeholder={`Select ${addressStructure.countries[deliveryAddress.country].field2.label}`}
-                  />
-                </div>
-              )}
-              <div className="form-group">
-                <label>Building Name</label>
-                <input
-                  type="text"
-                  value={deliveryAddress.building_name}
-                  onChange={(e) => handleDeliveryAddressChange("building_name", e.target.value)}
-                />
-              </div>
-            </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
       {/* ── ADDRESS STRUCTURE BUILDER MODAL ── */}
       {showStructureBuilder && (
@@ -664,19 +838,27 @@ const CreateCustomerPage = () => {
                 <p className="saved-label">Saved Countries (Click to edit):</p>
                 <div className="saved-tags">
                   {countryList.map((country) => (
-                    <button
-                      key={country}
-                      className="saved-country-tag"
-                      onClick={() => loadCountryForEdit(country)}
-                    >
-                      {country}
-                    </button>
+                    <div key={country} className="country-tag-wrapper">
+                      <button
+                        className="saved-country-tag"
+                        onClick={() => loadCountryForEdit(country)}
+                      >
+                        {country}
+                      </button>
+                      <button
+                        className="delete-country-btn"
+                        onClick={() => handleDeleteCountry(country)}
+                        title={`Delete ${country}`}
+                      >
+                        ×
+                      </button>
+                    </div>
                   ))}
                 </div>
               </div>
             )}
             <hr />
-            {/* COUNTRY */}
+            {/* COUNTRY - ALWAYS SHOWN */}
             <div className="field-group">
               <label>Country Name</label>
               <input
@@ -688,81 +870,91 @@ const CreateCustomerPage = () => {
                 className={selectedCountryForEdit ? "disabled-input" : ""}
               />
             </div>
-            {/* FIELD 1 */}
-            <div className="field-group">
-              <label>Field 1 Label (e.g., Emirate, State)</label>
-              <input
-                type="text"
-                placeholder="Enter label"
-                value={tempField1Label}
-                onChange={(e) => setTempField1Label(e.target.value)}
-              />
-              <label className="value-label">Field 1 Value (comma-separated for multiples)</label>
-              <div className="input-with-list">
+            {/* FIELD 1 - SHOWN IF COUNTRY IS FILLED */}
+            {tempCountry.trim() && (
+              <div className="field-group">
+                <label>Field 1 Label (e.g., Emirate, State)</label>
                 <input
                   type="text"
-                  placeholder="e.g., Tamil Nadu, Andhra Pradesh, Arunachal Pradesh"
-                  value={tempField1Value}
-                  onChange={(e) => setTempField1Value(e.target.value)}
+                  placeholder="Enter label"
+                  value={tempField1Label}
+                  onChange={(e) => setTempField1Label(e.target.value)}
                 />
-                {/* UPDATED: Show saved values as clickable spans */}
-                {addressStructure.countries[currentEditCountry]?.field1?.values?.length > 0 && (
-                  <div className="saved-list">
-                    Saved: {addressStructure.countries[currentEditCountry].field1.values.map((v, i) => (
-                      <span
-                        key={i}
-                        className="clickable-value"
-                        onClick={() => handleField1ValueClick(v)}
-                        style={{ marginLeft: "4px", cursor: "pointer", color: "#007bff" }}
-                      >
-                        {v}
-                      </span>
-                    ))}
-                  </div>
-                )}
+                <label className="value-label">Field 1 Value (comma-separated for multiples)</label>
+                <div className="input-with-list">
+                  <input
+                    type="text"
+                    placeholder="e.g., Tamil Nadu, Andhra Pradesh, Arunachal Pradesh"
+                    value={tempField1Value}
+                    onChange={(e) => setTempField1Value(e.target.value)}
+                  />
+                  {/* UPDATED: Show saved values as clickable spans */}
+                  {addressStructure.countries[currentEditCountry]?.field1?.values?.length > 0 && (
+                    <div className="saved-list">
+                      Saved: {addressStructure.countries[currentEditCountry].field1.values.map((v, i) => (
+                        <span
+                          key={i}
+                          className="clickable-value"
+                          onClick={() => handleField1ValueClick(v)}
+                          style={{ marginLeft: "4px", cursor: "pointer", color: "#007bff" }}
+                        >
+                          {v}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-            {/* FIELD 2 */}
-            <div className="field-group">
-              <label>Field 2 Label (e.g., City, District)</label>
-              <input
-                type="text"
-                placeholder="Enter label"
-                value={tempField2Label}
-                onChange={(e) => setTempField2Label(e.target.value)}
-              />
-              <label className="value-label">Field 2 Value (comma-separated for multiples)</label>
-              <div className="input-with-list">
+            )}
+            {/* FIELD 2 - SHOWN IF COUNTRY FILLED AND FIELD1 LABEL FILLED */}
+            {tempCountry.trim() && tempField1Label.trim() && (
+              <div className="field-group">
+                <label>Field 2 Label (e.g., City, District)</label>
                 <input
                   type="text"
-                  placeholder="e.g., Sharjah, Chennai"
-                  value={tempField2Value}
-                  onChange={(e) => setTempField2Value(e.target.value)}
+                  placeholder="Enter label"
+                  value={tempField2Label}
+                  onChange={(e) => setTempField2Label(e.target.value)}
                 />
+                <label className="value-label">Field 2 Value (comma-separated for multiples)</label>
+                <div className="input-with-list">
+                  <input
+                    type="text"
+                    placeholder="e.g., Sharjah, Chennai"
+                    value={tempField2Value}
+                    onChange={(e) => setTempField2Value(e.target.value)}
+                  />
+                </div>
               </div>
-            </div>
-            {/* FIELD 3 */}
-            <div className="field-group">
-              <label>Field 3 Label (e.g., Area, Village)</label>
-              <input
-                type="text"
-                placeholder="Enter label"
-                value={tempField3Label}
-                onChange={(e) => setTempField3Label(e.target.value)}
-              />
-              <label className="value-label">Field 3 Value (comma-separated for multiples)</label>
-              <div className="input-with-list">
+            )}
+            {/* FIELD 3 - SHOWN IF COUNTRY FILLED, FIELD1 AND FIELD2 LABELS FILLED */}
+            {tempCountry.trim() && tempField1Label.trim() && tempField2Label.trim() && (
+              <div className="field-group">
+                <label>Field 3 Label (e.g., Area, Village)</label>
                 <input
                   type="text"
-                  placeholder="e.g., Al Barsha, Koyambedu"
-                  value={tempField3Value}
-                  onChange={(e) => setTempField3Value(e.target.value)}
+                  placeholder="Enter label"
+                  value={tempField3Label}
+                  onChange={(e) => setTempField3Label(e.target.value)}
                 />
+                <label className="value-label">Field 3 Value (comma-separated for multiples)</label>
+                <div className="input-with-list">
+                  <input
+                    type="text"
+                    placeholder="e.g., Al Barsha, Koyambedu"
+                    value={tempField3Value}
+                    onChange={(e) => setTempField3Value(e.target.value)}
+                  />
+                </div>
               </div>
-            </div>
-            {/* ACTIONS */}
+            )}
+            {/* ACTIONS - ALWAYS SHOWN, BUT ENABLE SAVE ONLY IF AT LEAST COUNTRY FILLED */}
             <div className="modal-actions">
-              <button className="save-structure-btn" onClick={saveAddressStructure}>
+              <button
+                className="save-structure-btn"
+                onClick={saveAddressStructure}
+                disabled={!tempCountry.trim()}
+              >
                 Save Structure
               </button>
               <button className="cancel-btn" onClick={cancelStructure}>
@@ -772,24 +964,60 @@ const CreateCustomerPage = () => {
           </div>
         </div>
       )}
-      {/* ── STYLES (unchanged) ── */}
+      {/* ── STYLES (UPDATED: Added gradient background, fixed back button, main card margin) ── */}
       <style jsx>{`
-        /* Base Layout */
+        /* Base Layout - UPDATED: Gradient background like EmployeeList */
         .create-customer-container {
-          background: #f8f9fa;
+          background: linear-gradient(135deg, #ffffff 0%, #3498db 100%);
           min-height: 100vh;
           padding: 20px;
           position: relative;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
-        /* Header */
+        /* NEW: Fixed Back Button - Styled exactly like EmployeeList */
+        .fixed-back-btn {
+          position: fixed;
+          top: 20px;
+          left: 20px;
+          background-color: transparent;
+          border: 2px solid #3498db;
+          color: #3498db;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 20px;
+          border-radius: 50px;
+          font-size: 16px;
+          font-weight: 600;
+          box-shadow: 0 2px 10px rgba(52, 152, 219, 0.2);
+          z-index: 1001;
+          transition: all 0.3s ease;
+        }
+        .fixed-back-btn:hover {
+          background-color: #3498db;
+          color: #ffffff;
+          transform: scale(1.05);
+        }
+        /* NEW: Main Content Card - With margin for fixed button, like EmployeeList */
+        .main-content-card {
+          max-width: 1000px;
+          margin: 80px auto 20px;
+          background-color: #ffffff;
+          border-radius: 15px;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+          overflow: hidden;
+        }
+        /* Header - UPDATED: Adjusted for card */
         .header-section {
           display: flex;
           align-items: center;
           justify-content: space-between;
           margin-bottom: 20px;
+          padding: 30px 30px 20px;
           flex-wrap: wrap;
           gap: 12px;
+          border-bottom: 2px solid #3498db;
         }
         .header-buttons {
           display: flex;
@@ -809,14 +1037,13 @@ const CreateCustomerPage = () => {
           font-weight: 500;
           transition: background 0.2s;
         }
-        .back-btn { background: #6c757d; color: #fff; }
-        .back-btn:hover { background: #5a6268; }
         .save-btn { background: #007bff; color: #fff; }
         .save-btn:hover { background: #0056b3; }
         .address-structure-btn { background: #28a745; color: #fff; }
         .address-structure-btn:hover { background: #218838; }
         .save-structure-btn { background: #17a2b8; color: #fff; font-weight: bold; }
         .save-structure-btn:hover { background: #138496; }
+        .save-structure-btn:disabled { background: #6c757d; cursor: not-allowed; }
         .cancel-btn { background: #dc3545; color: #fff; }
         .cancel-btn:hover { background: #c82333; }
         h1 {
@@ -859,6 +1086,7 @@ const CreateCustomerPage = () => {
           box-shadow: 0 2px 8px rgba(0,0,0,.1);
           max-width: 1000px;
           margin: 0 auto;
+          height:500px;
         }
         .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
         .form-column { display: flex; flex-direction: column; gap: 16px; }
@@ -1017,20 +1245,24 @@ const CreateCustomerPage = () => {
           font-size: 13px;
         }
         .phone-input-group input:focus { outline: none; }
-        /* Alert */
+        /* Alert - UPDATED: Made more prominent (centered, wider) */
         .alert {
           position: fixed;
           top: 20px;
-          right: 20px;
+          left: 50%;
+          transform: translateX(-50%);
           z-index: 1050;
-          padding: 14px 18px;
-          border-radius: 6px;
-          font-size: 14px;
-          font-weight: 500;
-          box-shadow: 0 4px 12px rgba(0,0,0,.1);
+          padding: 16px 24px;
+          border-radius: 8px;
+          font-size: 15px;
+          font-weight: 600;
+          box-shadow: 0 6px 20px rgba(0,0,0,.15);
+          min-width: 350px;
+          max-width: 80vw;
+          text-align: center;
         }
-        .alert-success { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
-        .alert-warning { background: #fff3cd; border: 1px solid #ffeaa7; color: #856404; }
+        .alert-success { background: #d4edda; border: 2px solid #c3e6cb; color: #155724; }
+        .alert-warning { background: #fff3cd; border: 2px solid #ffeaa7; color: #856404; }
         /* Structure Builder Modal */
         .structure-builder-overlay {
           position: fixed;
@@ -1077,6 +1309,11 @@ const CreateCustomerPage = () => {
           flex-wrap: wrap;
           gap: 10px;
         }
+        .country-tag-wrapper {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+        }
         .saved-country-tag {
           background: #d1ecf1;
           color: #0c5460;
@@ -1091,6 +1328,23 @@ const CreateCustomerPage = () => {
         .saved-country-tag:hover {
           background: #bee5eb;
         }
+        .delete-country-btn {
+          background: #dc3545;
+          color: #fff;
+          border: none;
+          border-radius: 50%;
+          width: 20px;
+          height: 20px;
+          font-size: 16px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: background 0.2s;
+        }
+        .delete-country-btn:hover {
+          background: #c82333;
+        }
         hr {
           margin: 24px 0;
           border: none;
@@ -1099,6 +1353,11 @@ const CreateCustomerPage = () => {
         /* Field Group */
         .field-group {
           margin-bottom: 26px;
+          animation: fadeIn 0.3s ease-in;
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
         }
         .field-group label {
           display: block;
@@ -1152,10 +1411,13 @@ const CreateCustomerPage = () => {
           .structure-builder-modal { padding: 24px; max-width: 95%; }
           .tabs-container { min-width: auto; }
           .copy-suggestion { flex-direction: column; align-items: flex-start; gap: 6px; }
+          .country-tag-wrapper { flex-direction: column; gap: 2px; align-items: flex-start; }
+          .alert { min-width: 280px; max-width: 95vw; left: 5px; right: 5px; transform: none; }
+          .fixed-back-btn { left: 10px; top: 10px; padding: 6px 16px; font-size: 14px; }
+          .main-content-card { margin: 60px auto 20px; padding: 20px; }
         }
       `}</style>
     </div>
   );
 };
-
 export default CreateCustomerPage;

@@ -500,40 +500,55 @@ const CustomerListPage = () => {
     <ErrorBoundary>
       <div style={{
         minHeight: '100vh',
-        background: 'linear-gradient(135deg, #e3e7eb 0%, #b8c6db 100%)',
-        padding: '40px 20px',
-        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+        background: 'linear-gradient(135deg, #ffffff 0%, #3498db 100%)',
+        padding: '20px',
+        position: 'relative'
       }}>
+        {/* Fixed Back Button in Top-Left Corner - Styled like EmployeeList */}
+        <button
+          onClick={goToAdminPage}
+          style={{
+            position: 'fixed',
+            top: '20px',
+            left: '20px',
+            backgroundColor: 'transparent',
+            border: '2px solid #3498db',
+            color: '#3498db',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 20px',
+            borderRadius: '50px',
+            fontSize: '16px',
+            fontWeight: '600',
+            boxShadow: '0 2px 10px rgba(52, 152, 219, 0.2)',
+            zIndex: 1001,
+            transition: 'all 0.3s ease'
+          }}
+          onMouseOver={(e) => {
+            e.target.style.backgroundColor = '#3498db';
+            e.target.style.color = '#ffffff';
+            e.target.style.transform = 'scale(1.05)';
+          }}
+          onMouseOut={(e) => {
+            e.target.style.backgroundColor = 'transparent';
+            e.target.style.color = '#3498db';
+            e.target.style.transform = 'scale(1)';
+          }}
+        >
+          <FaArrowLeft /> Back to Admin
+        </button>
+        {/* Main Container - Adjusted margin for fixed button */}
         <div style={{
-          maxWidth: '1600px', // Increased from 1400px for wider table
-          margin: '0 auto',
+          maxWidth: '1600px',
+          margin: '80px auto 20px',
           backgroundColor: '#ffffff',
           borderRadius: '12px',
           boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
-          padding: '30px'
+          padding: '30px',
+          overflow: 'hidden'
         }}>
-          <button
-            onClick={goToAdminPage}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '10px 20px',
-              backgroundColor: '#f8f9fa',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontSize: '16px',
-              fontWeight: '500',
-              color: '#333',
-              transition: 'background-color 0.3s ease',
-              marginBottom: '20px'
-            }}
-            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#e9ecef'}
-            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-          >
-            <FaArrowLeft /> Back to Admin
-          </button>
           <h2 style={{
             fontSize: '28px',
             fontWeight: '700',

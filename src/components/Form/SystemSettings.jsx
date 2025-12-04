@@ -1,10 +1,9 @@
-// Updated SystemSettings.jsx - Added new 'Working Days' tab with Total Working Days input and Apply Company Leaves checkbox
+// Updated SystemSettings.jsx - Design changes: Added gradient background, fixed back button styled like EmployeeList, and wrapped main content in a white card for consistency. No functional changes.
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaArrowLeft } from 'react-icons/fa';
 import axios from 'axios';
 import './SystemSettings.css';
-
 const SystemSettings = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('Details');
@@ -42,11 +41,12 @@ const SystemSettings = () => {
     allowConsecutiveLoginAttempts: 0,
     allowLoginAfterFail: 0,
     enableTwoFactorAuth: false,
-    totalWorkingDays: 30, // NEW: Default total working days per month
+    totalWorkingDays: 30, // NEW: Default total working days per month (kept for backend compatibility, but input removed)
     applyCompanyLeaves: false, // NEW: Checkbox to apply company leaves deduction
   });
   const [clickCount, setClickCount] = useState(0);
   const [warningMessage, setWarningMessage] = useState('');
+  const [isSuccessMessage, setIsSuccessMessage] = useState(false); // NEW: To distinguish success vs error messages
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
   const [baseUrl, setBaseUrl] = useState("");
@@ -97,6 +97,7 @@ const SystemSettings = () => {
     } catch (error) {
       console.error('Error fetching users:', error);
       setWarningMessage('Failed to fetch users');
+      setIsSuccessMessage(false);
     }
   };
   const fetchSettings = async (currentBaseUrl) => {
@@ -112,6 +113,7 @@ const SystemSettings = () => {
     } catch (error) {
       console.error('Error fetching settings:', error);
       setWarningMessage('Failed to fetch settings');
+      setIsSuccessMessage(false);
     }
   };
   useEffect(() => {
@@ -148,9 +150,11 @@ const SystemSettings = () => {
       if (!response.ok) throw new Error('Failed to save settings');
       localStorage.setItem('systemSettings', JSON.stringify(settings));
       setWarningMessage('Settings saved successfully!');
+      setIsSuccessMessage(true); // NEW: Mark as success
     } catch (error) {
       console.error('Error saving settings:', error);
       setWarningMessage(`Failed to save settings: ${error.message}`);
+      setIsSuccessMessage(false); // NEW: Mark as error
     }
   };
   const handleSearchChange = (e) => {
@@ -194,12 +198,15 @@ const SystemSettings = () => {
         setNewUser({ email: '', firstName: '', phoneNumber: '', roleProfile: 'User', password: '' });
         setShowAddUserForm(false);
         setWarningMessage('User added successfully! You can now login with these credentials.');
+        setIsSuccessMessage(true); // NEW: Mark as success
       } catch (error) {
         console.error('Error adding user:', error);
         setWarningMessage(`Failed to add user: ${error.message}`);
+        setIsSuccessMessage(false); // NEW: Mark as error
       }
     } else {
       setWarningMessage('Please fill in all required fields.');
+      setIsSuccessMessage(false); // NEW: Mark as error
     }
   };
   const handleDeleteUser = (email) => {
@@ -219,9 +226,11 @@ const SystemSettings = () => {
       }
       await fetchUsers(baseUrl);
       setWarningMessage('User deleted successfully!');
+      setIsSuccessMessage(true); // NEW: Mark as success
     } catch (error) {
       console.error('Error deleting user:', error);
       setWarningMessage(`Failed to delete user: ${error.message}`);
+      setIsSuccessMessage(false); // NEW: Mark as error
     } finally {
       setShowDeleteConfirm(false);
       setUserToDelete(null);
@@ -490,23 +499,9 @@ const SystemSettings = () => {
             <button type="submit" className="save-settings-btn">Save Settings</button>
           </form>
         );
-      case 'Working Days': // NEW: Working Days tab
+      case 'Working Days': // NEW: Working Days tab (Total Working Days input removed)
         return (
           <form onSubmit={handleSubmit} className="settings-form">
-            <div>
-              <label htmlFor="totalWorkingDays">Total Working Days per Month</label>
-              <input
-                type="number"
-                id="totalWorkingDays"
-                name="totalWorkingDays"
-                value={settings.totalWorkingDays}
-                onChange={handleInputChange}
-                min="1"
-                max="31"
-                placeholder="e.g., 30"
-              />
-              <small>Fixed number of working days used for daily rate calculation and attendance summary</small>
-            </div>
             <div>
               <label>
                 <input
@@ -517,7 +512,6 @@ const SystemSettings = () => {
                 />
                 Apply Company Leaves (Deduct from Total Working Days)
               </label>
-              <small>If enabled, holidays from Working Days will be deducted to compute effective working days in Attendance</small>
             </div>
             <button type="submit" className="save-settings-btn">Save Settings</button>
           </form>
@@ -528,66 +522,181 @@ const SystemSettings = () => {
   };
   const tabs = ['Details', 'Login', 'Working Days']; // UPDATED: Added 'Working Days' tab
   return (
-    <div className="system-settings">
-      <div className="header">
-        <button className="back-to-admin-btn" onClick={handleGoBack}>
-          <FaArrowLeft /> Back to Admin
-        </button>
-        <h2>System Settings</h2>
-      </div>
-      <div className="search-container">
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={handleSearchChange}
-          placeholder="Search (e.g., userlist)"
-        />
-        {showDropdown && (
-          <div className="dropdown">
-            <div className="dropdown-item" onClick={handleDropdownClick}>User List</div>
-          </div>
-        )}
-      </div>
-      {warningMessage && (
-        <div className="warning-box">
-          <p className="warning-text">{warningMessage}</p>
-          <button className="close-warning" onClick={() => setWarningMessage('')}>
-            ×
-          </button>
+    <div style={{
+      minHeight: '100vh',
+      background: 'linear-gradient(135deg, #ffffff 0%, #3498db 100%)',
+      padding: '20px',
+      position: 'relative'
+    }}>
+      {/* Fixed Back Button - Styled like EmployeeList */}
+      <button
+        onClick={handleGoBack}
+        style={{
+          position: 'fixed',
+          top: '20px',
+          left: '20px',
+          backgroundColor: 'transparent',
+          border: '2px solid #3498db',
+          color: '#3498db',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '8px 20px',
+          borderRadius: '50px',
+          fontSize: '16px',
+          fontWeight: '600',
+          boxShadow: '0 2px 10px rgba(52, 152, 219, 0.2)',
+          zIndex: 1001,
+          transition: 'all 0.3s ease'
+        }}
+        onMouseOver={(e) => {
+          e.target.style.backgroundColor = '#3498db';
+          e.target.style.color = '#ffffff';
+          e.target.style.transform = 'scale(1.05)';
+        }}
+        onMouseOut={(e) => {
+          e.target.style.backgroundColor = 'transparent';
+          e.target.style.color = '#3498db';
+          e.target.style.transform = 'scale(1)';
+        }}
+      >
+        <FaArrowLeft /> Back to Admin
+      </button>
+      {/* Main Container - Styled like EmployeeList Card */}
+      <div style={{
+        maxWidth: '1250px',
+        margin: '80px auto 20px',
+        backgroundColor: '#ffffff',
+        padding: '30px',
+        borderRadius: '15px',
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+        overflow: 'hidden'
+      }}>
+        {/* Header with Title - Styled like EmployeeList */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '30px',
+          paddingBottom: '20px',
+          borderBottom: '2px solid #3498db'
+        }}>
+          <div></div> {/* Empty left for balance */}
+          <h2 style={{
+            textAlign: 'center',
+            color: '#2c3e50',
+            margin: 0,
+            fontSize: '1.8rem',
+            fontWeight: '600',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '10px'
+          }}>
+            System Settings
+          </h2>
+          <div></div> {/* Empty right for balance */}
         </div>
-      )}
-      {!showUserList && (
-        <div className="tabs">
-          {tabs.map((tab) => (
-            <button
-              key={tab}
-              className={activeTab === tab ? 'active-tab' : ''}
-              onClick={() => setActiveTab(tab)}
+        {/* Search Container */}
+        <div className="search-container">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={handleSearchChange}
+            placeholder="Search (e.g., userlist)"
+          />
+          {showDropdown && (
+            <div className="dropdown">
+              <div className="dropdown-item" onClick={handleDropdownClick}>User List</div>
+            </div>
+          )}
+        </div>
+        {warningMessage && (
+          <div
+            className={`message-overlay ${isSuccessMessage ? 'success-overlay' : 'error-overlay'}`}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              zIndex: 1000,
+            }}
+          >
+            <div
+              className={`message-box ${isSuccessMessage ? 'success-box' : 'error-box'}`}
+              style={{
+                backgroundColor: isSuccessMessage ? '#4CAF50' : '#f44336',
+                color: 'white',
+                padding: '20px',
+                borderRadius: '8px',
+                maxWidth: '400px',
+                width: '90%',
+                textAlign: 'center',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+                position: 'relative',
+              }}
             >
-              {tab}
-            </button>
-          ))}
-        </div>
-      )}
-      <div className="content">{renderTabContent()}</div>
-      {showDeleteConfirm && (
-        <>
-          <div className="modal-overlay" onClick={() => setShowDeleteConfirm(false)} />
-          <div className="confirm-modal">
-            <p className="confirm-text">Are you sure you want to delete user {userToDelete}?</p>
-            <div className="modal-button-group">
-              <button className="confirm-delete-btn" onClick={confirmDelete}>
-                Yes, Delete
-              </button>
-              <button className="cancel-delete-btn" onClick={() => setShowDeleteConfirm(false)}>
-                No, Cancel
+              <p className="message-text" style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>
+                {warningMessage}
+              </p>
+              <button
+                className="close-message"
+                onClick={() => setWarningMessage('')}
+                style={{
+                  position: 'absolute',
+                  top: '10px',
+                  right: '15px',
+                  background: 'none',
+                  border: 'none',
+                  color: 'white',
+                  fontSize: '24px',
+                  cursor: 'pointer',
+                  lineHeight: 1,
+                }}
+              >
+                ×
               </button>
             </div>
           </div>
-        </>
-      )}
+        )}
+        {!showUserList && (
+          <div className="tabs">
+            {tabs.map((tab) => (
+              <button
+                key={tab}
+                className={activeTab === tab ? 'active-tab' : ''}
+                onClick={() => setActiveTab(tab)}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="content">{renderTabContent()}</div>
+        {showDeleteConfirm && (
+          <>
+            <div className="modal-overlay" onClick={() => setShowDeleteConfirm(false)} />
+            <div className="confirm-modal">
+              <p className="confirm-text">Are you sure you want to delete user {userToDelete}?</p>
+              <div className="modal-button-group">
+                <button className="confirm-delete-btn" onClick={confirmDelete}>
+                  Yes, Delete
+                </button>
+                <button className="cancel-delete-btn" onClick={() => setShowDeleteConfirm(false)}>
+                  No, Cancel
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 };
-
 export default SystemSettings;

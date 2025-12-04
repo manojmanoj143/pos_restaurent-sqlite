@@ -25,7 +25,6 @@ function EmployeePage() {
   // New states for custom delete confirmation
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [employeeToDelete, setEmployeeToDelete] = useState(null);
-
   // List of country codes for dropdown
   const countryCodes = [
     { code: '+91', country: 'India' },
@@ -34,7 +33,6 @@ function EmployeePage() {
     { code: '+44', country: 'UK' },
     { code: '+61', country: 'Australia' },
   ];
-
   // Fetch config to determine baseUrl (similar to AdminPage)
   useEffect(() => {
     const fetchConfig = async () => {
@@ -58,7 +56,6 @@ function EmployeePage() {
     };
     fetchConfig();
   }, []);
-
   // Fetch employees (updated to use baseUrl)
   const fetchEmployees = async (currentBaseUrl = baseUrl) => {
     try {
@@ -75,12 +72,10 @@ function EmployeePage() {
       setLoading(false);
     }
   };
-
   // Validate 6-digit secret key
   const validateSecretKey = (key) => {
     return key.length === 6 && /^\d+$/.test(key);
   };
-
   // Handle form input changes
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -90,7 +85,6 @@ function EmployeePage() {
       setError(null);
     }
   };
-
   // Handle employee creation (updated to use baseUrl, manual secret key)
   const handleCreateEmployee = async (e) => {
     e.preventDefault();
@@ -127,7 +121,6 @@ function EmployeePage() {
       setLoading(false);
     }
   };
-
   // Handle employee edit
   const handleEditEmployee = (employee) => {
     setEditMode(true);
@@ -145,7 +138,6 @@ function EmployeePage() {
     });
     setSelectedEmployee(employee);
   };
-
   // Handle employee update (updated to use baseUrl, manual secret key)
   const handleUpdateEmployee = async (e) => {
     e.preventDefault();
@@ -190,13 +182,11 @@ function EmployeePage() {
       setLoading(false);
     }
   };
-
   // Updated handle employee deletion to trigger custom confirmation
   const handleDeleteEmployee = (employeeId) => {
     setEmployeeToDelete(employeeId);
     setShowDeleteConfirm(true);
   };
-
   // Proceed with deletion after confirmation
   const confirmDelete = async () => {
     if (!employeeToDelete) return;
@@ -218,13 +208,11 @@ function EmployeePage() {
       setEmployeeToDelete(null);
     }
   };
-
   // Cancel deletion
   const cancelDelete = () => {
     setShowDeleteConfirm(false);
     setEmployeeToDelete(null);
   };
-
   // Handle employee selection
   const handleSelectEmployee = (employee) => {
     setSelectedEmployee(employee);
@@ -232,93 +220,179 @@ function EmployeePage() {
     setFormData({ name: '', countryCode: '+91', phoneNumber: '', vehicleNumber: '', role: 'Delivery Boy', email: '', secretKey: '' });
   };
 
+  if (loading) {
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh',
+        background: 'linear-gradient(135deg, #ffffff 0%, #3498db 100%)'
+      }}>
+        <div style={{
+          textAlign: 'center',
+          color: '#3498db',
+          fontSize: '18px'
+        }}>
+          <FaUsers style={{ fontSize: '48px', marginBottom: '20px', color: '#3498db' }} />
+          <p>Loading employees...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#f5f6fa', padding: '20px', marginLeft: '250px' }}>
-      <div style={{ maxWidth: '1200px', margin: '40px auto 0' }}>
-        <button
-          onClick={() => navigate('/admin')}
-          style={{
-            position: 'fixed',
-            top: '20px',
-            left: '270px',
-            borderRadius: '50%',
-            width: '50px',
-            height: '50px',
+    <div style={{
+      minHeight: '100vh',
+      background: 'linear-gradient(135deg, #ffffff 0%, #3498db 100%)',
+      padding: '20px',
+      position: 'relative'
+    }}>
+      {/* Fixed Back Button in Top-Left Corner - Styled like EmployeeList */}
+      <button
+        onClick={() => navigate('/admin')}
+        style={{
+          position: 'fixed',
+          top: '20px',
+          left: '20px',
+          backgroundColor: 'transparent',
+          border: '2px solid #3498db',
+          color: '#3498db',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '8px 20px',
+          borderRadius: '50px',
+          fontSize: '16px',
+          fontWeight: '600',
+          boxShadow: '0 2px 10px rgba(52, 152, 219, 0.2)',
+          zIndex: 1001,
+          transition: 'all 0.3s ease'
+        }}
+        onMouseOver={(e) => {
+          e.target.style.backgroundColor = '#3498db';
+          e.target.style.color = '#ffffff';
+          e.target.style.transform = 'scale(1.05)';
+        }}
+        onMouseOut={(e) => {
+          e.target.style.backgroundColor = 'transparent';
+          e.target.style.color = '#3498db';
+          e.target.style.transform = 'scale(1)';
+        }}
+        disabled={loading}
+      >
+        <FaArrowLeft /> Back to Admin
+      </button>
+      {/* Main Container - Like EmployeeList Card */}
+      <div style={{
+        maxWidth: '1250px',
+        margin: '80px auto 20px',
+        backgroundColor: '#ffffff',
+        padding: '30px',
+        borderRadius: '15px',
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+        overflow: 'hidden'
+      }}>
+        {/* Header with Title */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          marginBottom: '30px',
+          paddingBottom: '20px',
+          borderBottom: '2px solid #3498db'
+        }}>
+          <h2 style={{
+            textAlign: 'center',
+            color: '#2c3e50',
+            margin: 0,
+            fontSize: '1.8rem',
+            fontWeight: '600',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: '#f0f0f0',
-            border: '1px solid #ccc',
-            cursor: 'pointer',
-            transition: 'background-color 0.3s',
-            zIndex: 1000,
-          }}
-          onMouseOver={(e) => (e.target.style.backgroundColor = '#3498db')}
-          onMouseOut={(e) => (e.target.style.backgroundColor = '#f0f0f0')}
-        >
-          <FaArrowLeft style={{ fontSize: '24px', color: '#333' }} />
-        </button>
-        <h2 style={{ textAlign: 'center', marginBottom: '40px', color: '#333', fontSize: '2rem', fontWeight: '600' }}>
-          Employee Management
-        </h2>
-        {loading && (
-          <div style={{ textAlign: 'center', color: '#666', fontSize: '1.2rem' }}>Loading...</div>
-        )}
+            gap: '10px'
+          }}>
+            <FaUsers style={{ color: '#3498db', fontSize: '2rem' }} />
+            Employee Management
+          </h2>
+        </div>
+        {/* Error and Message - Styled like EmployeeList Alerts */}
         {error && (
-          <div
-            style={{
-              backgroundColor: '#ffebee',
-              padding: '10px',
-              marginBottom: '20px',
-              color: '#c0392b',
-              borderRadius: '5px',
-            }}
-          >
+          <div style={{
+            background: 'linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%)',
+            color: '#c0392b',
+            padding: '15px',
+            borderRadius: '10px',
+            marginBottom: '20px',
+            textAlign: 'center',
+            border: '1px solid #e74c3c',
+            boxShadow: '0 2px 4px rgba(231, 76, 60, 0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '10px'
+          }}>
+            <FaTimes style={{ fontSize: '1.2rem' }} />
             {error}
           </div>
         )}
         {message && (
-          <div
-            style={{
-              backgroundColor: message.includes('success') ? '#d4edda' : '#ffebee',
-              padding: '10px',
-              marginBottom: '20px',
-              color: message.includes('success') ? '#155724' : '#c0392b',
-              borderRadius: '5px',
-            }}
-          >
+          <div style={{
+            background: 'linear-gradient(135deg, #d4edda 0%, #c8e6c9 100%)',
+            color: '#155724',
+            padding: '15px',
+            borderRadius: '10px',
+            marginBottom: '20px',
+            textAlign: 'center',
+            border: '1px solid #28a745',
+            boxShadow: '0 2px 4px rgba(40, 167, 69, 0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '10px'
+          }}>
+            <FaCheck style={{ fontSize: '1.2rem', color: '#27ae60' }} />
             {message}
           </div>
         )}
+        {/* Main Content - Flex Layout for Form and List */}
         <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-          {/* Create/Edit Employee Form */}
+          {/* Create/Edit Employee Form - Styled like a Card */}
           <div
             style={{
               flex: '1',
-              backgroundColor: '#fff',
+              backgroundColor: '#f8f9fa',
               padding: '20px',
-              borderRadius: '8px',
-              boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
+              borderRadius: '10px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
               minWidth: '300px',
+              border: '1px solid #e9ecef'
             }}
           >
-            <h3 style={{ marginBottom: '20px', color: '#333', fontSize: '1.5rem', fontWeight: '600' }}>
+            <h3 style={{ marginBottom: '20px', color: '#2c3e50', fontSize: '1.3rem', fontWeight: '600', textAlign: 'center' }}>
               {editMode ? 'Edit Employee' : 'Create Delivery Boy'}
             </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            <form onSubmit={(e) => { e.preventDefault(); editMode ? handleUpdateEmployee(e) : handleCreateEmployee(e); }} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               <input
                 type="text"
                 name="name"
                 value={formData.name}
                 onChange={handleInputChange}
                 placeholder="Employee Name"
+                required
                 style={{
-                  padding: '10px',
-                  border: '1px solid #ccc',
-                  borderRadius: '5px',
+                  padding: '12px',
+                  border: '1px solid #3498db',
+                  borderRadius: '8px',
                   fontSize: '1rem',
                   outline: 'none',
+                  background: '#ffffff',
+                  transition: 'border-color 0.3s ease'
                 }}
+                onFocus={(e) => e.target.style.borderColor = '#2980b9'}
+                onBlur={(e) => e.target.style.borderColor = '#3498db'}
               />
               <input
                 type="email"
@@ -326,13 +400,18 @@ function EmployeePage() {
                 value={formData.email}
                 onChange={handleInputChange}
                 placeholder="Email Address"
+                required
                 style={{
-                  padding: '10px',
-                  border: '1px solid #ccc',
-                  borderRadius: '5px',
+                  padding: '12px',
+                  border: '1px solid #3498db',
+                  borderRadius: '8px',
                   fontSize: '1rem',
                   outline: 'none',
+                  background: '#ffffff',
+                  transition: 'border-color 0.3s ease'
                 }}
+                onFocus={(e) => e.target.style.borderColor = '#2980b9'}
+                onBlur={(e) => e.target.style.borderColor = '#3498db'}
               />
               <div style={{ display: 'flex', gap: '10px' }}>
                 <select
@@ -340,13 +419,18 @@ function EmployeePage() {
                   value={formData.countryCode}
                   onChange={handleInputChange}
                   style={{
-                    padding: '10px',
-                    border: '1px solid #ccc',
-                    borderRadius: '5px',
+                    padding: '12px',
+                    border: '1px solid #3498db',
+                    borderRadius: '8px',
                     fontSize: '1rem',
                     outline: 'none',
+                    background: '#ffffff',
                     width: '150px',
+                    transition: 'border-color 0.3s ease',
+                    color: '#2c3e50'
                   }}
+                  onFocus={(e) => e.target.style.borderColor = '#2980b9'}
+                  onBlur={(e) => e.target.style.borderColor = '#3498db'}
                 >
                   {countryCodes.map(({ code, country }) => (
                     <option key={code} value={code}>
@@ -360,14 +444,19 @@ function EmployeePage() {
                   value={formData.phoneNumber}
                   onChange={handleInputChange}
                   placeholder="Phone Number"
+                  required
                   style={{
                     flex: '1',
-                    padding: '10px',
-                    border: '1px solid #ccc',
-                    borderRadius: '5px',
+                    padding: '12px',
+                    border: '1px solid #3498db',
+                    borderRadius: '8px',
                     fontSize: '1rem',
                     outline: 'none',
+                    background: '#ffffff',
+                    transition: 'border-color 0.3s ease'
                   }}
+                  onFocus={(e) => e.target.style.borderColor = '#2980b9'}
+                  onBlur={(e) => e.target.style.borderColor = '#3498db'}
                 />
               </div>
               <input
@@ -376,30 +465,40 @@ function EmployeePage() {
                 value={formData.vehicleNumber}
                 onChange={handleInputChange}
                 placeholder="Vehicle Number"
+                required
                 style={{
-                  padding: '10px',
-                  border: '1px solid #ccc',
-                  borderRadius: '5px',
+                  padding: '12px',
+                  border: '1px solid #3498db',
+                  borderRadius: '8px',
                   fontSize: '1rem',
                   outline: 'none',
+                  background: '#ffffff',
+                  transition: 'border-color 0.3s ease'
                 }}
+                onFocus={(e) => e.target.style.borderColor = '#2980b9'}
+                onBlur={(e) => e.target.style.borderColor = '#3498db'}
               />
               <select
                 name="role"
                 value={formData.role}
                 onChange={handleInputChange}
                 style={{
-                  padding: '10px',
-                  border: '1px solid #ccc',
-                  borderRadius: '5px',
+                  padding: '12px',
+                  border: '1px solid #3498db',
+                  borderRadius: '8px',
                   fontSize: '1rem',
                   outline: 'none',
+                  background: '#ffffff',
+                  color: '#2c3e50',
+                  transition: 'border-color 0.3s ease'
                 }}
+                onFocus={(e) => e.target.style.borderColor = '#2980b9'}
+                onBlur={(e) => e.target.style.borderColor = '#3498db'}
               >
                 <option value="Delivery Boy">Delivery Boy</option>
               </select>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <FaKey style={{ color: '#f39c12' }} />
+                <FaKey style={{ color: '#f39c12', fontSize: '1.2rem' }} />
                 <input
                   type="text"
                   name="secretKey"
@@ -407,138 +506,203 @@ function EmployeePage() {
                   onChange={handleInputChange}
                   placeholder="6-Digit Secret Key"
                   maxLength={6}
+                  required
                   style={{
                     flex: 1,
-                    padding: '10px',
-                    border: '1px solid #ccc',
-                    borderRadius: '5px',
+                    padding: '12px',
+                    border: '1px solid #3498db',
+                    borderRadius: '8px',
                     fontSize: '1rem',
                     outline: 'none',
+                    background: '#ffffff',
                     textAlign: 'center',
                     fontWeight: 'bold',
+                    transition: 'border-color 0.3s ease'
                   }}
+                  onFocus={(e) => e.target.style.borderColor = '#2980b9'}
+                  onBlur={(e) => e.target.style.borderColor = '#3498db'}
                 />
               </div>
               <button
-                onClick={editMode ? handleUpdateEmployee : handleCreateEmployee}
+                type="submit"
                 disabled={loading || !validateSecretKey(formData.secretKey)}
                 style={{
-                  padding: '10px 20px',
-                  backgroundColor: loading || !validateSecretKey(formData.secretKey) ? '#ccc' : '#3498db',
-                  color: '#fff',
+                  padding: '12px 24px',
+                  background: loading || !validateSecretKey(formData.secretKey) ? 'linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%)' : 'linear-gradient(135deg, #3498db 0%, #2980b9 100%)',
+                  color: '#ffffff',
                   border: 'none',
-                  borderRadius: '5px',
+                  borderRadius: '50px',
                   cursor: loading || !validateSecretKey(formData.secretKey) ? 'not-allowed' : 'pointer',
-                  transition: 'background-color 0.3s',
+                  fontSize: '1rem',
+                  fontWeight: '600',
+                  boxShadow: loading || !validateSecretKey(formData.secretKey) ? '0 2px 4px rgba(149, 165, 166, 0.3)' : '0 4px 8px rgba(52, 152, 219, 0.3)',
+                  transition: 'all 0.3s ease',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  gap: '8px'
                 }}
-                onMouseOver={(e) => !loading && validateSecretKey(formData.secretKey) && (e.target.style.backgroundColor = '#2980b9')}
-                onMouseOut={(e) => !loading && validateSecretKey(formData.secretKey) && (e.target.style.backgroundColor = '#3498db')}
+                onMouseOver={(e) => {
+                  if (!loading && validateSecretKey(formData.secretKey)) {
+                    e.target.style.transform = 'translateY(-2px)';
+                    e.target.style.boxShadow = '0 6px 12px rgba(52, 152, 219, 0.4)';
+                  }
+                }}
+                onMouseOut={(e) => {
+                  if (!loading && validateSecretKey(formData.secretKey)) {
+                    e.target.style.transform = 'translateY(0)';
+                    e.target.style.boxShadow = '0 4px 8px rgba(52, 152, 219, 0.3)';
+                  }
+                }}
               >
-                <FaPlusCircle style={{ marginRight: '5px' }} />
+                <FaPlusCircle />
                 {loading ? 'Processing...' : editMode ? 'Update Employee' : 'Create Employee'}
               </button>
               {editMode && (
                 <button
+                  type="button"
                   onClick={() => {
                     setEditMode(false);
                     setFormData({ name: '', countryCode: '+91', phoneNumber: '', vehicleNumber: '', role: 'Delivery Boy', email: '', secretKey: '' });
                     setEditEmployeeId(null);
                   }}
                   style={{
-                    padding: '10px 20px',
-                    backgroundColor: '#ccc',
-                    color: '#333',
+                    padding: '12px 24px',
+                    background: 'linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%)',
+                    color: '#ffffff',
                     border: 'none',
-                    borderRadius: '5px',
+                    borderRadius: '50px',
                     cursor: 'pointer',
-                    transition: 'background-color 0.3s',
+                    fontSize: '1rem',
+                    fontWeight: '600',
+                    boxShadow: '0 2px 4px rgba(149, 165, 166, 0.3)',
+                    transition: 'all 0.3s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
                   }}
-                  onMouseOver={(e) => (e.target.style.backgroundColor = '#bbb')}
-                  onMouseOut={(e) => (e.target.style.backgroundColor = '#ccc')}
+                  onMouseOver={(e) => {
+                    e.target.style.transform = 'translateY(-2px)';
+                    e.target.style.boxShadow = '0 4px 8px rgba(149, 165, 166, 0.4)';
+                  }}
+                  onMouseOut={(e) => {
+                    e.target.style.transform = 'translateY(0)';
+                    e.target.style.boxShadow = '0 2px 4px rgba(149, 165, 166, 0.3)';
+                  }}
                 >
                   Cancel
                 </button>
               )}
-            </div>
+            </form>
           </div>
-          {/* Employee List */}
+          {/* Employee List - Styled like a Card */}
           <div
             style={{
               flex: '1',
-              backgroundColor: '#fff',
+              backgroundColor: '#f8f9fa',
               padding: '20px',
-              borderRadius: '8px',
-              boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
+              borderRadius: '10px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
               minWidth: '300px',
+              border: '1px solid #e9ecef',
+              maxHeight: '500px',
+              overflowY: 'auto'
             }}
           >
-            <h3 style={{ marginBottom: '20px', color: '#333', fontSize: '1.5rem', fontWeight: '600' }}>
+            <h3 style={{ marginBottom: '20px', color: '#2c3e50', fontSize: '1.3rem', fontWeight: '600', textAlign: 'center' }}>
               Employee List
             </h3>
             {employees.length === 0 ? (
-              <p style={{ color: '#555' }}>No employees found</p>
+              <div style={{ textAlign: 'center', color: '#7f8c8d', fontSize: '1rem' }}>
+                No employees found.
+              </div>
             ) : (
-              <ul style={{ listStyle: 'none', padding: '0' }}>
+              <ul style={{ listStyle: 'none', padding: '0', margin: 0 }}>
                 {employees.map((employee) => (
                   <li
                     key={employee.employeeId}
                     style={{
-                      padding: '10px',
-                      borderBottom: '1px solid #eee',
+                      padding: '15px',
+                      border: '1px solid #e9ecef',
+                      borderRadius: '8px',
+                      marginBottom: '10px',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      transition: 'background-color 0.2s',
+                      transition: 'all 0.2s ease',
+                      backgroundColor: '#ffffff',
+                      cursor: 'pointer'
                     }}
-                    onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#f0f0f0')}
-                    onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#fff')}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(52, 152, 219, 0.1)';
+                      e.currentTarget.style.transform = 'scale(1.02)';
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.backgroundColor = '#ffffff';
+                      e.currentTarget.style.transform = 'scale(1)';
+                    }}
                   >
                     <div
-                      style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                      style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}
                       onClick={() => handleSelectEmployee(employee)}
                     >
-                      <FaUsers style={{ marginRight: '10px', color: '#3498db' }} />
-                      <span>{employee.name}</span>
+                      <FaUsers style={{ marginRight: '10px', color: '#3498db', fontSize: '1.2rem' }} />
+                      <span style={{ fontWeight: '500', color: '#2c3e50' }}>{employee.name}</span>
                     </div>
-                    <div style={{ display: 'flex', gap: '5px' }}>
+                    <div style={{ display: 'flex', gap: '8px' }}>
                       <button
                         onClick={() => handleEditEmployee(employee)}
                         style={{
-                          padding: '5px 10px',
-                          backgroundColor: '#f1c40f',
-                          color: '#fff',
+                          padding: '8px 12px',
+                          background: 'linear-gradient(135deg, #3498db 0%, #2980b9 100%)',
+                          color: '#ffffff',
                           border: 'none',
-                          borderRadius: '5px',
+                          borderRadius: '20px',
                           cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
+                          gap: '5px',
+                          fontSize: '0.9rem',
+                          transition: 'all 0.3s ease',
+                          boxShadow: '0 2px 4px rgba(52, 152, 219, 0.3)'
                         }}
-                        onMouseOver={(e) => (e.target.style.backgroundColor = '#d4ac0d')}
-                        onMouseOut={(e) => (e.target.style.backgroundColor = '#f1c40f')}
+                        onMouseOver={(e) => {
+                          e.target.style.transform = 'translateY(-2px)';
+                          e.target.style.boxShadow = '0 4px 8px rgba(52, 152, 219, 0.4)';
+                        }}
+                        onMouseOut={(e) => {
+                          e.target.style.transform = 'translateY(0)';
+                          e.target.style.boxShadow = '0 2px 4px rgba(52, 152, 219, 0.3)';
+                        }}
                       >
-                        <FaEdit style={{ marginRight: '5px' }} />
-                        Edit
+                        <FaEdit />
                       </button>
                       <button
                         onClick={() => handleDeleteEmployee(employee.employeeId)}
                         style={{
-                          padding: '5px 10px',
-                          backgroundColor: '#e74c3c',
-                          color: '#fff',
+                          padding: '8px 12px',
+                          background: 'linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)',
+                          color: '#ffffff',
                           border: 'none',
-                          borderRadius: '5px',
+                          borderRadius: '20px',
                           cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
+                          gap: '5px',
+                          fontSize: '0.9rem',
+                          transition: 'all 0.3s ease',
+                          boxShadow: '0 2px 4px rgba(231, 76, 60, 0.3)'
                         }}
-                        onMouseOver={(e) => (e.target.style.backgroundColor = '#c0392b')}
-                        onMouseOut={(e) => (e.target.style.backgroundColor = '#e74c3c')}
+                        onMouseOver={(e) => {
+                          e.target.style.transform = 'translateY(-2px)';
+                          e.target.style.boxShadow = '0 4px 8px rgba(231, 76, 60, 0.4)';
+                        }}
+                        onMouseOut={(e) => {
+                          e.target.style.transform = 'translateY(0)';
+                          e.target.style.boxShadow = '0 2px 4px rgba(231, 76, 60, 0.3)';
+                        }}
                       >
-                        <FaTrash style={{ marginRight: '5px' }} />
-                        Delete
+                        <FaTrash />
                       </button>
                     </div>
                   </li>
@@ -547,31 +711,33 @@ function EmployeePage() {
             )}
           </div>
         </div>
-        {/* Employee Details */}
+        {/* Employee Details - Styled like a Card */}
         {selectedEmployee && (
           <div
             style={{
               marginTop: '20px',
-              backgroundColor: '#fff',
+              backgroundColor: '#f8f9fa',
               padding: '20px',
-              borderRadius: '8px',
-              boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
+              borderRadius: '10px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+              border: '1px solid #e9ecef'
             }}
           >
-            <h3 style={{ marginBottom: '20px', color: '#333', fontSize: '1.5rem', fontWeight: '600' }}>
+            <h3 style={{ marginBottom: '20px', color: '#2c3e50', fontSize: '1.3rem', fontWeight: '600', textAlign: 'center' }}>
               Employee Details
             </h3>
-            <p style={{ margin: '5px 0' }}><strong>Name:</strong> {selectedEmployee.name}</p>
-            <p style={{ margin: '5px 0' }}><strong>Email:</strong> {selectedEmployee.email || 'N/A'}</p>
-            <p style={{ margin: '5px 0' }}><strong>Phone Number:</strong> {selectedEmployee.phoneNumber}</p>
-            <p style={{ margin: '5px 0' }}><strong>Vehicle Number:</strong> {selectedEmployee.vehicleNumber}</p>
-            <p style={{ margin: '5px 0' }}><strong>Role:</strong> {selectedEmployee.role}</p>
-            <p style={{ margin: '5px 0' }}><strong>Secret Key:</strong> {selectedEmployee.secretKey || 'N/A'}</p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '15px' }}>
+              <p style={{ margin: 0, color: '#2c3e50' }}><strong>Name:</strong> {selectedEmployee.name}</p>
+              <p style={{ margin: 0, color: '#2c3e50' }}><strong>Email:</strong> {selectedEmployee.email || 'N/A'}</p>
+              <p style={{ margin: 0, color: '#2c3e50' }}><strong>Phone Number:</strong> {selectedEmployee.phoneNumber}</p>
+              <p style={{ margin: 0, color: '#2c3e50' }}><strong>Vehicle Number:</strong> {selectedEmployee.vehicleNumber}</p>
+              <p style={{ margin: 0, color: '#2c3e50' }}><strong>Role:</strong> {selectedEmployee.role}</p>
+              <p style={{ margin: 0, color: '#2c3e50' }}><strong>Secret Key:</strong> {selectedEmployee.secretKey || 'N/A'}</p>
+            </div>
           </div>
         )}
       </div>
-
-      {/* Custom Delete Confirmation Dialog */}
+      {/* Custom Delete Confirmation Dialog - Styled like EmployeeList */}
       {showDeleteConfirm && (
         <div
           style={{
@@ -582,74 +748,97 @@ function EmployeePage() {
             bottom: 0,
             backgroundColor: 'rgba(0, 0, 0, 0.5)',
             display: 'flex',
-            alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 2000,
+            alignItems: 'center',
+            zIndex: 1000
           }}
+          onClick={(e) => { if (e.target === e.currentTarget) cancelDelete(); }}
         >
-          <div
-            style={{
-              backgroundColor: '#fff',
-              padding: '30px',
-              borderRadius: '8px',
-              boxShadow: '0 4px 10px rgba(0,0,0,0.2)',
-              maxWidth: '400px',
-              textAlign: 'center',
-              minWidth: '300px',
-            }}
-          >
-            <FaTrash style={{ fontSize: '48px', color: '#e74c3c', marginBottom: '15px' }} />
-            <h3 style={{ color: '#333', marginBottom: '10px', fontSize: '1.4rem' }}>Confirm Deletion</h3>
-            <p style={{ color: '#666', marginBottom: '20px', fontSize: '1rem' }}>
-              Are you sure you want to delete this employee? This action cannot be undone.
-            </p>
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+          <div style={{
+            backgroundColor: '#ffffff',
+            padding: '30px',
+            borderRadius: '15px',
+            width: '90%',
+            maxWidth: '400px',
+            boxShadow: '0 10px 20px rgba(0, 0, 0, 0.2)',
+            textAlign: 'center',
+            border: '1px solid #e9ecef'
+          }}>
+            <h3 style={{
+              color: '#e74c3c',
+              marginBottom: '15px',
+              fontSize: '1.5rem'
+            }}>
+              <FaTrash style={{ fontSize: '1.5rem', marginRight: '10px' }} />
+              Confirm Delete
+            </h3>
+            <p style={{
+              color: '#2c3e50',
+              marginBottom: '25px',
+              fontSize: '1.1rem',
+              lineHeight: '1.5'
+            }}>Are you sure you want to delete this employee? This action cannot be undone.</p>
+            <div style={{
+              display: 'flex',
+              gap: '15px',
+              justifyContent: 'center',
+              flexWrap: 'wrap'
+            }}>
               <button
                 onClick={confirmDelete}
-                disabled={loading}
                 style={{
-                  padding: '10px 20px',
-                  backgroundColor: loading ? '#ccc' : '#e74c3c',
-                  color: '#fff',
+                  padding: '12px 24px',
+                  background: 'linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)',
+                  color: 'white',
                   border: 'none',
-                  borderRadius: '5px',
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                  transition: 'background-color 0.3s',
+                  borderRadius: '25px',
+                  cursor: 'pointer',
+                  fontSize: '1rem',
+                  fontWeight: '600',
+                  boxShadow: '0 4px 8px rgba(231, 76, 60, 0.3)',
+                  transition: 'all 0.3s ease',
+                  minWidth: '120px'
                 }}
-                onMouseOver={(e) => !loading && (e.target.style.backgroundColor = '#c0392b')}
-                onMouseOut={(e) => !loading && (e.target.style.backgroundColor = '#e74c3c')}
+                onMouseOver={(e) => {
+                  e.target.style.transform = 'translateY(-2px)';
+                  e.target.style.boxShadow = '0 6px 12px rgba(231, 76, 60, 0.4)';
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.transform = 'translateY(0)';
+                  e.target.style.boxShadow = '0 4px 8px rgba(231, 76, 60, 0.3)';
+                }}
+                disabled={loading}
               >
-                <FaCheck />
-                Yes, Delete
+                {loading ? 'Deleting...' : 'Yes, Delete'}
               </button>
               <button
                 onClick={cancelDelete}
-                disabled={loading}
                 style={{
-                  padding: '10px 20px',
-                  backgroundColor: loading ? '#ccc' : '#95a5a6',
-                  color: '#fff',
+                  padding: '12px 24px',
+                  background: 'linear-gradient(135deg, #3498db 0%, #2980b9 100%)',
+                  color: 'white',
                   border: 'none',
-                  borderRadius: '5px',
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                  transition: 'background-color 0.3s',
+                  borderRadius: '25px',
+                  cursor: 'pointer',
+                  fontSize: '1rem',
+                  fontWeight: '600',
+                  boxShadow: '0 4px 8px rgba(52, 152, 219, 0.3)',
+                  transition: 'all 0.3s ease',
+                  minWidth: '120px'
                 }}
-                onMouseOver={(e) => !loading && (e.target.style.backgroundColor = '#7f8c8d')}
-                onMouseOut={(e) => !loading && (e.target.style.backgroundColor = '#95a5a6')}
+                onMouseOver={(e) => {
+                  e.target.style.transform = 'translateY(-2px)';
+                  e.target.style.boxShadow = '0 6px 12px rgba(52, 152, 219, 0.4)';
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.transform = 'translateY(0)';
+                  e.target.style.boxShadow = '0 4px 8px rgba(52, 152, 219, 0.3)';
+                }}
+                disabled={loading}
               >
-                <FaTimes />
                 Cancel
               </button>
             </div>
-            {loading && (
-              <p style={{ color: '#666', fontSize: '0.9rem', marginTop: '10px' }}>Deleting...</p>
-            )}
           </div>
         </div>
       )}

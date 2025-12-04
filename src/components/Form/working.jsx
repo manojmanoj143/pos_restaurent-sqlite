@@ -1,4 +1,4 @@
-// src/components/Form/working.jsx (Modified - Company Working Days Calendar with Holiday Marking - Only Current Month Days - Added Side Panel for Totals and Leaves Table - Modal for Reasons - Left-Aligned Dates - Pre-populated Defaults for November Only - A4-like Form Layout in Side Panel - Removed Bulk Action Button - Increased Table Font Size and Bold Text Visibility - Centered Layout with Reduced Widths - Top-Left Back Button - Lighter Font Colors - Equal Width and Height for Calendar and Form Panels)
+// src/components/Form/working.jsx - Updated with EmployeeList-like background and fixed back button design. No functional changes.
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -360,220 +360,240 @@ function Working() {
   const updateBtnStyle = { ...modalBtnStyle, backgroundColor: '#3498db', color: '#fff' };
   const removeBtnStyle = { ...modalBtnStyle, backgroundColor: '#e74c3c', color: '#fff' };
   const cancelBtnStyle = { ...modalBtnStyle, backgroundColor: '#bdc3c7', color: '#fff' };
+
   return (
     <div style={{
       minHeight: '100vh',
-      backgroundColor: '#f4f6f9',
+      background: 'linear-gradient(135deg, #ffffff 0%, #3498db 100%)',
       padding: '20px',
-      display: 'flex',
-      flexDirection: 'column',
+      position: 'relative'
     }}>
-      {/* Top Header with Back Button - NEW: Top-left positioned */}
+      {/* Fixed Back Button in Top-Left Corner - Styled like EmployeeList */}
+      <button
+        onClick={() => navigate('/company-details')}
+        style={{
+          position: 'fixed',
+          top: '20px',
+          left: '20px',
+          backgroundColor: 'transparent',
+          border: '2px solid #3498db',
+          color: '#3498db',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '8px 20px',
+          borderRadius: '50px',
+          fontSize: '16px',
+          fontWeight: '600',
+          boxShadow: '0 2px 10px rgba(52, 152, 219, 0.2)',
+          zIndex: 1001,
+          transition: 'all 0.3s ease'
+        }}
+        onMouseOver={(e) => {
+          e.target.style.backgroundColor = '#3498db';
+          e.target.style.color = '#ffffff';
+          e.target.style.transform = 'scale(1.05)';
+        }}
+        onMouseOut={(e) => {
+          e.target.style.backgroundColor = 'transparent';
+          e.target.style.color = '#3498db';
+          e.target.style.transform = 'scale(1)';
+        }}
+        disabled={loading}
+      >
+        <FaArrowLeft /> Back to Company Details
+      </button>
+      {/* Main Container - Like EmployeeList Card */}
       <div style={{
-        display: 'flex',
-        justifyContent: 'flex-start',
-        alignItems: 'center',
-        marginBottom: '20px',
-        padding: '10px 0',
+        maxWidth: '1020px',
+        margin: '80px auto 20px',
+        backgroundColor: '#ffffff',
+        padding: '30px',
+        borderRadius: '15px',
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+        overflow: 'hidden'
       }}>
-        <button
-          onClick={() => navigate('/company-details')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            padding: '10px 20px',
-            backgroundColor: '#3498db',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '15px',
-            cursor: 'pointer',
-          }}
-          onMouseOver={(e) => (e.target.style.backgroundColor = '#2980b9')}
-          onMouseOut={(e) => (e.target.style.backgroundColor = '#3498db')}
-        >
-          <FaArrowLeft /> Back to Company Details
-        </button>
-      </div>
-      {/* Centered Content Container - UPDATED: Equal widths (500px each), reduced total maxWidth to 1020px, centered with margin auto */}
-      <div style={{
-        display: 'flex',
-        gap: '20px',
-        maxWidth: '1020px', // 500 + 20 + 500 = 1020px for equal panels
-        margin: '0 auto',
-        width: '100%',
-        flex: 1,
-      }}>
-        {/* Left: Calendar Container - UPDATED: Equal width maxWidth 500px, height fit-content for alignment */}
+        {/* Centered Content Container - UPDATED: Equal widths (500px each), reduced total maxWidth to 1020px, centered with margin auto */}
         <div style={{
+          display: 'flex',
+          gap: '20px',
+          maxWidth: '1020px', // 500 + 20 + 500 = 1020px for equal panels
+          margin: '0 auto',
+          width: '100%',
           flex: 1,
-          maxWidth: '500px',
-          backgroundColor: '#fff',
-          padding: '30px',
-          borderRadius: '15px',
-          boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
-          color: '#555', // UPDATED: Lighter color for all text
-          height: 'fit-content', // Ensure same height alignment with side panel
         }}>
-          <h2 style={{ textAlign: 'center', color: '#555', fontSize: '2rem', fontWeight: '600', marginBottom: '30px' }}> {/* UPDATED: Lighter color */}
-            <FaCalendarAlt style={{ marginRight: '10px' }} /> Company Working Days & Holidays
-          </h2>
-          {error && (
-            <div style={{ backgroundColor: '#ffebee', padding: '10px', marginBottom: '20px', color: '#c0392b', borderRadius: '15px', textAlign: 'center' }}>
-              {error}
-            </div>
-          )}
-          {message && (
-            <div style={{ backgroundColor: '#d4edda', padding: '10px', marginBottom: '20px', color: '#155724', borderRadius: '15px', textAlign: 'center' }}>
-              {message}
-            </div>
-          )}
-          {/* Month Navigation */}
-          <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-            <button
-              onClick={goToPrevMonth}
-              style={{ padding: '10px', backgroundColor: '#3498db', color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer', marginRight: '10px' }}
-            >
-              Previous Month
-            </button>
-            <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#555' }}> {/* UPDATED: Lighter color */}
-              {monthName} {year}
-            </span>
-            <button
-              onClick={goToNextMonth}
-              style={{ padding: '10px', backgroundColor: '#3498db', color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer', marginLeft: '10px' }}
-            >
-              Next Month
-            </button>
-          </div>
-          {/* Calendar Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '5px', marginBottom: '20px' }}>
-            {/* Weekday Headers */}
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-              <div key={day} style={{ textAlign: 'center', fontWeight: 'bold', padding: '10px', backgroundColor: '#ecf0f1', borderRadius: '5px', color: '#555' }}> {/* UPDATED: Lighter color */}
-                {day}
+          {/* Left: Calendar Container - UPDATED: Equal width maxWidth 500px, height fit-content for alignment */}
+          <div style={{
+            flex: 1,
+            maxWidth: '500px',
+            backgroundColor: '#fff',
+            padding: '30px',
+            borderRadius: '15px',
+            boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
+            color: '#555', // UPDATED: Lighter color for all text
+            height: 'fit-content', // Ensure same height alignment with side panel
+          }}>
+            <h2 style={{ textAlign: 'center', color: '#555', fontSize: '2rem', fontWeight: '600', marginBottom: '30px' }}> {/* UPDATED: Lighter color */}
+              <FaCalendarAlt style={{ marginRight: '10px' }} /> Company Working Days & Holidays
+            </h2>
+            {error && (
+              <div style={{ backgroundColor: '#ffebee', padding: '10px', marginBottom: '20px', color: '#c0392b', borderRadius: '15px', textAlign: 'center' }}>
+                {error}
               </div>
-            ))}
-            {/* Calendar Days */}
-            {calendarDays.map((item, index) => {
-              const isHoliday = item.isCurrentMonth && holidays.has(item.dateStr);
-              const isClickable = item.isCurrentMonth && item.day !== '';
-              const reason = isHoliday ? holidays.get(item.dateStr) : '';
-              const titleText = isClickable ? (isHoliday ? `Reason: ${reason} - Click to edit/remove` : 'Click to add leave with reason') : '';
-              const dayStyle = {
-                textAlign: 'left',
-                padding: '10px 8px',
-                borderRadius: '5px',
-                cursor: isClickable ? 'pointer' : 'default',
-                border: isHoliday ? '2px solid #e74c3c' : '1px solid #ddd',
-                backgroundColor: isHoliday ? '#fdf2f2' : (item.isToday ? '#3498db' : (item.isCurrentMonth && item.day !== '' ? '#fff' : '#f8f9fa')),
-                color: item.isToday ? '#fff' : (isHoliday ? '#e74c3c' : (item.isCurrentMonth && item.day !== '' ? '#555' : 'transparent')), // UPDATED: Lighter color
-                minHeight: '40px',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'flex-start',
-                justifyContent: 'center',
-              };
-              return (
-                <div
-                  key={index}
-                  style={dayStyle}
-                  onClick={() => isClickable && openModal(item.dateStr)}
-                  title={titleText}
-                >
-                  <span>{item.day}</span>
-                  {item.isToday && <div style={{ fontSize: '0.8rem', marginTop: '2px', color: '#fff' }}>Today</div>}
-                </div>
-              );
-            })}
-          </div>
-          {/* Save Button - REMOVED: Bulk Action Button */}
-          <form onSubmit={handleSubmit}>
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+            )}
+            {message && (
+              <div style={{ backgroundColor: '#d4edda', padding: '10px', marginBottom: '20px', color: '#155724', borderRadius: '15px', textAlign: 'center' }}>
+                {message}
+              </div>
+            )}
+            {/* Month Navigation - UPDATED: Flex layout for single horizontal line, centered */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '20px' }}>
               <button
-                type="submit"
-                disabled={loading}
-                style={{
-                  padding: '12px 20px',
-                  backgroundColor: loading ? '#bdc3c7' : '#3498db',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '15px',
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  fontSize: '1rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                }}
+                onClick={goToPrevMonth}
+                style={{ padding: '8px', backgroundColor: '#3498db', color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer' }}
               >
-                {loading ? 'Saving...' : <><FaSave style={{ marginRight: '5px' }} />Save Holidays & Working Days</>}
+                Previous Month
+              </button>
+              <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#555',paddingLeft:'15px' }}> {/* UPDATED: Lighter color */}
+                {monthName} {year}
+              </span>
+              <button
+                onClick={goToNextMonth}
+                style={{ padding: '8px', backgroundColor: '#3498db', color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer' }}
+              >
+                Next Month
               </button>
             </div>
-          </form>
-          {/* Instructions */}
-          <div style={{ marginTop: '30px', padding: '15px', backgroundColor: '#e8f4fd', borderRadius: '10px', fontSize: '0.9rem', color: '#555' }}> {/* UPDATED: Lighter color */}
-            <strong>Instructions:</strong> Click on any date in the current month to add/edit/remove leave with reason (e.g., festival, weekly leave). Use the right panel to view leaves grouped by type with counts. Leaves are marked with red borders. Total working days and leaves are auto-calculated. Save to update for the month. Only current month dates are displayed; previous and next month days are hidden with empty cells for alignment.
-          </div>
-        </div>
-        {/* Right: Side Panel - A4-like Form with Month/Year Header, Filter Button, Grouped Table, Summary at Bottom - UPDATED: Equal width 500px, height fit-content for alignment */}
-        <div style={sidePanelStyle}>
-          {/* A4-like Header */}
-          <div style={headerStyle}>
-            Company Leaves Form - {monthName} {year}
-          </div>
-          {/* Filter Toggle Button */}
-          <div style={{ textAlign: 'right', marginBottom: '10px' }}>
-            <button onClick={toggleShowAll} style={filterBtnStyle}>
-              {showAllLeaves ? 'Show Month Only' : 'Show All Leaves'}
-            </button>
-          </div>
-          {/* Table Section */}
-          <div style={{ width: '100%' }}>
-            <h4 style={{ color: '#555', marginBottom: '10px', fontSize: '13px' }}> {/* UPDATED: Lighter color */}
-              Leaves Details {showAllLeaves ? '(All Months)' : '(Current Month)'}
-            </h4>
-            <table style={tableStyle}>
-              <thead>
-                <tr>
-                  <th style={thStyle}>Leave Type</th>
-                  <th style={thStyle}>Count</th>
-                  <th style={thStyle}>Dates</th>
-                </tr>
-              </thead>
-              <tbody>
-                {groupedArray.length === 0 ? (
-                  <tr>
-                    <td colSpan={3} style={{ textAlign: 'center', color: '#777', fontStyle: 'italic' }}> {/* UPDATED: Lighter color */}
-                      No leaves {showAllLeaves ? `for ${year}` : 'added yet.'}
-                    </td>
-                  </tr>
-                ) : (
-                  groupedArray.map(({ reason, count, dates }) => {
-                    const dateStrs = dates.map(d => {
-                      const dt = new Date(d);
-                      return dt.getDate().toString().padStart(2, '0') + '-' + dt.toLocaleDateString('en-GB', { month: 'short' }) + '-' + dt.getFullYear();
-                    }).join(', ');
-                    return (
-                      <tr key={reason}>
-                        <td style={tdStyle}><strong>{reason} ({count})</strong></td> {/* UPDATED: Added <strong> for visibility */}
-                        <td style={tdStyle}><strong>{count}</strong></td> {/* UPDATED: Added <strong> for visibility */}
-                        <td style={tdStyle}><strong>{dateStrs}</strong></td> {/* UPDATED: Added <strong> for visibility */}
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-          {/* Summary at Bottom */}
-          <div style={summaryStyle}>
-            <h4 style={summaryHeaderStyle}>Summary</h4>
-            <div style={summaryTotalsStyle}>
-              <span>Total Leaves: {displayLeaves}</span>
-              <span>Working Days: {displayWorking}</span>
+            {/* Calendar Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '5px', marginBottom: '20px' }}>
+              {/* Weekday Headers */}
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                <div key={day} style={{ textAlign: 'center', fontWeight: 'bold', padding: '10px', backgroundColor: '#ecf0f1', borderRadius: '5px', color: '#555' }}> {/* UPDATED: Lighter color */}
+                  {day}
+                </div>
+              ))}
+              {/* Calendar Days */}
+              {calendarDays.map((item, index) => {
+                const isHoliday = item.isCurrentMonth && holidays.has(item.dateStr);
+                const isClickable = item.isCurrentMonth && item.day !== '';
+                const reason = isHoliday ? holidays.get(item.dateStr) : '';
+                const titleText = isClickable ? (isHoliday ? `Reason: ${reason} - Click to edit/remove` : 'Click to add leave with reason') : '';
+                const dayStyle = {
+                  textAlign: 'left',
+                  padding: '10px 8px',
+                  borderRadius: '5px',
+                  cursor: isClickable ? 'pointer' : 'default',
+                  border: isHoliday ? '2px solid #e74c3c' : '1px solid #ddd',
+                  backgroundColor: isHoliday ? '#fdf2f2' : (item.isToday ? '#3498db' : (item.isCurrentMonth && item.day !== '' ? '#fff' : '#f8f9fa')),
+                  color: item.isToday ? '#fff' : (isHoliday ? '#e74c3c' : (item.isCurrentMonth && item.day !== '' ? '#555' : 'transparent')), // UPDATED: Lighter color
+                  minHeight: '40px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'flex-start',
+                  justifyContent: 'center',
+                };
+                return (
+                  <div
+                    key={index}
+                    style={dayStyle}
+                    onClick={() => isClickable && openModal(item.dateStr)}
+                    title={titleText}
+                  >
+                    <span>{item.day}</span>
+                    {item.isToday && <div style={{ fontSize: '0.8rem', marginTop: '2px', color: '#fff' }}>Today</div>}
+                  </div>
+                );
+              })}
             </div>
-            <div style={summaryNoteStyle}>
-              * Total Days: {totalDays} ({period})
+            {/* Save Button - REMOVED: Bulk Action Button */}
+            <form onSubmit={handleSubmit}>
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  style={{
+                    padding: '12px 20px',
+                    backgroundColor: loading ? '#bdc3c7' : '#3498db',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '15px',
+                    cursor: loading ? 'not-allowed' : 'pointer',
+                    fontSize: '1rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                  }}
+                >
+                  {loading ? 'Saving...' : <><FaSave style={{ marginRight: '5px' }} />Save Holidays & Working Days</>}
+                </button>
+              </div>
+            </form>
+            {/* Instructions */}
+            <div style={{ marginTop: '30px', padding: '15px', backgroundColor: '#e8f4fd', borderRadius: '10px', fontSize: '0.9rem', color: '#555' }}> {/* UPDATED: Lighter color */}
+              <strong>Instructions:</strong> Click on any date in the current month to add/edit/remove leave with reason (e.g., festival, weekly leave). Use the right panel to view leaves grouped by type with counts. Leaves are marked with red borders. Total working days and leaves are auto-calculated. Save to update for the month. Only current month dates are displayed; previous and next month days are hidden with empty cells for alignment.
+            </div>
+          </div>
+          {/* Right: Side Panel - A4-like Form with Month/Year Header, Filter Button, Grouped Table, Summary at Bottom - UPDATED: Equal width 500px, height fit-content for alignment */}
+          <div style={sidePanelStyle}>
+            {/* A4-like Header */}
+            <div style={headerStyle}>
+              Company Leaves Form - {monthName} {year}
+            </div>
+            {/* Filter Toggle Button */}
+            <div style={{ textAlign: 'right', marginBottom: '10px' }}>
+              <button onClick={toggleShowAll} style={filterBtnStyle}>
+                {showAllLeaves ? 'Show Month Only' : 'Show All Leaves'}
+              </button>
+            </div>
+            {/* Table Section */}
+            <div style={{ width: '100%' }}>
+              <h4 style={{ color: '#555', marginBottom: '10px', fontSize: '13px' }}> {/* UPDATED: Lighter color */}
+                Leaves Details {showAllLeaves ? '(All Months)' : '(Current Month)'}
+              </h4>
+              <table style={tableStyle}>
+                <thead>
+                  <tr>
+                    <th style={thStyle}>Leave Type</th>
+                    <th style={thStyle}>Count</th>
+                    <th style={thStyle}>Dates</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {groupedArray.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} style={{ textAlign: 'center', color: '#777', fontStyle: 'italic' }}> {/* UPDATED: Lighter color */}
+                        No leaves {showAllLeaves ? `for ${year}` : 'added yet.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    groupedArray.map(({ reason, count, dates }) => {
+                      const dateStrs = dates.map(d => {
+                        const dt = new Date(d);
+                        return dt.getDate().toString().padStart(2, '0') + '-' + dt.toLocaleDateString('en-GB', { month: 'short' }) + '-' + dt.getFullYear();
+                      }).join(', ');
+                      return (
+                        <tr key={reason}>
+                          <td style={tdStyle}><strong>{reason} ({count})</strong></td> {/* UPDATED: Added <strong> for visibility */}
+                          <td style={tdStyle}><strong>{count}</strong></td> {/* UPDATED: Added <strong> for visibility */}
+                          <td style={tdStyle}><strong>{dateStrs}</strong></td> {/* UPDATED: Added <strong> for visibility */}
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {/* Summary at Bottom */}
+            <div style={summaryStyle}>
+              <h4 style={summaryHeaderStyle}>Summary</h4>
+              <div style={summaryTotalsStyle}>
+                <span>Total Leaves: {displayLeaves}</span>
+                <span>Working Days: {displayWorking}</span>
+              </div>
+              <div style={summaryNoteStyle}>
+                * Total Days: {totalDays} ({period})
+              </div>
             </div>
           </div>
         </div>

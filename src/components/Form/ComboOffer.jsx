@@ -234,40 +234,19 @@ const ComboOffer = () => {
   };
   /* -------------------------------------------------- STYLES -------------------------------------------------- */
   const pageStyle = {
-    padding: "20px",
-    background: "linear-gradient(135deg, #e3f2fd, #bbdefb)",
-    minHeight: "100vh",
-    fontFamily: "Arial, sans-serif",
+    minHeight: '100vh',
+    background: 'linear-gradient(135deg, #ffffff 0%, #3498db 100%)',
+    padding: '20px',
+    position: 'relative'
   };
-  const headerStyle = { display: "flex", alignItems: "center", marginBottom: "20px" };
-  const backButtonStyle = {
-    background: "linear-gradient(135deg, #ffffff, #f0f0f0)",
-    border: "1px solid #bdc3c7",
-    borderRadius: "5px",
-    padding: "8px 12px",
-    cursor: "pointer",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-    transition: "background 0.3s ease",
-  };
-  const titleStyle = { marginLeft: "10px", color: "#2c3e50" };
-  const warningStyle = {
-    backgroundColor: "#ffebee",
-    padding: "10px",
-    marginBottom: "20px",
-    color: "#c0392b",
-    borderRadius: "5px",
-  };
-  const loadingStyle = { textAlign: "center", color: "#7f8c8d" };
   const formCardStyle = {
     maxWidth: "800px", // Wider for side-by-side layout
-    margin: "0 auto",
+    margin: "80px auto 20px",
     backgroundColor: "#ffffff",
-    padding: "20px",
-    borderRadius: "10px",
-    boxShadow: "0 4px 8px rgba(0,0,0,0.1)",
+    padding: "30px",
+    borderRadius: "15px",
+    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+    overflow: "hidden",
     display: "grid",
     gridTemplateColumns: "1fr 300px", // Side layout for form and images
     gap: "20px",
@@ -371,22 +350,71 @@ const ComboOffer = () => {
     cursor: "pointer",
     fontSize: "12px",
   };
+  const warningStyle = {
+    backgroundColor: "#ffebee",
+    padding: "10px",
+    marginBottom: "20px",
+    color: "#c0392b",
+    borderRadius: "5px",
+  };
+  const loadingStyle = { textAlign: "center", color: "#7f8c8d" };
+  const titleStyle = { marginLeft: "10px", color: "#2c3e50" };
   /* -------------------------------------------------- RENDER -------------------------------------------------- */
   return (
     <div style={pageStyle}>
-      {/* Header */}
-      <div style={headerStyle}>
-        <button onClick={() => navigate(-1)} style={backButtonStyle}>
-          <FaArrowLeft style={{ fontSize: "24px", color: "#2c3e50" }} />
-        </button>
-        <h2 style={titleStyle}>{isEdit ? "Edit Combo Offer" : "Create Combo Offer"}</h2>
-      </div>
+      {/* Fixed Back Button in Top-Left Corner - Styled like EmployeeList */}
+      <button
+        onClick={() => navigate(-1)}
+        style={{
+          position: 'fixed',
+          top: '20px',
+          left: '20px',
+          backgroundColor: 'transparent',
+          border: '2px solid #3498db',
+          color: '#3498db',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '8px 20px',
+          borderRadius: '50px',
+          fontSize: '16px',
+          fontWeight: '600',
+          boxShadow: '0 2px 10px rgba(52, 152, 219, 0.2)',
+          zIndex: 1001,
+          transition: 'all 0.3s ease'
+        }}
+        onMouseOver={(e) => {
+          e.target.style.backgroundColor = '#3498db';
+          e.target.style.color = '#ffffff';
+          e.target.style.transform = 'scale(1.05)';
+        }}
+        onMouseOut={(e) => {
+          e.target.style.backgroundColor = 'transparent';
+          e.target.style.color = '#3498db';
+          e.target.style.transform = 'scale(1)';
+        }}
+        disabled={loading}
+      >
+        <FaArrowLeft /> Back to Admin
+      </button>
       {/* Warning / Success */}
       {warningMessage && <div style={warningStyle}>{warningMessage}</div>}
       {/* Loading */}
       {loading && <div style={loadingStyle}>Loading...</div>}
       {/* Form Card - Grid layout for side-by-side */}
       <div style={formCardStyle}>
+        {/* Title inside card */}
+        <h2 style={{
+          textAlign: 'center',
+          color: '#2c3e50',
+          margin: '0 0 30px 0',
+          fontSize: '1.8rem',
+          fontWeight: '600',
+          gridColumn: '1 / -1'
+        }}>
+          {isEdit ? "Edit Combo Offer" : "Create Combo Offer"}
+        </h2>
         {/* Main Form - Left Side */}
         <div style={mainFormStyle}>
           <form onSubmit={handleSubmit}>

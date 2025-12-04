@@ -369,17 +369,20 @@ const ItemListPage = () => {
     position: "fixed",
     top: "20px",
     left: "20px",
-    backgroundColor: "#f0f0f0",
-    border: "1px solid #ccc",
-    color: "#333",
-    borderRadius: "5px",
-    padding: "10px",
+    backgroundColor: "transparent",
+    border: "2px solid #3498db",
+    color: "#3498db",
     cursor: "pointer",
-    zIndex: 1000,
     display: "flex",
     alignItems: "center",
-    justifyContent: "center",
-    transition: "all 0.3s ease",
+    gap: "8px",
+    padding: "8px 20px",
+    borderRadius: "50px",
+    fontSize: "16px",
+    fontWeight: "600",
+    boxShadow: "0 2px 10px rgba(52, 152, 219, 0.2)",
+    zIndex: 1001,
+    transition: "all 0.3s ease"
   };
   // UPDATED: Poster style for combo offers
   const posterStyle = {
@@ -610,17 +613,22 @@ const ItemListPage = () => {
   };
   return (
     <div className="container-fluid mt-5">
+      {/* Updated Back Button - Styled like EmployeeList */}
       <button
         onClick={goBack}
         style={backButtonStyle}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.backgroundColor = "#e0e0e0";
+        onMouseOver={(e) => {
+          e.target.style.backgroundColor = '#3498db';
+          e.target.style.color = '#ffffff';
+          e.target.style.transform = 'scale(1.05)';
         }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.backgroundColor = "#f0f0f0";
+        onMouseOut={(e) => {
+          e.target.style.backgroundColor = 'transparent';
+          e.target.style.color = '#3498db';
+          e.target.style.transform = 'scale(1)';
         }}
       >
-        <FaArrowLeft style={{ fontSize: "24px" }} />
+        <FaArrowLeft /> Back to Admin
       </button>
       <button
         onClick={handleAddNewItem}

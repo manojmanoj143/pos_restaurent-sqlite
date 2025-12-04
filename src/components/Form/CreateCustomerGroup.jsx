@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import axios from 'axios';
+import { FaArrowLeft } from 'react-icons/fa';
 
 const CreateCustomerGroup = () => {
   const [groupName, setGroupName] = useState("");
@@ -8,7 +10,6 @@ const CreateCustomerGroup = () => {
   const [customerGroups, setCustomerGroups] = useState([]);
   const [baseUrl, setBaseUrl] = useState("");
   const [editingGroupId, setEditingGroupId] = useState(null);
-
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -29,27 +30,20 @@ const CreateCustomerGroup = () => {
         setBaseUrl("");
       } finally {
         // Pass the determined baseUrl to fetch functions
-        fetchCounts(currentBaseUrl);
-        fetchLogo(currentBaseUrl);
+        fetchCustomerGroups(currentBaseUrl);
       }
     };
     fetchConfig();
   }, []);
 
-
-  const fetchCustomerGroups = async () => {
+  const fetchCustomerGroups = async (currentBaseUrl) => {
     try {
-      const response = await fetch('/api/customer-groups');
-      const data = await response.json();
-      setCustomerGroups(data);
+      const res = await axios.get(`${currentBaseUrl}/api/customer-groups`);
+      setCustomerGroups(res.data);
     } catch (error) {
       console.error('Error fetching customer groups:', error);
     }
   };
-
-  useEffect(() => {
-    fetchCustomerGroups();
-  }, []);
 
   const handleCreateOrUpdateGroup = async () => {
     if (!groupName.trim()) {
@@ -57,37 +51,40 @@ const CreateCustomerGroup = () => {
       setWarningType("warning");
       return;
     }
-
     try {
       const groupData = {
         group_name: groupName.trim(),
       };
-
-      let url = '/api/customer-groups';
+      let url = `${baseUrl}/api/customer-groups`;
       let method = 'POST';
       if (editingGroupId) {
-        url = `/api/customer-groups/${editingGroupId}`;
+        url = `${baseUrl}/api/customer-groups/${editingGroupId}`;
         method = 'PUT';
       }
-
-      const response = await fetch(url, {
+      const response = await axios({
         method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(groupData),
+        url,
+        data: groupData,
+        headers: { 'Content-Type': 'application/json' }
       });
-
-      if (response.ok) {
-        const responseData = await response.json();
+      if (response.status === 200 || response.status === 201) {
+        const responseData = response.data;
         setWarningMessage(editingGroupId ? 'Customer group updated successfully!' : 'Customer group created successfully!');
         setWarningType("success");
         setGroupName("");
         setEditingGroupId(null);
-        fetchCustomerGroups();
+        fetchCustomerGroups(baseUrl);
+        // NEW: Pass back the formState if coming from create customer
         if (location.state?.fromCreateCustomer) {
-          navigate('/create-customer', { state: { newGroupId: responseData._id || editingGroupId } });
+          navigate('/create-customer', {
+            state: {
+              newGroupId: responseData._id || editingGroupId,
+              formState: location.state.formState
+            }
+          });
         }
       } else {
-        const errorData = await response.json();
+        const errorData = response.data;
         setWarningMessage(errorData.error || (editingGroupId ? 'Failed to update customer group' : 'Failed to create customer group'));
         setWarningType("warning");
       }
@@ -100,16 +97,13 @@ const CreateCustomerGroup = () => {
 
   const handleDeleteGroup = async (groupId) => {
     try {
-      const response = await fetch(`/api/customer-groups/${groupId}`, {
-        method: 'DELETE',
-      });
-
-      if (response.ok) {
+      const response = await axios.delete(`${baseUrl}/api/customer-groups/${groupId}`);
+      if (response.status === 200) {
         setWarningMessage('Customer group deleted successfully!');
         setWarningType("success");
-        fetchCustomerGroups();
+        fetchCustomerGroups(baseUrl);
       } else {
-        const errorData = await response.json();
+        const errorData = response.data;
         setWarningMessage(errorData.error || 'Failed to delete customer group');
         setWarningType("warning");
       }
@@ -135,239 +129,320 @@ const CreateCustomerGroup = () => {
   };
 
   return (
-    <div className="container mt-5 p-4">
-      {warningMessage && (
-        <div className={`alert alert-${warningType} text-center alert-dismissible fade show`} role="alert">
-          {warningMessage}
-          <button
-            type="button"
-            className="btn btn-primary ms-3"
-            onClick={handleWarningOk}
-          >
-            OK
-          </button>
+    <div style={{
+      minHeight: '100vh',
+      background: 'linear-gradient(135deg, #ffffff 0%, #3498db 100%)',
+      padding: '20px',
+      position: 'relative'
+    }}>
+      {/* Fixed Back Button in Top-Left Corner - Styled like EmployeeList */}
+      <button
+        onClick={handleBackToAdmin}
+        style={{
+          position: 'fixed',
+          top: '20px',
+          left: '20px',
+          backgroundColor: 'transparent',
+          border: '2px solid #3498db',
+          color: '#3498db',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '8px 20px',
+          borderRadius: '50px',
+          fontSize: '16px',
+          fontWeight: '600',
+          boxShadow: '0 2px 10px rgba(52, 152, 219, 0.2)',
+          zIndex: 1001,
+          transition: 'all 0.3s ease'
+        }}
+        onMouseOver={(e) => {
+          e.target.style.backgroundColor = '#3498db';
+          e.target.style.color = '#ffffff';
+          e.target.style.transform = 'scale(1.05)';
+        }}
+        onMouseOut={(e) => {
+          e.target.style.backgroundColor = 'transparent';
+          e.target.style.color = '#3498db';
+          e.target.style.transform = 'scale(1)';
+        }}
+      >
+        <FaArrowLeft /> Back to Admin
+      </button>
+
+      {/* Main Container - Like EmployeeList Card */}
+      <div style={{
+        maxWidth: '900px',
+        margin: '80px auto 20px',
+        backgroundColor: '#ffffff',
+        padding: '30px',
+        borderRadius: '15px',
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+        overflow: 'hidden'
+      }}>
+        {/* Header with Title */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          marginBottom: '30px',
+          paddingBottom: '20px',
+          borderBottom: '2px solid #3498db'
+        }}>
+          <h1 style={{
+            textAlign: 'center',
+            color: '#2c3e50',
+            margin: 0,
+            fontSize: '1.8rem',
+            fontWeight: '600'
+          }}>
+            Create a New Customer Group
+          </h1>
         </div>
-      )}
 
-      <div className="row">
-        <div className="col-md-12">
-          <div className="d-flex align-items-center mb-4">
-            <button 
-              type="button" 
-              className="btn btn-secondary rounded-pill"
-              onClick={handleBackToAdmin}
+        {/* Warning Message - Styled like EmployeeList Alerts */}
+        {warningMessage && (
+          <div style={{
+            background: warningType === 'success' ? 'linear-gradient(135deg, #d4edda 0%, #c8e6c9 100%)' : 'linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%)',
+            color: warningType === 'success' ? '#155724' : '#c0392b',
+            padding: '15px',
+            borderRadius: '10px',
+            marginBottom: '20px',
+            textAlign: 'center',
+            border: `1px solid ${warningType === 'success' ? '#28a745' : '#e74c3c'}`,
+            boxShadow: `0 2px 4px rgba(${warningType === 'success' ? '40, 167, 69' : '231, 76, 60'}, 0.2)`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '10px'
+          }}>
+            {warningMessage}
+            <button
+              onClick={handleWarningOk}
+              style={{
+                background: 'linear-gradient(135deg, #3498db 0%, #2980b9 100%)',
+                color: '#ffffff',
+                border: 'none',
+                padding: '8px 15px',
+                borderRadius: '25px',
+                cursor: 'pointer',
+                fontSize: '0.9rem',
+                fontWeight: '500',
+                transition: 'all 0.3s ease',
+                boxShadow: '0 2px 4px rgba(52, 152, 219, 0.3)'
+              }}
+              onMouseOver={(e) => {
+                e.target.style.transform = 'scale(1.05)';
+                e.target.style.boxShadow = '0 4px 8px rgba(52, 152, 219, 0.4)';
+              }}
+              onMouseOut={(e) => {
+                e.target.style.transform = 'scale(1)';
+                e.target.style.boxShadow = '0 2px 4px rgba(52, 152, 219, 0.3)';
+              }}
             >
-              Back to Admin
+              OK
             </button>
-            <h1 className="mb-0 flex-grow-1 text-center">Create a New Customer Group</h1>
           </div>
-          <div className="inner-container">
-            <form onSubmit={(e) => { e.preventDefault(); handleCreateOrUpdateGroup(); }}>
-              <div className="form-group mb-3">
-                <label htmlFor="group_name">Enter Group Name:</label>
-                <input
-                  type="text"
-                  id="group_name"
-                  className="form-control rounded-pill"
-                  value={groupName}
-                  onChange={(e) => setGroupName(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="d-flex justify-content-center mt-4">
-                <button 
-                  type="submit" 
-                  className="btn btn-primary rounded-pill px-5"
-                >
-                  {editingGroupId ? 'Update Group' : 'Save Group'}
-                </button>
-              </div>
-            </form>
+        )}
 
-            <div className="mt-5">
-              <h2 className="mb-3 text-center">Existing Customer Groups</h2>
-              {customerGroups.length === 0 ? (
-                <p className="text-center">No customer groups found.</p>
-              ) : (
-                <ul className="list-group">
-                  {customerGroups.map((group) => (
-                    <li key={group._id} className="list-group-item d-flex justify-content-between align-items-center rounded">
-                      {group.group_name}
-                      <div>
-                        <button 
-                          className="btn btn-primary btn-sm me-2 rounded-pill" 
-                          onClick={() => handleEditGroup(group)}
-                        >
-                          Edit
-                        </button>
-                        <button 
-                          className="btn btn-danger btn-sm rounded-pill" 
-                          onClick={() => handleDeleteGroup(group._id)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
+        {/* Form Section - Styled like EmployeeList Form */}
+        <div style={{
+          background: '#f8f9fa',
+          padding: '20px',
+          borderRadius: '15px',
+          marginBottom: '30px',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+          border: '1px solid #e9ecef'
+        }}>
+          <form onSubmit={(e) => { e.preventDefault(); handleCreateOrUpdateGroup(); }}>
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{
+                display: 'block',
+                marginBottom: '8px',
+                fontWeight: '600',
+                fontSize: '1rem',
+                color: '#2c3e50'
+              }}>Enter Group Name:</label>
+              <input
+                type="text"
+                value={groupName}
+                onChange={(e) => setGroupName(e.target.value)}
+                required
+                style={{
+                  width: '100%',
+                  padding: '12px 15px',
+                  border: '1px solid #3498db',
+                  borderRadius: '25px',
+                  fontSize: '1rem',
+                  outline: 'none',
+                  background: '#ffffff',
+                  transition: 'border-color 0.3s ease',
+                  boxShadow: '0 2px 4px rgba(52, 152, 219, 0.1)'
+                }}
+                onFocus={(e) => e.target.style.borderColor = '#2980b9'}
+                onBlur={(e) => e.target.style.borderColor = '#3498db'}
+              />
             </div>
-          </div>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'center'
+            }}>
+              <button
+                type="submit"
+                style={{
+                  background: 'linear-gradient(135deg, #3498db 0%, #2980b9 100%)',
+                  color: '#ffffff',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '12px 30px',
+                  borderRadius: '50px',
+                  fontSize: '1rem',
+                  fontWeight: '600',
+                  boxShadow: '0 4px 8px rgba(52, 152, 219, 0.3)',
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseOver={(e) => {
+                  e.target.style.transform = 'translateY(-2px)';
+                  e.target.style.boxShadow = '0 6px 12px rgba(52, 152, 219, 0.4)';
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.transform = 'translateY(0)';
+                  e.target.style.boxShadow = '0 4px 8px rgba(52, 152, 219, 0.3)';
+                }}
+              >
+                {editingGroupId ? 'Update Group' : 'Save Group'}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {/* Existing Groups Section - Styled like EmployeeList Table/List */}
+        <div style={{
+          background: '#f8f9fa',
+          padding: '20px',
+          borderRadius: '15px',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+          border: '1px solid #e9ecef'
+        }}>
+          <h2 style={{
+            textAlign: 'center',
+            color: '#2c3e50',
+            margin: '0 0 20px 0',
+            fontSize: '1.5rem',
+            fontWeight: '600'
+          }}>
+            Existing Customer Groups
+          </h2>
+          {customerGroups.length === 0 ? (
+            <div style={{
+              textAlign: 'center',
+              color: '#7f8c8d',
+              fontSize: '1.1rem',
+              padding: '40px',
+              background: '#ffffff',
+              borderRadius: '10px',
+              border: '2px dashed #bdc3c7'
+            }}>
+              No customer groups found.
+            </div>
+          ) : (
+            <div style={{
+              maxHeight: '400px',
+              overflowY: 'auto'
+            }}>
+              {customerGroups.map((group) => (
+                <div
+                  key={group._id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    backgroundColor: '#ffffff',
+                    padding: '15px 20px',
+                    marginBottom: '10px',
+                    borderRadius: '10px',
+                    border: '1px solid #e9ecef',
+                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(52, 152, 219, 0.05)';
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.backgroundColor = '#ffffff';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
+                >
+                  <span style={{
+                    color: '#2c3e50',
+                    fontWeight: '500',
+                    fontSize: '1rem'
+                  }}>
+                    {group.group_name}
+                  </span>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button
+                      onClick={() => handleEditGroup(group)}
+                      style={{
+                        padding: '8px 15px',
+                        background: 'linear-gradient(135deg, #3498db 0%, #2980b9 100%)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '25px',
+                        cursor: 'pointer',
+                        fontSize: '0.9rem',
+                        fontWeight: '500',
+                        transition: 'all 0.3s ease',
+                        boxShadow: '0 2px 4px rgba(52, 152, 219, 0.3)'
+                      }}
+                      onMouseOver={(e) => {
+                        e.target.style.transform = 'translateY(-2px)';
+                        e.target.style.boxShadow = '0 4px 8px rgba(52, 152, 219, 0.4)';
+                      }}
+                      onMouseOut={(e) => {
+                        e.target.style.transform = 'translateY(0)';
+                        e.target.style.boxShadow = '0 2px 4px rgba(52, 152, 219, 0.3)';
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteGroup(group._id)}
+                      style={{
+                        padding: '8px 15px',
+                        background: 'linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '25px',
+                        cursor: 'pointer',
+                        fontSize: '0.9rem',
+                        fontWeight: '500',
+                        transition: 'all 0.3s ease',
+                        boxShadow: '0 2px 4px rgba(231, 76, 60, 0.3)'
+                      }}
+                      onMouseOver={(e) => {
+                        e.target.style.transform = 'translateY(-2px)';
+                        e.target.style.boxShadow = '0 4px 8px rgba(231, 76, 60, 0.4)';
+                      }}
+                      onMouseOut={(e) => {
+                        e.target.style.transform = 'translateY(0)';
+                        e.target.style.boxShadow = '0 2px 4px rgba(231, 76, 60, 0.3)';
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
-
-      <style jsx>{`
-        .container {
-          background: #ffffff;
-          padding: 2.5rem;
-          border-radius: 12px;
-          box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
-          max-width: 900px;
-          margin: 2rem auto;
-        }
-        .inner-container {
-          background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
-          padding: 2rem;
-          border-radius: 8px;
-        }
-        h1, h2 {
-          color: #2c3e50;
-          font-weight: 700;
-          font-size: 2rem;
-        }
-        h2 {
-          font-size: 1.5rem;
-        }
-        .form-group label {
-          font-weight: 600;
-          color: #34495e;
-          margin-bottom: 0.5rem;
-          font-size: 1rem;
-        }
-        .form-control {
-          border-radius: 25px;
-          border: 1px solid #b0bec5;
-          padding: 0.75rem 1.25rem;
-          background-color: #fff;
-          transition: all 0.3s ease;
-        }
-        .form-control:focus {
-          border-color: #007bff;
-          box-shadow: 0 0 8px rgba(0, 123, 255, 0.3);
-        }
-        .btn-primary {
-          background-color: #007bff;
-          border-color: #007bff;
-          padding: 0.75rem 2rem;
-          font-weight: 600;
-          transition: all 0.3s ease;
-        }
-        .btn-primary:hover {
-          background-color: #0056b3;
-          border-color: #0056b3;
-          transform: translateY(-2px);
-        }
-        .btn-secondary {
-          background-color: #6c757d;
-          border-color: #6c757d;
-          border-radius: 25px;
-          padding: 0.5rem 1.5rem;
-          font-weight: 600;
-          transition: all 0.3s ease;
-        }
-        .btn-secondary:hover {
-          background-color: #5a6268;
-          border-color: #5a6268;
-          transform: translateY(-2px);
-        }
-        .btn-danger {
-          background-color: #dc3545;
-          border-color: #dc3545;
-          padding: 0.5rem 1rem;
-          font-weight: 600;
-          transition: all 0.3s ease;
-        }
-        .btn-danger:hover {
-          background-color: #c82333;
-          border-color: #c82333;
-          transform: translateY(-2px);
-        }
-        .alert {
-          position: fixed;
-          top: 20px;
-          left: 50%;
-          transform: translateX(-50%);
-          z-index: 1050;
-          min-width: 350px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 1rem 1.5rem;
-          border-radius: 12px;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-          font-size: 1rem;
-          background-color: ${warningType === 'success' ? '#d4edda' : '#fff3cd'};
-          border: 1px solid ${warningType === 'success' ? '#28a745' : '#ffc107'};
-        }
-        .alert .btn {
-          padding: 0.5rem 1.5rem;
-          font-size: 0.9rem;
-          border-radius: 25px;
-        }
-        .list-group-item {
-          border-radius: 8px;
-          margin-bottom: 10px;
-          background-color: #fff;
-          border: 1px solid #b0bec5;
-          padding: 1rem;
-        }
-        .list-group-item:hover {
-          background-color: #f8f9fa;
-        }
-        @media (max-width: 991px) {
-          .container {
-            padding: 1.5rem;
-          }
-          .inner-container {
-            padding: 1.5rem;
-          }
-          .alert {
-            min-width: 80%;
-            font-size: 0.95rem;
-          }
-          .alert .btn {
-            padding: 0.4rem 1.2rem;
-          }
-        }
-        @media (max-width: 576px) {
-          .container {
-            padding: 1rem;
-          }
-          .inner-container {
-            padding: 1rem;
-          }
-          h1 {
-            font-size: 1.5rem;
-          }
-          h2 {
-            font-size: 1.2rem;
-          }
-          .alert {
-            min-width: 90%;
-            font-size: 0.85rem;
-          }
-          .alert .btn {
-            padding: 0.3rem 1rem;
-            font-size: 0.8rem;
-          }
-          .form-control {
-            padding: 0.6rem 1rem;
-          }
-          .btn-primary, .btn-secondary, .btn-danger {
-            padding: 0.5rem 1rem;
-          }
-        }
-      `}</style>
     </div>
   );
 };

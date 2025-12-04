@@ -1,11 +1,10 @@
-// src/components/Form/SalarySlip.jsx
+// src/components/Form/SalarySlip.jsx - UPDATED: Back button and background styled to match EmployeeList (gradient bg, fixed transparent bordered back button).
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { FaArrowLeft, FaFileInvoiceDollar, FaUser, FaCalendarAlt, FaSave, FaPrint, FaInfoCircle, FaTable, FaPlus, FaTrash, FaUniversity, FaMoneyBillWave, FaCalculator } from 'react-icons/fa';
 import jsPDF from 'jspdf'; // Assume installed: npm install jspdf
 import 'jspdf-autotable'; // Assume installed: npm install jspdf-autotable
-
 const SalarySlip = () => {
   const navigate = useNavigate();
   const [employees, setEmployees] = useState([]);
@@ -40,7 +39,6 @@ const SalarySlip = () => {
   const [grossPay, setGrossPay] = useState(12000.00);
   const [grossYearToDate, setGrossYearToDate] = useState(106285.71);
   const totalDeductions = 0.00; // Fixed to 0 since deductions removed
-
   // Fetch base URL, settings, and company name
   useEffect(() => {
     const fetchConfig = async () => {
@@ -72,7 +70,6 @@ const SalarySlip = () => {
     };
     fetchConfig();
   }, []);
-
   // Fetch company name from company details
   const fetchCompanyName = async (currentBaseUrl) => {
     try {
@@ -88,7 +85,6 @@ const SalarySlip = () => {
       setCompanyName('My Company');
     }
   };
-
   const fetchSettings = async (currentBaseUrl) => {
     try {
       const url = currentBaseUrl ? `${currentBaseUrl}/api/settings` : '/api/settings';
@@ -106,7 +102,6 @@ const SalarySlip = () => {
       setApplyCompanyLeaves(false);
     }
   };
-
   const getCurrencySymbol = (code) => {
     const symbols = {
       'USD': '$',
@@ -120,7 +115,6 @@ const SalarySlip = () => {
     };
     return symbols[code] || code;
   };
-
   // Fetch employees
   const fetchEmployees = async (currentBaseUrl) => {
     try {
@@ -134,8 +128,7 @@ const SalarySlip = () => {
       setLoading(false);
     }
   };
-
-  // Fetch attendance summary for selected employee and month
+  // Fetch attendance summary for selected employee and month - UPDATED: Logic for effectiveWorkingDays based on applyCompanyLeaves
   const fetchAttendanceSummary = async (currentBaseUrl, month, employeeId) => {
     try {
       let url = currentBaseUrl ? `${currentBaseUrl}/api/attendance?month=${month}` : `/api/attendance?month=${month}`;
@@ -146,12 +139,15 @@ const SalarySlip = () => {
       const offCount = records.filter((r) => r.status === 'Off Day').length;
       const leaveWithoutPayCount = records.filter((r) => r.status === 'Leave Without Pay').length;
       const absentCount = records.filter((r) => r.status === 'Absent').length;
-      let eff = totalWorkingDays;
-      let holidayData = [];
+      // UPDATED: Compute daysInMonth
+      const year = parseInt(month.split('-')[0]);
+      const mon = parseInt(month.split('-')[1]);
+      const daysInMonth = new Date(year, mon, 0).getDate();
+      // UPDATED: Set effectiveWorkingDays based on applyCompanyLeaves
+      let eff = applyCompanyLeaves ? totalWorkingDays : daysInMonth;
       let companyLeaveCountLocal = 0;
+      let holidayData = [];
       if (applyCompanyLeaves) {
-        const year = parseInt(month.split('-')[0]);
-        const mon = month.split('-')[1];
         try {
           const res = await axios.get(`${currentBaseUrl}/api/working-days?year=${year}&month=${mon}`);
           holidayData = res.data.holidays || [];
@@ -160,12 +156,16 @@ const SalarySlip = () => {
         } catch (e) {
           console.error('Failed to fetch holidays:', e);
         }
+      } else {
+        // If not applying leaves, no holidays, company leaves = 0
+        companyLeaveCountLocal = 0;
       }
       setHolidays(holidayData);
       setCompanyLeaveCount(companyLeaveCountLocal);
       setEffectiveWorkingDays(eff);
       setLeaveWithoutPay(leaveWithoutPayCount);
-      const dailyRateLocal = selectedEmployee ? selectedEmployee.salary / totalWorkingDays : 0;
+      // UPDATED: Use eff for dailyRate
+      const dailyRateLocal = selectedEmployee ? selectedEmployee.salary / eff : 0;
       setDailyRate(dailyRateLocal);
       const totalSalary = records.reduce((sum, rec) => sum + (rec.dailySalary || 0), 0);
       const paymentDays = fullCount + offCount;
@@ -206,7 +206,6 @@ const SalarySlip = () => {
       setError('Failed to load attendance summary');
     }
   };
-
   // Load summary when employee or month changes
   useEffect(() => {
     if (selectedEmployee) {
@@ -219,12 +218,10 @@ const SalarySlip = () => {
       setAttendanceSummary(null);
     }
   }, [selectedEmployee, selectedMonth, baseUrl]);
-
   // Handle month change
   const handleMonthChange = (e) => {
     setSelectedMonth(e.target.value);
   };
-
   // Handle employee selection
   const handleEmployeeSelect = (e) => {
     const empId = e.target.value;
@@ -232,7 +229,6 @@ const SalarySlip = () => {
     setSelectedEmployee(emp);
     setError('');
   };
-
   // Earnings handlers (Deductions removed)
   const updateEarningsAmount = (index, value) => {
     const newEarnings = [...earnings];
@@ -240,28 +236,23 @@ const SalarySlip = () => {
     setEarnings(newEarnings);
     updateTotals();
   };
-
   const addEarningsRow = () => {
     setEarnings([...earnings, { component: '', amount: 0 }]);
   };
-
   const deleteEarningsRow = (index) => {
     const newEarnings = earnings.filter((_, i) => i !== index);
     setEarnings(newEarnings);
     updateTotals();
   };
-
   const updateEarningsComponent = (index, value) => {
     const newEarnings = [...earnings];
     newEarnings[index].component = value;
     setEarnings(newEarnings);
   };
-
   const updateTotals = () => {
     const totalEarnings = earnings.reduce((sum, e) => sum + e.amount, 0);
     setGrossPay(selectedEmployee ? selectedEmployee.salary : totalEarnings); // Prioritize employee's salary for gross pay
   };
-
   // Save salary slip
   const saveSalarySlip = async () => {
     if (!selectedEmployee || !attendanceSummary) {
@@ -297,14 +288,12 @@ const SalarySlip = () => {
       setError('Failed to save salary slip.');
     }
   };
-
   // Function to get month abbreviation
   const getMonthAbbr = (monthStr) => {
     const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
     const monthIndex = parseInt(monthStr.split('-')[1]) - 1;
     return monthNames[monthIndex] || '';
   };
-
   // Generate PDF (updated: removed deductions table, updated final box with month abbr)
   const generatePDF = () => {
     if (!selectedEmployee || !attendanceSummary) return;
@@ -368,15 +357,16 @@ const SalarySlip = () => {
     doc.text(`Total Salary: ${currency}${grossPay.toFixed(2)} | ${monthAbbr} Month Salary: ${currency}${monthToDate.toFixed(2)}`, 25, startY + 12);
     doc.save(`SalarySlip_${selectedEmployee.name}_${selectedMonth}.pdf`);
   };
-
   if (loading && employees.length === 0) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', backgroundColor: 'rgb(52, 152, 219)' }}>
-        <div style={{ color: 'white', fontSize: '1.2rem' }}>Loading...</div>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: 'linear-gradient(135deg, #ffffff 0%, #3498db 100%)' }}>
+        <div style={{ textAlign: 'center', color: '#3498db', fontSize: '18px' }}>
+          <FaFileInvoiceDollar style={{ fontSize: '48px', marginBottom: '20px', color: '#3498db' }} />
+          <p>Loading salary slip...</p>
+        </div>
       </div>
     );
   }
-
   const employeeDetails = selectedEmployee ? {
     employeeId: selectedEmployee.employeeId,
     employeeName: selectedEmployee.name,
@@ -386,7 +376,6 @@ const SalarySlip = () => {
     status: 'Submitted',
     currency: currency
   } : null;
-
   // Enhanced input style for neater appearance
   const inputStyle = {
     padding: '10px 12px', // Increased padding
@@ -398,94 +387,199 @@ const SalarySlip = () => {
     width: '100%', // Full width where applicable
     boxSizing: 'border-box'
   };
-
   const readonlyInputStyle = {
     ...inputStyle,
     backgroundColor: '#f8f9fa',
     color: '#495057',
     cursor: 'not-allowed'
   };
-
   const amountInputStyle = {
     ...inputStyle,
     width: '150px', // Increased width for amount fields
     textAlign: 'right'
   };
-
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: 'rgb(52, 152, 219)', padding: '20px' }}> {/* Updated background to requested color */}
-      <div style={{ maxWidth: '1200px', margin: '0 auto' }}> {/* Increased width for tables */}
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <button
-              onClick={() => navigate('/admin')}
-              style={{
-                padding: '12px', // Increased padding
-                backgroundColor: 'rgba(255, 255, 255, 0.2)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '50%',
-                cursor: 'pointer',
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #ffffff 0%, #3498db 100%)', padding: '20px', position: 'relative' }}>
+      {/* Fixed Back Button in Top-Left Corner - Styled like EmployeeList */}
+      <button
+        onClick={() => navigate('/admin')}
+        style={{
+          position: 'fixed',
+          top: '20px',
+          left: '20px',
+          backgroundColor: 'transparent',
+          border: '2px solid #3498db',
+          color: '#3498db',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '8px 20px',
+          borderRadius: '50px',
+          fontSize: '16px',
+          fontWeight: '600',
+          boxShadow: '0 2px 10px rgba(52, 152, 219, 0.2)',
+          zIndex: 1001,
+          transition: 'all 0.3s ease'
+        }}
+        onMouseOver={(e) => {
+          e.target.style.backgroundColor = '#3498db';
+          e.target.style.color = '#ffffff';
+          e.target.style.transform = 'scale(1.05)';
+        }}
+        onMouseOut={(e) => {
+          e.target.style.backgroundColor = 'transparent';
+          e.target.style.color = '#3498db';
+          e.target.style.transform = 'scale(1)';
+        }}
+      >
+        <FaArrowLeft /> Back to Admin
+      </button>
+      <div style={{ maxWidth: '1200px', margin: '80px auto 20px', backgroundColor: '#ffffff', padding: '30px', borderRadius: '15px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)', overflow: 'hidden' }}> {/* Main Container - Styled like EmployeeList Card */}
+        {/* Header with Title - Styled like EmployeeList Header */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '30px',
+          paddingBottom: '20px',
+          borderBottom: '2px solid #3498db'
+        }}>
+          <div></div> {/* Empty left for balance */}
+          <h2 style={{
+            textAlign: 'center',
+            color: '#2c3e50',
+            margin: 0,
+            fontSize: '1.8rem',
+            fontWeight: '600',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '10px'
+          }}>
+            <FaFileInvoiceDollar style={{ color: '#3498db', fontSize: '2rem' }} />
+            Salary Slip
+          </h2>
+          <div></div> {/* Empty right for balance */}
+        </div>
+        {/* Selection - Centered - Styled like EmployeeList Filter Section */}
+        <div style={{ background: '#ffffff', padding: '20px', borderRadius: '15px', marginBottom: '20px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)', border: '1px solid #e9ecef' }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            marginBottom: '20px',
+            gap: '10px',
+            paddingBottom: '10px',
+            borderBottom: '1px solid #3498db'
+          }}>
+            <FaFileInvoiceDollar style={{ color: '#3498db', fontSize: '1.5rem' }} />
+            <h4 style={{ margin: 0, color: '#2c3e50', fontWeight: '600' }}>Select Employee & Month</h4>
+          </div>
+          <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <div style={{ minWidth: '250px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', fontSize: '0.95rem', color: '#2c3e50' }}>Select Employee:</label>
+              <div style={{
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'background-color 0.3s ease'
-              }}
-              onMouseEnter={(e) => e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.3)'}
-              onMouseLeave={(e) => e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.2)'}
-            >
-              <FaArrowLeft />
-            </button>
-            <h1 style={{ margin: 0, color: 'white', fontSize: '2.2rem' }}> {/* White text for contrast */}
-              <FaFileInvoiceDollar style={{ marginRight: '10px' }} /> Salary Slip
-            </h1>
-          </div>
-        </div>
-        {/* Selection */}
-        <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.95)', padding: '20px', borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', marginBottom: '20px' }}> {/* Semi-transparent white for better design */}
-          <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <div style={{ minWidth: '250px' }}> {/* Increased min-width */}
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#2c3e50' }}>Select Employee:</label>
-              <select
-                value={selectedEmployee?._id || ''}
-                onChange={handleEmployeeSelect}
-                style={inputStyle}
-              >
-                <option value="">Choose Employee</option>
-                {employees.map((emp) => (
-                  <option key={emp._id} value={emp._id}>
-                    {emp.name} ({emp.employeeId})
-                  </option>
-                ))}
-              </select>
+                gap: '8px',
+                background: '#f8f9fa',
+                padding: '8px 12px',
+                borderRadius: '10px',
+                border: '1px solid #e9ecef'
+              }}>
+                <FaUser style={{ color: '#7f8c8d', fontSize: '1rem' }} />
+                <select
+                  value={selectedEmployee?._id || ''}
+                  onChange={handleEmployeeSelect}
+                  style={{
+                    flex: 1,
+                    padding: '5px 0',
+                    border: 'none',
+                    background: 'transparent',
+                    fontSize: '0.9rem',
+                    color: '#2c3e50',
+                    outline: 'none'
+                  }}
+                >
+                  <option value="">Choose Employee</option>
+                  {employees.map((emp) => (
+                    <option key={emp._id} value={emp._id}>
+                      {emp.name} ({emp.employeeId})
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div style={{ minWidth: '200px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#2c3e50' }}>Month:</label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <FaCalendarAlt style={{ color: 'rgb(52, 152, 219)' }} />
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', fontSize: '0.95rem', color: '#2c3e50' }}>Month:</label>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: '#f8f9fa',
+                padding: '8px 12px',
+                borderRadius: '10px',
+                border: '1px solid #e9ecef'
+              }}>
+                <FaCalendarAlt style={{ color: '#7f8c8d', fontSize: '1rem' }} />
                 <input
                   type="month"
                   value={selectedMonth}
                   onChange={handleMonthChange}
-                  style={inputStyle}
+                  style={{
+                    flex: 1,
+                    padding: '5px 0',
+                    border: 'none',
+                    background: 'transparent',
+                    fontSize: '0.9rem',
+                    color: '#2c3e50',
+                    outline: 'none'
+                  }}
                 />
               </div>
             </div>
           </div>
         </div>
-        {/* Error and Message */}
+        {/* Error and Message - Styled like EmployeeList Alerts */}
         {error && (
-          <div style={{ backgroundColor: '#ffebee', color: '#c0392b', padding: '15px', borderRadius: '8px', marginBottom: '15px', borderLeft: '4px solid #c0392b' }}>
+          <div style={{
+            background: 'linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%)',
+            color: '#c0392b',
+            padding: '15px',
+            borderRadius: '10px',
+            marginBottom: '20px',
+            textAlign: 'center',
+            border: '1px solid #e74c3c',
+            boxShadow: '0 2px 4px rgba(231, 76, 60, 0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '10px'
+          }}>
+            <FaInfoCircle style={{ fontSize: '1.2rem' }} />
             {error}
           </div>
         )}
         {message && (
-          <div style={{ backgroundColor: '#d4edda', color: '#155724', padding: '15px', borderRadius: '8px', marginBottom: '15px', borderLeft: '4px solid #155724' }}>
+          <div style={{
+            background: 'linear-gradient(135deg, #d4edda 0%, #c8e6c9 100%)',
+            color: '#155724',
+            padding: '15px',
+            borderRadius: '10px',
+            marginBottom: '20px',
+            textAlign: 'center',
+            border: '1px solid #28a745',
+            boxShadow: '0 2px 4px rgba(40, 167, 69, 0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '10px'
+          }}>
+            <FaSave style={{ fontSize: '1.2rem', color: '#27ae60' }} />
             {message}
           </div>
         )}
-        {/* Salary Slip Display */}
+        {/* Salary Slip Display - Main content in white card like EmployeeList */}
         {selectedEmployee && attendanceSummary ? (
           <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.95)', padding: '25px', borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}> {/* Semi-transparent white */}
             {/* Tabs - Removed deductions references */}
@@ -667,7 +761,7 @@ const SalarySlip = () => {
                 </div>
               </div>
             )}
-            {/* Payment Days Tab */}
+            {/* Payment Days Tab - UPDATED: Removed Company Leaves and Leave Without Pay fields */}
             {activeTab === 'payment-days' && (
               <div>
                 <h3 style={{ color: '#2c3e50', marginBottom: '20px' }}>Payment Days Details</h3>
@@ -680,15 +774,6 @@ const SalarySlip = () => {
                         <input
                           type="number"
                           value={totalWorkingDays}
-                          readOnly
-                          style={readonlyInputStyle}
-                        />
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                        <label style={{ fontWeight: 'bold', fontSize: '1rem' }}>Company Leaves:</label>
-                        <input
-                          type="number"
-                          value={companyLeaveCount}
                           readOnly
                           style={readonlyInputStyle}
                         />
@@ -721,15 +806,6 @@ const SalarySlip = () => {
                         <input
                           type="number"
                           value={attendanceSummary.offCount}
-                          readOnly
-                          style={readonlyInputStyle}
-                        />
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                        <label style={{ fontWeight: 'bold', fontSize: '1rem' }}>Leave Without Pay:</label>
-                        <input
-                          type="number"
-                          value={attendanceSummary.leaveWithoutPay}
                           readOnly
                           style={readonlyInputStyle}
                         />
@@ -966,59 +1042,76 @@ const SalarySlip = () => {
                 </div>
               </div>
             )}
-            {/* Actions */}
+            {/* Actions - Styled like EmployeeList Buttons */}
             <div style={{ display: 'flex', gap: '15px', justifyContent: 'center', marginTop: '25px' }}>
               <button
                 onClick={saveSalarySlip}
                 style={{
-                  padding: '12px 20px',
-                  backgroundColor: '#27ae60',
+                  padding: '12px 24px',
+                  background: 'linear-gradient(135deg, #27ae60 0%, #229954 100%)',
                   color: 'white',
                   border: 'none',
-                  borderRadius: '8px',
+                  borderRadius: '25px',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '6px',
-                  fontSize: '1.1rem',
-                  transition: 'background-color 0.3s ease',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                  fontSize: '1rem',
+                  fontWeight: '600',
+                  boxShadow: '0 4px 8px rgba(39, 174, 96, 0.3)',
+                  transition: 'all 0.3s ease',
+                  minWidth: '140px'
                 }}
-                onMouseEnter={(e) => e.target.style.backgroundColor = '#2ecc71'}
-                onMouseLeave={(e) => e.target.style.backgroundColor = '#27ae60'}
+                onMouseOver={(e) => {
+                  e.target.style.transform = 'translateY(-2px)';
+                  e.target.style.boxShadow = '0 6px 12px rgba(39, 174, 96, 0.4)';
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.transform = 'translateY(0)';
+                  e.target.style.boxShadow = '0 4px 8px rgba(39, 174, 96, 0.3)';
+                }}
               >
                 <FaSave /> Save Slip
               </button>
               <button
                 onClick={generatePDF}
                 style={{
-                  padding: '12px 20px',
-                  backgroundColor: 'rgb(52, 152, 219)',
+                  padding: '12px 24px',
+                  background: 'linear-gradient(135deg, #3498db 0%, #2980b9 100%)',
                   color: 'white',
                   border: 'none',
-                  borderRadius: '8px',
+                  borderRadius: '25px',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '6px',
-                  fontSize: '1.1rem',
-                  transition: 'background-color 0.3s ease',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                  fontSize: '1rem',
+                  fontWeight: '600',
+                  boxShadow: '0 4px 8px rgba(52, 152, 219, 0.3)',
+                  transition: 'all 0.3s ease',
+                  minWidth: '140px'
                 }}
-                onMouseEnter={(e) => e.target.style.backgroundColor = 'rgb(41, 128, 185)'}
-                onMouseLeave={(e) => e.target.style.backgroundColor = 'rgb(52, 152, 219)'}
+                onMouseOver={(e) => {
+                  e.target.style.transform = 'translateY(-2px)';
+                  e.target.style.boxShadow = '0 6px 12px rgba(52, 152, 219, 0.4)';
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.transform = 'translateY(0)';
+                  e.target.style.boxShadow = '0 4px 8px rgba(52, 152, 219, 0.3)';
+                }}
               >
                 <FaPrint /> Generate PDF
               </button>
             </div>
           </div>
         ) : selectedEmployee ? (
-          <div style={{ textAlign: 'center', padding: '50px', color: 'white', backgroundColor: 'rgba(255, 255, 255, 0.1)' }}> {/* Styled loading */}
-            Loading salary slip...
+          <div style={{ textAlign: 'center', padding: '50px', color: '#7f8c8d', backgroundColor: '#f8f9fa', borderRadius: '10px', border: '2px dashed #bdc3c7' }}> {/* Styled loading with better contrast */}
+            <FaFileInvoiceDollar style={{ fontSize: '4rem', marginBottom: '15px', color: '#3498db' }} />
+            <p style={{ fontSize: '1.2rem' }}>Loading salary slip...</p>
           </div>
         ) : (
-          <div style={{ textAlign: 'center', padding: '50px', color: 'white', backgroundColor: 'rgba(255, 255, 255, 0.1)' }}>
-            <FaFileInvoiceDollar style={{ fontSize: '4rem', marginBottom: '15px' }} />
+          <div style={{ textAlign: 'center', padding: '50px', color: '#7f8c8d', backgroundColor: '#f8f9fa', borderRadius: '10px', border: '2px dashed #bdc3c7' }}>
+            <FaFileInvoiceDollar style={{ fontSize: '4rem', marginBottom: '15px', color: '#3498db' }} />
             <p style={{ fontSize: '1.2rem' }}>Select an employee and month to generate salary slip.</p>
           </div>
         )}
@@ -1026,5 +1119,4 @@ const SalarySlip = () => {
     </div>
   );
 };
-
 export default SalarySlip;

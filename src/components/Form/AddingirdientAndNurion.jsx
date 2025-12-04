@@ -7,9 +7,7 @@ const AddIngredientAndNutrition = () => {
   const location = useLocation();
   const dropdownRef = useRef(null);
   const [isMessageBoxVisible, setIsMessageBoxVisible] = useState(false);
-
   const { formData: passedFormData, itemId, isEditing = false, itemToEdit } = location.state || {};
-
   const [ingredients, setIngredients] = useState(
     passedFormData?.ingredients || [{ name: '', small: '', medium: '', large: '', weight: '', nutrition: [] }]
   );
@@ -23,7 +21,6 @@ const AddIngredientAndNutrition = () => {
   const [hasExistingData, setHasExistingData] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isNewItem, setIsNewItem] = useState(itemId === "new");
-
   const nutritionNames = [
     'Carbohydrates', 'Calories', 'carbs', 'Proteins', 'Fats', 'Fiber', 'Vitamins', 'Minerals', 'Water', 'Sugars', 'Starch',
     'Amino Acids', 'Fatty Acids', 'Cholesterol', 'Antioxidants', 'Electrolytes', 'Glucose', 'Fructose',
@@ -35,10 +32,8 @@ const AddIngredientAndNutrition = () => {
     'Manganese', 'Iodine', 'Selenium', 'Molybdenum', 'Chromium', 'Phytochemicals', 'Flavonoids',
     'Polyphenols', 'Carotenoids', 'Glycogen', 'Beta-Glucans', 'Sterols',
   ];
-
   const generateOptions = () => {
     const nameMap = {};
-
     items.forEach((item) => {
       if (!nameMap[item.item_name]) {
         nameMap[item.item_name] = {
@@ -50,7 +45,6 @@ const AddIngredientAndNutrition = () => {
       } else {
         nameMap[item.item_name].instances.push({ item_id: item._id });
       }
-
       item.addons?.forEach((addon, index) => {
         if (!nameMap[addon.name1]) {
           nameMap[addon.name1] = {
@@ -63,7 +57,6 @@ const AddIngredientAndNutrition = () => {
           nameMap[addon.name1].instances.push({ item_id: item._id, index });
         }
       });
-
       item.combos?.forEach((combo, index) => {
         if (!nameMap[combo.name1]) {
           nameMap[combo.name1] = {
@@ -77,16 +70,12 @@ const AddIngredientAndNutrition = () => {
         }
       });
     });
-
     return Object.values(nameMap).sort((a, b) => a.label.localeCompare(b.label));
   };
-
   const options = generateOptions();
-
   const filteredOptions = searchTerm.trim()
     ? options.filter((option) => option.value.toLowerCase().includes(searchTerm.toLowerCase()))
     : options;
-
   const fetchItems = async () => {
     try {
       const response = await fetch('/api/items');
@@ -103,24 +92,20 @@ const AddIngredientAndNutrition = () => {
       setLoading(false);
     }
   };
-
   const fetchItemData = async (selectedValue) => {
     if (!selectedValue || isNewItem) {
       setIngredients(passedFormData?.ingredients || [{ name: '', small: '', medium: '', large: '', weight: '', nutrition: [] }]);
       setHasExistingData(false);
       return;
     }
-
     const option = options.find((opt) => opt.value === selectedValue);
     if (!option) {
       setIngredients([{ name: '', small: '', medium: '', large: '', weight: '', nutrition: [] }]);
       setHasExistingData(false);
       return;
     }
-
     const { type, instances } = option;
     let ingredients = [];
-
     const firstInstance = instances[0];
     try {
       const response = await fetch(
@@ -136,7 +121,6 @@ const AddIngredientAndNutrition = () => {
       console.error('Error fetching item data:', error);
       setError('Error fetching item data');
     }
-
     const validIngredients =
       ingredients && Array.isArray(ingredients) && ingredients.length > 0
         ? ingredients.map((ing, ingIndex) => ({
@@ -154,15 +138,12 @@ const AddIngredientAndNutrition = () => {
               : [],
           }))
         : [{ name: '', small: '', medium: '', large: '', weight: '', nutrition: [] }];
-
     setIngredients(validIngredients);
     setHasExistingData(ingredients?.length > 0);
   };
-
   useEffect(() => {
     fetchItems();
   }, []);
-
   useEffect(() => {
     if (isNewItem) {
       setSelectedItem(passedFormData?.item_name);
@@ -172,7 +153,6 @@ const AddIngredientAndNutrition = () => {
       fetchItemData(selectedItem);
     }
   }, [selectedItem, items, isNewItem, passedFormData]);
-
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -184,13 +164,11 @@ const AddIngredientAndNutrition = () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
-
   const handleIngredientChange = (index, field, value) => {
     const newIngredients = [...ingredients];
     newIngredients[index] = { ...newIngredients[index], [field]: value };
     setIngredients(newIngredients);
   };
-
   const handleNutritionChange = (ingredientIndex, nutritionIndex, field, value) => {
     const newIngredients = [...ingredients];
     const nutrition = [...newIngredients[ingredientIndex].nutrition];
@@ -198,11 +176,9 @@ const AddIngredientAndNutrition = () => {
     newIngredients[ingredientIndex].nutrition = nutrition;
     setIngredients(newIngredients);
   };
-
   const handleAddRow = () => {
     setIngredients([...ingredients, { name: '', small: '', medium: '', large: '', weight: '', nutrition: [] }]);
   };
-
   const handleAddNutrition = (ingredientIndex) => {
     const newIngredients = [...ingredients];
     newIngredients[ingredientIndex].nutrition = [
@@ -211,7 +187,6 @@ const AddIngredientAndNutrition = () => {
     ];
     setIngredients(newIngredients);
   };
-
   const handleDeleteNutrition = (ingredientIndex, nutritionIndex) => {
     const newIngredients = [...ingredients];
     newIngredients[ingredientIndex].nutrition = newIngredients[ingredientIndex].nutrition.filter(
@@ -219,13 +194,11 @@ const AddIngredientAndNutrition = () => {
     );
     setIngredients(newIngredients);
   };
-
   const handleItemSelect = (option) => {
     setSelectedItem(option.value);
     setSearchTerm(option.label);
     setIsDropdownOpen(false);
   };
-
   const handleSearchChange = (e) => {
     const value = e.target.value;
     setSearchTerm(value);
@@ -234,23 +207,19 @@ const AddIngredientAndNutrition = () => {
       setSelectedItem('');
     }
   };
-
   const handleGoBack = () => {
     navigate(-1);
   };
-
   const handleSave = async () => {
     if (!selectedItem) {
       setSaveMessage('Please select an item, addon, or combo');
       return;
     }
-
     const validIngredients = ingredients.filter((ing) => ing.name.trim());
     if (validIngredients.length === 0) {
       setSaveMessage('Please add at least one ingredient');
       return;
     }
-
     for (const ing of validIngredients) {
       if (!ing.weight || isNaN(parseFloat(ing.weight)) || parseFloat(ing.weight) <= 0) {
         setSaveMessage(`Please enter a valid base weight for ingredient: ${ing.name}`);
@@ -280,7 +249,6 @@ const AddIngredientAndNutrition = () => {
         }
       }
     }
-
     const updatedIngredients = validIngredients.map((ing) => ({
       ingredients_name: ing.name,
       small: parseFloat(ing.small),
@@ -292,12 +260,10 @@ const AddIngredientAndNutrition = () => {
         nutrition_value: parseFloat(nut.nutrition_value),
       })),
     }));
-
     const updatedFormData = {
       ...passedFormData,
       ingredients: updatedIngredients,
     };
-
     if (isNewItem) {
       navigate('/create-item', {
         state: {
@@ -311,9 +277,7 @@ const AddIngredientAndNutrition = () => {
         setSaveMessage('Invalid selection');
         return;
       }
-
       const { type, instances } = option;
-
       const data = {
         item_name: selectedItem,
         type,
@@ -332,7 +296,6 @@ const AddIngredientAndNutrition = () => {
             })),
         })),
       };
-
       try {
         setSaveLoading(true);
         setSaveMessage('');
@@ -343,7 +306,6 @@ const AddIngredientAndNutrition = () => {
           },
           body: JSON.stringify(data),
         });
-
         if (response.ok) {
           setSaveMessage('Data saved successfully!');
           setHasExistingData(true);
@@ -370,27 +332,22 @@ const AddIngredientAndNutrition = () => {
       }
     }
   };
-
   const handleClear = async () => {
     if (!selectedItem) {
       setSaveMessage('Please select an item, addon, or combo to clear');
       return;
     }
-
     if (isNewItem) {
       setIngredients([{ name: '', small: '', medium: '', large: '', weight: '', nutrition: [] }]);
       setSaveMessage('Ingredients cleared for new item');
       return;
     }
-
     const option = options.find((opt) => opt.value === selectedItem);
     if (!option) {
       setSaveMessage('Invalid selection');
       return;
     }
-
     const { type, instances } = option;
-
     try {
       setSaveLoading(true);
       setSaveMessage('');
@@ -404,7 +361,6 @@ const AddIngredientAndNutrition = () => {
           },
         }
       );
-
       if (response.ok) {
         setSaveMessage('Data cleared successfully!');
         setIngredients([{ name: '', small: '', medium: '', large: '', weight: '', nutrition: [] }]);
@@ -427,13 +383,10 @@ const AddIngredientAndNutrition = () => {
       setSaveLoading(false);
     }
   };
-
   const calculateNutrition = (ingredient, sizeKey) => {
     const baseWeight = parseFloat(ingredient.weight) || 1;
     const sizeWeight = parseFloat(ingredient[sizeKey]) || 1;
-
     const scalingFactor = sizeWeight / baseWeight;
-
     return ingredient.nutrition.map((nut) => {
       const nutritionValue = parseFloat(nut.nutrition_value) || 0;
       if (nutritionValue === 0) {
@@ -443,38 +396,19 @@ const AddIngredientAndNutrition = () => {
       return scaledValue.toFixed(3);
     });
   };
-
   const handleCloseMessageBox = () => {
     setIsMessageBoxVisible(false);
   };
-
   const handleCloseWarning = () => {
     setSaveMessage('');
     setError(null);
   };
-
   const styles = {
     container: {
       minHeight: '100vh',
-      background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
-      padding: '40px 20px',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-    },
-    backButton: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '8px',
-      padding: '10px 20px',
-      backgroundColor: '#ffffff',
-      borderWidth: '0',
-      borderRadius: '25px',
-      color: '#2c3e50',
-      fontWeight: '600',
-      boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-      cursor: 'pointer',
-      transition: 'all 0.3s ease',
+      background: 'linear-gradient(135deg, #ffffff 0%, #3498db 100%)',
+      padding: '20px',
+      position: 'relative'
     },
     formContainer: {
       backgroundColor: '#ffffff',
@@ -483,6 +417,7 @@ const AddIngredientAndNutrition = () => {
       boxShadow: '0 5px 15px rgba(0,0,0,0.08)',
       width: '100%',
       maxWidth: '1000px',
+      margin: '80px auto 20px'
     },
     title: {
       color: '#2c3e50',
@@ -493,6 +428,8 @@ const AddIngredientAndNutrition = () => {
       borderBottomStyle: 'solid',
       borderBottomColor: '#3498db',
       width: 'fit-content',
+      textAlign: 'center',
+      margin: '0 auto'
     },
     input: {
       width: '100%',
@@ -641,25 +578,47 @@ const AddIngredientAndNutrition = () => {
       transition: 'background-color 0.3s ease',
     },
   };
-
   return (
     <div style={styles.container}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', maxWidth: '1000px', marginBottom: '20px' }}>
-        <button
-          style={styles.backButton}
-          onClick={handleGoBack}
-          onMouseEnter={(e) => (e.target.style.backgroundColor = '#3498db')}
-          onMouseLeave={(e) => (e.target.style.backgroundColor = '#ffffff')}
-        >
-          <FaArrowLeft /> Go Back
-        </button>
-        <h2 style={{ ...styles.title, margin: '0 auto' }}>Add Ingredients and Nutrition</h2>
-      </div>
-
+      {/* Fixed Back Button in Top-Left Corner - Styled like EmployeeList */}
+      <button
+        onClick={handleGoBack}
+        style={{
+          position: 'fixed',
+          top: '20px',
+          left: '20px',
+          backgroundColor: 'transparent',
+          border: '2px solid #3498db',
+          color: '#3498db',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '8px 20px',
+          borderRadius: '50px',
+          fontSize: '16px',
+          fontWeight: '600',
+          boxShadow: '0 2px 10px rgba(52, 152, 219, 0.2)',
+          zIndex: 1001,
+          transition: 'all 0.3s ease'
+        }}
+        onMouseOver={(e) => {
+          e.target.style.backgroundColor = '#3498db';
+          e.target.style.color = '#ffffff';
+          e.target.style.transform = 'scale(1.05)';
+        }}
+        onMouseOut={(e) => {
+          e.target.style.backgroundColor = 'transparent';
+          e.target.style.color = '#3498db';
+          e.target.style.transform = 'scale(1)';
+        }}
+      >
+        <FaArrowLeft /> Back to Admin
+      </button>
       {loading && <div style={{ textAlign: 'center', color: '#2c3e50' }}>Loading...</div>}
-
       {!loading && (
         <div style={styles.formContainer}>
+          <h2 style={styles.title}>Add Ingredients and Nutrition</h2>
           {isNewItem ? (
             <div>
               <h5 style={styles.title}>Item: {passedFormData?.item_name}</h5>
@@ -693,7 +652,6 @@ const AddIngredientAndNutrition = () => {
               )}
             </div>
           )}
-
           {error && (
             <div style={styles.errorMessageBox}>
               <h6 style={styles.errorMessageBoxHeader}>Error</h6>
@@ -708,7 +666,6 @@ const AddIngredientAndNutrition = () => {
               </button>
             </div>
           )}
-
           {saveMessage && (
             <div style={styles.messageBox}>
               <h6 style={styles.messageBoxHeader}>
@@ -725,7 +682,6 @@ const AddIngredientAndNutrition = () => {
               </button>
             </div>
           )}
-
           {(selectedItem || isNewItem) && (
             <>
               <div style={{ marginBottom: '24px' }}>
@@ -807,7 +763,6 @@ const AddIngredientAndNutrition = () => {
                   Add Ingredient Row
                 </button>
               </div>
-
               {isMessageBoxVisible && (
                 <div style={styles.messageBox}>
                   <h6 style={styles.messageBoxHeader}>Base Weight Information</h6>
@@ -824,7 +779,6 @@ const AddIngredientAndNutrition = () => {
                   </button>
                 </div>
               )}
-
               <div style={{ marginBottom: '24px' }}>
                 <h5 style={styles.title}>Nutrition Input</h5>
                 {ingredients.every((ing) => !ing.name) ? (
@@ -899,7 +853,6 @@ const AddIngredientAndNutrition = () => {
                   )
                 )}
               </div>
-
               <div style={{ marginBottom: '24px' }}>
                 <h5 style={styles.title}>Nutrition Calculation</h5>
                 {ingredients.every((ing) => !ing.name || !ing.nutrition.length) ? (
@@ -943,7 +896,6 @@ const AddIngredientAndNutrition = () => {
                   </table>
                 )}
               </div>
-
               <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginTop: '30px' }}>
                 <button
                   onClick={handleSave}

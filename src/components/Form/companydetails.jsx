@@ -1,8 +1,8 @@
-// src/components/Form/companydetails.jsx (Updated CompanyDetails.jsx)
+// src/components/Form/companydetails.jsx (Updated CompanyDetails.jsx with gradient background, fixed back button, enhanced alerts, and layout adjustments to match EmployeeList design)
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { FaArrowLeft, FaBuilding, FaPlus, FaClock } from 'react-icons/fa';
+import { FaArrowLeft, FaBuilding, FaPlus, FaClock, FaGlobe, FaLink, FaTrash } from 'react-icons/fa';
 const SearchableSelect = ({ options = [], value = '', onChange, placeholder }) => {
   const [search, setSearch] = useState(value || '');
   const [showList, setShowList] = useState(false);
@@ -66,6 +66,76 @@ const SearchableSelect = ({ options = [], value = '', onChange, placeholder }) =
     </div>
   );
 };
+// NEW: Country Code Selector Component (similar to AddEmployee)
+const CountryCodeSelector = ({ selectedCode = '+91', onCodeChange }) => {
+  const [showDropdown, setShowDropdown] = useState(false);
+  const isdCodes = [
+    { code: "+91", country: "India" },
+    { code: "+1", country: "USA" },
+    { code: "+44", country: "UK" },
+    { code: "+971", country: "UAE" },
+    { code: "+61", country: "Australia" },
+  ];
+  const handleCodeSelect = (code) => {
+    onCodeChange(code);
+    setShowDropdown(false);
+  };
+  return (
+    <div className="country-code-selector" style={{ position: 'relative', display: 'inline-block' }}>
+      <button
+        type="button"
+        onClick={() => setShowDropdown(!showDropdown)}
+        style={{
+          background: '#fff',
+          border: '1px solid #bdc3c7',
+          borderRight: 'none',
+          padding: '10px 8px',
+          fontSize: '1rem',
+          height: '100%',
+          cursor: 'pointer',
+          borderRadius: '8px 0 0 8px',
+        }}
+      >
+        {selectedCode}
+      </button>
+      {showDropdown && (
+        <ul style={{
+          position: 'absolute',
+          top: '100%',
+          left: 0,
+          zIndex: 100,
+          background: '#fff',
+          border: '1px solid #bdc3c7',
+          borderRadius: '0 0 8px 8px',
+          listStyle: 'none',
+          margin: 0,
+          padding: 0,
+          minWidth: '120px',
+          boxShadow: '0 4px 12px rgba(0,0,0,.15)',
+        }}>
+          {isdCodes.map((c, i) => (
+            <li key={i}>
+              <button
+                type="button"
+                onClick={() => handleCodeSelect(c.code)}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: 'none',
+                  background: 'none',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                }}
+              >
+                {c.code} ({c.country})
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+};
 function CompanyDetails() {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
@@ -82,13 +152,20 @@ function CompanyDetails() {
     closingTime: '',
     totalTime: '',
     addresses: [{ country: '', field1: '', field2: '', field3: '', flat_villa_no: '', building_name: '' }],
-    contacts: [{ phoneNumber: '', whatsappNumber: '', emailAddress: '', website: '' }],
+    contacts: [{
+      phoneCountryCode: '+91',
+      phoneNumber: '',
+      whatsappCountryCode: '+91',
+      whatsappNumber: '',
+      emailAddress: '',
+      websites: [] // NEW: Array for multiple websites
+    }],
     bankName: '',
     accountHolderName: '',
     accountNumber: '',
     ifscCode: '',
     upiId: '',
-    currencyType: '',
+    currencyType: '', // Will be pre-filled from settings
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -99,6 +176,7 @@ function CompanyDetails() {
   const [addressStructure, setAddressStructure] = useState({ countries: {} });
   const [linkedValues, setLinkedValues] = useState({});
   const [baseUrl, setBaseUrl] = useState(""); // NEW: Added baseUrl state like in AdminPage
+  const [systemSettings, setSystemSettings] = useState({}); // NEW: State for system settings (for currency)
   const countryList = Object.keys(addressStructure.countries || {});
   // NEW: Fetch config to determine baseUrl
   const fetchConfig = async () => {
@@ -121,12 +199,29 @@ function CompanyDetails() {
         fetchLogo(currentBaseUrl);
         fetchAddressStructure(currentBaseUrl);
         fetchCompanyDetails(currentBaseUrl);
+        fetchSystemSettings(currentBaseUrl); // NEW: Fetch settings for currency
       } else {
         // If not client mode, use empty baseUrl (local)
         fetchLogo("");
         fetchAddressStructure("");
         fetchCompanyDetails("");
+        fetchSystemSettings(""); // NEW
       }
+    }
+  };
+  // NEW: Fetch system settings for pre-filling currency
+  const fetchSystemSettings = async (currentBaseUrl) => {
+    try {
+      const response = await axios.get(`${currentBaseUrl}/api/settings`);
+      if (response.data) {
+        setSystemSettings(response.data);
+        // Pre-fill currencyType if not already set
+        if (!formData.currencyType) {
+          setFormData(prev => ({ ...prev, currencyType: response.data.currency || 'INR' }));
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching system settings:', error);
     }
   };
   // UPDATED: Fetch logo with baseUrl
@@ -163,10 +258,18 @@ function CompanyDetails() {
         const latestDetails = response.data.companyDetails[response.data.companyDetails.length - 1];
         setSavedDetails(latestDetails);
         setFormData(latestDetails); // Pre-fill form with the latest data
+        // NEW: Ensure currencyType is set from settings if not in details
+        if (!latestDetails.currencyType && systemSettings.currency) {
+          setFormData(prev => ({ ...prev, currencyType: systemSettings.currency }));
+        }
         console.log('Fetched details:', latestDetails); // Debug log
       } else {
         // setError('No company details found.'); // Don't show error, just means new entry
         console.log('No existing company details found. Ready for new entry.');
+        // NEW: Pre-fill currency from settings for new entry
+        if (systemSettings.currency) {
+          setFormData(prev => ({ ...prev, currencyType: systemSettings.currency }));
+        }
       }
     } catch (err) {
       setError('Failed to fetch company details: ' + err.message);
@@ -213,8 +316,50 @@ function CompanyDetails() {
   const handleContactChange = (index, e) => {
     const { name, value } = e.target;
     const newContacts = [...formData.contacts];
-    newContacts[index][name] = value;
+    if (name.startsWith('phoneCountryCode') || name.startsWith('whatsappCountryCode')) {
+      newContacts[index][name] = value;
+    } else {
+      newContacts[index][name] = value;
+    }
     setFormData((prev) => ({ ...prev, contacts: newContacts }));
+  };
+  // NEW: Handle country code change for phone/whatsapp
+  const handleContactCountryCodeChange = (index, field, code) => {
+    const newContacts = [...formData.contacts];
+    newContacts[index][`${field}CountryCode`] = code;
+    setFormData((prev) => ({ ...prev, contacts: newContacts }));
+  };
+  // NEW: Handle multiple websites: add/remove
+  const addWebsite = (contactIndex) => {
+    const newContacts = [...formData.contacts];
+    newContacts[contactIndex].websites.push('');
+    setFormData((prev) => ({ ...prev, contacts: newContacts }));
+  };
+  const removeWebsite = (contactIndex, websiteIndex) => {
+    const newContacts = [...formData.contacts];
+    newContacts[contactIndex].websites.splice(websiteIndex, 1);
+    setFormData((prev) => ({ ...prev, contacts: newContacts }));
+  };
+  const handleWebsiteChange = (contactIndex, websiteIndex, value) => {
+    const newContacts = [...formData.contacts];
+    newContacts[contactIndex].websites[websiteIndex] = value;
+    setFormData((prev) => ({ ...prev, contacts: newContacts }));
+  };
+  // NEW: Remove entire contact (keep at least one)
+  const removeContact = (index) => {
+    if (formData.contacts.length > 1) {
+      const newContacts = [...formData.contacts];
+      newContacts.splice(index, 1);
+      setFormData((prev) => ({ ...prev, contacts: newContacts }));
+    }
+  };
+  // NEW: Remove entire address (keep at least one)
+  const removeAddress = (index) => {
+    if (formData.addresses.length > 1) {
+      const newAddresses = [...formData.addresses];
+      newAddresses.splice(index, 1);
+      setFormData((prev) => ({ ...prev, addresses: newAddresses }));
+    }
   };
   const addAddress = () => {
     setFormData((prev) => ({
@@ -225,7 +370,14 @@ function CompanyDetails() {
   const addContact = () => {
     setFormData((prev) => ({
       ...prev,
-      contacts: [...prev.contacts, { phoneNumber: '', whatsappNumber: '', emailAddress: '', website: '' }],
+      contacts: [...prev.contacts, {
+        phoneCountryCode: '+91',
+        phoneNumber: '',
+        whatsappCountryCode: '+91',
+        whatsappNumber: '',
+        emailAddress: '',
+        websites: []
+      }],
     }));
   };
   // Helper to get filtered values for field2 and field3 based on field1
@@ -281,7 +433,21 @@ function CompanyDetails() {
     if (address.country) parts.push(address.country);
     return parts.length > 0 ? parts.join(', ') : 'N/A';
   };
-  // UPDATED: Handle print with dynamic logoUrl
+  // UPDATED: Format contact for print (include country codes and multiple websites)
+  const formatContactForPrint = (contact, index) => {
+    return (
+      <div key={index}>
+        <div className="field"><span className="centered-label">Contact {index + 1}:</span><span className="value"></span></div>
+        <div className="field"><span className="label">Phone Number:</span><span className="value">{contact.phoneCountryCode}{contact.phoneNumber || 'N/A'}</span></div>
+        <div className="field"><span className="label">WhatsApp Number:</span><span className="value">{contact.whatsappCountryCode}{contact.whatsappNumber || 'N/A'}</span></div>
+        <div className="field"><span className="label">Email Address:</span><span className="value">{contact.emailAddress || 'N/A'}</span></div>
+        {contact.websites && contact.websites.length > 0 && (
+          <div className="field"><span className="label">Websites:</span><span className="value">{contact.websites.filter(w => w).join(', ') || 'N/A'}</span></div>
+        )}
+      </div>
+    );
+  };
+  // UPDATED: Handle print with dynamic logoUrl and updated contact format
   const handlePrint = () => {
     if (!savedDetails) {
       setError('No saved details available to print.');
@@ -373,13 +539,12 @@ function CompanyDetails() {
                 <div class="row" style="margin-bottom: 15px; border-bottom: 1px dashed #ccc; padding-bottom: 10px;">
                   <div class="column">
                     <div class="field"><span class="centered-label">Contact ${index + 1}:</span><span class="value"></span></div>
-                    <div class="field"><span class="label">Phone Number:</span><span class="value">${contact.phoneNumber || 'N/A'}</span></div>
+                    <div class="field"><span class="label">Phone Number:</span><span class="value">${contact.phoneCountryCode || ''}${contact.phoneNumber || 'N/A'}</span></div>
+                    <div class="field"><span class="label">WhatsApp Number:</span><span class="value">${contact.whatsappCountryCode || ''}${contact.whatsappNumber || 'N/A'}</span></div>
                     <div class="field"><span class="label">Email Address:</span><span class="value">${contact.emailAddress || 'N/A'}</span></div>
-                  </div>
-                  <div class="column">
-                    <div class="field"><span class="label"></span><span class="value"></span></div>
-                    <div class="field"><span class="label">WhatsApp Number:</span><span class="value">${contact.whatsappNumber || 'N/A'}</span></div>
-                    <div class="field"><span class="label">Website:</span><span class="value">${contact.website || 'N/A'}</span></div>
+                    ${contact.websites && contact.websites.length > 0 ? contact.websites.map((website, wIndex) => website ? `
+                      <div class="field"><span class="label">Website ${wIndex + 1}:</span><span class="value">${website}</span></div>
+                    ` : '').join('') : ''}
                   </div>
                 </div>
               `).join('') : '<div class="row" style="justify-content: flex-start;"><div class="column" style="width: 100%;"><div class="field"><span class="centered-label">No contacts available.</span><span class="value"></span></div></div></div>'}
@@ -412,75 +577,148 @@ function CompanyDetails() {
     setActiveSection(activeSection === section ? null : section);
   };
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#f4f6f9', padding: '20px' }}>
-      <div style={{ maxWidth: '800px', margin: '40px auto', backgroundColor: '#fff', padding: '30px', borderRadius: '15px', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
-          <button
-            onClick={() => navigate('/admin')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              padding: '10px 20px',
-              backgroundColor: '#3498db',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '15px',
-              cursor: 'pointer',
-            }}
-            onMouseOver={(e) => (e.target.style.backgroundColor = '#2980b9')}
-            onMouseOut={(e) => (e.target.style.backgroundColor = '#3498db')}
-          >
-            <FaArrowLeft /> Back to Dashboard
-          </button>
-          {/* NEW: Button for Company Working Hours at the top */}
+    <div style={{
+      minHeight: '100vh',
+      background: 'linear-gradient(135deg, #ffffff 0%, #3498db 100%)',
+      padding: '20px',
+      position: 'relative'
+    }}>
+      {/* Fixed Back Button in Top-Left Corner - Styled like EmployeeList */}
+      <button
+        onClick={() => navigate('/admin')}
+        style={{
+          position: 'fixed',
+          top: '20px',
+          left: '20px',
+          backgroundColor: 'transparent',
+          border: '2px solid #3498db',
+          color: '#3498db',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '8px 20px',
+          borderRadius: '50px',
+          fontSize: '16px',
+          fontWeight: '600',
+          boxShadow: '0 2px 10px rgba(52, 152, 219, 0.2)',
+          zIndex: 1001,
+          transition: 'all 0.3s ease'
+        }}
+        onMouseOver={(e) => {
+          e.target.style.backgroundColor = '#3498db';
+          e.target.style.color = '#ffffff';
+          e.target.style.transform = 'scale(1.05)';
+        }}
+        onMouseOut={(e) => {
+          e.target.style.backgroundColor = 'transparent';
+          e.target.style.color = '#3498db';
+          e.target.style.transform = 'scale(1)';
+        }}
+        disabled={loading}
+      >
+        <FaArrowLeft /> Back to Admin
+      </button>
+      {/* Main Container - Like EmployeeList Card */}
+      <div style={{
+        maxWidth: '800px',
+        margin: '80px auto 20px',
+        backgroundColor: '#ffffff',
+        padding: '30px',
+        borderRadius: '15px',
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+        overflow: 'hidden'
+      }}>
+        {/* Header with Title and Working Hours Button - Styled like EmployeeList Header */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '30px',
+          paddingBottom: '20px',
+          borderBottom: '2px solid #3498db'
+        }}>
+          <div></div> {/* Empty left for balance */}
+          <h2 style={{
+            textAlign: 'center',
+            color: '#2c3e50',
+            margin: 0,
+            fontSize: '1.8rem',
+            fontWeight: '600',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '10px'
+          }}>
+            <FaBuilding style={{ color: '#3498db', fontSize: '2rem' }} />
+            Company Details
+          </h2>
           <button
             onClick={() => navigate('/working')}
             style={{
+              background: 'linear-gradient(135deg, #27ae60 0%, #229954 100%)',
+              color: '#ffffff',
+              border: 'none',
+              cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              gap: '10px',
+              gap: '8px',
               padding: '10px 20px',
-              backgroundColor: '#27ae60',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '15px',
-              cursor: 'pointer',
+              borderRadius: '50px',
+              fontSize: '1rem',
+              fontWeight: '600',
+              boxShadow: '0 4px 8px rgba(39, 174, 96, 0.3)',
+              transition: 'all 0.3s ease'
             }}
-            onMouseOver={(e) => (e.target.style.backgroundColor = '#229954')}
-            onMouseOut={(e) => (e.target.style.backgroundColor = '#27ae60')}
+            onMouseOver={(e) => {
+              e.target.style.transform = 'translateY(-2px)';
+              e.target.style.boxShadow = '0 6px 12px rgba(39, 174, 96, 0.4)';
+            }}
+            onMouseOut={(e) => {
+              e.target.style.transform = 'translateY(0)';
+              e.target.style.boxShadow = '0 4px 8px rgba(39, 174, 96, 0.3)';
+            }}
+            disabled={loading}
           >
-            <FaClock /> Company Working Hours
+            <FaClock /> Working Hours
           </button>
         </div>
-        <h2 style={{ textAlign: 'center', color: '#2c3e50', fontSize: '2rem', fontWeight: '600', marginBottom: '30px' }}>
-          <FaBuilding style={{ marginRight: '10px' }} /> Company Details
-        </h2>
+        {/* Error and Message - Styled like EmployeeList Alerts */}
         {error && (
-          <div
-            style={{
-              backgroundColor: '#ffebee',
-              padding: '10px',
-              marginBottom: '20px',
-              color: '#c0392b',
-              borderRadius: '15px',
-              textAlign: 'center',
-            }}
-          >
+          <div style={{
+            background: 'linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%)',
+            color: '#c0392b',
+            padding: '15px',
+            borderRadius: '10px',
+            marginBottom: '20px',
+            textAlign: 'center',
+            border: '1px solid #e74c3c',
+            boxShadow: '0 2px 4px rgba(231, 76, 60, 0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '10px'
+          }}>
+            <FaTrash style={{ fontSize: '1.2rem' }} />
             {error}
           </div>
         )}
         {message && (
-          <div
-            style={{
-              backgroundColor: '#d4edda',
-              padding: '10px',
-              marginBottom: '20px',
-              color: '#155724',
-              borderRadius: '15px',
-              textAlign: 'center',
-            }}
-          >
+          <div style={{
+            background: 'linear-gradient(135deg, #d4edda 0%, #c8e6c9 100%)',
+            color: '#155724',
+            padding: '15px',
+            borderRadius: '10px',
+            marginBottom: '20px',
+            textAlign: 'center',
+            border: '1px solid #28a745',
+            boxShadow: '0 2px 4px rgba(40, 167, 69, 0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '10px'
+          }}>
+            <FaClock style={{ fontSize: '1.2rem', color: '#27ae60' }} />
             {message}
           </div>
         )}
@@ -607,7 +845,7 @@ function CompanyDetails() {
                       No Logo Uploaded
                     </div>
                   )}
-            
+         
                   {/* Title */}
                   <h3 style={{ color: '#2c3e50', fontSize: '1.8rem', margin: 0, textAlign: 'right', fontWeight: '600' }}>
                     Company Details<br/>Application
@@ -689,7 +927,7 @@ function CompanyDetails() {
                         </div>
                       )}
                     </div>
-                    {/* Contact Details - Single Column */}
+                    {/* Contact Details - Single Column, UPDATED for country codes and multiple websites */}
                     <div className="section">
                       <h4 style={{ color: '#2c3e50', fontSize: '1.3rem', textAlign: 'center', borderBottom: '1px solid #eee', paddingBottom: '8px', marginBottom: '15px' }}>Contact Details</h4>
                       {savedDetails.contacts && savedDetails.contacts.length > 0 ? savedDetails.contacts.map((contact, index) => (
@@ -701,20 +939,22 @@ function CompanyDetails() {
                             </div>
                             <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: '8px' }}>
                               <strong style={{ minWidth: '200px', textAlign: 'left', paddingRight: '10px', color: '#555', fontWeight: 'bold' }}>Phone Number :</strong>
-                              <span style={{ flex: 1, textAlign: 'left', color: '#000' }}>{contact.phoneNumber || 'N/A'}</span>
+                              <span style={{ flex: 1, textAlign: 'left', color: '#000' }}>{contact.phoneCountryCode || ''}{contact.phoneNumber || 'N/A'}</span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: '8px' }}>
                               <strong style={{ minWidth: '200px', textAlign: 'left', paddingRight: '10px', color: '#555', fontWeight: 'bold' }}>WhatsApp Number :</strong>
-                              <span style={{ flex: 1, textAlign: 'left', color: '#000' }}>{contact.whatsappNumber || 'N/A'}</span>
+                              <span style={{ flex: 1, textAlign: 'left', color: '#000' }}>{contact.whatsappCountryCode || ''}{contact.whatsappNumber || 'N/A'}</span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: '8px' }}>
                               <strong style={{ minWidth: '200px', textAlign: 'left', paddingRight: '10px', color: '#555', fontWeight: 'bold' }}>Email Address :</strong>
                               <span style={{ flex: 1, textAlign: 'left', color: '#000' }}>{contact.emailAddress || 'N/A'}</span>
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: '8px' }}>
-                              <strong style={{ minWidth: '200px', textAlign: 'left', paddingRight: '10px', color: '#555', fontWeight: 'bold' }}>Website :</strong>
-                              <span style={{ flex: 1, textAlign: 'left', color: '#000' }}>{contact.website || 'N/A'}</span>
-                            </div>
+                            {contact.websites && contact.websites.length > 0 && contact.websites.map((website, wIndex) => website ? (
+                              <div key={wIndex} style={{ display: 'flex', alignItems: 'baseline', marginBottom: '8px' }}>
+                                <strong style={{ minWidth: '200px', textAlign: 'left', paddingRight: '10px', color: '#555', fontWeight: 'bold' }}>Website {wIndex + 1} :</strong>
+                                <span style={{ flex: 1, textAlign: 'left', color: '#000' }}>{website}</span>
+                              </div>
+                            ) : null)}
                           </div>
                         </div>
                       )) : (
@@ -887,7 +1127,7 @@ function CompanyDetails() {
               </div>
             </div>
           )}
-          {/* UPDATED: Address section with dynamic fields */}
+          {/* UPDATED: Address section with dynamic fields and remove button */}
           {activeSection === 'address' && (
             <div>
               <h3 style={{ color: '#2c3e50', fontSize: '1.5rem', marginBottom: '15px', textAlign: 'center' }}>Address Details</h3>
@@ -965,6 +1205,28 @@ function CompanyDetails() {
                     placeholder="Building Name"
                     style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
                   />
+                  {/* NEW: Remove Address Button */}
+                  {formData.addresses.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeAddress(index)}
+                      style={{
+                        padding: '8px 12px',
+                        backgroundColor: '#e74c3c',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '10px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        justifyContent: 'center',
+                        fontSize: '0.9rem',
+                      }}
+                    >
+                      <FaTrash /> Remove Address
+                    </button>
+                  )}
                 </div>
               ))}
               <button
@@ -988,28 +1250,43 @@ function CompanyDetails() {
               </button>
             </div>
           )}
+          {/* UPDATED: Contact section with country codes (no labels), multiple websites, and remove button */}
           {activeSection === 'contact' && (
             <div>
               <h3 style={{ color: '#2c3e50', fontSize: '1.5rem', marginBottom: '15px', textAlign: 'center' }}>Contact Details</h3>
               {formData.contacts.map((contact, index) => (
                 <div key={index} style={{ display: 'grid', gap: '15px', marginBottom: '15px', border: '1px solid #ddd', padding: '10px', borderRadius: '10px' }}>
                    <h4 style={{textAlign: 'center', margin: '5px 0'}}>Contact {index + 1}</h4>
-                  <input
-                    type="text"
-                    name="phoneNumber"
-                    value={contact.phoneNumber}
-                    onChange={(e) => handleContactChange(index, e)}
-                    placeholder="Phone Number"
-                    style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
-                  />
-                  <input
-                    type="text"
-                    name="whatsappNumber"
-                    value={contact.whatsappNumber}
-                    onChange={(e) => handleContactChange(index, e)}
-                    placeholder="WhatsApp Number (optional)"
-                    style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
-                  />
+                  {/* Phone Number with Country Code - UPDATED: No label */}
+                  <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                    <CountryCodeSelector
+                      selectedCode={contact.phoneCountryCode}
+                      onCodeChange={(code) => handleContactCountryCodeChange(index, 'phone', code)}
+                    />
+                    <input
+                      type="text"
+                      name={`phoneNumber_${index}`}
+                      value={contact.phoneNumber}
+                      onChange={(e) => handleContactChange(index, e)}
+                      placeholder="Phone Number"
+                      style={{ flex: 1, padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
+                    />
+                  </div>
+                  {/* WhatsApp Number with Country Code - UPDATED: No label */}
+                  <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                    <CountryCodeSelector
+                      selectedCode={contact.whatsappCountryCode}
+                      onCodeChange={(code) => handleContactCountryCodeChange(index, 'whatsapp', code)}
+                    />
+                    <input
+                      type="text"
+                      name={`whatsappNumber_${index}`}
+                      value={contact.whatsappNumber}
+                      onChange={(e) => handleContactChange(index, e)}
+                      placeholder="WhatsApp Number (optional)"
+                      style={{ flex: 1, padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
+                    />
+                  </div>
                   <input
                     type="email"
                     name="emailAddress"
@@ -1018,14 +1295,59 @@ function CompanyDetails() {
                     placeholder="Email Address"
                     style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
                   />
-                  <input
-                    type="text"
-                    name="website"
-                    value={contact.website}
-                    onChange={(e) => handleContactChange(index, e)}
-                    placeholder="Website / Social Media Link (optional)"
-                    style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
-                  />
+                  {/* Multiple Websites */}
+                  <div>
+                    <label style={{ fontWeight: 'bold', color: '#555', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      Websites <FaLink />
+                    </label>
+                    {contact.websites.map((website, wIndex) => (
+                      <div key={wIndex} style={{ display: 'flex', gap: '5px', marginBottom: '5px', alignItems: 'center' }}>
+                        <input
+                          type="text"
+                          value={website}
+                          onChange={(e) => handleWebsiteChange(index, wIndex, e.target.value)}
+                          placeholder={`Website ${wIndex + 1}`}
+                          style={{ flex: 1, padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeWebsite(index, wIndex)}
+                          style={{ padding: '10px', backgroundColor: '#e74c3c', color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer' }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => addWebsite(index)}
+                      style={{ padding: '8px 12px', backgroundColor: '#3498db', color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer', marginTop: '5px' }}
+                    >
+                      <FaPlus /> Add Website
+                    </button>
+                  </div>
+                  {/* NEW: Remove Contact Button */}
+                  {formData.contacts.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeContact(index)}
+                      style={{
+                        padding: '8px 12px',
+                        backgroundColor: '#e74c3c',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '10px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        justifyContent: 'center',
+                        fontSize: '0.9rem',
+                      }}
+                    >
+                      <FaTrash /> Remove Contact
+                    </button>
+                  )}
                 </div>
               ))}
               <button
@@ -1093,13 +1415,15 @@ function CompanyDetails() {
                   placeholder="UPI ID"
                   style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
                 />
+                {/* UPDATED: Currency Type - Read-only, pre-filled from settings */}
                 <input
                   type="text"
                   name="currencyType"
-                  value={formData.currencyType}
+                  value={formData.currencyType || systemSettings.currency || ''}
                   onChange={handleChange}
                   placeholder="Currency Type (e.g., INR, USD)"
-                  style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
+                  readOnly
+                  style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem', backgroundColor: '#f8f9fa' }}
                 />
               </div>
             </div>
@@ -1199,6 +1523,13 @@ function CompanyDetails() {
           cursor: default;
           padding: 12px;
           text-align: center;
+        }
+        /* NEW: Country Code Selector Styles */
+        .country-code-selector ul {
+          box-shadow: 0 4px 12px rgba(0,0,0,.15);
+        }
+        .country-code-selector button:hover {
+          background-color: #f8f9fa;
         }
       `}</style>
     </div>
