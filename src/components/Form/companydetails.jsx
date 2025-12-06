@@ -1,8 +1,8 @@
-// src/components/Form/companydetails.jsx (Updated CompanyDetails.jsx with gradient background, fixed back button, enhanced alerts, and layout adjustments to match EmployeeList design)
+// src/components/Form/companydetails.jsx (Updated with "Company Licence" field after Owner Name, increased width, tabs in single line)
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { FaArrowLeft, FaBuilding, FaPlus, FaClock, FaGlobe, FaLink, FaTrash } from 'react-icons/fa';
+import { FaArrowLeft, FaBuilding, FaPlus, FaClock, FaGlobe, FaLink, FaTrash, FaCalendarAlt, FaEdit, FaSave, FaTimes } from 'react-icons/fa';
 const SearchableSelect = ({ options = [], value = '', onChange, placeholder }) => {
   const [search, setSearch] = useState(value || '');
   const [showList, setShowList] = useState(false);
@@ -141,6 +141,7 @@ function CompanyDetails() {
   const [formData, setFormData] = useState({
     restaurantName: '',
     ownerName: '',
+    companyLicence: '', // NEW: Company Licence field
     businessType: '',
     otherBusinessType: '',
     taxType: '',
@@ -151,6 +152,7 @@ function CompanyDetails() {
     openingTime: '',
     closingTime: '',
     totalTime: '',
+    specialTimings: [], // NEW: Array for special timings {reason, date, startTime, endTime, duration}
     addresses: [{ country: '', field1: '', field2: '', field3: '', flat_villa_no: '', building_name: '' }],
     contacts: [{
       phoneCountryCode: '+91',
@@ -170,6 +172,7 @@ function CompanyDetails() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [message, setMessage] = useState('');
+  const [warning, setWarning] = useState(''); // NEW: For warning messages
   const [activeSection, setActiveSection] = useState('basic'); // Default to 'basic' to show form first
   const [savedDetails, setSavedDetails] = useState(null);
   const [logoUrl, setLogoUrl] = useState(null); // State for logo URL
@@ -177,6 +180,12 @@ function CompanyDetails() {
   const [linkedValues, setLinkedValues] = useState({});
   const [baseUrl, setBaseUrl] = useState(""); // NEW: Added baseUrl state like in AdminPage
   const [systemSettings, setSystemSettings] = useState({}); // NEW: State for system settings (for currency)
+  // NEW: States for edit modal
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingSpecial, setEditingSpecial] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  // OLD: Remove editingSpecialIndex and tempSpecialTiming for add only
+  const [tempSpecialTiming, setTempSpecialTiming] = useState({ reason: '', date: '', startTime: '', endTime: '', duration: '' });
   const countryList = Object.keys(addressStructure.countries || {});
   // NEW: Fetch config to determine baseUrl
   const fetchConfig = async () => {
@@ -307,6 +316,101 @@ function CompanyDetails() {
     const total = `${totalH.toString().padStart(2, '0')}:${totalM.toString().padStart(2, '0')}`;
     setFormData((prev) => ({ ...prev, totalTime: total }));
   };
+  // NEW: Calculate duration for special timing
+  const calculateSpecialDuration = (startTime, endTime, setDuration) => {
+    if (!startTime || !endTime) {
+      setDuration('');
+      return;
+    }
+    const [startH, startM] = startTime.split(':').map(Number);
+    const [endH, endM] = endTime.split(':').map(Number);
+    let totalMin = (endH * 60 + endM) - (startH * 60 + startM);
+    if (totalMin < 0) totalMin += 24 * 60;
+    const totalH = Math.floor(totalMin / 60);
+    const totalM = totalMin % 60;
+    const total = `${totalH.toString().padStart(2, '0')}:${totalM.toString().padStart(2, '0')}`;
+    setDuration(total);
+  };
+  // NEW: Handle special timing changes for add
+  const handleSpecialChange = (field, value) => {
+    setTempSpecialTiming(prev => ({ ...prev, [field]: value }));
+    if (field === 'startTime' || field === 'endTime') {
+      calculateSpecialDuration(
+        field === 'startTime' ? value : tempSpecialTiming.startTime,
+        field === 'endTime' ? value : tempSpecialTiming.endTime,
+        (duration) => setTempSpecialTiming(prev => ({ ...prev, duration }))
+      );
+    }
+  };
+  // UPDATED: Add special timing (only add, no edit here)
+  const saveSpecialTiming = () => {
+    if (!tempSpecialTiming.reason || !tempSpecialTiming.date || !tempSpecialTiming.startTime || !tempSpecialTiming.endTime) {
+      setError('Please fill all fields for special timing.');
+      return;
+    }
+    // Add new
+    setFormData(prev => ({
+      ...prev,
+      specialTimings: [...prev.specialTimings, { ...tempSpecialTiming }]
+    }));
+    setTempSpecialTiming({ reason: '', date: '', startTime: '', endTime: '', duration: '' });
+    setMessage('Special timing saved.');
+    setError(null);
+  };
+  // NEW: Edit special timing - open modal
+  const editSpecialTiming = (index) => {
+    const special = formData.specialTimings[index];
+    setEditingSpecial({ ...special, index });
+    setShowEditModal(true);
+  };
+  // UPDATED: Delete special timing - no confirm, just warning message
+  const deleteSpecialTiming = (index) => {
+    const updatedSpecials = formData.specialTimings.filter((_, i) => i !== index);
+    setFormData(prev => ({ ...prev, specialTimings: updatedSpecials }));
+    setWarning('Special timing deleted.');
+    setError(null);
+    setMessage('');
+  };
+  // NEW: Handle edit changes in modal
+  const handleEditChange = (field, value) => {
+    const newSpecial = { ...editingSpecial, [field]: value };
+    setEditingSpecial(newSpecial);
+    if (field === 'startTime' || field === 'endTime') {
+      const startTime = field === 'startTime' ? value : editingSpecial.startTime;
+      const endTime = field === 'endTime' ? value : editingSpecial.endTime;
+      calculateSpecialDuration(startTime, endTime, (duration) => {
+        setEditingSpecial(prev => ({ ...prev, duration }));
+      });
+    }
+  };
+  // NEW: Update special timing from modal
+  const updateSpecialTiming = () => {
+    if (!editingSpecial.reason || !editingSpecial.date || !editingSpecial.startTime || !editingSpecial.endTime) {
+      setError('Please fill all fields for special timing.');
+      return;
+    }
+    const updatedSpecials = [...formData.specialTimings];
+    updatedSpecials[editingSpecial.index] = { ...editingSpecial };
+    setFormData(prev => ({ ...prev, specialTimings: updatedSpecials }));
+    setShowEditModal(false);
+    setEditingSpecial(null);
+    setShowDeleteConfirm(false);
+    setMessage('Special timing updated.');
+    setError(null);
+  };
+  // NEW: Cancel edit in modal
+  const cancelEditSpecial = () => {
+    setShowEditModal(false);
+    setEditingSpecial(null);
+    setShowDeleteConfirm(false);
+  };
+  // NEW: Confirm delete from modal
+  const confirmDeleteFromModal = () => {
+    deleteSpecialTiming(editingSpecial.index);
+    setShowDeleteConfirm(false);
+    setShowEditModal(false);
+    setEditingSpecial(null);
+  };
   const handleAddressChange = (index, e) => {
     const { name, value } = e.target;
     const newAddresses = [...formData.addresses];
@@ -397,13 +501,14 @@ function CompanyDetails() {
     }
     setFormData((prev) => ({ ...prev, addresses: newAddresses }));
   };
-  // UPDATED: Handle submit with baseUrl
+  // UPDATED: Handle submit with baseUrl and specialTimings
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       setLoading(true);
       setError(null);
       setMessage('');
+      setWarning('');
       console.log('Submitting form data:', formData); // Debug log
       const response = await axios.post(`${baseUrl}/api/company-details`, formData);
       setMessage('Company details saved successfully!');
@@ -447,7 +552,16 @@ function CompanyDetails() {
       </div>
     );
   };
-  // UPDATED: Handle print with dynamic logoUrl and updated contact format
+  // NEW: Format special timing for print/display
+  const formatSpecialTimingForPrint = (special, index) => {
+    return (
+      <div key={index} className="field" style={{ marginBottom: '5px' }}>
+        <span className="label">Special {index + 1} - {special.reason} ({special.date}):</span>
+        <span className="value">{special.startTime} to {special.endTime} ({special.duration})</span>
+      </div>
+    );
+  };
+  // UPDATED: Handle print with dynamic logoUrl, updated contact format, specialTimings, and NEW companyLicence
   const handlePrint = () => {
     if (!savedDetails) {
       setError('No saved details available to print.');
@@ -516,11 +630,26 @@ function CompanyDetails() {
                 </div>
                 <div class="column">
                   <div class="field"><span class="label">Owner/Manager Name:</span><span class="value">${savedDetails.ownerName || 'N/A'}</span></div>
+                  <div class="field"><span class="label">Company Licence:</span><span class="value">${savedDetails.companyLicence || 'N/A'}</span></div>
                   <div class="field"><span class="label">${savedDetails.taxType === 'GST' ? 'GST' : 'VAT'} Number:</span><span class="value">${savedDetails.taxNumber || 'N/A'}</span></div>
                   <div class="field"><span class="label">PAN Number:</span><span class="value">${savedDetails.panNumber || 'N/A'}</span></div>
                   <div class="field"><span class="label">Closing Time:</span><span class="value">${savedDetails.closingTime || 'N/A'}</span></div>
                 </div>
               </div>
+            </div>
+            <div class="section">
+              <h3>Special Timings (Overrides)</h3>
+              ${savedDetails.specialTimings && savedDetails.specialTimings.length > 0 ? savedDetails.specialTimings.map((special, index) => `
+                <div class="row" style="margin-bottom: 10px;">
+                  <div class="column" style="width: 100%;">
+                    <div class="field"><span class="label">Reason:</span><span class="value">${special.reason}</span></div>
+                    <div class="field"><span class="label">Date:</span><span class="value">${special.date}</span></div>
+                    <div class="field"><span class="label">Start Time:</span><span class="value">${special.startTime}</span></div>
+                    <div class="field"><span class="label">End Time:</span><span class="value">${special.endTime}</span></div>
+                    <div class="field"><span class="label">Duration:</span><span class="value">${special.duration}</span></div>
+                  </div>
+                </div>
+              `).join('') : '<div class="row"><div class="column"><div class="field"><span class="label">No special timings.</span><span class="value"></span></div></div></div>'}
             </div>
             <div class="section">
               <h3>Address Details</h3>
@@ -619,9 +748,9 @@ function CompanyDetails() {
       >
         <FaArrowLeft /> Back to Admin
       </button>
-      {/* Main Container - Like EmployeeList Card */}
+      {/* Main Container - Like EmployeeList Card - UPDATED: Increased maxWidth to 1200px */}
       <div style={{
-        maxWidth: '800px',
+        maxWidth: '1200px',
         margin: '80px auto 20px',
         backgroundColor: '#ffffff',
         padding: '30px',
@@ -722,7 +851,28 @@ function CompanyDetails() {
             {message}
           </div>
         )}
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', backgroundColor: '#3498db', padding: '10px', borderRadius: '10px', flexWrap: 'wrap' }}>
+        {/* NEW: Warning Message */}
+        {warning && (
+          <div style={{
+            background: 'linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%)',
+            color: '#856404',
+            padding: '15px',
+            borderRadius: '10px',
+            marginBottom: '20px',
+            textAlign: 'center',
+            border: '1px solid #f39c12',
+            boxShadow: '0 2px 4px rgba(243, 156, 18, 0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '10px'
+          }}>
+            <FaTrash style={{ fontSize: '1.2rem', color: '#f39c12' }} />
+            {warning}
+          </div>
+        )}
+        {/* UPDATED: Tabs - flexWrap: 'nowrap' for single line */}
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', backgroundColor: '#3498db', padding: '10px', borderRadius: '10px', flexWrap: 'nowrap', overflowX: 'auto' }}>
           <button
             onClick={() => toggleSection('details')}
             style={{
@@ -733,6 +883,8 @@ function CompanyDetails() {
               borderRadius: '10px',
               cursor: 'pointer',
               fontSize: '1rem',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
             }}
           >
             Details
@@ -747,9 +899,28 @@ function CompanyDetails() {
               borderRadius: '10px',
               cursor: 'pointer',
               fontSize: '1rem',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
             }}
           >
             Basic Information
+          </button>
+          {/* NEW: Timing Tab Button */}
+          <button
+            onClick={() => toggleSection('timing')}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: activeSection === 'timing' ? '#fff' : 'transparent',
+              color: activeSection === 'timing' ? '#3498db' : '#fff',
+              border: '1px solid #fff',
+              borderRadius: '10px',
+              cursor: 'pointer',
+              fontSize: '1rem',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+            }}
+          >
+            <FaClock /> Timing
           </button>
           <button
             onClick={() => toggleSection('address')}
@@ -761,6 +932,8 @@ function CompanyDetails() {
               borderRadius: '10px',
               cursor: 'pointer',
               fontSize: '1rem',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
             }}
           >
             Address Details
@@ -775,6 +948,8 @@ function CompanyDetails() {
               borderRadius: '10px',
               cursor: 'pointer',
               fontSize: '1rem',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
             }}
           >
             Contact Details
@@ -789,13 +964,15 @@ function CompanyDetails() {
               borderRadius: '10px',
               cursor: 'pointer',
               fontSize: '1rem',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
             }}
           >
             Bank Details
           </button>
         </div>
         <div style={{ display: 'grid', gap: '20px' }}>
-          {/* MODIFIED: Details section with single column for proper line display like image */}
+          {/* MODIFIED: Details section with single column for proper line display like image, added specialTimings, and NEW companyLicence */}
           {activeSection === 'details' && (
             <div>
               {/* A4 Sheet Styled Container */}
@@ -845,7 +1022,7 @@ function CompanyDetails() {
                       No Logo Uploaded
                     </div>
                   )}
-         
+     
                   {/* Title */}
                   <h3 style={{ color: '#2c3e50', fontSize: '1.8rem', margin: 0, textAlign: 'right', fontWeight: '600' }}>
                     Company Details<br/>Application
@@ -856,13 +1033,21 @@ function CompanyDetails() {
                 {/* Saved Details Content - Single Column for Exact Line Display */}
                 {savedDetails ? (
                   <div style={{ display: 'grid', gap: '15px' }}>
-                    {/* Basic Information */}
+                    {/* Basic Information - UPDATED: Added Company Licence after Owner Name */}
                     <div className="section">
                       <h4 style={{ color: '#2c3e50', fontSize: '1.3rem', textAlign: 'center', borderBottom: '1px solid #eee', paddingBottom: '8px', marginBottom: '15px' }}>Basic Information</h4>
                       <div style={{ width: '100%', fontSize: '0.95rem' }}>
                         <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: '8px' }}>
                           <strong style={{ minWidth: '200px', textAlign: 'left', paddingRight: '10px', color: '#555', fontWeight: 'bold' }}>Restaurant Name :</strong>
                           <span style={{ flex: 1, textAlign: 'left', color: '#000' }}>{savedDetails.restaurantName || 'N/A'}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: '8px' }}>
+                          <strong style={{ minWidth: '200px', textAlign: 'left', paddingRight: '10px', color: '#555', fontWeight: 'bold' }}>Owner/Manager Name :</strong>
+                          <span style={{ flex: 1, textAlign: 'left', color: '#000' }}>{savedDetails.ownerName || 'N/A'}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: '8px' }}>
+                          <strong style={{ minWidth: '200px', textAlign: 'left', paddingRight: '10px', color: '#555', fontWeight: 'bold' }}>Company Licence :</strong>
+                          <span style={{ flex: 1, textAlign: 'left', color: '#000' }}>{savedDetails.companyLicence || 'N/A'}</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: '8px' }}>
                           <strong style={{ minWidth: '200px', textAlign: 'left', paddingRight: '10px', color: '#555', fontWeight: 'bold' }}>Business Type :</strong>
@@ -893,10 +1078,6 @@ function CompanyDetails() {
                           <span style={{ flex: 1, textAlign: 'left', color: '#000' }}>{savedDetails.fssaiNumber || 'N/A'}</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: '8px' }}>
-                          <strong style={{ minWidth: '200px', textAlign: 'left', paddingRight: '10px', color: '#555', fontWeight: 'bold' }}>Owner/Manager Name :</strong>
-                          <span style={{ flex: 1, textAlign: 'left', color: '#000' }}>{savedDetails.ownerName || 'N/A'}</span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: '8px' }}>
                           <strong style={{ minWidth: '200px', textAlign: 'left', paddingRight: '10px', color: '#555', fontWeight: 'bold' }}>${savedDetails.taxType === 'GST' ? 'GST' : 'VAT'} Number :</strong>
                           <span style={{ flex: 1, textAlign: 'left', color: '#000' }}>{savedDetails.taxNumber || 'N/A'}</span>
                         </div>
@@ -905,6 +1086,43 @@ function CompanyDetails() {
                           <span style={{ flex: 1, textAlign: 'left', color: '#000' }}>{savedDetails.panNumber || 'N/A'}</span>
                         </div>
                       </div>
+                    </div>
+                    {/* NEW: Special Timings Section */}
+                    <div className="section">
+                      <h4 style={{ color: '#2c3e50', fontSize: '1.3rem', textAlign: 'center', borderBottom: '1px solid #eee', paddingBottom: '8px', marginBottom: '15px' }}>Special Timings (Overrides)</h4>
+                      {savedDetails.specialTimings && savedDetails.specialTimings.length > 0 ? savedDetails.specialTimings.map((special, index) => (
+                        <div key={index} style={{ marginBottom: '15px', borderBottom: '1px dashed #ccc', paddingBottom: '10px', fontSize: '0.95rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: '8px' }}>
+                            <strong style={{ minWidth: '200px', textAlign: 'left', color: '#333', fontWeight: 'bold' }}>Special {index + 1} :</strong>
+                            <span style={{ flex: 1 }}></span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: '8px' }}>
+                            <strong style={{ minWidth: '200px', textAlign: 'left', paddingRight: '10px', color: '#555', fontWeight: 'bold' }}>Reason :</strong>
+                            <span style={{ flex: 1, textAlign: 'left', color: '#000' }}>{special.reason}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: '8px' }}>
+                            <strong style={{ minWidth: '200px', textAlign: 'left', paddingRight: '10px', color: '#555', fontWeight: 'bold' }}>Date :</strong>
+                            <span style={{ flex: 1, textAlign: 'left', color: '#000' }}>{special.date}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: '8px' }}>
+                            <strong style={{ minWidth: '200px', textAlign: 'left', paddingRight: '10px', color: '#555', fontWeight: 'bold' }}>Start Time :</strong>
+                            <span style={{ flex: 1, textAlign: 'left', color: '#000' }}>{special.startTime}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: '8px' }}>
+                            <strong style={{ minWidth: '200px', textAlign: 'left', paddingRight: '10px', color: '#555', fontWeight: 'bold' }}>End Time :</strong>
+                            <span style={{ flex: 1, textAlign: 'left', color: '#000' }}>{special.endTime}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: '8px' }}>
+                            <strong style={{ minWidth: '200px', textAlign: 'left', paddingRight: '10px', color: '#555', fontWeight: 'bold' }}>Duration :</strong>
+                            <span style={{ flex: 1, textAlign: 'left', color: '#000' }}>{special.duration}</span>
+                          </div>
+                        </div>
+                      )) : (
+                        <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: '8px' }}>
+                          <strong style={{ minWidth: '200px', textAlign: 'left', color: '#333', fontWeight: 'bold' }}>No special timings available.</strong>
+                          <span style={{ flex: 1 }}></span>
+                        </div>
+                      )}
                     </div>
                     {/* Address Details - UPDATED: Use formatAddressForPrint, Single Column */}
                     <div className="section">
@@ -1038,6 +1256,15 @@ function CompanyDetails() {
                   placeholder="Owner / Manager Name"
                   style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
                 />
+                {/* NEW: Company Licence Input after Owner Name */}
+                <input
+                  type="text"
+                  name="companyLicence"
+                  value={formData.companyLicence}
+                  onChange={handleChange}
+                  placeholder="Company Licence (optional)"
+                  style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
+                />
                 <select
                   name="businessType"
                   value={formData.businessType}
@@ -1080,27 +1307,6 @@ function CompanyDetails() {
                   style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
                 />
                 <input
-                  type="time"
-                  name="openingTime"
-                  value={formData.openingTime}
-                  onChange={handleOpeningTimeChange}
-                  style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
-                />
-                <input
-                  type="time"
-                  name="closingTime"
-                  value={formData.closingTime}
-                  onChange={handleClosingTimeChange}
-                  style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
-                />
-                <input
-                  type="text"
-                  value={formData.totalTime}
-                  readOnly
-                  placeholder="Total Operating Time (auto-calculated)"
-                  style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem', backgroundColor: '#f8f9fa' }}
-                />
-                <input
                   type="text"
                   name="taxNumber"
                   value={formData.taxNumber}
@@ -1124,6 +1330,140 @@ function CompanyDetails() {
                   placeholder="PAN Number (optional)"
                   style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
                 />
+              </div>
+            </div>
+          )}
+          {/* UPDATED: Timing Section - Added Special Timings sub-section */}
+          {activeSection === 'timing' && (
+            <div>
+              <h3 style={{ color: '#2c3e50', fontSize: '1.5rem', marginBottom: '15px', textAlign: 'center' }}>
+                <FaClock style={{ marginRight: '8px' }} /> Timing Details
+              </h3>
+              <div style={{ display: 'grid', gap: '15px', maxWidth: '400px', margin: '0 auto' }}>
+                <div style={{ textAlign: 'center', color: '#555', fontSize: '0.9rem' }}>
+                  Set your business operating hours below. Total time is auto-calculated.
+                </div>
+                <input
+                  type="time"
+                  name="openingTime"
+                  value={formData.openingTime}
+                  onChange={handleOpeningTimeChange}
+                  placeholder="Start Time"
+                  style={{
+                    padding: '10px',
+                    border: '1px solid #bdc3c7',
+                    borderRadius: '10px',
+                    fontSize: '1rem',
+                    textAlign: 'center'
+                  }}
+                />
+                <input
+                  type="time"
+                  name="closingTime"
+                  value={formData.closingTime}
+                  onChange={handleClosingTimeChange}
+                  placeholder="End Time"
+                  style={{
+                    padding: '10px',
+                    border: '1px solid #bdc3c7',
+                    borderRadius: '10px',
+                    fontSize: '1rem',
+                    textAlign: 'center'
+                  }}
+                />
+                <input
+                  type="text"
+                  value={formData.totalTime}
+                  readOnly
+                  placeholder="Total Operating Time (auto-calculated)"
+                  style={{
+                    padding: '10px',
+                    border: '1px solid #bdc3c7',
+                    borderRadius: '10px',
+                    fontSize: '1rem',
+                    backgroundColor: '#f8f9fa',
+                    textAlign: 'center',
+                    fontWeight: 'bold',
+                    color: '#3498db'
+                  }}
+                />
+                <div style={{ textAlign: 'center', color: '#27ae60', fontSize: '0.9rem' }}>
+                  <FaCalendarAlt /> Note: This applies to daily operations. Customize per day in Working Hours page if needed.
+                </div>
+              </div>
+              {/* NEW: Special Timings Sub-Section */}
+              <div style={{ marginTop: '30px', paddingTop: '20px', borderTop: '2px solid #eee' }}>
+                <h4 style={{ color: '#2c3e50', fontSize: '1.3rem', marginBottom: '15px', textAlign: 'center' }}>
+                  Special Timings (Overrides for Specific Dates)
+                </h4>
+                <div style={{ textAlign: 'center', color: '#555', fontSize: '0.9rem', marginBottom: '15px' }}>
+                  Add special timings for specific dates (e.g., holidays, events). These override regular hours.
+                </div>
+                {/* Add Form */}
+                <div style={{ display: 'grid', gap: '10px', maxWidth: '400px', margin: '0 auto 20px', padding: '15px', border: '1px solid #ddd', borderRadius: '10px' }}>
+                  <input
+                    type="text"
+                    value={tempSpecialTiming.reason}
+                    onChange={(e) => handleSpecialChange('reason', e.target.value)}
+                    placeholder="Reason (e.g., Holiday, Event)"
+                    style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
+                  />
+                  <input
+                    type="date"
+                    value={tempSpecialTiming.date}
+                    onChange={(e) => handleSpecialChange('date', e.target.value)}
+                    style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
+                  />
+                  <input
+                    type="time"
+                    value={tempSpecialTiming.startTime}
+                    onChange={(e) => handleSpecialChange('startTime', e.target.value)}
+                    placeholder="Start Time"
+                    style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
+                  />
+                  <input
+                    type="time"
+                    value={tempSpecialTiming.endTime}
+                    onChange={(e) => handleSpecialChange('endTime', e.target.value)}
+                    placeholder="End Time"
+                    style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
+                  />
+                  <input
+                    type="text"
+                    value={tempSpecialTiming.duration}
+                    readOnly
+                    placeholder="Duration (auto-calculated)"
+                    style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem', backgroundColor: '#f8f9fa', fontWeight: 'bold' }}
+                  />
+                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                    <button
+                      onClick={saveSpecialTiming}
+                      style={{ padding: '10px 15px', backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer' }}
+                    >
+                      <FaPlus /> Add
+                    </button>
+                  </div>
+                </div>
+                {/* List of Special Timings */}
+                {formData.specialTimings.length > 0 && (
+                  <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #ddd', borderRadius: '10px' }}>
+                    {formData.specialTimings.map((special, index) => (
+                      <div key={index} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px', padding: '10px', borderBottom: '1px solid #eee', alignItems: 'center' }}>
+                        <div style={{ fontSize: '0.9rem' }}>
+                          <strong>{special.reason}</strong> - {special.date} ({special.startTime} - {special.endTime}, {special.duration})
+                        </div>
+                        <div style={{ display: 'flex', gap: '5px' }}>
+                          <button onClick={() => editSpecialTiming(index)} style={{ padding: '5px', backgroundColor: '#f39c12', color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>
+                            <FaEdit />
+                          </button>
+                          <button onClick={() => deleteSpecialTiming(index)} style={{ padding: '5px', backgroundColor: '#e74c3c', color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>
+                            <FaTrash />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1470,6 +1810,122 @@ function CompanyDetails() {
           </div>
         </div>
       </div>
+      {/* NEW: Edit Modal for Special Timing */}
+      {showEditModal && (
+        <div 
+          style={{ 
+            position: 'fixed', 
+            top: 0, 
+            left: 0, 
+            width: '100%', 
+            height: '100%', 
+            backgroundColor: 'rgba(0,0,0,0.5)', 
+            zIndex: 1000, 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center' 
+          }} 
+          onClick={cancelEditSpecial}
+        >
+          <div 
+            style={{ 
+              background: 'white', 
+              padding: '20px', 
+              borderRadius: '10px', 
+              maxWidth: '500px', 
+              width: '90%', 
+              maxHeight: '90%', 
+              overflowY: 'auto' 
+            }} 
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ color: '#2c3e50', marginBottom: '15px' }}>Edit Special Timing</h3>
+            <div style={{ display: 'grid', gap: '10px' }}>
+              <input
+                type="text"
+                value={editingSpecial?.reason || ''}
+                onChange={(e) => handleEditChange('reason', e.target.value)}
+                placeholder="Reason (e.g., Holiday, Event)"
+                style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
+              />
+              <input
+                type="date"
+                value={editingSpecial?.date || ''}
+                onChange={(e) => handleEditChange('date', e.target.value)}
+                style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
+              />
+              <input
+                type="time"
+                value={editingSpecial?.startTime || ''}
+                onChange={(e) => handleEditChange('startTime', e.target.value)}
+                placeholder="Start Time"
+                style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
+              />
+              <input
+                type="time"
+                value={editingSpecial?.endTime || ''}
+                onChange={(e) => handleEditChange('endTime', e.target.value)}
+                placeholder="End Time"
+                style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
+              />
+              <input
+                type="text"
+                value={editingSpecial?.duration || ''}
+                readOnly
+                placeholder="Duration (auto-calculated)"
+                style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem', backgroundColor: '#f8f9fa', fontWeight: 'bold' }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '15px' }}>
+              <button
+                onClick={updateSpecialTiming}
+                style={{ padding: '10px 15px', backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer' }}
+              >
+                <FaSave /> Update
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                style={{ padding: '10px 15px', backgroundColor: '#e74c3c', color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer' }}
+              >
+                <FaTrash /> Delete
+              </button>
+              <button
+                onClick={cancelEditSpecial}
+                style={{ padding: '10px 15px', backgroundColor: '#bdc3c7', color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer' }}
+              >
+                <FaTimes /> Cancel
+              </button>
+            </div>
+            {/* NEW: Inline Delete Confirmation in Modal */}
+            {showDeleteConfirm && (
+              <div style={{ 
+                marginTop: '20px', 
+                padding: '15px', 
+                background: '#fff3cd', 
+                border: '1px solid #ffeaa7', 
+                borderRadius: '5px',
+                textAlign: 'center'
+              }}>
+                <p style={{ margin: '0 0 15px 0', color: '#856404' }}>Are you sure you want to delete this special timing? This action cannot be undone.</p>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                  <button
+                    onClick={confirmDeleteFromModal}
+                    style={{ padding: '8px 12px', backgroundColor: '#e74c3c', color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer' }}
+                  >
+                    Yes, Delete
+                  </button>
+                  <button
+                    onClick={() => setShowDeleteConfirm(false)}
+                    style={{ padding: '8px 12px', backgroundColor: '#bdc3c7', color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer' }}
+                  >
+                    No
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       <style>{`
         /* Searchable Select */
         .searchable-select {

@@ -1,10 +1,8 @@
-// Updated src/components/Form/attendance.jsx - Notes now display auto-generated details from EmployeeList marking (status + times). Existing records editable. Full Day/Off Day marking exclusive to EmployeeList. Logic preserved.
-// DESIGN UPDATE: Applied EmployeeList-style background gradient, fixed back button ("Back to Admin"), and main container styling for consistency. Messages updated to match alert styles. No functional changes.
-import React, { useState, useEffect } from 'react';
+// Updated src/components/Form/attendance.jsx - Added Schedule column to show regular/special times. For no record days, display scheduled times (special if applicable). Notes show auto-generated from marking. Full Day/Off Day marking exclusive to EmployeeList. DESIGN consistent with EmployeeList.
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { FaArrowLeft, FaClock, FaUserCheck, FaCalendarAlt, FaSearch, FaEdit, FaTrash, FaTimes } from 'react-icons/fa';
-
 const Attendance = () => {
   const navigate = useNavigate();
   const [employees, setEmployees] = useState([]);
@@ -27,7 +25,15 @@ const Attendance = () => {
   const [editingRecord, setEditingRecord] = useState(null);
   const [editStatus, setEditStatus] = useState('Full Day');
   const [editNotes, setEditNotes] = useState('');
-
+  // NEW: Special timings map for quick lookup by date
+  const specialMap = useMemo(() => {
+    if (!selectedEmployee?.specialTimings) return {};
+    const map = {};
+    selectedEmployee.specialTimings.forEach(s => {
+      map[s.date] = s;
+    });
+    return map;
+  }, [selectedEmployee]);
   // Fetch base URL and settings (including new fields)
   useEffect(() => {
     const fetchConfig = async () => {
@@ -52,7 +58,6 @@ const Attendance = () => {
     };
     fetchConfig();
   }, []);
-
   // Fetch settings (renamed from fetchCurrency, now includes totalWorkingDays and applyCompanyLeaves)
   const fetchSettings = async (currentBaseUrl) => {
     try {
@@ -71,7 +76,6 @@ const Attendance = () => {
       setApplyCompanyLeaves(false);
     }
   };
-
   const getCurrencySymbol = (code) => {
     const symbols = {
       'USD': '$',
@@ -85,7 +89,6 @@ const Attendance = () => {
     };
     return symbols[code] || code;
   };
-
   // Fetch employees list from /api/add-employee
   const fetchEmployees = async (currentBaseUrl) => {
     try {
@@ -99,7 +102,6 @@ const Attendance = () => {
       setLoading(false);
     }
   };
-
   // Fetch attendance records for month and employeeId
   const fetchAttendance = async (currentBaseUrl, month, employeeId = null) => {
     try {
@@ -115,7 +117,6 @@ const Attendance = () => {
       setError('Failed to load attendance records');
     }
   };
-
   // Load data for selected employee/month: attendance + holidays (if apply) + compute effective
   useEffect(() => {
     const loadData = async () => {
@@ -159,7 +160,6 @@ const Attendance = () => {
     };
     loadData();
   }, [selectedMonth, selectedEmployee, baseUrl, totalWorkingDays, applyCompanyLeaves]);
-
   // Edit attendance
   const editAttendance = () => {
     try {
@@ -189,7 +189,6 @@ const Attendance = () => {
       setError(`Failed to update attendance: ${err.message}`);
     }
   };
-
   // Delete attendance
   const deleteAttendance = async (recordId) => {
     try {
@@ -202,18 +201,15 @@ const Attendance = () => {
       setError(`Failed to delete attendance: ${err.response?.data?.error || err.message}`);
     }
   };
-
   // Handle month change
   const handleMonthChange = (e) => {
     setSelectedMonth(e.target.value);
   };
-
   // Filter employees based on search
   const filteredEmployees = employees.filter((emp) =>
     emp.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     emp.email?.toLowerCase().includes(searchQuery.toLowerCase())
   );
-
   // Generate days in month
   const year = parseInt(selectedMonth.split('-')[0]);
   const monthIndex = parseInt(selectedMonth.split('-')[1]) - 1;
@@ -222,10 +218,8 @@ const Attendance = () => {
   for (let d = 1; d <= daysInMonth; d++) {
     monthDays.push(d);
   }
-
   // Check if date is holiday
   const isHolidayDate = (date) => holidays.some(h => h.date === date);
-
   // Get status style
   const getStatusStyle = (status) => {
     let statusStyle = {};
@@ -240,14 +234,23 @@ const Attendance = () => {
     }
     return statusStyle;
   };
-
+  // UPDATED: Get schedule display for a date (special if applicable, else regular)
+  const getScheduleDisplay = (date, record = null) => {
+    if (record && record.startTime && record.endTime) {
+      return `${record.startTime} - ${record.endTime}`;
+    }
+    const special = specialMap[date];
+    if (special) {
+      return `${special.startTime} - ${special.endTime} (Special: ${special.reason})`;
+    }
+    return selectedEmployee?.startTime && selectedEmployee?.endTime ? `${selectedEmployee.startTime} - ${selectedEmployee.endTime}` : 'N/A';
+  };
   // Summary calculations - UPDATED: Use effectiveWorkingDays, marked = full + off, absent = effective - marked
   const fullCount = attendanceRecords.filter((r) => r.status === 'Full Day').length;
   const offCount = attendanceRecords.filter((r) => r.status === 'Off Day').length;
   const markedCount = fullCount + offCount;
   const absentCount = effectiveWorkingDays - markedCount;
   const totalSalary = attendanceRecords.reduce((sum, rec) => sum + (rec.dailySalary || 0), 0);
-
   if (loading && !selectedEmployee) {
     return (
       <div style={{
@@ -268,7 +271,6 @@ const Attendance = () => {
       </div>
     );
   }
-
   return (
     <div style={{
       minHeight: '100vh',
@@ -311,7 +313,6 @@ const Attendance = () => {
       >
         <FaArrowLeft /> Back to Admin
       </button>
-
       {/* Main Container - Styled like EmployeeList */}
       <div style={{
         maxWidth: '1250px',
@@ -348,7 +349,6 @@ const Attendance = () => {
           </h2>
           <div></div> {/* Empty right for balance */}
         </div>
-
         {/* Error and Message - Styled like EmployeeList Alerts */}
         {error && (
           <div style={{
@@ -388,7 +388,6 @@ const Attendance = () => {
             {message}
           </div>
         )}
-
         {/* Month Selector - Styled consistently */}
         <div style={{
           display: 'flex',
@@ -416,9 +415,8 @@ const Attendance = () => {
             onBlur={(e) => e.target.style.borderColor = '#3498db'}
           />
         </div>
-
         {selectedEmployee ? (
-          /* Employee Monthly View: Day-wise full list including absent, holidays, with edit/delete for existing records only. No marking buttons. */
+          /* UPDATED: Employee Monthly View: Added Schedule column. For no record, show scheduled times (special if applicable). Notes from marking. */
           <div>
             {/* Subheader for Selected Employee - Styled like EmployeeList */}
             <div style={{
@@ -468,11 +466,13 @@ const Attendance = () => {
               boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)',
               backgroundColor: 'white'
             }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '800px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1000px' }}>
                 <thead>
                   <tr style={{ background: 'linear-gradient(135deg, #3498db 0%, #2980b9 100%)', color: 'white' }}>
                     <th style={{ padding: '15px 12px', border: 'none', textAlign: 'left', whiteSpace: 'nowrap', fontWeight: '600', fontSize: '0.95rem' }}>Date</th>
                     <th style={{ padding: '15px 12px', border: 'none', textAlign: 'left', fontWeight: '600', fontSize: '0.95rem' }}>Status</th>
+                    {/* NEW: Schedule Column */}
+                    <th style={{ padding: '15px 12px', border: 'none', textAlign: 'left', whiteSpace: 'nowrap', fontWeight: '600', fontSize: '0.95rem' }}>Schedule</th>
                     <th style={{ padding: '15px 12px', border: 'none', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: '600', fontSize: '0.95rem' }}>Daily Salary</th>
                     <th style={{ padding: '15px 12px', border: 'none', textAlign: 'left', minWidth: '200px', fontWeight: '600', fontSize: '0.95rem' }}>Notes</th>
                     <th style={{ padding: '15px 12px', border: 'none', textAlign: 'center', whiteSpace: 'nowrap', fontWeight: '600', fontSize: '0.95rem' }}>Actions</th>
@@ -483,18 +483,20 @@ const Attendance = () => {
                     const date = `${year}-${(monthIndex + 1).toString().padStart(2, '0')}-${dayNum.toString().padStart(2, '0')}`;
                     const isHoliday = applyCompanyLeaves && isHolidayDate(date);
                     const record = attendanceRecords.find((r) => r.date === date);
-                    let status, dailySalary, notes, actions;
+                    let status, dailySalary, notes, scheduleDisplay, actions;
                     if (isHoliday) {
                       // Company Leave - no marking allowed
                       status = 'Company Leave';
                       dailySalary = 0;
                       notes = 'Company Holiday';
+                      scheduleDisplay = '-';
                       actions = <td style={{ padding: '15px 12px', textAlign: 'center', borderRight: '1px solid #e9ecef' }}>-</td>;
                     } else if (record) {
                       // Existing record - show edit/delete; notes now includes auto-generated details from marking
                       status = record.status;
                       dailySalary = record.dailySalary;
                       notes = record.notes || '';
+                      scheduleDisplay = getScheduleDisplay(date, record);
                       actions = (
                         <td style={{ padding: '15px 12px', textAlign: 'center', borderRight: '1px solid #e9ecef' }}>
                           <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
@@ -555,12 +557,16 @@ const Attendance = () => {
                         </td>
                       );
                     } else {
-                      // Absent working day - Show only text, no buttons
+                      // Absent working day - Show only text, no buttons; show scheduled times
                       status = 'Absent';
                       dailySalary = 0;
                       notes = '';
+                      scheduleDisplay = getScheduleDisplay(date);
                       actions = <td style={{ padding: '15px 12px', textAlign: 'center', borderRight: '1px solid #e9ecef' }}>-</td>;
                     }
+                    // NEW: Style schedule if special
+                    const isSpecial = specialMap[date] && !record;
+                    const scheduleStyle = isSpecial ? { color: '#e67e22', fontWeight: 'bold' } : { color: '#2c3e50' };
                     return (
                       <tr key={date} style={{ borderBottom: '1px solid #e9ecef', backgroundColor: '#f8f9fa' }}>
                         <td style={{ padding: '15px 12px', borderRight: '1px solid #e9ecef', color: '#2c3e50' }}>{date}</td>
@@ -575,6 +581,10 @@ const Attendance = () => {
                           >
                             {status}
                           </span>
+                        </td>
+                        {/* NEW: Schedule TD */}
+                        <td style={{ padding: '15px 12px', borderRight: '1px solid #e9ecef', ...scheduleStyle }}>
+                          {scheduleDisplay}
                         </td>
                         <td style={{ padding: '15px 12px', borderRight: '1px solid #e9ecef', textAlign: 'right', color: '#2c3e50' }}>{currency}{dailySalary.toFixed(2)}</td>
                         <td style={{ padding: '15px 12px', borderRight: '1px solid #e9ecef', color: '#2c3e50' }}>{notes}</td>
@@ -743,7 +753,6 @@ const Attendance = () => {
             </div>
           </div>
         )}
-
         {/* Edit Modal - Styled like EmployeeList Modal */}
         {showEditModal && editingRecord && (
           <div
@@ -902,5 +911,4 @@ const Attendance = () => {
     </div>
   );
 };
-
 export default Attendance;

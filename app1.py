@@ -346,7 +346,7 @@ class SQLiteCollection:
             return doc
         return None
 def connect_to_sqlite():
-    global conn, items_collection, customers_collection, sales_collection, tables_collection, users_collection, settings_collection, email_tokens_collection, opening_collection, pos_closing_collection, kitchens_collection, item_groups_collection, kitchen_saved_collection, picked_up_collection, variants_collection, employees_collection, activeorders_collection, order_counters_collection, tripreports_collection, email_settings_collection, purchase_items_collection, suppliers_collection, purchase_orders_collection, purchase_receipts_collection, purchase_invoices_collection, uoms_collection, purchase_sales_collection, print_settings_collection, combo_offers_collection, vat_collection, customer_groups_collection, company_details_collection, logo_details_collection, supplier_group_collection,address_structures_collection,worker_collection, employee_designations_collection,employee_type_collection,working_days_collection,attendance_collection
+    global conn, items_collection, customers_collection, sales_collection, tables_collection, users_collection, settings_collection, email_tokens_collection, opening_collection, pos_closing_collection, kitchens_collection, item_groups_collection, kitchen_saved_collection, picked_up_collection, variants_collection, employees_collection, activeorders_collection, order_counters_collection, tripreports_collection, email_settings_collection, purchase_items_collection, suppliers_collection, purchase_orders_collection, purchase_receipts_collection, purchase_invoices_collection, uoms_collection, purchase_sales_collection, print_settings_collection, combo_offers_collection, vat_collection, customer_groups_collection, company_details_collection, logo_details_collection, supplier_group_collection,address_structures_collection,worker_collection, employee_designations_collection,employee_type_collection,working_days_collection,attendance_collection,brands_collection
     mode = config.get("mode", "server")
     if mode == 'server':
         db_path = os.path.join(CONFIG_DIR, 'restaurant.db')
@@ -355,7 +355,7 @@ def connect_to_sqlite():
         tables = [
             'active_orders', 'combo_offers', 'customers', 'email_settings', 'email_tokens', 'employees', 'item_groups', 'items', 'kitchen_saved_orders', 'kitchens',
             'order_counters', 'picked_up_items', 'pos_closing_entries', 'pos_opening_entries', 'print_settings', 'purchase_invoices', 'purchase_items', 'purchase_orders',
-            'purchase_receipts', 'purchase_sales', 'sales', 'suppliers', 'system_settings', 'tables', 'trip_reports', 'uoms', 'users', 'variants', 'vat', 'customer_groups', 'company_details', 'logo_details', 'supplier_groups','address_structures','new_employee','employee_designations','employee_types','working_days','attendance'
+            'purchase_receipts', 'purchase_sales', 'sales', 'suppliers', 'system_settings', 'tables', 'trip_reports', 'uoms', 'users', 'variants', 'vat', 'customer_groups', 'company_details', 'logo_details', 'supplier_groups','address_structures','new_employee','employee_designations','employee_types','working_days','attendance','brands'
         ]
         for table in tables:
             cur.execute(f"CREATE TABLE IF NOT EXISTS {table} (id TEXT PRIMARY KEY, data TEXT)")
@@ -400,6 +400,7 @@ def connect_to_sqlite():
         employee_type_collection = SQLiteCollection(conn, 'employee_types')
         working_days_collection = SQLiteCollection(conn, 'working_days')
         attendance_collection = SQLiteCollection(conn, 'attendance')
+        brands_collection = SQLiteCollection(conn, 'brands')  # NEW: Brands collection
         ensure_test_users()
         return True
     else:
@@ -3709,7 +3710,7 @@ if config.get('mode') == 'server':
     def add_purchase_order():
         try:
             data = request.json
-            required_fields = ['series', 'date', 'company', 'supplierId', 'name', 'supplierCompany', 'address', 'phone', 'email', 'currency', 'items', 'taxes', 'subtotal', 'totalQuantity', 'totalTaxes', 'grandTotal', 'status']
+            required_fields = ['series', 'date', 'company', 'supplierId', 'name', 'supplierCompany', 'supplierCode', 'supplierGroup', 'supplierCode', 'supplierGroup', 'supplierCode', 'supplierGroup', 'address', 'phone', 'email', 'currency', 'items', 'taxes', 'subtotal', 'totalQuantity', 'totalTaxes', 'grandTotal', 'status']
             if not all(key in data for key in required_fields):
                 return jsonify({'error': 'Missing required fields'}), 400
             if purchase_orders_collection.find_one({'series': data['series'] }):
@@ -3736,6 +3737,12 @@ if config.get('mode') == 'server':
                 'supplierId': data['supplierId'],
                 'name': data['name'],
                 'supplierCompany': data['supplierCompany'],
+                'supplierCode': data.get('supplierCode', ''),
+                'supplierGroup': data.get('supplierGroup', ''),
+                'supplierCode': data.get('supplierCode', ''),
+                'supplierGroup': data.get('supplierGroup', ''),
+                'supplierCode': data.get('supplierCode', ''),
+                'supplierGroup': data.get('supplierGroup', ''),
                 'address': data['address'],
                 'phone': data['phone'],
                 'email': data['email'],
@@ -3768,7 +3775,7 @@ if config.get('mode') == 'server':
             if not old_order:
                 return jsonify({'error': 'Purchase Order not found'}), 404
             update_data = {}
-            for field in ['series', 'date', 'company', 'supplierId', 'name', 'supplierCompany', 'address', 'phone', 'email', 'currency', 'targetWarehouse', 'items', 'taxes', 'subtotal', 'totalQuantity', 'totalTaxes', 'grandTotal', 'status']:
+            for field in ['series', 'date', 'company', 'supplierId', 'name', 'supplierCompany', 'supplierCode', 'supplierGroup', 'supplierCode', 'supplierGroup', 'supplierCode', 'supplierGroup', 'address', 'phone', 'email', 'currency', 'targetWarehouse', 'items', 'taxes', 'subtotal', 'totalQuantity', 'totalTaxes', 'grandTotal', 'status']:
                 if field in data:
                     if field == 'date':
                         update_data[field] = datetime.fromisoformat(str(data[field]).replace('Z', '+00:00'))
@@ -3820,7 +3827,7 @@ if config.get('mode') == 'server':
     def add_purchase_receipt():
         try:
             data = request.json
-            required_fields = ['series', 'date', 'poId', 'company', 'supplierId', 'name', 'supplierCompany', 'address', 'phone', 'email', 'items', 'taxes', 'subtotal', 'totalTaxes', 'grandTotal', 'status']
+            required_fields = ['series', 'date', 'poId', 'company', 'supplierId', 'name', 'supplierCompany', 'supplierCode', 'supplierGroup', 'supplierCode', 'supplierGroup', 'supplierCode', 'supplierGroup', 'address', 'phone', 'email', 'items', 'taxes', 'subtotal', 'totalTaxes', 'grandTotal', 'status']
             if not all(key in data for key in required_fields):
                 return jsonify({'error': 'Missing required fields'}), 400
             if purchase_receipts_collection.find_one({'series': data['series'] }):
@@ -3850,6 +3857,12 @@ if config.get('mode') == 'server':
                 'supplierId': data['supplierId'],
                 'name': data['name'],
                 'supplierCompany': data['supplierCompany'],
+                'supplierCode': data.get('supplierCode', ''),
+                'supplierGroup': data.get('supplierGroup', ''),
+                'supplierCode': data.get('supplierCode', ''),
+                'supplierGroup': data.get('supplierGroup', ''),
+                'supplierCode': data.get('supplierCode', ''),
+                'supplierGroup': data.get('supplierGroup', ''),
                 'address': data['address'],
                 'phone': data['phone'],
                 'email': data['email'],
@@ -3954,7 +3967,7 @@ if config.get('mode') == 'server':
                         }}
                     )
             update_fields = {}
-            for field in ['date', 'poId', 'company', 'supplierId', 'name', 'supplierCompany', 'address', 'phone', 'email', 'currency', 'items', 'taxes', 'subtotal', 'totalTaxes', 'grandTotal', 'status']:
+            for field in ['date', 'poId', 'company', 'supplierId', 'name', 'supplierCompany', 'supplierCode', 'supplierGroup', 'supplierCode', 'supplierGroup', 'supplierCode', 'supplierGroup', 'address', 'phone', 'email', 'currency', 'items', 'taxes', 'subtotal', 'totalTaxes', 'grandTotal', 'status']:
                 if field in data:
                     if field == 'date':
                         update_fields[field] = datetime.fromisoformat(str(data[field]).replace('Z', '+00:00'))
@@ -4034,7 +4047,7 @@ if config.get('mode') == 'server':
     def add_purchase_invoice():
         try:
             data = request.json
-            required_fields = ['series', 'date', 'company', 'supplierId', 'name', 'supplierCompany', 'address', 'phone', 'email', 'poId', 'prId', 'currency', 'items', 'taxes', 'totalQuantity', 'subtotal', 'taxesAdded', 'grandTotal', 'status']
+            required_fields = ['series', 'date', 'company', 'supplierId', 'name', 'supplierCompany', 'supplierCode', 'supplierGroup', 'supplierCode', 'supplierGroup', 'supplierCode', 'supplierGroup', 'address', 'phone', 'email', 'poId', 'prId', 'currency', 'items', 'taxes', 'totalQuantity', 'subtotal', 'taxesAdded', 'grandTotal', 'status']
             if not all(key in data for key in required_fields):
                 return jsonify({'error': 'Missing required fields'}), 400
             if purchase_invoices_collection.find_one({'series': data['series'] }):
@@ -4061,6 +4074,12 @@ if config.get('mode') == 'server':
                 'supplierId': data['supplierId'],
                 'name': data['name'],
                 'supplierCompany': data['supplierCompany'],
+                'supplierCode': data.get('supplierCode', ''),
+                'supplierGroup': data.get('supplierGroup', ''),
+                'supplierCode': data.get('supplierCode', ''),
+                'supplierGroup': data.get('supplierGroup', ''),
+                'supplierCode': data.get('supplierCode', ''),
+                'supplierGroup': data.get('supplierGroup', ''),
                 'address': data['address'],
                 'phone': data['phone'],
                 'email': data['email'],
@@ -4102,7 +4121,7 @@ if config.get('mode') == 'server':
             if not old_invoice:
                 return jsonify({'error': 'Purchase Invoice not found'}), 404
             update_fields = {}
-            for field in ['date', 'company', 'supplierId', 'name', 'supplierCompany', 'address', 'phone', 'email', 'poId', 'prId', 'currency', 'items', 'taxes', 'totalQuantity', 'subtotal', 'taxesAdded', 'grandTotal', 'status']:
+            for field in ['date', 'company', 'supplierId', 'name', 'supplierCompany', 'supplierCode', 'supplierGroup', 'supplierCode', 'supplierGroup', 'supplierCode', 'supplierGroup', 'address', 'phone', 'email', 'poId', 'prId', 'currency', 'items', 'taxes', 'totalQuantity', 'subtotal', 'taxesAdded', 'grandTotal', 'status']:
                 if field in data:
                     if field == 'date':
                         update_fields[field] = datetime.fromisoformat(str(data[field]).replace('Z', '+00:00'))
@@ -4724,15 +4743,21 @@ def manage_company_details():
             contacts = data.get('contacts', [])
             for contact in contacts:
                 if 'phoneCountryCode' not in contact:
-                    contact['phoneCountryCode'] = '+91'  # Default
+                    contact['phoneCountryCode'] = '+91' # Default
                 if 'whatsappCountryCode' not in contact:
-                    contact['whatsappCountryCode'] = '+91'  # Default
+                    contact['whatsappCountryCode'] = '+91' # Default
                 if 'websites' not in contact:
-                    contact['websites'] = []  # Ensure array for multiple websites
+                    contact['websites'] = [] # Ensure array for multiple websites
+            # NEW: Ensure specialTimings is an array
+            special_timings = data.get('specialTimings', [])
+            if not isinstance(special_timings, list):
+                special_timings = []
             company_data = {
                 '_id': str(uuid.uuid4()),
                 'restaurantName': data.get('restaurantName', ''),
                 'ownerName': data.get('ownerName', ''),
+                # NEW: Company Licence field
+                'companyLicence': data.get('companyLicence', ''),
                 'businessType': data.get('businessType', ''),
                 'otherBusinessType': data.get('otherBusinessType', ''),
                 'taxType': data.get('taxType', ''),
@@ -4743,15 +4768,17 @@ def manage_company_details():
                 'openingTime': data.get('openingTime', ''),
                 'closingTime': data.get('closingTime', ''),
                 'totalTime': data.get('totalTime', ''),
+                # NEW: Special Timings
+                'specialTimings': special_timings,
                 # UPDATED: Addresses now use dynamic fields: country, field1, field2, field3, flat_villa_no, building_name
                 'addresses': data.get('addresses', [{'country': '', 'field1': '', 'field2': '', 'field3': '', 'flat_villa_no': '', 'building_name': ''}]),
-                'contacts': contacts,  # Use processed contacts
+                'contacts': contacts, # Use processed contacts
                 'bankName': data.get('bankName', ''),
                 'accountHolderName': data.get('accountHolderName', ''),
                 'accountNumber': data.get('accountNumber', ''),
                 'ifscCode': data.get('ifscCode', ''),
                 'upiId': data.get('upiId', ''),
-                'currencyType': data.get('currencyType', ''),  # From settings or manual
+                'currencyType': data.get('currencyType', ''), # From settings or manual
                 'created_at': datetime.now(ZoneInfo("Asia/Kolkata")).isoformat()
             }
             logger.info(f"Saving company details: {company_data}")
@@ -4782,6 +4809,12 @@ def manage_company_details():
                             contact['whatsappCountryCode'] = '+91'
                         if 'websites' not in contact:
                             contact['websites'] = []
+                # NEW: Ensure specialTimings is array if missing
+                if 'specialTimings' not in detail:
+                    detail['specialTimings'] = []
+                # NEW: Ensure companyLicence is string if missing
+                if 'companyLicence' not in detail:
+                    detail['companyLicence'] = ''
                 serialized_details.append(detail)
             logger.info(f"Retrieved company details: {serialized_details}")
             return jsonify({"companyDetails": serialized_details}), 200
@@ -5442,6 +5475,7 @@ def add_employee():
                 "password": hashed_password,
                 "startTime": data['startTime'],
                 "endTime": data['endTime'],
+                "specialTimings": data.get('specialTimings', []),  # NEW: Employee special timings array
                 "created_at": datetime.now(ZoneInfo("UTC")).isoformat()
             }
             worker_collection.insert_one(new_employee)
@@ -5528,6 +5562,7 @@ def manage_employee(emp_id):
                     'accountHolderName': data.get('accountHolderName', current_emp.get('accountHolderName', '')),
                     'accountNumber': data.get('accountNumber', current_emp.get('accountNumber', '')),
                     'ifscCode': data.get('ifscCode', current_emp.get('ifscCode', '')),
+                    'specialTimings': data.get('specialTimings', current_emp.get('specialTimings', [])),  # NEW: Update specialTimings
                 }
             }
             if data.get('password') and data['password'].strip():
@@ -5885,7 +5920,176 @@ def salary_slip():
 @db_required
 def worker():
     return add_employee() # Reuse the same logic
+# --- Brand Management API Endpoints ---
+@app.route('/api/brands', methods=['GET'])
+@db_required
+def get_brands():
+    try:
+        brands = brands_collection.find()
+        return jsonify(convert_objectid_to_str(brands)), 200
+    except Exception as e:
+        return jsonify({'error': f"Failed to fetch brands: {str(e)}"}), 500
 
+@app.route('/api/brands', methods=['POST'])
+@db_required
+def add_brand():
+    try:
+        data = request.json
+        if not data or 'name' not in data or not data['name'].strip():
+            return jsonify({'error': 'Invalid brand name'}), 400
+        
+        # Check if brand already exists
+        if brands_collection.find_one({'name': data['name'].strip()}):
+            return jsonify({'error': 'Brand already exists'}), 400
+        
+        brand = {
+            'name': data['name'].strip(),
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }
+        result = brands_collection.insert_one(brand)
+        inserted_brand = brands_collection.find_one({'_id': result.inserted_id})
+        return jsonify(convert_objectid_to_str(inserted_brand)), 201
+    except Exception as e:
+        return jsonify({'error': f"Failed to add brand: {str(e)}"}), 500
+
+@app.route('/api/brands/<id>', methods=['PUT'])
+@db_required
+def update_brand(id):
+    try:
+        data = request.json
+        if not data or 'name' not in data or not data['name'].strip():
+            return jsonify({'error': 'Invalid brand name'}), 400
+        
+        # Check if another brand with the same name exists
+        existing = brands_collection.find_one({'name': data['name'].strip(), '_id': {'$ne': id}})
+        if existing:
+            return jsonify({'error': 'Brand name already exists'}), 400
+        
+        result = brands_collection.update_one({'_id': id}, {'$set': {'name': data['name'].strip()}})
+        if result.matched_count == 0:
+            return jsonify({'error': 'Brand not found or no changes'}), 404
+        
+        return jsonify({'message': 'Brand updated successfully'}), 200
+    except Exception as e:
+        return jsonify({'error': f"Failed to update brand: {str(e)}"}), 500
+
+@app.route('/api/brands/<id>', methods=['DELETE'])
+@db_required
+def delete_brand(id):
+    try:
+        result = brands_collection.delete_one({'_id': id})
+        if result.deleted_count == 0:
+            return jsonify({'error': 'Brand not found'}), 404
+        
+        return jsonify({'message': 'Brand deleted successfully'}), 200
+    except Exception as e:
+        return jsonify({'error': f"Failed to delete brand: {str(e)}"}), 500
+
+# --- Item-wise Purchase Report API Endpoint ---
+@app.route('/api/reports/item-wise-purchase', methods=['GET'])
+@db_required
+def get_item_wise_purchase_report():
+    try:
+        # Get query parameters for filtering
+        date_from = request.args.get('dateFrom')
+        date_to = request.args.get('dateTo')
+        item_id = request.args.get('itemId')
+        supplier_id = request.args.get('supplierId')
+        
+        # Fetch all submitted purchase invoices
+        invoices = purchase_invoices_collection.find({'status': 'Submitted'})
+        
+        # Filter by date range if provided
+        if date_from or date_to:
+            filtered_invoices = []
+            for invoice in invoices:
+                invoice_date = invoice.get('date')
+                if isinstance(invoice_date, str):
+                    invoice_date = datetime.fromisoformat(invoice_date.replace('Z', '+00:00'))
+                
+                include = True
+                if date_from:
+                    from_date = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
+                    if invoice_date < from_date:
+                        include = False
+                if date_to:
+                    to_date = datetime.fromisoformat(date_to.replace('Z', '+00:00'))
+                    if invoice_date > to_date:
+                        include = False
+                
+                if include:
+                    filtered_invoices.append(invoice)
+            invoices = filtered_invoices
+        
+        # Aggregate data by item
+        item_data = {}
+        
+        for invoice in invoices:
+            # Filter by supplier if provided
+            if supplier_id and invoice.get('supplierId') != supplier_id:
+                continue
+            
+            for item in invoice.get('items', []):
+                item_id_key = item.get('itemId')
+                
+                # Filter by item if provided
+                if item_id and item_id_key != item_id:
+                    continue
+                
+                if item_id_key not in item_data:
+                    # Get item details
+                    item_doc = purchase_items_collection.find_one({'_id': item_id_key})
+                    if not item_doc:
+                        continue
+                    
+                    item_data[item_id_key] = {
+                        'itemId': item_id_key,
+                        'itemName': item_doc.get('name', 'Unknown'),
+                        'brand': item_doc.get('company', ''),
+                        'totalQuantity': 0,
+                        'totalAmount': 0,
+                        'currency': invoice.get('currency', 'AED'),
+                        'suppliers': {}
+                    }
+                
+                # Add quantity and amount
+                quantity = float(item.get('acceptedQuantity', 0))
+                amount = float(item.get('amount', 0))
+                
+                item_data[item_id_key]['totalQuantity'] += quantity
+                item_data[item_id_key]['totalAmount'] += amount
+                
+                # Track supplier breakdown
+                supp_id = invoice.get('supplierId')
+                
+                # Get supplier name from suppliers collection
+                supplier_doc = suppliers_collection.find_one({'_id': supp_id})
+                supp_name = supplier_doc.get('company', 'Unknown') if supplier_doc else 'Unknown'
+                
+                if supp_id not in item_data[item_id_key]['suppliers']:
+                    item_data[item_id_key]['suppliers'][supp_id] = {
+                        'supplierId': supp_id,
+                        'supplierName': supp_name,
+                        'quantity': 0,
+                        'amount': 0
+                    }
+                
+                item_data[item_id_key]['suppliers'][supp_id]['quantity'] += quantity
+                item_data[item_id_key]['suppliers'][supp_id]['amount'] += amount
+        
+        # Convert to list and format suppliers as array
+        result = []
+        for item_id_key, data in item_data.items():
+            data['suppliers'] = list(data['suppliers'].values())
+            result.append(data)
+        
+        # Sort by item name
+        result.sort(key=lambda x: x['itemName'])
+        
+        return jsonify(convert_objectid_to_str(result)), 200
+    except Exception as e:
+        logger.error(f"Error generating item-wise purchase report: {str(e)}")
+        return jsonify({'error': f"Failed to generate report: {str(e)}"}), 500
 
 # Catch-all for React app
 @app.route('/', defaults={'path': ''})

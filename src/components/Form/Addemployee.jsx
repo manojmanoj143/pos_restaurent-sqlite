@@ -1,5 +1,9 @@
 // AddEmployee.jsx - Full completed detailed React component
-// Updated: Matched background gradient and fixed back button style from EmployeeList.jsx
+// Updated: Integrated special timings from company details into employee schedule
+// Employees can now select from company's specialTimings (by date) to assign overrides
+// Added employeeSpecialTimings state and form section in schedule tab
+// On submit, saves employeeSpecialTimings array to backend
+// For editing, pre-populates selected specials based on matching dates
 // Background: linear-gradient(135deg, #ffffff 0%, #3498db 100%)
 // Fixed back button: transparent bg, 2px solid #3498db, hover effects, positioned top-left
 // Main container: maxWidth 750px (form-specific), margin 80px auto 20px, white bg, padding 30px, borderRadius 15px, boxShadow
@@ -8,7 +12,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
-import { FaUserTie, FaArrowLeft, FaSave, FaPlus, FaTimes, FaEdit, FaTrash, FaClock } from 'react-icons/fa';
+import { FaUserTie, FaArrowLeft, FaSave, FaPlus, FaTimes, FaEdit, FaTrash, FaClock, FaCalendarAlt, FaCheckSquare, FaSquare } from 'react-icons/fa';
 
 const AddEmployee = () => {
   const navigate = useNavigate();
@@ -31,6 +35,7 @@ const AddEmployee = () => {
     password: '',
     startTime: '',
     endTime: '',
+    specialTimings: [], // NEW: Employee-specific special timings array
   });
   // State for phone number country code
   const [selectedISDCode, setSelectedISDCode] = useState("+971");
@@ -76,6 +81,9 @@ const AddEmployee = () => {
   const [editingId, setEditingId] = useState(null);
   const [newDesignationName, setNewDesignationName] = useState('');
   const [newEmployeeTypeName, setNewEmployeeTypeName] = useState('');
+  // NEW: State for selected company special timings (for employee assignment)
+  const [selectedCompanySpecials, setSelectedCompanySpecials] = useState(new Set()); // Set of indices for quick toggle
+
   // Helper function to convert time to minutes
   const timeToMinutes = (timeStr) => {
     if (!timeStr) return 0;
@@ -112,7 +120,19 @@ const AddEmployee = () => {
       setFormData({
         ...emp,
         password: '',
+        specialTimings: emp.specialTimings || [], // NEW: Pre-fill specialTimings
       });
+      // NEW: Pre-select company specials based on employee's specialTimings dates
+      if (emp.specialTimings && companyDetails?.specialTimings) {
+        const selectedIndices = new Set();
+        emp.specialTimings.forEach(empSpecial => {
+          const matchIndex = companyDetails.specialTimings.findIndex(cs => cs.date === empSpecial.date);
+          if (matchIndex !== -1) {
+            selectedIndices.add(matchIndex);
+          }
+        });
+        setSelectedCompanySpecials(selectedIndices);
+      }
       // If editing, parse phone number to extract ISD code and digits
       if (emp.phoneNumber) {
         const fullPhone = emp.phoneNumber;
@@ -123,7 +143,7 @@ const AddEmployee = () => {
         }
       }
     }
-  }, [location.state]);
+  }, [location.state, companyDetails]); // Depend on companyDetails for pre-select
   // Fetch designations, types, and company details when baseUrl is set
   useEffect(() => {
     if (baseUrl && baseUrl !== '') {
@@ -341,6 +361,19 @@ const AddEmployee = () => {
       setLoading(false);
     }
   };
+  // NEW: Toggle selection of company special timing for employee
+  const toggleSpecialSelection = (index) => {
+    const newSelected = new Set(selectedCompanySpecials);
+    if (newSelected.has(index)) {
+      newSelected.delete(index);
+    } else {
+      newSelected.add(index);
+    }
+    setSelectedCompanySpecials(newSelected);
+    // Update formData.specialTimings based on selection
+    const updatedSpecials = Array.from(newSelected).map(idx => companyDetails.specialTimings[idx]);
+    setFormData(prev => ({ ...prev, specialTimings: updatedSpecials }));
+  };
   // Validation with dynamic exact length per country and improved time validation for overnight shifts
   // Bank details are optional - no validation required for them during creation/update
   const handleSubmit = async (e) => {
@@ -407,7 +440,8 @@ const AddEmployee = () => {
       let method = 'post';
       let dataToSend = {
         ...formData,
-        phoneNumber: `${selectedISDCode}${formData.phoneNumber}` // Include ISD code in payload
+        phoneNumber: `${selectedISDCode}${formData.phoneNumber}`, // Include ISD code in payload
+        specialTimings: formData.specialTimings, // NEW: Include specialTimings
       };
       if (editingId) {
         url += `/${editingId}`;
@@ -430,9 +464,10 @@ const AddEmployee = () => {
       setFormData({
         name: '', phoneNumber: '', gender: '', dateOfBirth: '', email: '', address: '', employeeDesignation: '', employeeType: '',
         bankName: '', accountHolderName: '', accountNumber: '', ifscCode: '', salary: '', username: '', password: '',
-        startTime: '', endTime: '',
+        startTime: '', endTime: '', specialTimings: [], // NEW: Reset specialTimings
       });
       setSelectedISDCode("+971"); // Reset ISD code
+      setSelectedCompanySpecials(new Set()); // NEW: Reset selections
       setEditingId(null);
       await fetchEmployeeDesignations(); // Refetch designations
       await fetchEmployeeTypes(); // Refetch types separately
@@ -459,9 +494,10 @@ const AddEmployee = () => {
     setFormData({
       name: '', phoneNumber: '', gender: '', dateOfBirth: '', email: '', address: '', employeeDesignation: '', employeeType: '',
       bankName: '', accountHolderName: '', accountNumber: '', ifscCode: '', salary: '', username: '', password: '',
-      startTime: '', endTime: '',
+      startTime: '', endTime: '', specialTimings: [], // NEW: Reset specialTimings
     });
     setSelectedISDCode("+971"); // Reset ISD code
+    setSelectedCompanySpecials(new Set()); // NEW: Reset selections
     setActiveTab('details');
   };
   const closeDesignationsModal = (e) => {
@@ -916,11 +952,49 @@ const AddEmployee = () => {
                         />
                       </div>
                     </div>
+                    {/* NEW: Special Timings Section - Assign from Company Specials */}
+                    <div style={{ marginTop: '30px', paddingTop: '20px', borderTop: '2px solid #eee' }}>
+                      <h4 style={{ color: '#2c3e50', marginBottom: '15px', fontSize: '1.2rem', textAlign: 'center' }}>
+                        <FaCalendarAlt style={{ marginRight: '8px' }} /> Assign Special Timings (Overrides from Company)
+                      </h4>
+                      <div style={{ textAlign: 'center', color: '#555', fontSize: '0.9rem', marginBottom: '15px' }}>
+                        Select dates with special timings from company details to apply overrides for this employee.
+                      </div>
+                      {companyDetails.specialTimings && companyDetails.specialTimings.length > 0 ? (
+                        <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #ddd', borderRadius: '10px', padding: '10px' }}>
+                          {companyDetails.specialTimings.map((special, index) => (
+                            <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', borderBottom: '1px solid #eee' }}>
+                              <button
+                                type="button"
+                                onClick={() => toggleSpecialSelection(index)}
+                                style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '0' }}
+                              >
+                                {selectedCompanySpecials.has(index) ? <FaCheckSquare style={{ color: '#27ae60', fontSize: '1.2rem' }} /> : <FaSquare style={{ color: '#bdc3c7', fontSize: '1.2rem' }} />}
+                              </button>
+                              <div style={{ flex: 1 }}>
+                                <strong>{special.reason}</strong> - {special.date}<br />
+                                <small style={{ color: '#6c757d' }}>{special.startTime} to {special.endTime} ({special.duration})</small>
+                              </div>
+                            </div>
+                          ))}
+                          {formData.specialTimings.length > 0 && (
+                            <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#d4edda', borderRadius: '5px', fontSize: '0.9rem' }}>
+                              Selected: {formData.specialTimings.length} special timing(s) assigned.
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div style={{ textAlign: 'center', padding: '20px', color: '#6c757d' }}>
+                          <FaCalendarAlt style={{ fontSize: '2rem', marginBottom: '10px', opacity: 0.5 }} />
+                          <p>No special timings configured in company details. Add them in Company Details first.</p>
+                        </div>
+                      )}
+                    </div>
                   </>
                 ) : (
                   <div style={{ textAlign: 'center', padding: '20px', color: '#6c757d' }}>
                     <FaClock style={{ fontSize: '2rem', marginBottom: '10px', opacity: 0.5 }} />
-                    <p>Loading company schedule... Please ensure company details are configured.</p>
+                    <p>Loading company schedule... Please ensure company details are set.</p>
                   </div>
                 )}
               </div>

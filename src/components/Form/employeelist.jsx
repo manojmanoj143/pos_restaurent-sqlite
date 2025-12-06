@@ -1,9 +1,8 @@
-// EmployeeList.jsx - Full completed detailed React component
+// EmployeeList.jsx - Updated: In attendance modal, pre-populate startTime/endTime with special timing if date matches employee's specialTimings
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { FaUserTie, FaArrowLeft, FaEdit, FaTrash, FaPlus, FaTimes, FaClock, FaSearch, FaFilter } from 'react-icons/fa';
-
 const EmployeeList = () => {
   const navigate = useNavigate();
   const [employeesList, setEmployeesList] = useState([]);
@@ -30,7 +29,6 @@ const EmployeeList = () => {
     phone: '',
     salary: ''
   });
-
   // Fetch baseUrl on component mount
   useEffect(() => {
     const fetchConfig = async () => {
@@ -49,14 +47,12 @@ const EmployeeList = () => {
     };
     fetchConfig();
   }, []);
-
   // Fetch currency settings when baseUrl is set
   useEffect(() => {
     if (baseUrl !== undefined) {
       fetchCurrency();
     }
   }, [baseUrl]);
-
   // Fetch currency from system settings
   const fetchCurrency = async () => {
     try {
@@ -71,7 +67,6 @@ const EmployeeList = () => {
       setCurrency('$');
     }
   };
-
   // Helper function to get currency symbol based on code
   const getCurrencySymbol = (code) => {
     const symbols = {
@@ -86,7 +81,6 @@ const EmployeeList = () => {
     };
     return symbols[code] || code;
   };
-
   // Fetch employees, designations, and types when baseUrl is set
   useEffect(() => {
     if (baseUrl !== undefined) {
@@ -95,7 +89,6 @@ const EmployeeList = () => {
       fetchEmployeeTypes(); // New: Fetch for dropdown filter
     }
   }, [baseUrl]);
-
   const fetchEmployees = async () => {
     try {
       setLoading(true);
@@ -110,7 +103,6 @@ const EmployeeList = () => {
       setLoading(false);
     }
   };
-
   // New: Fetch employee designations for dropdown filter
   const fetchEmployeeDesignations = async () => {
     try {
@@ -122,7 +114,6 @@ const EmployeeList = () => {
       setError('Failed to fetch designations for filter. Please try again.');
     }
   };
-
   // New: Fetch employee types for dropdown filter
   const fetchEmployeeTypes = async () => {
     try {
@@ -134,7 +125,6 @@ const EmployeeList = () => {
       setError('Failed to fetch types for filter. Please try again.');
     }
   };
-
   // Updated: Filter employees based on filter states - exact match for dropdown fields
   const filteredEmployees = employeesList.filter((emp) =>
     emp.name.toLowerCase().includes(filters.name.toLowerCase()) &&
@@ -143,12 +133,10 @@ const EmployeeList = () => {
     emp.phoneNumber.includes(filters.phone) &&
     String(emp.salary).includes(filters.salary)
   );
-
   // Updated: Handle filter changes - for dropdowns, set exact value
   const handleFilterChange = (field, value) => {
     setFilters(prev => ({ ...prev, [field]: value }));
   };
-
   // New: Clear all filters
   const clearFilters = () => {
     setFilters({
@@ -159,17 +147,23 @@ const EmployeeList = () => {
       salary: ''
     });
   };
-
-  // Handle click on employee row to open attendance modal
+  // UPDATED: Handle click on employee row to open attendance modal - Pre-populate times with special if date matches
   const handleEmployeeClick = (emp) => {
     setSelectedEmployee(emp);
-    setAttendanceDate(new Date().toISOString().split('T')[0]);
-    setStartTime(emp.startTime || '');
-    setEndTime(emp.endTime || '');
+    const dateStr = new Date().toISOString().split('T')[0];
+    setAttendanceDate(dateStr);
+    // Check for special timing on this date
+    const special = emp.specialTimings?.find(s => s.date === dateStr);
+    if (special) {
+      setStartTime(special.startTime);
+      setEndTime(special.endTime);
+    } else {
+      setStartTime(emp.startTime || '');
+      setEndTime(emp.endTime || '');
+    }
     setSelectedStatus('Full Day');
     setShowAttendanceModal(true);
   };
-
   // Mark attendance for selected employee - UPDATED: Auto-set notes to include status and times
   const markTodayAttendance = async () => {
     if (!selectedEmployee) return;
@@ -200,16 +194,13 @@ const EmployeeList = () => {
       setLoading(false);
     }
   };
-
   const handleEditEmployee = (emp) => {
     navigate('/add-employee', { state: { editingEmployee: emp } });
   };
-
   const handleDeleteEmployee = (id) => {
     setDeletingId(id);
     setShowDeleteConfirm(true);
   };
-
   const confirmDeleteEmployee = async () => {
     try {
       setLoading(true);
@@ -226,18 +217,15 @@ const EmployeeList = () => {
       setLoading(false);
     }
   };
-
   const closeDeleteConfirm = (e) => {
     if (e.target === e.currentTarget) {
       setShowDeleteConfirm(false);
       setDeletingId(null);
     }
   };
-
   const addNewEmployee = () => {
     navigate('/add-employee');
   };
-
   if (loading) {
     return (
       <div style={{
@@ -258,7 +246,6 @@ const EmployeeList = () => {
       </div>
     );
   }
-
   return (
     <div style={{
       minHeight: '100vh',
@@ -905,7 +892,7 @@ const EmployeeList = () => {
           </div>
         )}
       </div>
-      {/* Attendance Modal - Styled like SalesPage Modal */}
+      {/* UPDATED: Attendance Modal - Now pre-populates with special times if date matches */}
       {showAttendanceModal && selectedEmployee && (
         <div
           style={{
@@ -955,7 +942,19 @@ const EmployeeList = () => {
                 <input
                   type="date"
                   value={attendanceDate}
-                  onChange={(e) => setAttendanceDate(e.target.value)}
+                  onChange={(e) => {
+                    setAttendanceDate(e.target.value);
+                    // UPDATED: On date change, check for special timing and update times
+                    const newDateStr = e.target.value;
+                    const special = selectedEmployee.specialTimings?.find(s => s.date === newDateStr);
+                    if (special) {
+                      setStartTime(special.startTime);
+                      setEndTime(special.endTime);
+                    } else {
+                      setStartTime(selectedEmployee.startTime || '');
+                      setEndTime(selectedEmployee.endTime || '');
+                    }
+                  }}
                   style={{
                     width: '100%',
                     padding: '10px',
@@ -1216,5 +1215,4 @@ const EmployeeList = () => {
     </div>
   );
 };
-
 export default EmployeeList;

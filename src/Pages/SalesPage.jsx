@@ -1,12 +1,12 @@
 import React from 'react'
 
-import Navbar from '../components/Navbar/Navbar'
+// import Navbar from '../components/Navbar/Navbar'
 import SalesPage from '../components/Navbar/SalesPage'
 
 function salespage() {
   return (
     <>
-    <Navbar/>
+    {/* <Navbar/> */}
     <SalesPage></SalesPage>
     </>
   )
