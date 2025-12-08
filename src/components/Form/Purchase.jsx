@@ -10,6 +10,21 @@ const FaChartBar = () => <svg stroke="currentColor" fill="currentColor" strokeWi
 const FaTrash = () => <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 448 512" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M432 32H312l-9.4-18.7A24 24 0 0 0 281.1 0H166.8a23.72 23.72 0 0 0-21.4 13.3L136 32H16A16 16 0 0 0 0 48v32a16 16 0 0 0 16 16h416a16 16 0 0 0 16-16V48a16 16 0 0 0-16-16zM53.2 467a48 48 0 0 0 47.9 45h245.8a48 48 0 0 0 47.9-45L416 128H32z"></path></svg>;
 const FaUser = () => <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 448 512" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M224 256c70.7 0 128-57.3 128-128S294.7 0 224 0 96 57.3 96 128s57.3 128 128 128zm89.6 32h-16.7c-22.2 10.2-46.9 16-72.9 16s-50.6-5.8-72.9-16h-16.7C60.2 288 0 348.2 0 422.4V464c0 26.5 21.5 48 48 48h352c26.5 0 48-21.5 48-48v-41.6c0-74.2-60.2-134.4-134.4-134.4z"></path></svg>;
 const FaPrint = () => <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 512 512" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M448 192H64C28.7 192 0 220.7 0 256v96c0 35.3 28.7 64 64 64h32v56c0 13.3 10.7 24 24 24h272c13.3 0 24-10.7 24-24v-56h32c35.3 0 64-28.7 64-64v-96c0-35.3-28.7-64-64-64zM384 448H128v-48h256v48zm-48-224H176c-13.3 0-24 10.7-24 24s10.7 24 24 24h160c13.3 0 24-10.7 24-24s-10.7-24-24-24zM448 64h-48V16c0-8.8-7.2-16-16-16H128c-8.8 0-16 7.2-16 16v48H64c-35.3 0-64 28.7-64 64v32h512v-32c0-35.3-28.7-64-64-64z"></path></svg>;
+// --- SVG Icon Components ---
+const isdCodes = [
+  { code: "+91", country: "India" },
+  { code: "+1", country: "USA" },
+  { code: "+44", country: "UK" },
+  { code: "+971", country: "UAE" },
+  { code: "+61", country: "Australia" },
+];
+const digitLengths = {
+  '+91': 10,
+  '+1': 10,
+  '+44': 10,
+  '+971': 9,
+  '+61': 9,
+};
 const FaPlus = () => <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 448 512" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M416 208H272V64c0-17.67-14.33-32-32-32h-32c-17.67 0-32 14.33-32 32v144H32c-17.67 0-32 14.33-32 32v32c0 17.67 14.33 32 32 32h144v144c0 17.67 14.33 32 32 32h32c17.67 0 32-14.33 32-32V304h144c17.67 0 32-14.33 32-32v-32c0-17.67-14.33-32-32-32z"></path></svg>;
 const FaEdit = () => <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 576 512" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M402.6 83.2l90.2 90.2c3.8 3.8 3.8 10 0 13.8L274.4 405.6l-92.8 10.3c-12.4 1.4-22.9-9.1-21.5-21.5l10.3-92.8L388.8 83.2c3.8-3.8 10-3.8 13.8 0zm162-22.9l-48.8-48.8c-15.2-15.2-39.9-15.2-55.2 0l-35.4 35.4c-3.8 3.8-3.8 10 0 13.8l90.2 90.2c3.8 3.8 10 3.8 13.8 0l35.4-35.4c15.2-15.2 15.2-39.9 0-55.2zM384 346.2V448H64V128h229.8c3.2 0 6.2-1.3 8.5-3.5l40-40c7.6-7.6 2.2-20.5-8.5-20.5H48C21.5 64 0 85.5 0 112v352c0 26.5 21.5 48 48 48h352c26.5 0 48-21.5 48-48V306.2c0-10.7-12.9-16-20.5-8.5l-40 40c-2.2 2.3-3.5 5.3-3.5 8.5z"></path></svg>;
 const FaCheck = () => <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 512 512" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M173.898 439.404l-166.4-166.4c-9.997-9.997-9.997-26.206 0-36.204l36.203-36.204c9.997-9.998 26.207-9.998 36.204 0L192 312.69 432.095 72.596c9.997-9.997 26.207-9.997 36.204 0l36.203 36.204c9.997 9.997 9.997 26.206 0 36.204l-294.4 294.401c-9.998 9.997-26.207 9.997-36.204-.001z"></path></svg>;
@@ -913,7 +928,7 @@ function Purchase() {
     });
   };
   const addContact = () => {
-    setSupplierForm({ ...supplierForm, contacts: [...supplierForm.contacts, { contactPerson: '', whatsapp: '', phone: '', email: '', address: '' }] });
+    setSupplierForm({ ...supplierForm, contacts: [...supplierForm.contacts, { designation: '', contactPerson: '', phoneCode: '+971', phone: '', whatsappCode: '+971', whatsapp: '', email: '', address: '' }] });
   };
   const removeContact = (index) => {
     if (supplierForm.contacts.length > 1) {
@@ -923,6 +938,17 @@ function Purchase() {
   };
   const handleContactChange = (index, field, value) => {
     const newContacts = [...supplierForm.contacts];
+    // Dynamic validation for phone/whatsapp length
+    if (field === 'phone') {
+      const code = newContacts[index].phoneCode || '+971';
+      const maxLen = digitLengths[code] || 10;
+      if (value.length > maxLen) return;
+    }
+    if (field === 'whatsapp') {
+      const code = newContacts[index].whatsappCode || '+971';
+      const maxLen = digitLengths[code] || 10;
+      if (value.length > maxLen) return;
+    }
     newContacts[index][field] = value;
     setSupplierForm({ ...supplierForm, contacts: newContacts });
   };
@@ -950,7 +976,7 @@ function Purchase() {
         setSupplierForm({
           company: '', code: '', group: '', country: '', currency: '',
           taxId: '', taxCategory: '', taxWithholdingCategory: '',
-          contacts: [{ contactPerson: '', whatsapp: '', phone: '', email: '', address: '' }],
+          contacts: [{ designation: '', contactPerson: '', phoneCode: '+971', phone: '', whatsappCode: '+971', whatsapp: '', email: '', address: '' }],
           paymentMode: '', paymentTerms: '', creditLimit: 0, paymentTermsOverride: '',
           bankDetails: '', website: '', onTimeDelivery: 0, defectRate: 0,
           lastPurchaseDate: '', lastPurchaseValue: 0
@@ -987,7 +1013,7 @@ function Purchase() {
         setSupplierForm({
           company: '', code: '', group: '', country: '', currency: '',
           taxId: '', taxCategory: '', taxWithholdingCategory: '',
-          contacts: [{ contactPerson: '', whatsapp: '', phone: '', email: '', address: '' }],
+          contacts: [{ designation: '', contactPerson: '', phoneCode: '+971', phone: '', whatsappCode: '+971', whatsapp: '', email: '', address: '' }],
           paymentMode: '', paymentTerms: '', creditLimit: 0, paymentTermsOverride: '',
           bankDetails: '', website: '', onTimeDelivery: 0, defectRate: 0,
           lastPurchaseDate: '', lastPurchaseValue: 0
@@ -2904,18 +2930,15 @@ function Purchase() {
                             <td><input type="text" value={row.nosUnit} onChange={(e) => handleItemFormChange(idx, 'nosUnit', e.target.value)} placeholder="Nos UOM (e.g., Patty)" className="purchase-input" required /></td>
                             <td>
                               <select
-                                multiple
-                                value={row.suppliers.map(s => `${s.supplierId}|${s.supplierName}`)}
+                                value={row.suppliers.length > 0 ? `${row.suppliers[0].supplierId}|${row.suppliers[0].supplierName}` : ''}
                                 onChange={(e) => {
-                                  const selectedOptions = Array.from(e.target.selectedOptions);
-                                  const newSuppliers = selectedOptions.map(option => {
-                                    const [supplierId, supplierName] = option.value.split('|');
-                                    return { supplierId, supplierName };
-                                  });
-                                  handleItemFormChange(idx, 'suppliers', newSuppliers);
+                                  const [supplierId, supplierName] = e.target.value.split('|');
+                                  handleItemFormChange(idx, 'suppliers', [{ supplierId, supplierName }]);
                                 }}
                                 className="purchase-input select"
+                                required
                               >
+                                <option value="">Select Supplier</option>
                                 {suppliers.map(supplier => (
                                   <option key={supplier._id} value={`${supplier._id}|${supplier.company}`}>
                                     {supplier.company}
@@ -2952,7 +2975,6 @@ function Purchase() {
                         <th>Nos per Box</th>
                         <th>Packets per Carton</th>
                         <th>Units per Packet</th>
-                        <th>Sold Nos</th>
                         <th>Total Purchased</th>
                         <th>Total Stock</th>
                         <th>Suppliers</th>
@@ -2974,7 +2996,6 @@ function Purchase() {
                             <td>{item.boxToMaster} {item.masterUnit}</td>
                             <td>{item.masterToOuter} {item.outerUnit}</td>
                             <td>{item.outerToNos} {item.nosUnit}</td>
-                            <td>{item.soldNos || 0} {item.nosUnit}</td>
                             <td>{item.totalPurchased || 0} {item.nosUnit}</td>
                             <td>{remainingPatties} {item.nosUnit}</td>
                             <td>{supplierNamesList}</td>
@@ -3065,12 +3086,48 @@ function Purchase() {
                       <div className="purchase-supplier-content">
                         {supplierForm.contacts.map((contact, idx) => (
                           <div key={idx} className="purchase-contact-block">
+                            <div className="purchase-form-field"><label className="purchase-label">Designation {idx + 1}</label><input type="text" value={contact.designation || ''} onChange={(e) => handleContactChange(idx, 'designation', e.target.value)} className="purchase-input" /></div>
                             <div className="purchase-form-field"><label className="purchase-label">Contact Person {idx + 1}</label><input type="text" value={contact.contactPerson} onChange={(e) => handleContactChange(idx, 'contactPerson', e.target.value)} className="purchase-input" /></div>
-                            <div className="purchase-form-field"><label className="purchase-label">WhatsApp No. {idx + 1}</label><input type="tel" value={contact.whatsapp} onChange={(e) => handleContactChange(idx, 'whatsapp', e.target.value)} className="purchase-input" /></div>
-                            <div className="purchase-form-field"><label className="purchase-label">Phone {idx + 1}</label><input type="tel" value={contact.phone} onChange={(e) => handleContactChange(idx, 'phone', e.target.value)} className="purchase-input" /></div>
+                            <div className="purchase-form-field">
+                              <label className="purchase-label">Phone {idx + 1}</label>
+                              <div style={{ display: 'flex', gap: '5px' }}>
+                                <select
+                                  value={contact.phoneCode || '+971'}
+                                  onChange={(e) => handleContactChange(idx, 'phoneCode', e.target.value)}
+                                  className="purchase-input select"
+                                  style={{ width: '80px' }}
+                                >
+                                  {isdCodes.map(c => <option key={c.code} value={c.code}>{c.code}</option>)}
+                                </select>
+                                <input type="tel" value={contact.phone} onChange={(e) => handleContactChange(idx, 'phone', e.target.value)} className="purchase-input" style={{ flex: 1 }} />
+                              </div>
+                            </div>
+                            <div className="purchase-form-field">
+                              <label className="purchase-label">WhatsApp No. {idx + 1}</label>
+                              <div style={{ display: 'flex', gap: '5px' }}>
+                                <select
+                                  value={contact.whatsappCode || '+971'}
+                                  onChange={(e) => handleContactChange(idx, 'whatsappCode', e.target.value)}
+                                  className="purchase-input select"
+                                  style={{ width: '80px' }}
+                                >
+                                  {isdCodes.map(c => <option key={c.code} value={c.code}>{c.code}</option>)}
+                                </select>
+                                <input type="tel" value={contact.whatsapp} onChange={(e) => handleContactChange(idx, 'whatsapp', e.target.value)} className="purchase-input" style={{ flex: 1 }} />
+                              </div>
+                            </div>
                             <div className="purchase-form-field"><label className="purchase-label">Email {idx + 1}</label><input type="email" value={contact.email} onChange={(e) => handleContactChange(idx, 'email', e.target.value)} className="purchase-input" /></div>
                             <div className="purchase-form-field">
-                              <label className="purchase-label">Address {idx + 1}</label><input type="text" value={contact.address} onChange={(e) => handleContactChange(idx, 'address', e.target.value)} className="purchase-input" />
+                              <label className="purchase-label">Address {idx + 1}</label>
+                              <textarea
+                                value={contact.address}
+                                onChange={(e) => handleContactChange(idx, 'address', e.target.value)}
+                                className="purchase-input textarea"
+                                rows="3"
+                                style={{ resize: 'vertical' }}
+                              />
+                            </div>
+                            <div className="purchase-form-field" style={{ justifyContent: 'flex-end', display: 'flex' }}>
                               <button type="button" onClick={() => removeContact(idx)} className="purchase-button delete" disabled={supplierForm.contacts.length === 1}>Remove Contact</button>
                             </div>
                           </div>
@@ -3140,7 +3197,7 @@ function Purchase() {
                                   <td>{supplier.country}</td>
                                   <td>{supplier.currency}</td>
                                   <td>{supplier.taxId}</td>
-                                  <td>{Array.isArray(supplier.contacts) ? supplier.contacts.map(c => `${c.contactPerson} (${c.phone}, ${c.address})`).join(', ') : ''}</td>
+                                  <td>{Array.isArray(supplier.contacts) ? supplier.contacts.map(c => `${c.contactPerson} (${c.designation ? c.designation + ', ' : ''}${c.phoneCode || ''} ${c.phone}, ${c.address})`).join(', ') : ''}</td>
                                   <td>{supplier.lastPurchaseDate ? new Date(supplier.lastPurchaseDate).toLocaleDateString() : '-'}</td>
                                   <td className="purchase-action-buttons">
                                     <button onClick={() => {
@@ -4653,14 +4710,20 @@ function Purchase() {
                               <FaFilter /> Apply Filters
                             </button>
                             <button onClick={() => {
-                              const headers = ['Item Name', 'Brand', 'Total Quantity', 'Total Amount', 'Suppliers'];
-                              const rows = reportItemWiseData.map(item => [
-                                item.itemName,
-                                item.brand,
-                                item.totalQuantity.toFixed(2),
-                                `${item.currency} ${item.totalAmount.toFixed(2)}`,
-                                item.suppliers.map(s => `${s.supplierName} (Qty: ${s.quantity.toFixed(2)}, Amt: ${item.currency} ${s.amount.toFixed(2)})`).join('; ')
-                              ]);
+                              const headers = ['Item Name', 'Brand', 'Total Quantity', 'Total Purchased', 'Total Amount', 'Suppliers'];
+                              const rows = reportItemWiseData.map(item => {
+                                const originalItem = items.find(i => i.name === item.itemName && i.company === item.brand);
+                                const totalPurchased = originalItem ? `${originalItem.totalPurchased || 0} ${originalItem.nosUnit}` : 'N/A';
+                                const uomDisplay = item.uom || item.unit || (originalItem ? originalItem.masterUnit : '');
+                                return [
+                                  item.itemName,
+                                  item.brand,
+                                  `${item.totalQuantity.toFixed(2)} ${uomDisplay}`,
+                                  totalPurchased,
+                                  `${item.currency} ${item.totalAmount.toFixed(2)}`,
+                                  item.suppliers.map(s => `${s.supplierName} (Qty: ${s.quantity.toFixed(2)} ${uomDisplay}, Amt: ${item.currency} ${s.amount.toFixed(2)})`).join('; ')
+                                ];
+                              });
                               const html = generateReportHtml('Item-wise Purchase Report', headers, rows, reportItemWiseData[0]?.currency || 'AED', 'itemwise');
                               const printWindow = window.open('', '_blank');
                               printWindow.document.write(html);
@@ -4678,26 +4741,32 @@ function Purchase() {
                             <th>Item Name</th>
                             <th>Brand</th>
                             <th>Total Quantity</th>
+                            <th>Total Purchased</th>
                             <th>Total Amount</th>
                             <th>Suppliers</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {reportItemWiseData.map((item, idx) => (
-                            <tr key={idx}>
-                              <td>{item.itemName}</td>
-                              <td>{item.brand}</td>
-                              <td>{item.totalQuantity.toFixed(2)}</td>
-                              <td>{item.currency} {item.totalAmount.toFixed(2)}</td>
-                              <td>
-                                {item.suppliers.map((supplier, sIdx) => (
-                                  <div key={sIdx} style={{ marginBottom: '5px' }}>
-                                    <strong>{supplier.supplierName}:</strong> Qty: {supplier.quantity.toFixed(2)}, Amt: {item.currency} {supplier.amount.toFixed(2)}
-                                  </div>
-                                ))}
-                              </td>
-                            </tr>
-                          ))}
+                          {reportItemWiseData.map((item, idx) => {
+                            const originalItem = items.find(i => i.name === item.itemName && i.company === item.brand);
+                            const uomDisplay = item.uom || item.unit || (originalItem ? originalItem.masterUnit : '');
+                            return (
+                              <tr key={idx}>
+                                <td>{item.itemName}</td>
+                                <td>{item.brand}</td>
+                                <td>{item.totalQuantity.toFixed(2)} {uomDisplay}</td>
+                                <td>{originalItem ? `${originalItem.totalPurchased || 0} ${originalItem.nosUnit}` : '-'}</td>
+                                <td>{item.currency} {item.totalAmount.toFixed(2)}</td>
+                                <td>
+                                  {item.suppliers.map((supplier, sIdx) => (
+                                    <div key={sIdx} style={{ marginBottom: '5px' }}>
+                                      <strong>{supplier.supplierName}:</strong> Qty: {supplier.quantity.toFixed(2)} {uomDisplay}, Amt: {item.currency} {supplier.amount.toFixed(2)}
+                                    </div>
+                                  ))}
+                                </td>
+                              </tr>
+                            );
+                          })}
                           {reportItemWiseData.length === 0 && (
                             <tr>
                               <td colSpan="5" style={{ textAlign: 'center', padding: '20px' }}>
