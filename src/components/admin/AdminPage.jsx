@@ -1,4 +1,8 @@
-// src/components/AdminPage.jsx
+// src/components/admin/AdminPage.jsx
+// FULLY UPDATED: Added "Schedule" submenu under Employee with Schedule Master, Schedule Rule Master, and Schedule Assign Employee
+// Paths: /schedule-master, /schedule-rule-master, /schedule-assign-employee (root-level, no /admin prefix)
+// Added necessary icon imports for new items (FaCalendar, FaCog, FaUserPlus)
+// All previous features preserved
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -25,11 +29,15 @@ import {
   FaBuilding,
   FaCamera,
   FaTrash,
-  FaChartLine, // NEW: For Sales menu
-  FaFileInvoiceDollar, // NEW: For Sales Invoice
-  FaEyeSlash, // NEW: For Hidden Items
-  FaList, // NEW: For Employee List
-  FaClock, // NEW: For Attendance
+  FaChartLine, // For Sales menu
+  FaFileInvoiceDollar, // For Sales Invoice
+  FaEyeSlash, // For Hidden Items
+  FaList, // For Employee List
+  FaClock, // For Attendance
+  FaBriefcase, // For Employee Designations (plural)
+  FaIdCard, // For Employee Types (plural)
+  FaCalendar, // For Schedule Master
+  FaUserPlus, // For Schedule Assign Employee
 } from 'react-icons/fa';
 function AdminPage() {
   const navigate = useNavigate();
@@ -43,7 +51,8 @@ function AdminPage() {
   const [isItemsOpen, setIsItemsOpen] = useState(false);
   const [isEmployeeAppOpen, setIsEmployeeAppOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isSalesOpen, setIsSalesOpen] = useState(false); // NEW: State for Sales menu
+  const [isSalesOpen, setIsSalesOpen] = useState(false); // State for Sales menu
+  const [isScheduleOpen, setIsScheduleOpen] = useState(false); // NEW: State for Schedule submenu under Employee
   const [importFile, setImportFile] = useState(null);
   const [message, setMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -52,18 +61,18 @@ function AdminPage() {
   const [logoFile, setLogoFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false); // NEW: State for logout modal
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false); // State for logout modal
   // Navigation handlers
   // Updated to show confirmation modal instead of immediate logout
   const handleLogoutClick = () => {
     setShowLogoutConfirm(true);
   };
-  // NEW: Handle confirmed logout
+  // Handle confirmed logout
   const confirmLogout = () => {
     setShowLogoutConfirm(false);
     navigate('/');
   };
-  // NEW: Handle canceled logout
+  // Handle canceled logout
   const cancelLogout = () => {
     setShowLogoutConfirm(false);
   };
@@ -253,7 +262,7 @@ function AdminPage() {
   const handleSearchChange = (e) => {
     setSearchQuery(e.target.value);
   };
-  // Menu items
+  // Menu items - UPDATED: Added Schedule submenu under Employee
   const masterMenuItems = [
     {
       icon: <FaUsers />,
@@ -275,20 +284,33 @@ function AdminPage() {
         { icon: <FaUtensils />, text: 'Add Ingredient & Nutrition', path: '/add-ingredients-nutrition' },
         { icon: <FaLayerGroup />, text: 'Add Variant', path: '/create-variant' },
         { icon: <FaGift />, text: 'Combo Offer', path: '/combo-offer' },
-        { icon: <FaEyeSlash />, text: 'Hidden Items', path: '/hidden-items' }, // NEW: Hidden Items added here
-        // MOVED: Vat removed from Items and placed in Settings
+        { icon: <FaEyeSlash />, text: 'Hidden Items', path: '/hidden-items' },
+        // Vat removed from Items and placed in Settings
       ],
     },
     {
       icon: <FaUserTie />,
       text: 'Employee',
       children: [
-        { icon: <FaList />, text: 'Employee List', path: '/employee-list' }, // NEW: Added Employee List
+        { icon: <FaList />, text: 'Employee List', path: '/employee-list' },
         { icon: <FaUserTie />, text: 'Delivery Person', path: '/employees' },
         { icon: <FaUsers />, text: 'Users', path: '/users' },
-        { icon: <FaPlusCircle />, text: 'Add New Employee', path: '/add-employee' }, // NEW: Added Add New Employee
-        { icon: <FaClock />, text: 'Attendance', path: '/attendance' }, // NEW: Added Attendance
-        { icon: <FaFileInvoiceDollar />, text: 'Salary Slip', path: '/salary-slip' }, // NEW: Added Salary Slip
+        { icon: <FaPlusCircle />, text: 'Add New Employee', path: '/add-employee' },
+        { icon: <FaClock />, text: 'Attendance', path: '/attendance' },
+        { icon: <FaFileInvoiceDollar />, text: 'Salary Slip', path: '/salary-slip' },
+        // UPDATED: Employee Designations and Employee Types (plural paths)
+        { icon: <FaBriefcase />, text: 'Employee Designations', path: '/employee-designations' },
+        { icon: <FaIdCard />, text: 'Employee Types', path: '/employee-types' },
+        // NEW: Schedule submenu
+        {
+          icon: <FaClock />,
+          text: 'Schedule',
+          children: [
+            { icon: <FaCalendar />, text: 'Schedule Master', path: '/schedule-master' },
+            { icon: <FaCog />, text: 'Schedule Rule Master', path: '/schedule-rule-master' },
+            { icon: <FaUserPlus />, text: 'Schedule Assign Employee', path: '/schedule-assign-employee' },
+          ],
+        },
       ],
     },
     { icon: <FaTable />, text: 'Add New Table', path: '/add-table' },
@@ -298,13 +320,13 @@ function AdminPage() {
       children: [
         { icon: <FaBuilding />, text: 'Company Details', path: '/company-details' },
         { icon: <FaPrint />, text: 'Print Settings', path: '/print-settings' },
-        { icon: <FaEnvelope />, text: 'Email Settings', path: '/email-settings' },       
+        { icon: <FaEnvelope />, text: 'Email Settings', path: '/email-settings' },
         { icon: <FaDatabase />, text: 'Backups', path: '/backup' },
-        { icon: <FaCog />, text: 'System Settings', path: '/system-settings' }, // MOVED: System Settings added here
+        { icon: <FaCog />, text: 'System Settings', path: '/system-settings' }, // System Settings added here
       ],
     },
     { icon: <FaShoppingCart />, text: 'Purchase Module', path: '/purchase' },
-    // NEW: Sales Menu
+    // Sales Menu
     {
       icon: <FaChartLine />,
       text: 'Sales',
@@ -315,7 +337,7 @@ function AdminPage() {
     },
   ];
   const otherMenuItems = [
-    // REMOVED: { icon: <FaFileAlt />, text: 'Record', path: '/record' },
+    // { icon: <FaFileAlt />, text: 'Record', path: '/record' },
     // Note: System Settings has been moved to Settings submenu under Master
   ];
   // Filter menu items based on search query
@@ -349,6 +371,7 @@ function AdminPage() {
       case 'Employee': return isEmployeeAppOpen;
       case 'Settings': return isSettingsOpen;
       case 'Sales': return isSalesOpen;
+      case 'Schedule': return isScheduleOpen; // NEW
       default: return false;
     }
   };
@@ -360,6 +383,7 @@ function AdminPage() {
       case 'Employee': setIsEmployeeAppOpen(!isEmployeeAppOpen); break;
       case 'Settings': setIsSettingsOpen(!isSettingsOpen); break;
       case 'Sales': setIsSalesOpen(!isSalesOpen); break;
+      case 'Schedule': setIsScheduleOpen(!isScheduleOpen); break; // NEW
     }
   };
   // Helper to set expand state
@@ -370,6 +394,7 @@ function AdminPage() {
       case 'Employee': setIsEmployeeAppOpen(value); break;
       case 'Settings': setIsSettingsOpen(value); break;
       case 'Sales': setIsSalesOpen(value); break;
+      case 'Schedule': setIsScheduleOpen(value); break; // NEW
     }
   };
   return (
@@ -668,28 +693,96 @@ function AdminPage() {
                                   }}
                                 >
                                   {item.children.map((subItem, subIndex) => (
-                                    <button
-                                      key={subIndex}
-                                      onClick={() => handleNavigation(subItem.path)}
-                                      style={{
-                                        padding: '12px 20px',
-                                        backgroundColor: '#ffffff',
-                                        color: '#2c3e50',
-                                        border: 'none',
-                                        borderRadius: '15px',
-                                        cursor: 'pointer',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '10px',
-                                        fontSize: '1rem',
-                                        transition: 'background-color 0.3s',
-                                        textAlign: 'left'
-                                      }}
-                                      onMouseOver={(e) => (e.target.style.backgroundColor = '#e6f3fa')}
-                                      onMouseOut={(e) => (e.target.style.backgroundColor = '#ffffff')}
-                                    >
-                                      {subItem.icon} {subItem.text}
-                                    </button>
+                                    <React.Fragment key={subIndex}>
+                                      {subItem.children ? (
+                                        // NEW: Handle nested children for Schedule
+                                        <>
+                                          <button
+                                            onClick={() => toggleExpandState(subItem.text)}
+                                            style={{
+                                              padding: '12px 20px',
+                                              backgroundColor: getExpandState(subItem.text) ? '#3498db' : '#ffffff',
+                                              color: getExpandState(subItem.text) ? '#ffffff' : '#2c3e50',
+                                              border: 'none',
+                                              borderRadius: '15px',
+                                              cursor: 'pointer',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: '10px',
+                                              fontSize: '1rem',
+                                              transition: 'background-color 0.3s, color 0.3s',
+                                              textAlign: 'left'
+                                            }}
+                                            onMouseOver={(e) =>
+                                              !getExpandState(subItem.text) && (e.target.style.backgroundColor = '#e6f3fa')
+                                            }
+                                            onMouseOut={(e) =>
+                                              !getExpandState(subItem.text) && (e.target.style.backgroundColor = '#ffffff')
+                                            }
+                                          >
+                                            {subItem.icon} {subItem.text}
+                                          </button>
+                                          {getExpandState(subItem.text) && subItem.children.length > 0 && (
+                                            <div
+                                              style={{
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                gap: '10px',
+                                                paddingLeft: '20px',
+                                              }}
+                                            >
+                                              {subItem.children.map((grandSubItem, grandSubIndex) => (
+                                                <button
+                                                  key={grandSubIndex}
+                                                  onClick={() => handleNavigation(grandSubItem.path)}
+                                                  style={{
+                                                    padding: '12px 20px',
+                                                    backgroundColor: '#ffffff',
+                                                    color: '#2c3e50',
+                                                    border: 'none',
+                                                    borderRadius: '15px',
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '10px',
+                                                    fontSize: '1rem',
+                                                    transition: 'background-color 0.3s',
+                                                    textAlign: 'left'
+                                                  }}
+                                                  onMouseOver={(e) => (e.target.style.backgroundColor = '#e6f3fa')}
+                                                  onMouseOut={(e) => (e.target.style.backgroundColor = '#ffffff')}
+                                                >
+                                                  {grandSubItem.icon} {grandSubItem.text}
+                                                </button>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </>
+                                      ) : (
+                                        <button
+                                          key={subIndex}
+                                          onClick={() => handleNavigation(subItem.path)}
+                                          style={{
+                                            padding: '12px 20px',
+                                            backgroundColor: '#ffffff',
+                                            color: '#2c3e50',
+                                            border: 'none',
+                                            borderRadius: '15px',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '10px',
+                                            fontSize: '1rem',
+                                            transition: 'background-color 0.3s',
+                                            textAlign: 'left'
+                                          }}
+                                          onMouseOver={(e) => (e.target.style.backgroundColor = '#e6f3fa')}
+                                          onMouseOut={(e) => (e.target.style.backgroundColor = '#ffffff')}
+                                        >
+                                          {subItem.icon} {subItem.text}
+                                        </button>
+                                      )}
+                                    </React.Fragment>
                                   ))}
                                 </div>
                               )}
@@ -943,7 +1036,7 @@ function AdminPage() {
           </div>
         </div>
       </div>
-      {/* NEW: Logout Confirmation Modal */}
+      {/* Logout Confirmation Modal */}
       {showLogoutConfirm && (
         <div style={{
           position: 'fixed',

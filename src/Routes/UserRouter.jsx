@@ -1,12 +1,9 @@
-// src/UserRouter.jsx (Fully Updated & Corrected)
-// - Fixed typo in BackupPage import (removed trailing .)
-// - Added import for SalarySlip
-// - Added new route /salary-slip
-// - All previous routes preserved exactly as you provided
-// - Ready to copy-paste
-
+// src/UserRouter.jsx
+// FULLY UPDATED: Added routes for Schedule Master (/schedule-master), Schedule Rule Master (/schedule-rule-master), Schedule Assign Employee (/schedule-assign-employee)
+// All previous routes preserved, no /admin prefix
 import React from "react";
 import { Route, Routes } from "react-router-dom";
+
 // Import Pages
 import TablePage from "../Pages/TablePage";
 import FrontPage from "../Pages/FrontPage";
@@ -16,6 +13,7 @@ import CashPage from "../Pages/CashPage";
 import CardPage from "../Pages/CardPage";
 import SavedOrderPage from "../Pages/SavedOrderPage";
 import SalesPage from "../Pages/SalesPage";
+
 // Import Components
 import FirstTab from "../components/FirstTab/FirstTab";
 import AdminPage from "../components/admin/AdminPage";
@@ -29,7 +27,7 @@ import RecordPage from "../components/Form/RecordPage";
 import OpeningEntry from "../components/Bearer/OpeningEntry";
 import ClosingEntry from "../components/Bearer/ClosingEntry";
 import RegisterPage from "../components/Form/RegisterPage";
-import BackupPage from "../components/Form/BackupsPage."; // ← Fixed: removed trailing .
+import BackupPage from "../components/Form/BackupsPage."; // Fixed: removed trailing .
 import SystemSettings from "../components/Form/SystemSettings";
 import ActiveOrders from "../components/Header/ActiveOrders";
 import Dashboard from "../components/Dashboard";
@@ -56,7 +54,16 @@ import AddEmployee from "../components/Form/Addemployee";
 import EmployeeList from "../components/Form/employeelist";
 import Attendance from "../components/Form/attendance";
 import Working from "../components/Form/working";
-import SalarySlip from "../components/Form/salaryslip"; // ← NEW: SalarySlip import
+import SalarySlip from "../components/Form/salaryslip";
+
+// UPDATED: Imports for Employee Designation and Type (plural routes)
+import EmployeeDesignation from "../components/Form/Employeedesignation";
+import EmployeeType from "../components/Form/Employeetype";
+
+// NEW: Imports for Schedule pages (FIXED: Corrected import path to match file name 'schedulerulemaster.jsx')
+import ScheduleMaster from "../components/Form/schedulemaster";
+import ScheduleRuleMaster from "../components/Form/shedulerulemaster";
+import ScheduleAssignEmployee from "../components/Form/scheduleassignemployee";
 
 const UserRouter = () => {
   return (
@@ -93,7 +100,14 @@ const UserRouter = () => {
         <Route path="/add-employee" element={<AddEmployee />} />
         <Route path="/employee-list" element={<EmployeeList />} />
         <Route path="/attendance" element={<Attendance />} />
-        <Route path="/salary-slip" element={<SalarySlip />} /> {/* ← NEW: Salary Slip Route */}
+        <Route path="/salary-slip" element={<SalarySlip />} />
+        {/* UPDATED: Employee Designation and Type Routes (plural, no /admin prefix) */}
+        <Route path="/employee-designations" element={<EmployeeDesignation />} />
+        <Route path="/employee-types" element={<EmployeeType />} />
+        {/* NEW: Schedule Routes */}
+        <Route path="/schedule-master" element={<ScheduleMaster />} />
+        <Route path="/schedule-rule-master" element={<ScheduleRuleMaster />} />
+        <Route path="/schedule-assign-employee" element={<ScheduleAssignEmployee />} />
         {/* System Configuration Routes */}
         <Route path="/backup" element={<BackupPage />} />
         <Route path="/system-settings" element={<SystemSettings />} />

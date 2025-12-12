@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import axios from 'axios';
 import { FaArrowLeft } from 'react-icons/fa'; // NEW: Import FaArrowLeft for back button
-const SearchableSelect = ({ options = [], value = '', onChange, placeholder, allowCreateNew = false, onAddNewValue = null }) => {
+
+const SearchableSelect = ({ options = [], value = '', onChange, placeholder, allowCreateNew = false, onAddNewValue = null, createNewLabel = null }) => {
   const [search, setSearch] = useState(value || '');
   const [showList, setShowList] = useState(false);
   useEffect(() => {
@@ -49,6 +50,10 @@ const SearchableSelect = ({ options = [], value = '', onChange, placeholder, all
       setShowList(false);
     }, 200);
   };
+  // UPDATED: Create new text logic - if createNewLabel provided, show "Create New [label]", else fallback to old "Create New: 'value'"
+  const createNewText = createNewLabel 
+    ? `Create New ${createNewLabel}` 
+    : `Create New: "${search.trim() || 'value'}"`;
   return (
     <div className="searchable-select">
       <input
@@ -70,7 +75,7 @@ const SearchableSelect = ({ options = [], value = '', onChange, placeholder, all
               }}
               style={{ fontStyle: 'italic', color: '#007bff' }}
             >
-              Create New: "{search.trim() || 'value'}"
+              {createNewText}
             </li>
           )}
           {filteredOptions.length > 0 ? (
@@ -96,6 +101,7 @@ const SearchableSelect = ({ options = [], value = '', onChange, placeholder, all
     </div>
   );
 };
+
 const CreateCustomerPage = () => {
   /* ────────────────────── BASIC STATE ────────────────────── */
   const [activeTab, setActiveTab] = useState("details");
@@ -657,6 +663,7 @@ const CreateCustomerPage = () => {
                 </div>
                 <div className="form-group">
                   <label>Customer Group</label>
+                  {/* UPDATED: Pass createNewLabel="Group" */}
                   <SearchableSelect
                     options={customerGroups.map(g => g.group_name)}
                     value={selectedGroup ? customerGroups.find(g => g._id === selectedGroup)?.group_name || '' : ''}
@@ -664,6 +671,7 @@ const CreateCustomerPage = () => {
                     placeholder="Select or Create Group"
                     allowCreateNew={true}
                     onAddNewValue={handleCreateNewGroup}
+                    createNewLabel="Group"
                   />
                 </div>
               </div>
@@ -751,6 +759,7 @@ const CreateCustomerPage = () => {
                 {deliveryAddress.country && addressStructure.countries[deliveryAddress.country]?.field1 && (
                   <div className="form-group">
                     <label>{addressStructure.countries[deliveryAddress.country].field1.label}</label>
+                    {/* UPDATED: Pass createNewLabel=field1.label */}
                     <SearchableSelect
                       options={addressStructure.countries[deliveryAddress.country].field1.values || []}
                       value={deliveryAddress.field1}
@@ -763,6 +772,7 @@ const CreateCustomerPage = () => {
                       placeholder={`Select ${addressStructure.countries[deliveryAddress.country].field1.label}`}
                       allowCreateNew={true}
                       onAddNewValue={handleAddNewField1}
+                      createNewLabel={addressStructure.countries[deliveryAddress.country].field1.label}
                     />
                   </div>
                 )}
@@ -770,6 +780,7 @@ const CreateCustomerPage = () => {
                 {deliveryAddress.country && addressStructure.countries[deliveryAddress.country]?.field2 && (
                   <div className="form-group">
                     <label>{addressStructure.countries[deliveryAddress.country].field2.label}</label>
+                    {/* UPDATED: Pass createNewLabel=field2.label */}
                     <SearchableSelect
                       options={getFilteredValues("field2").length > 0
                         ? getFilteredValues("field2")
@@ -779,6 +790,7 @@ const CreateCustomerPage = () => {
                       placeholder={`Select ${addressStructure.countries[deliveryAddress.country].field2.label}`}
                       allowCreateNew={true}
                       onAddNewValue={handleAddNewField2}
+                      createNewLabel={addressStructure.countries[deliveryAddress.country].field2.label}
                     />
                   </div>
                 )}
@@ -797,6 +809,7 @@ const CreateCustomerPage = () => {
                 {deliveryAddress.country && addressStructure.countries[deliveryAddress.country]?.field3 && (
                   <div className="form-group">
                     <label>{addressStructure.countries[deliveryAddress.country].field3.label}</label>
+                    {/* UPDATED: Pass createNewLabel=field3.label */}
                     <SearchableSelect
                       options={getFilteredValues("field3").length > 0
                         ? getFilteredValues("field3")
@@ -806,6 +819,7 @@ const CreateCustomerPage = () => {
                       placeholder={`Select ${addressStructure.countries[deliveryAddress.country].field3.label}`}
                       allowCreateNew={true}
                       onAddNewValue={handleAddNewField3}
+                      createNewLabel={addressStructure.countries[deliveryAddress.country].field3.label}
                     />
                   </div>
                 )}
@@ -1208,7 +1222,7 @@ const CreateCustomerPage = () => {
           height: 100%;
           width: 58px;
           display: flex;
-          align-items: center;
+          align-items:  center;
           justify-content: center;
           cursor: pointer;
         }
@@ -1420,4 +1434,5 @@ const CreateCustomerPage = () => {
     </div>
   );
 };
+
 export default CreateCustomerPage;

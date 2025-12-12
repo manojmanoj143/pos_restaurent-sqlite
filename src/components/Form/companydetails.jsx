@@ -3,6 +3,31 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { FaArrowLeft, FaBuilding, FaPlus, FaClock, FaGlobe, FaLink, FaTrash, FaCalendarAlt, FaEdit, FaSave, FaTimes } from 'react-icons/fa';
+
+// Helper to ensure 24-hour HH:mm format
+const formatTo24Hour = (timeStr) => {
+  if (!timeStr) return '';
+  // Check if it matches HH:mm format (24-hour)
+  if (/^([01]\d|2[0-3]):([0-5]\d)$/.test(timeStr)) {
+    return timeStr;
+  }
+  // Convert 12-hour format to 24-hour
+  const [time, modifier] = timeStr.split(' ');
+  if (!time || !modifier) return timeStr;
+
+  let [hours, minutes] = time.split(':');
+
+  if (hours === '12') {
+    hours = '00';
+  }
+
+  if (modifier === 'PM') {
+    hours = parseInt(hours, 10) + 12;
+  }
+
+  return `${hours}:${minutes}`;
+};
+
 const SearchableSelect = ({ options = [], value = '', onChange, placeholder }) => {
   const [search, setSearch] = useState(value || '');
   const [showList, setShowList] = useState(false);
@@ -1022,10 +1047,10 @@ function CompanyDetails() {
                       No Logo Uploaded
                     </div>
                   )}
-     
+
                   {/* Title */}
                   <h3 style={{ color: '#2c3e50', fontSize: '1.8rem', margin: 0, textAlign: 'right', fontWeight: '600' }}>
-                    Company Details<br/>Application
+                    Company Details<br />Application
                   </h3>
                 </div>
                 {/* Border Line */}
@@ -1063,11 +1088,11 @@ function CompanyDetails() {
                         </div>
                         <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: '8px' }}>
                           <strong style={{ minWidth: '200px', textAlign: 'left', paddingRight: '10px', color: '#555', fontWeight: 'bold' }}>Opening Time :</strong>
-                          <span style={{ flex: 1, textAlign: 'left', color: '#000' }}>{savedDetails.openingTime || 'N/A'}</span>
+                          <span style={{ flex: 1, textAlign: 'left', color: '#000' }}>{savedDetails.openingTime ? formatTo24Hour(savedDetails.openingTime) : 'N/A'}</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: '8px' }}>
                           <strong style={{ minWidth: '200px', textAlign: 'left', paddingRight: '10px', color: '#555', fontWeight: 'bold' }}>Closing Time :</strong>
-                          <span style={{ flex: 1, textAlign: 'left', color: '#000' }}>{savedDetails.closingTime || 'N/A'}</span>
+                          <span style={{ flex: 1, textAlign: 'left', color: '#000' }}>{savedDetails.closingTime ? formatTo24Hour(savedDetails.closingTime) : 'N/A'}</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: '8px' }}>
                           <strong style={{ minWidth: '200px', textAlign: 'left', paddingRight: '10px', color: '#555', fontWeight: 'bold' }}>Total Operating Time :</strong>
@@ -1106,11 +1131,11 @@ function CompanyDetails() {
                           </div>
                           <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: '8px' }}>
                             <strong style={{ minWidth: '200px', textAlign: 'left', paddingRight: '10px', color: '#555', fontWeight: 'bold' }}>Start Time :</strong>
-                            <span style={{ flex: 1, textAlign: 'left', color: '#000' }}>{special.startTime}</span>
+                            <span style={{ flex: 1, textAlign: 'left', color: '#000' }}>{formatTo24Hour(special.startTime)}</span>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: '8px' }}>
                             <strong style={{ minWidth: '200px', textAlign: 'left', paddingRight: '10px', color: '#555', fontWeight: 'bold' }}>End Time :</strong>
-                            <span style={{ flex: 1, textAlign: 'left', color: '#000' }}>{special.endTime}</span>
+                            <span style={{ flex: 1, textAlign: 'left', color: '#000' }}>{formatTo24Hour(special.endTime)}</span>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: '8px' }}>
                             <strong style={{ minWidth: '200px', textAlign: 'left', paddingRight: '10px', color: '#555', fontWeight: 'bold' }}>Duration :</strong>
@@ -1231,7 +1256,7 @@ function CompanyDetails() {
                     </button>
                   </div>
                 ) : (
-                  <p style={{textAlign: 'center', color: '#7f8c8d', fontSize: '1.1rem'}}>No saved details available. Please fill out the form sections.</p>
+                  <p style={{ textAlign: 'center', color: '#7f8c8d', fontSize: '1.1rem' }}>No saved details available. Please fill out the form sections.</p>
                 )}
               </div>
             </div>
@@ -1346,7 +1371,7 @@ function CompanyDetails() {
                 <input
                   type="time"
                   name="openingTime"
-                  value={formData.openingTime}
+                  value={formatTo24Hour(formData.openingTime)}
                   onChange={handleOpeningTimeChange}
                   placeholder="Start Time"
                   style={{
@@ -1360,7 +1385,7 @@ function CompanyDetails() {
                 <input
                   type="time"
                   name="closingTime"
-                  value={formData.closingTime}
+                  value={formatTo24Hour(formData.closingTime)}
                   onChange={handleClosingTimeChange}
                   placeholder="End Time"
                   style={{
@@ -1416,14 +1441,14 @@ function CompanyDetails() {
                   />
                   <input
                     type="time"
-                    value={tempSpecialTiming.startTime}
+                    value={formatTo24Hour(tempSpecialTiming.startTime)}
                     onChange={(e) => handleSpecialChange('startTime', e.target.value)}
                     placeholder="Start Time"
                     style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
                   />
                   <input
                     type="time"
-                    value={tempSpecialTiming.endTime}
+                    value={formatTo24Hour(tempSpecialTiming.endTime)}
                     onChange={(e) => handleSpecialChange('endTime', e.target.value)}
                     placeholder="End Time"
                     style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
@@ -1450,7 +1475,7 @@ function CompanyDetails() {
                     {formData.specialTimings.map((special, index) => (
                       <div key={index} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px', padding: '10px', borderBottom: '1px solid #eee', alignItems: 'center' }}>
                         <div style={{ fontSize: '0.9rem' }}>
-                          <strong>{special.reason}</strong> - {special.date} ({special.startTime} - {special.endTime}, {special.duration})
+                          <strong>{special.reason}</strong> - {special.date} ({formatTo24Hour(special.startTime)} - {formatTo24Hour(special.endTime)}, {special.duration})
                         </div>
                         <div style={{ display: 'flex', gap: '5px' }}>
                           <button onClick={() => editSpecialTiming(index)} style={{ padding: '5px', backgroundColor: '#f39c12', color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>
@@ -1473,7 +1498,7 @@ function CompanyDetails() {
               <h3 style={{ color: '#2c3e50', fontSize: '1.5rem', marginBottom: '15px', textAlign: 'center' }}>Address Details</h3>
               {formData.addresses.map((address, index) => (
                 <div key={index} style={{ display: 'grid', gap: '15px', marginBottom: '15px', border: '1px solid #ddd', padding: '10px', borderRadius: '10px' }}>
-                  <h4 style={{textAlign: 'center', margin: '5px 0'}}>Address {index + 1}</h4>
+                  <h4 style={{ textAlign: 'center', margin: '5px 0' }}>Address {index + 1}</h4>
                   {/* Country */}
                   <SearchableSelect
                     options={countryList}
@@ -1596,7 +1621,7 @@ function CompanyDetails() {
               <h3 style={{ color: '#2c3e50', fontSize: '1.5rem', marginBottom: '15px', textAlign: 'center' }}>Contact Details</h3>
               {formData.contacts.map((contact, index) => (
                 <div key={index} style={{ display: 'grid', gap: '15px', marginBottom: '15px', border: '1px solid #ddd', padding: '10px', borderRadius: '10px' }}>
-                   <h4 style={{textAlign: 'center', margin: '5px 0'}}>Contact {index + 1}</h4>
+                  <h4 style={{ textAlign: 'center', margin: '5px 0' }}>Contact {index + 1}</h4>
                   {/* Phone Number with Country Code - UPDATED: No label */}
                   <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
                     <CountryCodeSelector
@@ -1812,31 +1837,31 @@ function CompanyDetails() {
       </div>
       {/* NEW: Edit Modal for Special Timing */}
       {showEditModal && (
-        <div 
-          style={{ 
-            position: 'fixed', 
-            top: 0, 
-            left: 0, 
-            width: '100%', 
-            height: '100%', 
-            backgroundColor: 'rgba(0,0,0,0.5)', 
-            zIndex: 1000, 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center' 
-          }} 
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
           onClick={cancelEditSpecial}
         >
-          <div 
-            style={{ 
-              background: 'white', 
-              padding: '20px', 
-              borderRadius: '10px', 
-              maxWidth: '500px', 
-              width: '90%', 
-              maxHeight: '90%', 
-              overflowY: 'auto' 
-            }} 
+          <div
+            style={{
+              background: 'white',
+              padding: '20px',
+              borderRadius: '10px',
+              maxWidth: '500px',
+              width: '90%',
+              maxHeight: '90%',
+              overflowY: 'auto'
+            }}
             onClick={(e) => e.stopPropagation()}
           >
             <h3 style={{ color: '#2c3e50', marginBottom: '15px' }}>Edit Special Timing</h3>
@@ -1898,11 +1923,11 @@ function CompanyDetails() {
             </div>
             {/* NEW: Inline Delete Confirmation in Modal */}
             {showDeleteConfirm && (
-              <div style={{ 
-                marginTop: '20px', 
-                padding: '15px', 
-                background: '#fff3cd', 
-                border: '1px solid #ffeaa7', 
+              <div style={{
+                marginTop: '20px',
+                padding: '15px',
+                background: '#fff3cd',
+                border: '1px solid #ffeaa7',
                 borderRadius: '5px',
                 textAlign: 'center'
               }}>

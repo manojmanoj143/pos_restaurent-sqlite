@@ -1,18 +1,7 @@
-// AddEmployee.jsx - Full completed detailed React component
-// Updated: Integrated special timings from company details into employee schedule
-// Employees can now select from company's specialTimings (by date) to assign overrides
-// Added employeeSpecialTimings state and form section in schedule tab
-// On submit, saves employeeSpecialTimings array to backend
-// For editing, pre-populates selected specials based on matching dates
-// Background: linear-gradient(135deg, #ffffff 0%, #3498db 100%)
-// Fixed back button: transparent bg, 2px solid #3498db, hover effects, positioned top-left
-// Main container: maxWidth 750px (form-specific), margin 80px auto 20px, white bg, padding 30px, borderRadius 15px, boxShadow
-// Removed 100vh height/center flex; added padding 20px to outer div
-// Header: Kept flex layout with dummy left for balance (matches EmployeeList header structure)
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
-import { FaUserTie, FaArrowLeft, FaSave, FaPlus, FaTimes, FaEdit, FaTrash, FaClock, FaCalendarAlt, FaCheckSquare, FaSquare } from 'react-icons/fa';
+import { FaUserTie, FaArrowLeft, FaSave, FaPlus, FaTimes, FaUsersCog, FaUpload, FaUser, FaIdCard, FaBriefcase, FaGraduationCap, FaStethoscope, FaUsers } from 'react-icons/fa';
 
 const AddEmployee = () => {
   const navigate = useNavigate();
@@ -20,22 +9,37 @@ const AddEmployee = () => {
   const [formData, setFormData] = useState({
     name: '',
     phoneNumber: '',
+    email: '',
     gender: '',
     dateOfBirth: '',
-    email: '',
+    dateOfJoining: '',
+    company: 'POS 8',
+    status: 'Active',
+    salutation: '',
+    maritalStatus: '',
+    idNumber: '',
+    idExpiry: '',
     address: '',
     employeeDesignation: '',
     employeeType: '',
+    basicSalary: '',
+    hra: '',
+    ta: '',
+    oa: '',
+    totalSalary: '',
+    username: '',
+    password: '',
     bankName: '',
     accountHolderName: '',
     accountNumber: '',
     ifscCode: '',
-    salary: '',
-    username: '',
-    password: '',
-    startTime: '',
-    endTime: '',
-    specialTimings: [], // NEW: Employee-specific special timings array
+    nationality: '',
+    education: '',
+    previousExperience: '',
+    skills: '',
+    healthInfo: '',
+    familyDetails: '',
+    profileImage: '',
   });
   // State for phone number country code
   const [selectedISDCode, setSelectedISDCode] = useState("+971");
@@ -50,49 +54,51 @@ const AddEmployee = () => {
   ];
   // Digit lengths per country for dynamic validation
   const digitLengths = {
-    '+91': 10, // India
-    '+1': 10, // USA/Canada
-    '+44': 10, // UK
-    '+971': 9, // UAE
-    '+61': 9, // Australia
+    '+91': 10,
+    '+1': 10,
+    '+44': 10,
+    '+971': 9,
+    '+61': 9,
   };
-  const [activeTab, setActiveTab] = useState('details'); // 'details', 'salary', 'schedule', 'credentials'
-  const [employeeDesignations, setEmployeeDesignations] = useState([]); // Separate state for designations
-  const [employeeTypes, setEmployeeTypes] = useState([]); // Separate state for types
-  const [companyDetails, setCompanyDetails] = useState(null);
-  const [showCreateDesignation, setShowCreateDesignation] = useState(false);
-  const [showCreateEmployeeType, setShowCreateEmployeeType] = useState(false);
-  const [showDesignationsModal, setShowDesignationsModal] = useState(false);
-  const [showEmployeeTypesModal, setShowEmployeeTypesModal] = useState(false);
-  const [deletingDesignation, setDeletingDesignation] = useState(null);
-  const [deletingEmployeeType, setDeletingEmployeeType] = useState(null);
-  const [editingDesignationId, setEditingDesignationId] = useState(null);
-  const [editingEmployeeTypeId, setEditingEmployeeTypeId] = useState(null);
-  const [editDesignationName, setEditDesignationName] = useState('');
-  const [editEmployeeTypeName, setEditEmployeeTypeName] = useState('');
+  const [activeTab, setActiveTab] = useState('details'); // 'details', 'personal', 'employment', 'salary', 'professional', 'other', 'credentials'
+  const [employeeDesignations, setEmployeeDesignations] = useState([]);
+  const [employeeTypes, setEmployeeTypes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   // New states for centered notification modal
   const [showNotification, setShowNotification] = useState(false);
-  const [notificationType, setNotificationType] = useState(''); // 'success' or 'error'
+  const [notificationType, setNotificationType] = useState('');
   const [notificationMessage, setNotificationMessage] = useState('');
+  // NEW: Confirmation modal before submit
+  const [showConfirmation, setShowConfirmation] = useState(false);
   const [baseUrl, setBaseUrl] = useState('');
   const [editingId, setEditingId] = useState(null);
-  const [newDesignationName, setNewDesignationName] = useState('');
-  const [newEmployeeTypeName, setNewEmployeeTypeName] = useState('');
-  // NEW: State for selected company special timings (for employee assignment)
-  const [selectedCompanySpecials, setSelectedCompanySpecials] = useState(new Set()); // Set of indices for quick toggle
-
-  // Helper function to convert time to minutes
-  const timeToMinutes = (timeStr) => {
-    if (!timeStr) return 0;
-    const [hours, minutes] = timeStr.split(':').map(Number);
-    return hours * 60 + minutes;
-  };
-  // Computed isCompanyOvernight based on companyDetails
-  const isCompanyOvernight = companyDetails && timeToMinutes(companyDetails.closingTime) < timeToMinutes(companyDetails.openingTime);
-  // Fetch baseUrl on component mount
+  // NEW: For image upload
+  const [imagePreview, setImagePreview] = useState(null);
+  const [isEditingDraft, setIsEditingDraft] = useState(false); // Fix for ReferenceError
+  // Company options (for multi-company; can fetch from API if needed)
+  const companyOptions = ['POS 8', 'POS 9', 'Company A', 'Company B']; // Example
+  // Status options
+  const statusOptions = ['Active', 'Inactive'];
+  // Salutation options
+  const salutationOptions = ['', 'Mr.', 'Ms.', 'Mrs.', 'Dr.', 'Prof.'];
+  // Marital Status options
+  const maritalOptions = ['', 'Single', 'Married', 'Divorced', 'Widowed'];
+  // Nationality options (example; can be select or text)
+  const nationalityOptions = ['', 'Indian', 'American', 'British', 'Emirati', 'Australian', 'Other'];
+  // Gender options
+  const genderOptions = ['', 'Male', 'Female', 'Other'];
+  // NEW: Compute total salary when components change
+  useEffect(() => {
+    const basic = parseFloat(formData.basicSalary) || 0;
+    const hra = parseFloat(formData.hra) || 0;
+    const ta = parseFloat(formData.ta) || 0;
+    const oa = parseFloat(formData.oa) || 0;
+    const total = basic + hra + ta + oa;
+    setFormData(prev => ({ ...prev, totalSalary: total.toFixed(2) }));
+  }, [formData.basicSalary, formData.hra, formData.ta, formData.oa]);
+  // Fetch baseUrl on component mount - NEW: Consistent with EmployeeList.jsx
   useEffect(() => {
     const fetchConfig = async () => {
       try {
@@ -101,39 +107,38 @@ const AddEmployee = () => {
         if (appConfig.mode === "client") {
           setBaseUrl(`http://${appConfig.server_ip}:8000`);
         } else {
-          // FIXED: In server mode, still use localhost:8000 since frontend is separate (on 3000)
           setBaseUrl(`http://localhost:8000`);
         }
       } catch (error) {
         console.error("Failed to fetch config:", error);
-        // FIXED: Default to localhost:8000 to avoid 404 on relative calls
         setBaseUrl(`http://localhost:8000`);
       }
     };
     fetchConfig();
   }, []);
-  // Handle editing from navigation state
+  // Fetch employee designations and types when baseUrl changes
+  useEffect(() => {
+    if (baseUrl) {
+      fetchEmployeeDesignations();
+      fetchEmployeeTypes();
+    }
+  }, [baseUrl]);
+  // Handle editing from navigation state (for finalized employees)
   useEffect(() => {
     if (location.state?.editingEmployee) {
       const emp = location.state.editingEmployee;
       setEditingId(emp._id);
+      setIsEditingDraft(false);
       setFormData({
         ...emp,
         password: '',
-        specialTimings: emp.specialTimings || [], // NEW: Pre-fill specialTimings
+        // Parse phone if needed
       });
-      // NEW: Pre-select company specials based on employee's specialTimings dates
-      if (emp.specialTimings && companyDetails?.specialTimings) {
-        const selectedIndices = new Set();
-        emp.specialTimings.forEach(empSpecial => {
-          const matchIndex = companyDetails.specialTimings.findIndex(cs => cs.date === empSpecial.date);
-          if (matchIndex !== -1) {
-            selectedIndices.add(matchIndex);
-          }
-        });
-        setSelectedCompanySpecials(selectedIndices);
+      // Set image preview
+      if (emp.profileImage) {
+        setImagePreview(emp.profileImage.startsWith('data:') ? emp.profileImage : null);
       }
-      // If editing, parse phone number to extract ISD code and digits
+      // Parse phone
       if (emp.phoneNumber) {
         const fullPhone = emp.phoneNumber;
         const isdMatch = isdCodes.find(c => fullPhone.startsWith(c.code));
@@ -143,20 +148,12 @@ const AddEmployee = () => {
         }
       }
     }
-  }, [location.state, companyDetails]); // Depend on companyDetails for pre-select
-  // Fetch designations, types, and company details when baseUrl is set
-  useEffect(() => {
-    if (baseUrl && baseUrl !== '') {
-      fetchEmployeeDesignations();
-      fetchEmployeeTypes();
-      fetchCompanyDetails();
-    }
-  }, [baseUrl]);
+  }, [location.state]);
   const fetchEmployeeDesignations = async () => {
     try {
       const url = `${baseUrl}/api/employee-designations`;
       const response = await axios.get(url);
-      setEmployeeDesignations(response.data); // Only designations here
+      setEmployeeDesignations(response.data);
     } catch (err) {
       console.error('Error fetching employee designations:', err);
       setError('Failed to fetch employee designations. Please try again.');
@@ -166,23 +163,10 @@ const AddEmployee = () => {
     try {
       const url = `${baseUrl}/api/employee-types`;
       const response = await axios.get(url);
-      setEmployeeTypes(response.data); // Only types here - separate fetch
+      setEmployeeTypes(response.data);
     } catch (err) {
       console.error('Error fetching employee types:', err);
       setError('Failed to fetch employee types. Please try again.');
-    }
-  };
-  const fetchCompanyDetails = async () => {
-    try {
-      const url = `${baseUrl}/api/company-details`;
-      const response = await axios.get(url);
-      if (response.data.companyDetails && response.data.companyDetails.length > 0) {
-        const latestDetails = response.data.companyDetails[response.data.companyDetails.length - 1];
-        setCompanyDetails(latestDetails);
-      }
-    } catch (err) {
-      console.error('Error fetching company details:', err);
-      setError('Failed to fetch company details for schedule. Please ensure company details are set.');
     }
   };
   const handleChange = (e) => {
@@ -190,12 +174,22 @@ const AddEmployee = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
     if (error) setError('');
   };
-  // Handler for ISD Code selection
+  // NEW: Handle image upload
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData(prev => ({ ...prev, profileImage: reader.result })); // Base64
+        setImagePreview(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
   const handleISDCodeSelect = (code) => {
     setSelectedISDCode(code);
     setShowISDCodeDropdown(false);
   };
-  // Phone number change with dynamic limit
   const handlePhoneNumberChange = (e) => {
     const v = e.target.value.replace(/\D/g, "");
     const maxDigits = digitLengths[selectedISDCode] || 10;
@@ -203,252 +197,96 @@ const AddEmployee = () => {
       setFormData(prev => ({ ...prev, phoneNumber: v }));
     }
   };
-  // Dynamic max digits based on selected ISD code
   const getMaxDigits = () => digitLengths[selectedISDCode] || 10;
   const handleDesignationChange = (e) => {
     const value = e.target.value;
     if (value === 'create_new') {
-      setShowCreateDesignation(true);
+      navigate('/employee-designations');
     } else {
       setFormData(prev => ({ ...prev, employeeDesignation: value }));
-      setShowCreateDesignation(false);
-      setNewDesignationName('');
     }
   };
   const handleEmployeeTypeChange = (e) => {
     const value = e.target.value;
     if (value === 'create_new') {
-      setShowCreateEmployeeType(true);
+      navigate('/employee-types');
     } else {
       setFormData(prev => ({ ...prev, employeeType: value }));
-      setShowCreateEmployeeType(false);
-      setNewEmployeeTypeName('');
     }
   };
-  const handleCreateNewDesignation = async () => {
-    if (!newDesignationName.trim()) {
-      setError('Please enter a designation name.');
-      return;
-    }
-    try {
-      setLoading(true);
-      const url = `${baseUrl}/api/employee-designations`;
-      const response = await axios.post(url, { name: newDesignationName.trim() });
-      const newDesignation = response.data;
-      setEmployeeDesignations(prev => [...prev, newDesignation]); // Add to designations only
-      setFormData(prev => ({ ...prev, employeeDesignation: newDesignation.name }));
-      setShowCreateDesignation(false);
-      setNewDesignationName('');
-      setMessage('New employee designation created successfully!');
-      setError('');
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to create designation.');
-    } finally {
-      setLoading(false);
-    }
-  };
-  const handleCreateNewEmployeeType = async () => {
-    if (!newEmployeeTypeName.trim()) {
-      setError('Please enter an employee type name.');
-      return;
-    }
-    try {
-      setLoading(true);
-      const url = `${baseUrl}/api/employee-types`;
-      const response = await axios.post(url, { name: newEmployeeTypeName.trim() });
-      const newEmployeeType = response.data;
-      setEmployeeTypes(prev => [...prev, newEmployeeType]); // Add to types only
-      setFormData(prev => ({ ...prev, employeeType: newEmployeeType.name }));
-      setShowCreateEmployeeType(false);
-      setNewEmployeeTypeName('');
-      setMessage('New employee type created successfully!');
-      setError('');
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to create employee type.');
-    } finally {
-      setLoading(false);
-    }
-  };
-  const openDesignationsModal = () => setShowDesignationsModal(true);
-  const openEmployeeTypesModal = () => setShowEmployeeTypesModal(true);
-  const handleEditDesignation = (designation) => {
-    setEditingDesignationId(designation.id);
-    setEditDesignationName(designation.name);
-  };
-  const handleEditEmployeeType = (employeeType) => {
-    setEditingEmployeeTypeId(employeeType.id);
-    setEditEmployeeTypeName(employeeType.name);
-  };
-  const handleUpdateDesignation = async () => {
-    if (!editDesignationName.trim()) {
-      setError('Please enter a designation name.');
-      return;
-    }
-    try {
-      setLoading(true);
-      const url = `${baseUrl}/api/employee-designations/${editingDesignationId}`;
-      await axios.put(url, { name: editDesignationName.trim() });
-      setEmployeeDesignations(prev => prev.map(t => t.id === editingDesignationId ? { ...t, name: editDesignationName.trim() } : t)); // Update designations only
-      setEditingDesignationId(null);
-      setEditDesignationName('');
-      setMessage('Employee designation updated successfully!');
-      setError('');
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to update designation.');
-    } finally {
-      setLoading(false);
-    }
-  };
-  const handleUpdateEmployeeType = async () => {
-    if (!editEmployeeTypeName.trim()) {
-      setError('Please enter an employee type name.');
-      return;
-    }
-    try {
-      setLoading(true);
-      const url = `${baseUrl}/api/employee-types/${editingEmployeeTypeId}`;
-      await axios.put(url, { name: editEmployeeTypeName.trim() });
-      setEmployeeTypes(prev => prev.map(t => t.id === editingEmployeeTypeId ? { ...t, name: editEmployeeTypeName.trim() } : t)); // Update types only
-      setEditingEmployeeTypeId(null);
-      setEditEmployeeTypeName('');
-      setMessage('Employee type updated successfully!');
-      setError('');
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to update employee type.');
-    } finally {
-      setLoading(false);
-    }
-  };
-  const handleDeleteDesignation = (designationId) => {
-    setDeletingDesignation(designationId);
-    // FIXED: Don't close modal immediately; confirm first
-    if (window.confirm('Are you sure you want to delete this designation?')) {
-      confirmDeleteDesignation(designationId);
-    }
-  };
-  const handleDeleteEmployeeType = (employeeTypeId) => {
-    setDeletingEmployeeType(employeeTypeId);
-    // FIXED: Don't close modal immediately; confirm first
-    if (window.confirm('Are you sure you want to delete this employee type?')) {
-      confirmDeleteEmployeeType(employeeTypeId);
-    }
-  };
-  const confirmDeleteDesignation = async (designationId) => {
-    try {
-      const url = `${baseUrl}/api/employee-designations/${designationId}`;
-      await axios.delete(url);
-      setEmployeeDesignations(prev => prev.filter(t => t.id !== designationId)); // Remove from designations only
-      setMessage('Employee designation deleted successfully!');
-      setError('');
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to delete designation.');
-    } finally {
-      setDeletingDesignation(null);
-      setLoading(false);
-    }
-  };
-  const confirmDeleteEmployeeType = async (employeeTypeId) => {
-    try {
-      const url = `${baseUrl}/api/employee-types/${employeeTypeId}`;
-      await axios.delete(url);
-      setEmployeeTypes(prev => prev.filter(t => t.id !== employeeTypeId)); // Remove from types only
-      setMessage('Employee type deleted successfully!');
-      setError('');
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to delete employee type.');
-    } finally {
-      setDeletingEmployeeType(null);
-      setLoading(false);
-    }
-  };
-  // NEW: Toggle selection of company special timing for employee
-  const toggleSpecialSelection = (index) => {
-    const newSelected = new Set(selectedCompanySpecials);
-    if (newSelected.has(index)) {
-      newSelected.delete(index);
-    } else {
-      newSelected.add(index);
-    }
-    setSelectedCompanySpecials(newSelected);
-    // Update formData.specialTimings based on selection
-    const updatedSpecials = Array.from(newSelected).map(idx => companyDetails.specialTimings[idx]);
-    setFormData(prev => ({ ...prev, specialTimings: updatedSpecials }));
-  };
-  // Validation with dynamic exact length per country and improved time validation for overnight shifts
-  // Bank details are optional - no validation required for them during creation/update
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  // Validation - Full for submit
+  const validateForm = () => {
     if (!baseUrl || baseUrl === '') {
       setError('Server configuration not available. Please check your connection.');
-      return;
+      return false;
     }
-    if (!formData.name || !formData.phoneNumber || !formData.email || !formData.address ||
-        !formData.employeeDesignation || !formData.employeeType || !formData.salary || !formData.username || (!formData.password && !editingId) ||
-        !formData.startTime || !formData.endTime) {
-      setError('Please fill in all required fields.');
-      return;
+    // Minimal required fields
+    const required = ['name', 'phoneNumber', 'email', 'address', 'employeeDesignation', 'employeeType', 'username'];
+    if (editingId) {
+      // For edit finalized, password optional
+    } else {
+      required.push('password');
+    }
+    if (!required.every(field => formData[field])) {
+      setError('Please fill in all required fields: Name, Phone, Email, Address, Designation, Type, Username' + (required.includes('password') ? ', Password' : '') + '.');
+      return false;
+    }
+    // Validate salary fields only if provided (optional now)
+    const salaryFields = ['basicSalary', 'hra', 'ta', 'oa'];
+    for (const field of salaryFields) {
+      if (formData[field] && (isNaN(formData[field]) || parseFloat(formData[field]) < 0)) {
+        setError(`${field.replace(/([A-Z])/g, ' $1').toUpperCase()} must be a valid positive number if provided.`);
+        return false;
+      }
     }
     const phoneMaxDigits = getMaxDigits();
     if (formData.phoneNumber.length !== phoneMaxDigits) {
-      setError(`Phone number must be exactly ${phoneMaxDigits} digits for ${isdCodes.find(c => c.code === selectedISDCode)?.country || 'this country'}.`);
-      return;
+      setError(`Phone number must be exactly ${phoneMaxDigits} digits.`);
+      return false;
     }
-    if (formData.salary && (isNaN(formData.salary) || parseFloat(formData.salary) < 0)) {
-      setError('Salary must be a valid positive number.');
-      return;
-    }
-    if (companyDetails && formData.startTime && formData.endTime) {
-      const openingTime = companyDetails.openingTime;
-      const closingTime = companyDetails.closingTime;
-      const start = formData.startTime;
-      const end = formData.endTime;
-      const sMin = timeToMinutes(start);
-      const eMin = timeToMinutes(end);
-      const oMin = timeToMinutes(openingTime);
-      const cMin = timeToMinutes(closingTime);
-      const overnight = cMin < oMin;
-      let valid = false;
-      if (overnight) {
-        if (eMin > sMin) {
-          // No midnight span: evening or morning shift
-          if (sMin >= oMin || (sMin <= cMin && eMin <= cMin)) {
-            valid = true;
-          }
-        } else {
-          // Spans midnight
-          if (sMin >= oMin && eMin <= cMin) {
-            valid = true;
-          }
-        }
-      } else {
-        // Normal day
-        if (sMin >= oMin && eMin <= cMin && eMin > sMin) {
-          valid = true;
+    // Date validations only if provided
+    const dates = ['dateOfBirth', 'dateOfJoining', 'idExpiry'];
+    for (const dateField of dates) {
+      if (formData[dateField]) {
+        const date = new Date(formData[dateField]);
+        if (isNaN(date.getTime())) {
+          setError(`Invalid date format for ${dateField.replace(/([A-Z])/g, ' $1').toLowerCase()}. Use YYYY-MM-DD.`);
+          return false;
         }
       }
-      if (!valid) {
-        setError(`Employee shift times must be within company operating hours (${openingTime} - ${closingTime}) and end after start time.`);
-        return;
-      }
     }
+    // Email validation (always required)
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      setError('Please enter a valid email address.');
+      return false;
+    }
+    return true;
+  };
+  // Handle confirmation submit
+  const handleConfirmSubmit = async () => {
+    setShowConfirmation(false);
+    if (!validateForm()) return;
     setLoading(true);
     setMessage('');
     setError('');
-    setShowNotification(false); // Close any previous notification
+    setShowNotification(false);
     try {
-      let url = `${baseUrl}/api/add-employee`;
-      let method = 'post';
-      let dataToSend = {
+      let url, method, dataToSend;
+      // Normal create/update
+      url = `${baseUrl}/api/add-employee`;
+      method = editingId ? 'put' : 'post';
+      if (editingId) url += `/${editingId}`;
+      dataToSend = {
         ...formData,
-        phoneNumber: `${selectedISDCode}${formData.phoneNumber}`, // Include ISD code in payload
-        specialTimings: formData.specialTimings, // NEW: Include specialTimings
+        phoneNumber: `${selectedISDCode}${formData.phoneNumber}`,
+        hra: formData.hra || '',
+        ta: formData.ta || '',
+        oa: formData.oa || '',
+        basicSalary: formData.basicSalary || '',
       };
-      if (editingId) {
-        url += `/${editingId}`;
-        method = 'put';
-        if (!dataToSend.password) {
-          delete dataToSend.password;
-        }
+      if (editingId && !dataToSend.password) {
+        delete dataToSend.password;
       }
       const response = await axios({
         method,
@@ -456,59 +294,52 @@ const AddEmployee = () => {
         data: dataToSend,
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       });
-      // Use notification modal for success
       const successMsg = editingId ? 'Employee updated successfully!' : 'Employee created successfully!';
       setNotificationType('success');
       setNotificationMessage(successMsg);
       setShowNotification(true);
+      // Reset form
       setFormData({
-        name: '', phoneNumber: '', gender: '', dateOfBirth: '', email: '', address: '', employeeDesignation: '', employeeType: '',
-        bankName: '', accountHolderName: '', accountNumber: '', ifscCode: '', salary: '', username: '', password: '',
-        startTime: '', endTime: '', specialTimings: [], // NEW: Reset specialTimings
+        name: '', phoneNumber: '', email: '', gender: '', dateOfBirth: '', dateOfJoining: '', company: 'POS 8', status: 'Active', salutation: '', maritalStatus: '', idNumber: '', idExpiry: '', address: '', employeeDesignation: '', employeeType: '',
+        basicSalary: '', hra: '', ta: '', oa: '', totalSalary: '', username: '', password: '', bankName: '', accountHolderName: '', accountNumber: '', ifscCode: '',
+        nationality: '', education: '', previousExperience: '', skills: '', healthInfo: '', familyDetails: '', profileImage: '',
       });
-      setSelectedISDCode("+971"); // Reset ISD code
-      setSelectedCompanySpecials(new Set()); // NEW: Reset selections
+      setImagePreview(null);
+      setSelectedISDCode("+971");
       setEditingId(null);
-      await fetchEmployeeDesignations(); // Refetch designations
-      await fetchEmployeeTypes(); // Refetch types separately
-      await fetchCompanyDetails();
-      // Auto-close notification after 2 seconds and navigate if new employee
+      await fetchEmployeeDesignations();
+      await fetchEmployeeTypes();
       setTimeout(() => {
         setShowNotification(false);
-        if (!editingId) {
-          navigate('');
-        }
+        navigate('/admin'); // Navigate to employee list page on success
       }, 2000);
     } catch (err) {
-      // Use notification modal for error
       const errorMsg = err.response?.data?.error || `Failed to ${editingId ? 'update' : 'create'} employee`;
       setNotificationType('error');
       setNotificationMessage(errorMsg);
       setShowNotification(true);
+      // If error, do not navigate, stay on form
+      console.error('Error details:', err.response?.data);
     } finally {
       setLoading(false);
     }
   };
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!validateForm()) return;
+    setShowConfirmation(true);
+  };
   const cancelEdit = () => {
     setEditingId(null);
+    // Reset form (as above)
     setFormData({
-      name: '', phoneNumber: '', gender: '', dateOfBirth: '', email: '', address: '', employeeDesignation: '', employeeType: '',
-      bankName: '', accountHolderName: '', accountNumber: '', ifscCode: '', salary: '', username: '', password: '',
-      startTime: '', endTime: '', specialTimings: [], // NEW: Reset specialTimings
+      name: '', phoneNumber: '', email: '', gender: '', dateOfBirth: '', dateOfJoining: '', company: 'POS 8', status: 'Active', salutation: '', maritalStatus: '', idNumber: '', idExpiry: '', address: '', employeeDesignation: '', employeeType: '',
+      basicSalary: '', hra: '', ta: '', oa: '', totalSalary: '', username: '', password: '', bankName: '', accountHolderName: '', accountNumber: '', ifscCode: '',
+      nationality: '', education: '', previousExperience: '', skills: '', healthInfo: '', familyDetails: '', profileImage: '',
     });
-    setSelectedISDCode("+971"); // Reset ISD code
-    setSelectedCompanySpecials(new Set()); // NEW: Reset selections
+    setImagePreview(null);
+    setSelectedISDCode("+971");
     setActiveTab('details');
-  };
-  const closeDesignationsModal = (e) => {
-    if (e.target === e.currentTarget) {
-      setShowDesignationsModal(false);
-    }
-  };
-  const closeEmployeeTypesModal = (e) => {
-    if (e.target === e.currentTarget) {
-      setShowEmployeeTypesModal(false);
-    }
   };
   const TabButton = ({ tabKey, label, icon }) => (
     <button
@@ -533,23 +364,38 @@ const AddEmployee = () => {
       {icon && icon} {label}
     </button>
   );
-  // Conditional props for time inputs
-  const getTimeInputProps = (isStart = true) => {
-    if (!companyDetails || !isCompanyOvernight) {
-      return isStart
-        ? { min: companyDetails?.openingTime, max: companyDetails?.closingTime }
-        : { min: formData.startTime || companyDetails?.openingTime, max: companyDetails?.closingTime };
-    }
-    return {}; // No min/max for overnight to allow flexible input
-  };
+  // Render selects for enums
+  const renderSelect = (name, options, label, required = false, icon = null) => (
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px' }}>
+        {icon && <span style={{ marginRight: '5px' }}>{icon}</span>}{label} {required ? '*' : ''}
+      </label>
+      <select name={name} value={formData[name]} onChange={handleChange} required={required} style={{ padding: '12px', border: '1px solid #bdc3c7', borderRadius: '8px', fontSize: '1rem', outline: 'none', backgroundColor: '#fff', transition: 'border-color 0.3s' }} onFocus={e => e.target.style.borderColor = '#3498db'} onBlur={e => e.target.style.borderColor = '#bdc3c7'}>
+        {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+      </select>
+    </div>
+  );
+  const renderTextarea = (name, label, rows = 3, required = false, placeholder = '') => (
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px' }}>{label} {required ? '*' : ''}</label>
+      <textarea name={name} placeholder={placeholder} value={formData[name]} onChange={handleChange} rows={rows} required={required} style={{ width: '100%', padding: '12px', border: '1px solid #bdc3c7', borderRadius: '8px', fontSize: '1rem', outline: 'none', resize: 'vertical', transition: 'border-color 0.3s' }} onFocus={e => e.target.style.borderColor = '#3498db'} onBlur={e => e.target.style.borderColor = '#bdc3c7'} />
+    </div>
+  );
+  const renderInput = (type, name, label, required = false, placeholder = '', min = null, step = null) => (
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px' }}>{label} {required ? '*' : ''}</label>
+      <input type={type} name={name} placeholder={placeholder} value={formData[name]} onChange={handleChange} required={required} min={min} step={step} style={{ padding: '12px', border: '1px solid #bdc3c7', borderRadius: '8px', fontSize: '1rem', outline: 'none', transition: 'border-color 0.3s' }} onFocus={e => e.target.style.borderColor = '#3498db'} onBlur={e => e.target.style.borderColor = '#bdc3c7'} />
+    </div>
+  );
   return (
     <div style={{
       minHeight: '100vh',
       background: 'linear-gradient(135deg, #ffffff 0%, #3498db 100%)',
       padding: '20px',
-      position: 'relative'
+      position: 'relative',
+      overflow: 'hidden' // Remove scrollbars
     }}>
-      {/* Fixed Back Button in Top-Left Corner - Matched from EmployeeList */}
+      {/* Fixed Back Button */}
       <button
         onClick={() => navigate('/admin')}
         style={{
@@ -585,17 +431,17 @@ const AddEmployee = () => {
       >
         <FaArrowLeft /> Back to Admin
       </button>
-      {/* Main Container - Matched from EmployeeList: maxWidth adjusted to 750px for form, margin 80px auto 20px */}
+      {/* Main Container - Increased width to 1200px */}
       <div style={{
-        maxWidth: '750px',
+        maxWidth: '1200px',
         margin: '80px auto 20px',
         backgroundColor: '#ffffff',
         padding: '30px',
         borderRadius: '15px',
         boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-        overflow: 'hidden'
+        overflow: 'hidden' // No scrollbars
       }}>
-        {/* Header with Title and Buttons - Matched structure from EmployeeList */}
+        {/* Header */}
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
@@ -604,7 +450,7 @@ const AddEmployee = () => {
           paddingBottom: '20px',
           borderBottom: '2px solid #3498db'
         }}>
-          <div></div> {/* Empty left for balance - matched from EmployeeList */}
+          <div></div>
           <h2 style={{
             textAlign: 'center',
             color: '#2c3e50',
@@ -668,11 +514,11 @@ const AddEmployee = () => {
                 e.target.style.boxShadow = '0 4px 8px rgba(52, 152, 219, 0.3)'
               )}
             >
-              <FaSave /> {loading ? 'Processing...' : (editingId ? 'Update Employee' : 'Create Employee')}
+              <FaSave /> {loading ? 'Processing...' : (editingId ? 'Update Employee' : 'Save Employee')}
             </button>
           </div>
         </div>
-        {/* Error and Message - Matched from EmployeeList Alerts */}
+        {/* Alerts */}
         {error && (
           <div style={{
             background: 'linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%)',
@@ -712,304 +558,229 @@ const AddEmployee = () => {
           </div>
         )}
         <form id="employeeForm" onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px', height: '100%' }}>
-          {/* Tab Navigation */}
-          <div style={{ display: 'flex', gap: '5px', marginBottom: '20px', borderBottom: '2px solid #bdc3c7' }}>
-            <TabButton tabKey="details" label="Details" />
+          {/* Tab Navigation - Expanded, no overflow */}
+          <div style={{ display: 'flex', gap: '5px', marginBottom: '20px', borderBottom: '2px solid #bdc3c7', overflow: 'hidden' }}>
+            <TabButton tabKey="details" label="Basic Details" />
+            <TabButton tabKey="personal" label="Personal Info" icon={<FaUser />} />
+            <TabButton tabKey="employment" label="Employment" icon={<FaIdCard />} />
             <TabButton tabKey="salary" label="Salary" />
-            <TabButton tabKey="schedule" label="Schedule" icon={<FaClock />} />
+            <TabButton tabKey="professional" label="Professional" icon={<FaBriefcase />} />
+            <TabButton tabKey="other" label="Other Details" icon={<FaUsers />} />
             <TabButton tabKey="credentials" label="Credentials" />
           </div>
           {/* Tab Content */}
-          <div style={{ flex: 1, minHeight: '500px', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 1, minHeight: '500px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             {activeTab === 'details' && (
-              <>
-                {/* Personal Details */}
-                <div style={{ border: '1px solid #bdc3c7', borderRadius: '10px', padding: '20px', marginBottom: '15px' }}>
-                  <h3 style={{ color: '#2c3e50', marginBottom: '15px', fontSize: '1.2rem' }}>Personal Details</h3>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px' }}>Full Name *</label>
-                      <input type="text" name="name" placeholder="Full Name *" value={formData.name} onChange={handleChange} required style={{padding:'12px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',transition:'border-color 0.3s'}} onFocus={e=>e.target.style.borderColor='#3498db'} onBlur={e=>e.target.style.borderColor='#bdc3c7'} />
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px' }}>Phone Number *</label>
-                      {/* Phone input with ISD dropdown */}
-                      <div className="phone-input-group" style={{ display: 'flex', height: '42px', border: '1.5px solid #bdc3c7', borderRadius: '6px' }}>
-                        <div className="isd-wrapper" style={{ position: 'relative' }}>
-                          <button
-                            className="isd-btn"
-                            type="button"
-                            onClick={() => setShowISDCodeDropdown(!showISDCodeDropdown)}
-                            style={{
-                              background: '#fff',
-                              border: 'none',
-                              borderRight: '1.5px solid #bdc3c7',
-                              padding: '0 10px',
-                              fontSize: '13px',
-                              height: '100%',
-                              width: '58px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            {selectedISDCode}
-                          </button>
-                          {showISDCodeDropdown && (
-                            <ul className="isd-dropdown" style={{
-                              position: 'absolute',
-                              top: '100%',
-                              left: 0,
-                              zIndex: 1050,
-                              background: '#fff',
-                              border: '1.5px solid #bdc3c7',
-                              borderRadius: '6px',
-                              listStyle: 'none',
-                              margin: '2px 0 0',
-                              padding: '6px 0',
-                              minWidth: '140px',
-                              maxHeight: '220px',
-                              overflowY: 'auto',
-                              boxShadow: '0 4px 12px rgba(0,0,0,.15)'
-                            }}>
-                              {isdCodes.map((c, i) => (
-                                <li key={i}>
-                                  <button
-                                    className="dropdown-item"
-                                    type="button"
-                                    onClick={() => handleISDCodeSelect(c.code)}
-                                    style={{
-                                      width: '100%',
-                                      padding: '8px 14px',
-                                      border: 'none',
-                                      background: 'none',
-                                      textAlign: 'left',
-                                      cursor: 'pointer',
-                                      fontSize: '13px'
-                                    }}
-                                  >
-                                    {c.code} ({c.country})
-                                  </button>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                        <input
-                          type="text"
-                          placeholder={`${getMaxDigits()}-digit Phone Number`}
-                          value={formData.phoneNumber}
-                          onChange={handlePhoneNumberChange}
-                          style={{
-                            flex: 1,
-                            padding: '0 12px',
-                            fontSize: '13px'
-                          }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginTop: '10px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px' }}>Gender</label>
-                      <select name="gender" value={formData.gender} onChange={handleChange} style={{padding:'12px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',backgroundColor:'#fff',transition:'border-color 0.3s'}} onFocus={e=>e.target.style.borderColor='#3498db'} onBlur={e=>e.target.style.borderColor='#bdc3c7'}>
-                        <option value="">Select Gender</option>
-                        <option value="Male">Male</option>
-                        <option value="Female">Female</option>
-                        <option value="Other">Other</option>
-                      </select>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px' }}>Date of Birth</label>
-                      <input type="date" name="dateOfBirth" value={formData.dateOfBirth} onChange={handleChange} style={{padding:'12px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',transition:'border-color 0.3s'}} onFocus={e=>e.target.style.borderColor='#3498db'} onBlur={e=>e.target.style.borderColor='#bdc3c7'} />
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', marginTop: '10px' }}>
-                    <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px' }}>Email *</label>
-                    <input type="email" name="email" placeholder="Email *" value={formData.email} onChange={handleChange} required style={{width:'100%',padding:'12px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',transition:'border-color 0.3s'}} onFocus={e=>e.target.style.borderColor='#3498db'} onBlur={e=>e.target.style.borderColor='#bdc3c7'} />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', marginTop: '10px' }}>
-                    <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px' }}>Address *</label>
-                    <textarea name="address" placeholder="Address *" value={formData.address} onChange={handleChange} rows={3} required style={{width:'100%',padding:'12px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',resize:'vertical',transition:'border-color 0.3s'}} onFocus={e=>e.target.style.borderColor='#3498db'} onBlur={e=>e.target.style.borderColor='#bdc3c7'} />
-                  </div>
-                </div>
-                {/* Employment Details */}
-                <div style={{ border: '1px solid #bdc3c7', borderRadius: '10px', padding: '20px' }}>
-                  <h3 style={{ color: '#2c3e50', marginBottom: '15px', fontSize: '1.2rem' }}>Employment Details</h3>
+              <div style={{ border: '1px solid #bdc3c7', borderRadius: '10px', padding: '20px' }}>
+                <h3 style={{ color: '#2c3e50', marginBottom: '15px', fontSize: '1.2rem' }}>Basic Details</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                  {renderInput('text', 'name', 'Full Name', true, 'Full Name *')}
+                  {/* Phone with ISD */}
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px' }}>Employee Designation *</label>
-                    <select name="employeeDesignation" value={formData.employeeDesignation} onChange={handleDesignationChange} required style={{width:'100%',padding:'12px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',backgroundColor:'#fff',transition:'border-color 0.3s'}} onFocus={e=>e.target.style.borderColor='#3498db'} onBlur={e=>e.target.style.borderColor='#bdc3c7'}>
-                      <option value="">Select Employee Designation *</option>
-                      {employeeDesignations.map(designation => (<option key={designation.id} value={designation.name}>{designation.name}</option>))} {/* Only designations */}
-                      <option value="create_new">+ Create New Employee Designation</option>
-                    </select>
-                    {showCreateDesignation && (
-                      <div style={{ marginTop: '10px', display: 'flex', gap: '10px', alignItems: 'center' }}>
-                        <input type="text" placeholder="New Designation Name" value={newDesignationName} onChange={(e) => setNewDesignationName(e.target.value)} style={{ flex: 1, padding: '8px', border: '1px solid #bdc3c7', borderRadius: '4px' }} />
-                        <button type="button" onClick={handleCreateNewDesignation} style={{ padding: '8px 12px', background: '#27ae60', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }} disabled={loading || !newDesignationName.trim()}>Save</button>
+                    <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px' }}>Phone Number *</label>
+                    <div className="phone-input-group" style={{ display: 'flex', height: '42px', border: '1.5px solid #bdc3c7', borderRadius: '6px' }}>
+                      <div className="isd-wrapper" style={{ position: 'relative' }}>
+                        <button
+                          className="isd-btn"
+                          type="button"
+                          onClick={() => setShowISDCodeDropdown(!showISDCodeDropdown)}
+                          style={{
+                            background: '#fff',
+                            border: 'none',
+                            borderRight: '1.5px solid #bdc3c7',
+                            padding: '0 10px',
+                            fontSize: '13px',
+                            height: '100%',
+                            width: '58px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {selectedISDCode}
+                        </button>
+                        {showISDCodeDropdown && (
+                          <ul className="isd-dropdown" style={{
+                            position: 'absolute',
+                            top: '100%',
+                            left: 0,
+                            zIndex: 1050,
+                            background: '#fff',
+                            border: '1.5px solid #bdc3c7',
+                            borderRadius: '6px',
+                            listStyle: 'none',
+                            margin: '2px 0 0',
+                            padding: '6px 0',
+                            minWidth: '140px',
+                            maxHeight: '220px',
+                            overflowY: 'auto',
+                            boxShadow: '0 4px 12px rgba(0,0,0,.15)'
+                          }}>
+                            {isdCodes.map((c, i) => (
+                              <li key={i}>
+                                <button
+                                  className="dropdown-item"
+                                  type="button"
+                                  onClick={() => handleISDCodeSelect(c.code)}
+                                  style={{
+                                    width: '100%',
+                                    padding: '8px 14px',
+                                    border: 'none',
+                                    background: 'none',
+                                    textAlign: 'left',
+                                    cursor: 'pointer',
+                                    fontSize: '13px'
+                                  }}
+                                >
+                                  {c.code} ({c.country})
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
                       </div>
-                    )}
-                    <button type="button" onClick={openDesignationsModal} style={{ marginTop: '5px', padding: '5px 10px', background: '#3498db', color: 'white', border: 'none', borderRadius: '4px', fontSize: '0.8rem', cursor: 'pointer' }} disabled={loading}>
-                      Manage Designations
-                    </button>
-                  </div>
-                  {/* Employee Type Section */}
-                  <div style={{ display: 'flex', flexDirection: 'column', marginTop: '15px' }}>
-                    <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px' }}>Employee Type *</label>
-                    <select name="employeeType" value={formData.employeeType} onChange={handleEmployeeTypeChange} required style={{width:'100%',padding:'12px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',backgroundColor:'#fff',transition:'border-color 0.3s'}} onFocus={e=>e.target.style.borderColor='#3498db'} onBlur={e=>e.target.style.borderColor='#bdc3c7'}>
-                      <option value="">Select Employee Type *</option>
-                      {employeeTypes.map(typeItem => (<option key={typeItem.id} value={typeItem.name}>{typeItem.name}</option>))} {/* Only types */}
-                      <option value="create_new">+ Create New Employee Type</option>
-                    </select>
-                    {showCreateEmployeeType && (
-                      <div style={{ marginTop: '10px', display: 'flex', gap: '10px', alignItems: 'center' }}>
-                        <input type="text" placeholder="New Employee Type Name" value={newEmployeeTypeName} onChange={(e) => setNewEmployeeTypeName(e.target.value)} style={{ flex: 1, padding: '8px', border: '1px solid #bdc3c7', borderRadius: '4px' }} />
-                        <button type="button" onClick={handleCreateNewEmployeeType} style={{ padding: '8px 12px', background: '#27ae60', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }} disabled={loading || !newEmployeeTypeName.trim()}>Save</button>
-                      </div>
-                    )}
-                    <button type="button" onClick={openEmployeeTypesModal} style={{ marginTop: '5px', padding: '5px 10px', background: '#3498db', color: 'white', border: 'none', borderRadius: '4px', fontSize: '0.8rem', cursor: 'pointer' }} disabled={loading}>
-                      Manage Employee Types
-                    </button>
+                      <input
+                        type="text"
+                        placeholder={`${getMaxDigits()}-digit Phone Number`}
+                        value={formData.phoneNumber}
+                        onChange={handlePhoneNumberChange}
+                        style={{
+                          flex: 1,
+                          padding: '0 12px',
+                          fontSize: '13px'
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
-              </>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginTop: '10px' }}>
+                  {renderSelect('gender', genderOptions, 'Gender')}
+                  {renderInput('date', 'dateOfBirth', 'Date of Birth')}
+                </div>
+                {renderInput('email', 'email', 'Email', true, 'Email *')}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginTop: '10px' }}>
+                  {renderInput('text', 'idNumber', 'ID Number', false, 'ID Number (e.g., Aadhaar/License)')}
+                  {renderInput('date', 'idExpiry', 'ID Expiry Date')}
+                </div>
+                {renderTextarea('address', 'Address', 3, true, 'Address *')}
+              </div>
             )}
-            {/* Salary Tab - Bank Details are OPTIONAL (no 'required' attribute) */}
+            {activeTab === 'personal' && (
+              <div style={{ border: '1px solid #bdc3c7', borderRadius: '10px', padding: '20px' }}>
+                <h3 style={{ color: '#2c3e50', marginBottom: '15px', fontSize: '1.2rem' }}>Personal Information</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                  {renderSelect('salutation', salutationOptions, 'Salutation/Title')}
+                  {renderSelect('maritalStatus', maritalOptions, 'Marital Status')}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginTop: '10px' }}>
+                  {renderSelect('nationality', nationalityOptions, 'Nationality')}
+                  {renderInput('date', 'dateOfJoining', 'Date of Joining')}
+                </div>
+                {renderSelect('status', statusOptions, 'Status')}
+                {renderSelect('company', companyOptions, 'Company (Multi-Company Setup)')}
+              </div>
+            )}
+            {activeTab === 'employment' && (
+              <div style={{ border: '1px solid #bdc3c7', borderRadius: '10px', padding: '20px' }}>
+                <h3 style={{ color: '#2c3e50', marginBottom: '15px', fontSize: '1.2rem' }}>Employment Details</h3>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px' }}>Employee Designation (FK) *</label>
+                  <select name="employeeDesignation" value={formData.employeeDesignation} onChange={handleDesignationChange} required style={{ width: '100%', padding: '12px', border: '1px solid #bdc3c7', borderRadius: '8px', fontSize: '1rem', outline: 'none', backgroundColor: '#fff', transition: 'border-color 0.3s' }} onFocus={e => e.target.style.borderColor = '#3498db'} onBlur={e => e.target.style.borderColor = '#bdc3c7'}>
+                    <option value="">Select Employee Designation *</option>
+                    {employeeDesignations.map(designation => (<option key={designation.id} value={designation.name}>{designation.name}</option>))}
+                    <option value="create_new">+ Create New Employee Designation</option>
+                  </select>
+                  {/* Removed Manage Designations button */}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', marginTop: '15px' }}>
+                  <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px' }}>Employee Type (FK) *</label>
+                  <select name="employeeType" value={formData.employeeType} onChange={handleEmployeeTypeChange} required style={{ width: '100%', padding: '12px', border: '1px solid #bdc3c7', borderRadius: '8px', fontSize: '1rem', outline: 'none', backgroundColor: '#fff', transition: 'border-color 0.3s' }} onFocus={e => e.target.style.borderColor = '#3498db'} onBlur={e => e.target.style.borderColor = '#bdc3c7'}>
+                    <option value="">Select Employee Type *</option>
+                    {employeeTypes.map(typeItem => (<option key={typeItem.id} value={typeItem.name}>{typeItem.name}</option>))}
+                    <option value="create_new">+ Create New Employee Type</option>
+                  </select>
+                  {/* Removed Manage Employee Types button */}
+                </div>
+              </div>
+            )}
             {activeTab === 'salary' && (
               <>
                 <div style={{ border: '1px solid #bdc3c7', borderRadius: '10px', padding: '20px', marginBottom: '15px' }}>
-                  <h3 style={{ color: '#2c3e50', marginBottom: '15px', fontSize: '1.2rem' }}>Bank Details (Optional - Can be updated later)</h3>
+                  <h3 style={{ color: '#2c3e50', marginBottom: '15px', fontSize: '1.2rem' }}>Salary Components (Optional)</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '10px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px' }}>Bank Name</label>
-                      <input type="text" name="bankName" placeholder="Bank Name (Optional)" value={formData.bankName} onChange={handleChange} style={{padding:'12px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',transition:'border-color 0.3s'}} onFocus={e=>e.target.style.borderColor='#3498db'} onBlur={e=>e.target.style.borderColor='#bdc3c7'} />
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px' }}>Account Holder Name</label>
-                      <input type="text" name="accountHolderName" placeholder="Account Holder Name (Optional)" value={formData.accountHolderName} onChange={handleChange} style={{padding:'12px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',transition:'border-color 0.3s'}} onFocus={e=>e.target.style.borderColor='#3498db'} onBlur={e=>e.target.style.borderColor='#bdc3c7'} />
-                    </div>
+                    {renderInput('number', 'basicSalary', 'Basic Salary', false, 'Basic Salary (Optional)', 0, 0.01)}
+                    {renderInput('number', 'hra', 'HRA', false, 'HRA (Optional)', 0, 0.01)}
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px' }}>Account Number</label>
-                      <input type="text" name="accountNumber" placeholder="Account Number (Optional)" value={formData.accountNumber} onChange={handleChange} style={{padding:'12px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',transition:'border-color 0.3s'}} onFocus={e=>e.target.style.borderColor='#3498db'} onBlur={e=>e.target.style.borderColor='#bdc3c7'} />
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px' }}>IFSC Code</label>
-                      <input type="text" name="ifscCode" placeholder="IFSC Code (Optional)" value={formData.ifscCode} onChange={handleChange} style={{padding:'12px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',transition:'border-color 0.3s'}} onFocus={e=>e.target.style.borderColor='#3498db'} onBlur={e=>e.target.style.borderColor='#bdc3c7'} />
-                    </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '10px' }}>
+                    {renderInput('number', 'ta', 'TA', false, 'TA (Optional)', 0, 0.01)}
+                    {renderInput('number', 'oa', 'OA', false, 'OA (Optional)', 0, 0.01)}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px' }}>Total Salary (Computed)</label>
+                    <input type="text" value={formData.totalSalary} readOnly style={{ width: '100%', padding: '12px', border: '1px solid #bdc3c7', borderRadius: '8px', fontSize: '1rem', outline: 'none', backgroundColor: '#f8f9fa', color: '#27ae60', fontWeight: '600' }} />
                   </div>
                 </div>
                 <div style={{ border: '1px solid #bdc3c7', borderRadius: '10px', padding: '20px' }}>
-                  <h3 style={{ color: '#2c3e50', marginBottom: '15px', fontSize: '1.2rem' }}>Salary</h3>
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px' }}>Salary (Monthly) *</label>
-                    <input type="number" name="salary" placeholder="Salary (Monthly) *" value={formData.salary} onChange={handleChange} min="0" step="0.01" required style={{width:'100%',padding:'12px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',transition:'border-color 0.3s'}} onFocus={e=>e.target.style.borderColor='#3498db'} onBlur={e=>e.target.style.borderColor='#bdc3c7'} />
+                  <h3 style={{ color: '#2c3e50', marginBottom: '15px', fontSize: '1.2rem' }}>Bank Details (Optional)</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '10px' }}>
+                    {renderInput('text', 'bankName', 'Bank Name', false, 'Bank Name (Optional)')}
+                    {renderInput('text', 'accountHolderName', 'Account Holder Name', false, 'Account Holder Name (Optional)')}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                    {renderInput('text', 'accountNumber', 'Account Number', false, 'Account Number (Optional)')}
+                    {renderInput('text', 'ifscCode', 'IFSC Code', false, 'IFSC Code (Optional)')}
                   </div>
                 </div>
               </>
             )}
-            {activeTab === 'schedule' && (
+            {activeTab === 'professional' && (
               <div style={{ border: '1px solid #bdc3c7', borderRadius: '10px', padding: '20px' }}>
-                <h3 style={{ color: '#2c3e50', marginBottom: '15px', fontSize: '1.2rem' }}>Employee Schedule</h3>
-                {companyDetails ? (
-                  <>
-                    <div style={{marginBottom:'20px',padding:'15px',backgroundColor:'#f8f9fa',borderRadius:'8px',border:'1px solid #dee2e6',textAlign:'center'}}>
-                      <strong>Company Operating Hours:</strong><br />
-                      {companyDetails.openingTime} - {companyDetails.closingTime}
-                      <p style={{ margin: '5px 0 0 0', fontSize: '0.9rem', color: '#6c757d' }}>
-                        {isCompanyOvernight ? 'Overnight operation: Shifts can span midnight.' : 'Employee shifts must be within these hours.'}
-                      </p>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600', color: '#2c3e50' }}>Start Time *</label>
-                        <input
-                          type="time"
-                          name="startTime"
-                          value={formData.startTime}
-                          onChange={handleChange}
-                          {...getTimeInputProps(true)}
-                          required
-                          style={{width:'100%',padding:'12px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',transition:'border-color 0.3s',backgroundColor:'#fff'}}
-                          onFocus={e=>e.target.style.borderColor='#3498db'}
-                          onBlur={e=>e.target.style.borderColor='#bdc3c7'}
-                        />
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600', color: '#2c3e50' }}>End Time *</label>
-                        <input
-                          type="time"
-                          name="endTime"
-                          value={formData.endTime}
-                          onChange={handleChange}
-                          {...getTimeInputProps(false)}
-                          required
-                          style={{width:'100%',padding:'12px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',transition:'border-color 0.3s',backgroundColor:'#fff'}}
-                          onFocus={e=>e.target.style.borderColor='#3498db'}
-                          onBlur={e=>e.target.style.borderColor='#bdc3c7'}
-                        />
-                      </div>
-                    </div>
-                    {/* NEW: Special Timings Section - Assign from Company Specials */}
-                    <div style={{ marginTop: '30px', paddingTop: '20px', borderTop: '2px solid #eee' }}>
-                      <h4 style={{ color: '#2c3e50', marginBottom: '15px', fontSize: '1.2rem', textAlign: 'center' }}>
-                        <FaCalendarAlt style={{ marginRight: '8px' }} /> Assign Special Timings (Overrides from Company)
-                      </h4>
-                      <div style={{ textAlign: 'center', color: '#555', fontSize: '0.9rem', marginBottom: '15px' }}>
-                        Select dates with special timings from company details to apply overrides for this employee.
-                      </div>
-                      {companyDetails.specialTimings && companyDetails.specialTimings.length > 0 ? (
-                        <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #ddd', borderRadius: '10px', padding: '10px' }}>
-                          {companyDetails.specialTimings.map((special, index) => (
-                            <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', borderBottom: '1px solid #eee' }}>
-                              <button
-                                type="button"
-                                onClick={() => toggleSpecialSelection(index)}
-                                style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '0' }}
-                              >
-                                {selectedCompanySpecials.has(index) ? <FaCheckSquare style={{ color: '#27ae60', fontSize: '1.2rem' }} /> : <FaSquare style={{ color: '#bdc3c7', fontSize: '1.2rem' }} />}
-                              </button>
-                              <div style={{ flex: 1 }}>
-                                <strong>{special.reason}</strong> - {special.date}<br />
-                                <small style={{ color: '#6c757d' }}>{special.startTime} to {special.endTime} ({special.duration})</small>
-                              </div>
-                            </div>
-                          ))}
-                          {formData.specialTimings.length > 0 && (
-                            <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#d4edda', borderRadius: '5px', fontSize: '0.9rem' }}>
-                              Selected: {formData.specialTimings.length} special timing(s) assigned.
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div style={{ textAlign: 'center', padding: '20px', color: '#6c757d' }}>
-                          <FaCalendarAlt style={{ fontSize: '2rem', marginBottom: '10px', opacity: 0.5 }} />
-                          <p>No special timings configured in company details. Add them in Company Details first.</p>
-                        </div>
-                      )}
-                    </div>
-                  </>
-                ) : (
-                  <div style={{ textAlign: 'center', padding: '20px', color: '#6c757d' }}>
-                    <FaClock style={{ fontSize: '2rem', marginBottom: '10px', opacity: 0.5 }} />
-                    <p>Loading company schedule... Please ensure company details are set.</p>
-                  </div>
-                )}
+                <h3 style={{ color: '#2c3e50', marginBottom: '15px', fontSize: '1.2rem' }}>Professional Details (Optional)</h3>
+                {renderTextarea('education', 'Education/Qualifications', 4, false, 'Enter education and qualifications...')}
+                {renderTextarea('previousExperience', 'Previous Experience', 4, false, 'Enter previous work experience...')}
+                {renderTextarea('skills', 'Skills/Certifications', 4, false, 'Enter skills and certifications...')}
+              </div>
+            )}
+            {activeTab === 'other' && (
+              <div style={{ border: '1px solid #bdc3c7', borderRadius: '10px', padding: '20px' }}>
+                <h3 style={{ color: '#2c3e50', marginBottom: '15px', fontSize: '1.2rem' }}>Other Details (Optional)</h3>
+                {/* Health - Confidential */}
+                <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#fff3cd', borderRadius: '8px', border: '1px solid #ffeaa7' }}>
+                  <label style={{ fontWeight: '600', color: '#856404', marginBottom: '5px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <FaStethoscope /> Health/Medical Information (Confidential)
+                  </label>
+                  <p style={{ fontSize: '0.9rem', color: '#856404', marginBottom: '10px' }}>This information is kept confidential and used only for internal HR purposes.</p>
+                  {renderTextarea('healthInfo', '', 3, false, 'Enter health/medical information (optional)...')}
+                </div>
+                {/* Family */}
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <FaUsers /> Family/Dependents Details
+                  </label>
+                  {renderTextarea('familyDetails', '', 3, false, 'Enter family and dependents details...')}
+                </div>
+                {/* Photo/Image */}
+                <div>
+                  <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <FaUpload /> Photo/Image (for ID cards or profiles)
+                  </label>
+                  <input type="file" accept="image/*" onChange={handleImageUpload} style={{ marginBottom: '10px' }} />
+                  {imagePreview && (
+                    <img src={imagePreview} alt="Preview" style={{ width: '150px', height: '150px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #bdc3c7' }} />
+                  )}
+                  <p style={{ fontSize: '0.8rem', color: '#6c757d' }}>Upload a profile photo (optional).</p>
+                </div>
               </div>
             )}
             {activeTab === 'credentials' && (
               <div style={{ border: '1px solid #bdc3c7', borderRadius: '10px', padding: '20px' }}>
                 <h3 style={{ color: '#2c3e50', marginBottom: '15px', fontSize: '1.2rem' }}>Login Credentials</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                  {renderInput('text', 'username', 'Username (Login User)', true, 'Username *')}
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px' }}>Username *</label>
-                    <input type="text" name="username" placeholder="Username *" value={formData.username} onChange={handleChange} required style={{padding:'12px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',transition:'border-color 0.3s'}} onFocus={e=>e.target.style.borderColor='#3498db'} onBlur={e=>e.target.style.borderColor='#bdc3c7'} />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px' }}>Password {editingId ? "(leave blank to keep current)" : "*" }</label>
-                    <input type="password" name="password" placeholder={editingId ? "New Password (leave blank to keep current)" : "Password *"} value={formData.password} onChange={handleChange} required={!editingId} style={{padding:'12px',border:'1px solid #bdc3c7',borderRadius:'8px',fontSize:'1rem',outline:'none',transition:'border-color 0.3s'}} onFocus={e=>e.target.style.borderColor='#3498db'} onBlur={e=>e.target.style.borderColor='#bdc3c7'} />
+                    <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px' }}>Password {editingId ? "(leave blank to keep current, optional)" : "*"}</label>
+                    <input type="password" name="password" placeholder={editingId ? "New Password (leave blank to keep current, optional)" : "Password *"} value={formData.password} onChange={handleChange} required={!editingId} style={{ padding: '12px', border: '1px solid #bdc3c7', borderRadius: '8px', fontSize: '1rem', outline: 'none', transition: 'border-color 0.3s' }} onFocus={e => e.target.style.borderColor = '#3498db'} onBlur={e => e.target.style.borderColor = '#bdc3c7'} />
                   </div>
                 </div>
               </div>
@@ -1017,7 +788,91 @@ const AddEmployee = () => {
           </div>
         </form>
       </div>
-      {/* Centered Notification Modal */}
+      {/* Confirmation Modal - Warning before submit */}
+      {showConfirmation && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 2000
+          }}
+          onClick={() => setShowConfirmation(false)}
+        >
+          <div
+            style={{
+              backgroundColor: '#fff',
+              padding: '30px',
+              borderRadius: '15px',
+              textAlign: 'center',
+              boxShadow: '0 8px 30px rgba(0,0,0,0.3)',
+              maxWidth: '450px',
+              width: '90%',
+              position: 'relative'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                color: '#f39c12',
+                fontSize: '1.5rem',
+                marginBottom: '15px',
+                fontWeight: 'bold'
+              }}
+            >
+              Confirm Action
+            </div>
+            <p style={{ margin: 0, color: '#2c3e50', fontSize: '1rem', lineHeight: '1.5' }}>
+              Are you sure you want to {editingId ? 'update' : 'save'} this employee? This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '20px' }}>
+              <button
+                onClick={handleConfirmSubmit}
+                style={{
+                  padding: '12px 24px',
+                  backgroundColor: '#3498db',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '1rem',
+                  fontWeight: '500',
+                  transition: 'background-color 0.3s'
+                }}
+                onMouseOver={(e) => (e.target.style.backgroundColor = '#2980b9')}
+                onMouseOut={(e) => (e.target.style.backgroundColor = '#3498db')}
+              >
+                Submit
+              </button>
+              <button
+                onClick={() => setShowConfirmation(false)}
+                style={{
+                  padding: '12px 24px',
+                  backgroundColor: '#95a5a6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '1rem',
+                  fontWeight: '500',
+                  transition: 'background-color 0.3s'
+                }}
+                onMouseOver={(e) => (e.target.style.backgroundColor = '#7f8c8d')}
+                onMouseOut={(e) => (e.target.style.backgroundColor = '#95a5a6')}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Notification Modal */}
       {showNotification && (
         <div
           style={{
@@ -1084,94 +939,7 @@ const AddEmployee = () => {
           </div>
         </div>
       )}
-      {/* Manage Designations Modal */}
-      {showDesignationsModal && (
-        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,backgroundColor:'rgba(0,0,0,0.5)',display:'flex',justifyContent:'center',alignItems:'center',zIndex:1000}} onClick={closeDesignationsModal}>
-          <div style={{backgroundColor:'#fff',padding:'20px',borderRadius:'10px',maxWidth:'400px',width:'90%',maxHeight:'80vh',overflowY:'auto',boxShadow:'0 4px 6px rgba(0,0,0,0.1)'}}>
-            <h3 style={{ marginBottom: '15px' }}>Manage Employee Designations</h3>
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-              <input type="text" placeholder="New Designation Name" value={newDesignationName} onChange={(e) => setNewDesignationName(e.target.value)} style={{ flex: 1, padding: '8px', border: '1px solid #bdc3c7', borderRadius: '4px' }} />
-              <button onClick={handleCreateNewDesignation} style={{ padding: '8px 12px', background: '#27ae60', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }} disabled={loading || !newDesignationName.trim()}>
-                <FaPlus />
-              </button>
-            </div>
-            <ul style={{ listStyle: 'none', padding: 0 }}>
-              {employeeDesignations.map(designation => (
-                <li key={designation.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', borderBottom: '1px solid #eee' }}>
-                  {editingDesignationId === designation.id ? (
-                    <>
-                      <input type="text" value={editDesignationName} onChange={(e) => setEditDesignationName(e.target.value)} style={{ flex: '1', padding: '5px', border: '1px solid #bdc3c7', borderRadius: '4px' }} />
-                      <button onClick={handleUpdateDesignation} style={{ marginLeft: '5px', padding: '5px', background: '#3498db', color: 'white', border: 'none', borderRadius: '4px' }} disabled={!editDesignationName.trim() || loading}>Save</button>
-                      <button onClick={() => { setEditingDesignationId(null); setEditDesignationName(''); }} style={{ marginLeft: '5px', padding: '5px', background: '#95a5a6', color: 'white', border: 'none', borderRadius: '4px' }}>Cancel</button>
-                    </>
-                  ) : (
-                    <>
-                      <span>{designation.name}</span>
-                      <div>
-                        <button onClick={() => handleEditDesignation(designation)} style={{ marginRight: '5px', padding: '5px', background: '#f39c12', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }} disabled={loading}>
-                          <FaEdit />
-                        </button>
-                        <button onClick={() => handleDeleteDesignation(designation.id)} style={{ padding: '5px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }} disabled={loading}>
-                          <FaTrash />
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </li>
-              ))}
-            </ul>
-            {employeeDesignations.length === 0 && <p style={{ textAlign: 'center', color: '#6c757d' }}>No designations yet. Create one above.</p>}
-            <button onClick={() => setShowDesignationsModal(false)} style={{ marginTop: '15px', width: '100%', padding: '10px', background: '#95a5a6', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }} disabled={loading}>
-              Close
-            </button>
-          </div>
-        </div>
-      )}
-      {/* Manage Employee Types Modal */}
-      {showEmployeeTypesModal && (
-        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,backgroundColor:'rgba(0,0,0,0.5)',display:'flex',justifyContent:'center',alignItems:'center',zIndex:1000}} onClick={closeEmployeeTypesModal}>
-          <div style={{backgroundColor:'#fff',padding:'20px',borderRadius:'10px',maxWidth:'400px',width:'90%',maxHeight:'80vh',overflowY:'auto',boxShadow:'0 4px 6px rgba(0,0,0,0.1)'}}>
-            <h3 style={{ marginBottom: '15px' }}>Manage Employee Types</h3>
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-              <input type="text" placeholder="New Employee Type Name" value={newEmployeeTypeName} onChange={(e) => setNewEmployeeTypeName(e.target.value)} style={{ flex: 1, padding: '8px', border: '1px solid #bdc3c7', borderRadius: '4px' }} />
-              <button onClick={handleCreateNewEmployeeType} style={{ padding: '8px 12px', background: '#27ae60', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }} disabled={loading || !newEmployeeTypeName.trim()}>
-                <FaPlus />
-              </button>
-            </div>
-            <ul style={{ listStyle: 'none', padding: 0 }}>
-              {employeeTypes.map(typeItem => (
-                <li key={typeItem.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', borderBottom: '1px solid #eee' }}>
-                  {editingEmployeeTypeId === typeItem.id ? (
-                    <>
-                      <input type="text" value={editEmployeeTypeName} onChange={(e) => setEditEmployeeTypeName(e.target.value)} style={{ flex: '1', padding: '5px', border: '1px solid #bdc3c7', borderRadius: '4px' }} />
-                      <button onClick={handleUpdateEmployeeType} style={{ marginLeft: '5px', padding: '5px', background: '#3498db', color: 'white', border: 'none', borderRadius: '4px' }} disabled={!editEmployeeTypeName.trim() || loading}>Save</button>
-                      <button onClick={() => { setEditingEmployeeTypeId(null); setEditEmployeeTypeName(''); }} style={{ marginLeft: '5px', padding: '5px', background: '#95a5a6', color: 'white', border: 'none', borderRadius: '4px' }}>Cancel</button>
-                    </>
-                  ) : (
-                    <>
-                      <span>{typeItem.name}</span>
-                      <div>
-                        <button onClick={() => handleEditEmployeeType(typeItem)} style={{ marginRight: '5px', padding: '5px', background: '#f39c12', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }} disabled={loading}>
-                          <FaEdit />
-                        </button>
-                        <button onClick={() => handleDeleteEmployeeType(typeItem.id)} style={{ padding: '5px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }} disabled={loading}>
-                          <FaTrash />
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </li>
-              ))}
-            </ul>
-            {employeeTypes.length === 0 && <p style={{ textAlign: 'center', color: '#6c757d' }}>No employee types yet. Create one above.</p>}
-            <button onClick={() => setShowEmployeeTypesModal(false)} style={{ marginTop: '15px', width: '100%', padding: '10px', background: '#95a5a6', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }} disabled={loading}>
-              Close
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
-
 export default AddEmployee;

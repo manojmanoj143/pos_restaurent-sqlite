@@ -1,8 +1,52 @@
 import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
-import { FaArrowLeft } from "react-icons/fa";
+import { FaArrowLeft, FaCrop, FaSave, FaTimes, FaSearchPlus, FaSearchMinus, FaEdit, FaTrash } from "react-icons/fa";
+import Cropper from 'react-easy-crop';
 import "./createitempage.css";
+
+const createImage = (url) =>
+  new Promise((resolve, reject) => {
+    const image = new Image()
+    image.addEventListener('load', () => resolve(image))
+    image.addEventListener('error', (error) => reject(error))
+    image.setAttribute('crossOrigin', 'anonymous')
+    image.src = url
+  })
+
+const getCroppedImg = async (imageSrc, pixelCrop, targetWidth, targetHeight) => {
+  const image = await createImage(imageSrc)
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')
+
+  if (!ctx) {
+    return null
+  }
+
+  canvas.width = targetWidth || pixelCrop.width
+  canvas.height = targetHeight || pixelCrop.height
+
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.drawImage(
+    image,
+    pixelCrop.x,
+    pixelCrop.y,
+    pixelCrop.width,
+    pixelCrop.height,
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  )
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((file) => {
+      resolve(file)
+    }, 'image/jpeg')
+  })
+}
 const Modal = ({ isOpen, onClose, children, title, className }) => {
   if (!isOpen) return null;
   return (
@@ -127,6 +171,21 @@ const CreateItemPage = () => {
   const [loading, setLoading] = useState(false);
   const [baseUrl, setBaseUrl] = useState("");
   const [companyTaxRate, setCompanyTaxRate] = useState(0);
+
+  // Image Cropping State
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [currentImageToCrop, setCurrentImageToCrop] = useState(null);
+  const [cropTarget, setCropTarget] = useState({ field: null, subField: null, variantId: null, subheading: null, isModal: false });
+  const [originalFile, setOriginalFile] = useState(null);
+  const [targetSize, setTargetSize] = useState({ width: 768, height: 768 });
+  const [aspect, setAspect] = useState(1);
+
+  const onCropComplete = (croppedArea, croppedAreaPixels) => {
+    setCroppedAreaPixels(croppedAreaPixels);
+  };
   const itemToEdit = location.state?.item;
   const isEditing = Boolean(itemToEdit);
   // Helper function to prevent scroll on number inputs
@@ -242,18 +301,18 @@ const CreateItemPage = () => {
           const formattedIngredients =
             fetchedIngredients.length > 0
               ? fetchedIngredients.map((ing) => ({
-                  ingredients_name: ing.name || "",
-                  small: ing.small || 0,
-                  medium: ing.medium || 0,
-                  large: ing.large || 0,
-                  weight: ing.weight || 0,
-                  nutrition: Array.isArray(ing.nutrition)
-                    ? ing.nutrition.map((nut) => ({
-                        nutrition_name: nut.nutrition_name || "",
-                        nutrition_value: nut.nutrition_value || 0,
-                      }))
-                    : [],
-                }))
+                ingredients_name: ing.name || "",
+                small: ing.small || 0,
+                medium: ing.medium || 0,
+                large: ing.large || 0,
+                weight: ing.weight || 0,
+                nutrition: Array.isArray(ing.nutrition)
+                  ? ing.nutrition.map((nut) => ({
+                    nutrition_name: nut.nutrition_name || "",
+                    nutrition_value: nut.nutrition_value || 0,
+                  }))
+                  : [],
+              }))
               : initialFormState.ingredients;
           const updatedAddons = await Promise.all(
             (itemToEdit.addons || []).map(async (addon, index) => {
@@ -271,21 +330,21 @@ const CreateItemPage = () => {
                   ingredients:
                     addonIngredients.length > 0
                       ? addonIngredients.map((ing) => ({
-                          ingredients_name: ing.name || "",
-                          small: ing.small || 0,
-                          medium: ing.medium || 0,
-                          large: ing.large || 0,
-                          weight: ing.weight || 0,
-                          nutrition: Array.isArray(ing.nutrition)
-                            ? ing.nutrition.map((nut) => ({
-                                nutrition_name: nut.nutrition_name || "",
-                                nutrition_value: nut.nutrition_value || 0,
-                              }))
-                            : [],
-                        }))
+                        ingredients_name: ing.name || "",
+                        small: ing.small || 0,
+                        medium: ing.medium || 0,
+                        large: ing.large || 0,
+                        weight: ing.weight || 0,
+                        nutrition: Array.isArray(ing.nutrition)
+                          ? ing.nutrition.map((nut) => ({
+                            nutrition_name: nut.nutrition_name || "",
+                            nutrition_value: nut.nutrition_value || 0,
+                          }))
+                          : [],
+                      }))
                       : addon.ingredients || [
-                          { ingredients_name: "", small: 0, medium: 0, large: 0, weight: 0, nutrition: [] },
-                        ],
+                        { ingredients_name: "", small: 0, medium: 0, large: 0, weight: 0, nutrition: [] },
+                      ],
                 };
               } catch (error) {
                 return {
@@ -317,21 +376,21 @@ const CreateItemPage = () => {
                   ingredients:
                     comboIngredients.length > 0
                       ? comboIngredients.map((ing) => ({
-                          ingredients_name: ing.name || "",
-                          small: ing.small || 0,
-                          medium: ing.medium || 0,
-                          large: ing.large || 0,
-                          weight: ing.weight || 0,
-                          nutrition: Array.isArray(ing.nutrition)
-                            ? ing.nutrition.map((nut) => ({
-                                nutrition_name: nut.nutrition_name || "",
-                                nutrition_value: nut.nutrition_value || 0,
-                              }))
-                            : [],
-                        }))
+                        ingredients_name: ing.name || "",
+                        small: ing.small || 0,
+                        medium: ing.medium || 0,
+                        large: ing.large || 0,
+                        weight: ing.weight || 0,
+                        nutrition: Array.isArray(ing.nutrition)
+                          ? ing.nutrition.map((nut) => ({
+                            nutrition_name: nut.nutrition_name || "",
+                            nutrition_value: nut.nutrition_value || 0,
+                          }))
+                          : [],
+                      }))
                       : combo.ingredients || [
-                          { ingredients_name: "", small: 0, medium: 0, large: 0, weight: 0, nutrition: [] },
-                        ],
+                        { ingredients_name: "", small: 0, medium: 0, large: 0, weight: 0, nutrition: [] },
+                      ],
                 };
               } catch (error) {
                 return {
@@ -585,11 +644,81 @@ const CreateItemPage = () => {
       [field]: [...prev[field], template],
     }));
   };
-  const handleImageUpload = async (e, field, subField = null, variantId = null, subheading = null) => {
+
+  const handleImageUpload = (e, field, subField = null, variantId = null, subheading = null) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    setOriginalFile(file);
     const localUrl = URL.createObjectURL(file);
-    // Optimistic update: show local preview immediately
+    setCurrentImageToCrop(localUrl);
+    setCropTarget({ field, subField, variantId, subheading });
+    setCropModalOpen(true);
+    setZoom(1);
+    setTargetSize({ width: 768, height: 768 });
+    setAspect(1);
+    e.target.value = "";
+  };
+
+  const handleEditImage = (imageUrl, field, subField = null, variantId = null, subheading = null, isModal = false) => {
+    if (!imageUrl) return;
+    setCurrentImageToCrop(imageUrl);
+    setCropTarget({ field, subField, variantId, subheading, isModal });
+    setOriginalFile(null); // Indicating this is an edit of an existing image
+    setCropModalOpen(true);
+    setZoom(1);
+    setTargetSize({ width: 768, height: 768 });
+    setAspect(1);
+  };
+
+  const handleCropSave = async () => {
+    if (!currentImageToCrop || !croppedAreaPixels) return;
+
+    try {
+      setLoading(true);
+      const croppedImageBlob = await getCroppedImg(
+        currentImageToCrop,
+        croppedAreaPixels,
+        targetSize.width,
+        targetSize.height
+      );
+
+      let fileName = "edited_image.jpg";
+      if (originalFile) {
+        fileName = originalFile.name;
+      } else {
+        fileName = `edited_${Date.now()}.jpg`;
+      }
+
+      const fileToUpload = new File([croppedImageBlob], fileName, { type: "image/jpeg" });
+
+      if (cropTarget.isModal) {
+        await uploadModalImageToBackend(fileToUpload, cropTarget.variantId, cropTarget.subField);
+      } else {
+        await uploadImageToBackend(
+          fileToUpload,
+          cropTarget.field,
+          cropTarget.subField,
+          cropTarget.variantId,
+          cropTarget.subheading
+        );
+      }
+
+      setCropModalOpen(false);
+      setCurrentImageToCrop(null);
+      setOriginalFile(null);
+    } catch (error) {
+      console.error("Crop failed:", error);
+      setWarningMessage("Failed to crop image.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const uploadImageToBackend = async (file, field, subField, variantId, subheading) => {
+    const localUrl = URL.createObjectURL(file);
+
+    // Optimistic update
     if (field === "image") {
       setImagePreviews(prev => ({ ...prev, item: localUrl }));
     } else if (field === "images") {
@@ -607,14 +736,16 @@ const CreateItemPage = () => {
         },
       }));
     }
+
     const formDataUpload = new FormData();
     formDataUpload.append("files", file);
+
     try {
       const response = await axios.post(`${baseUrl}/api/upload-image`, formDataUpload);
       const imagePath = response.data.urls[0];
       const serverUrl = `${baseUrl}${imagePath}`;
       const filename = extractImageName(imagePath);
-      // Update with server data
+
       if (field === "image") {
         setFormData(prev => ({ ...prev, image: filename }));
         setImagePreviews(prev => ({ ...prev, item: serverUrl }));
@@ -622,7 +753,7 @@ const CreateItemPage = () => {
         setFormData(prev => ({ ...prev, images: [...prev.images, filename] }));
         setImagePreviews(prev => {
           const newMultiple = [...prev.multiple];
-          newMultiple[newMultiple.length - 1] = serverUrl; // Replace last (local) with server
+          newMultiple[newMultiple.length - 1] = serverUrl;
           return { ...prev, multiple: newMultiple };
         });
       } else if (subField === "spicy_image") {
@@ -649,11 +780,11 @@ const CreateItemPage = () => {
           custom_variants: prev.custom_variants.map((variant) =>
             variant._id === variantId
               ? {
-                  ...variant,
-                  subheadings: variant.subheadings.map((sub) =>
-                    sub.name === subheading ? { ...sub, image: filename } : sub
-                  ),
-                }
+                ...variant,
+                subheadings: variant.subheadings.map((sub) =>
+                  sub.name === subheading ? { ...sub, image: filename } : sub
+                ),
+              }
               : variant
           ),
         }));
@@ -665,10 +796,8 @@ const CreateItemPage = () => {
           },
         }));
       }
-      URL.revokeObjectURL(localUrl);
       setWarningMessage("Image uploaded successfully!");
     } catch (error) {
-      // Revert on failure
       if (field === "image") {
         setImagePreviews(prev => ({ ...prev, item: "" }));
       } else if (field === "images") {
@@ -686,10 +815,10 @@ const CreateItemPage = () => {
           },
         }));
       }
-      URL.revokeObjectURL(localUrl);
       setWarningMessage(`Failed to upload image: ${error.message}`);
     }
   };
+
   const handleImageDelete = async (field, subField = null, index = null, variantId = null, subheading = null) => {
     let filename;
     let oldPreview;
@@ -705,11 +834,11 @@ const CreateItemPage = () => {
         custom_variants: prev.custom_variants.map((variant) =>
           variant._id === variantId
             ? {
-                ...variant,
-                subheadings: variant.subheadings.map((sub) =>
-                  sub.name === subheading ? { ...sub, image: "" } : sub
-                ),
-              }
+              ...variant,
+              subheadings: variant.subheadings.map((sub) =>
+                sub.name === subheading ? { ...sub, image: "" } : sub
+              ),
+            }
             : variant
         ),
       }));
@@ -768,11 +897,11 @@ const CreateItemPage = () => {
           custom_variants: prev.custom_variants.map((variant) =>
             variant._id === variantId
               ? {
-                  ...variant,
-                  subheadings: variant.subheadings.map((sub) =>
-                    sub.name === subheading ? { ...sub, image: filename } : sub
-                  ),
-                }
+                ...variant,
+                subheadings: variant.subheadings.map((sub) =>
+                  sub.name === subheading ? { ...sub, image: filename } : sub
+                ),
+              }
               : variant
           ),
         }));
@@ -861,13 +990,13 @@ const CreateItemPage = () => {
       custom_variants: prev.custom_variants.map((variant) =>
         variant._id === variantId
           ? {
-              ...variant,
-              subheadings: variant.subheadings.map((sub) =>
-                sub.name === subheading
-                  ? { ...sub, [field]: field === "price" ? Number(value) || null : value }
-                  : sub
-              ),
-            }
+            ...variant,
+            subheadings: variant.subheadings.map((sub) =>
+              sub.name === subheading
+                ? { ...sub, [field]: field === "price" ? Number(value) || null : value }
+                : sub
+            ),
+          }
           : variant
       ),
     }));
@@ -923,7 +1052,12 @@ const CreateItemPage = () => {
             min="0"
             step="0.01"
           />
-          <label className="field-label">{`${sub.name} Image`}</label>
+          <label className="field-label">
+            {`${sub.name} Image`}
+            <span style={{ fontSize: "12px", color: "red", marginLeft: "10px" }}>
+              (Image size is 768px width and 768px height)
+            </span>
+          </label>
           <input
             type="file"
             accept="image/*"
@@ -938,13 +1072,19 @@ const CreateItemPage = () => {
                 alt={`${sub.name} Preview`}
                 className="image-preview"
               />
-              <button
-                type="button"
-                className="delete-button"
-                onClick={() => handleImageDelete("customVariant", "customVariantImage", null, variant._id, sub.name)}
-              >
-                Delete {sub.name} Image
-              </button>
+              <div className="button-group" style={{ display: 'flex', gap: '5px', marginTop: '5px' }}>
+                <button type="button" className="edit-button" onClick={() => handleEditImage(imagePreviews.custom_variant_images[`${variant._id}_${sub.name}_image`], "customVariant", "customVariantImage", variant._id, sub.name)} style={{ background: '#3498db', border: 'none', color: 'white', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>
+                  <FaEdit /> Edit
+                </button>
+                <button
+                  type="button"
+                  className="delete-button"
+                  onClick={() => handleImageDelete("customVariant", "customVariantImage", null, variant._id, sub.name)}
+                  style={{ background: '#e74c3c', border: 'none', color: 'white', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}
+                >
+                  <FaTrash /> Delete {sub.name} Image
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -965,7 +1105,7 @@ const CreateItemPage = () => {
     try {
       const response = await axios.get(`${baseUrl}/api/variants/${variantId}`);
       const variantData = response.data;
-  
+
       setModalState(prev => ({
         ...prev,
         modalCustomSelectedVariantId: variantId,
@@ -1147,7 +1287,7 @@ const CreateItemPage = () => {
             }}
           />
         </div>
-    
+
         {variant.enabled && (
           <>
             <h6>{variant.heading} Options</h6>
@@ -1164,15 +1304,20 @@ const CreateItemPage = () => {
                   min="0"
                   step="0.01"
                 />
-            
-                <label className="field-label">{`${sub.name} Image`}</label>
+
+                <label className="field-label">
+                  {`${sub.name} Image`}
+                  <span style={{ fontSize: "12px", color: "red", marginLeft: "10px" }}>
+                    (Image size is 768px width and 768px height)
+                  </span>
+                </label>
                 <input
                   type="file"
                   accept="image/*"
                   onChange={e => handleModalCustomVariantImageUpload(e, variant._id, sub.name)}
                   className="field-input"
                 />
-            
+
                 {(sub.image || sub.imageTemp) && (
                   <div className="image-container">
                     <img
@@ -1346,9 +1491,9 @@ const CreateItemPage = () => {
             weight: ing.weight || 0,
             nutrition: Array.isArray(ing.nutrition)
               ? ing.nutrition.map((nut) => ({
-                  nutrition_name: nut.nutrition_name || "",
-                  nutrition_value: nut.nutrition_value || 0,
-                }))
+                nutrition_name: nut.nutrition_name || "",
+                nutrition_value: nut.nutrition_value || 0,
+              }))
               : [],
           }));
           setModalState({
@@ -1688,15 +1833,39 @@ const CreateItemPage = () => {
       }));
     }
   };
-  const handleModalImageUpload = async (e, variant = null, subField = null) => {
+  const handleModalImageUpload = (e, variant = null, subField = null) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    setOriginalFile(file);
     const localUrl = URL.createObjectURL(file);
+    setCurrentImageToCrop(localUrl);
+
+    // For Modal, variant corresponds to the variant key (e.g., 'spicy'), subField is the field (e.g., 'spicy_image')
+    // If it's the main Addon/Combo image, variant is null, subField is null
+    setCropTarget({
+      field: null,
+      subField: subField,
+      variantId: variant, // overload variantId to pass variant name in modal context
+      subheading: null,
+      isModal: true
+    });
+    setCropModalOpen(true);
+    setZoom(1);
+    setTargetSize({ width: 768, height: 768 });
+    setAspect(1);
+    e.target.value = "";
+  };
+
+  const uploadModalImageToBackend = async (file, variant, subField) => {
+    const localUrl = URL.createObjectURL(file);
+
+    // Optimistic update
     setModalState(prev => ({
       ...prev,
       data: {
         ...prev.data,
-        imagePreview: localUrl,
+        imagePreview: !subField ? localUrl : prev.data.imagePreview,
         ...(subField && {
           variants: {
             ...prev.data.variants,
@@ -1708,19 +1877,22 @@ const CreateItemPage = () => {
         })
       }
     }));
+
     const formDataUpload = new FormData();
     formDataUpload.append("files", file);
+
     try {
       const response = await axios.post(`${baseUrl}/api/upload-image`, formDataUpload);
       const imagePath = response.data.urls[0];
       const serverUrl = `${baseUrl}${imagePath}`;
       const filename = extractImageName(imagePath);
+
       setModalState(prev => ({
         ...prev,
         data: {
           ...prev.data,
-          image: filename,
-          imagePreview: serverUrl,
+          image: !subField ? filename : prev.data.image,
+          imagePreview: !subField ? serverUrl : prev.data.imagePreview,
           ...(subField && {
             variants: {
               ...prev.data.variants,
@@ -1733,13 +1905,12 @@ const CreateItemPage = () => {
           })
         }
       }));
-      URL.revokeObjectURL(localUrl);
     } catch (error) {
       setModalState(prev => ({
         ...prev,
         data: {
           ...prev.data,
-          imagePreview: "",
+          imagePreview: !subField ? "" : prev.data.imagePreview,
           ...(subField && {
             variants: {
               ...prev.data.variants,
@@ -1751,7 +1922,6 @@ const CreateItemPage = () => {
           })
         }
       }));
-      URL.revokeObjectURL(localUrl);
       setWarningMessage(`Failed to upload image in modal: ${error.message}`);
     }
   };
@@ -1830,10 +2000,10 @@ const CreateItemPage = () => {
         cold: modalState.data.variants.cold.enabled ? modalState.data.variants.cold : undefined,
         spicy: modalState.data.variants.spicy.enabled
           ? {
-              ...modalState.data.variants.spicy,
-              spicy_image: modalState.data.variants.spicy.spicy_image,
-              non_spicy_image: modalState.data.variants.spicy.non_spicy_image,
-            }
+            ...modalState.data.variants.spicy,
+            spicy_image: modalState.data.variants.spicy.spicy_image,
+            non_spicy_image: modalState.data.variants.spicy.non_spicy_image,
+          }
           : undefined,
         sugar: modalState.data.variants.sugar.enabled ? modalState.data.variants.sugar : undefined,
         custom_variants: modalState.data.custom_variants.map(variant => ({
@@ -1862,10 +2032,10 @@ const CreateItemPage = () => {
         cold: modalState.data.variants.cold.enabled ? modalState.data.variants.cold : undefined,
         spicy: modalState.data.variants.spicy.enabled
           ? {
-              ...modalState.data.variants.spicy,
-              spicy_image: modalState.data.variants.spicy.spicy_image,
-              non_spicy_image: modalState.data.variants.spicy.non_spicy_image,
-            }
+            ...modalState.data.variants.spicy,
+            spicy_image: modalState.data.variants.spicy.spicy_image,
+            non_spicy_image: modalState.data.variants.spicy.non_spicy_image,
+          }
           : undefined,
         sugar: modalState.data.variants.sugar.enabled ? modalState.data.variants.sugar : undefined,
         custom_variants: modalState.data.custom_variants.map(variant => ({
@@ -2164,14 +2334,24 @@ const CreateItemPage = () => {
               );
             })}
             <div className="form-group">
-              <label>Item Image</label>
+              <label>
+                Item Image
+                <span style={{ fontSize: "12px", color: "red", marginLeft: "10px" }}>
+                  (Image size is 768px width and 768px height)
+                </span>
+              </label>
               <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, "image")} className="input" />
               {imagePreviews.item ? (
                 <div className="image-container">
                   <img src={imagePreviews.item} alt="Preview" className="image-preview" />
-                  <button type="button" className="delete-button" onClick={() => handleImageDelete("image")}>
-                    Delete Image
-                  </button>
+                  <div className="button-group" style={{ display: 'flex', gap: '5px', marginTop: '5px' }}>
+                    <button type="button" className="edit-button" onClick={() => handleEditImage(imagePreviews.item, "image")} style={{ background: '#3498db', border: 'none', color: 'white', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>
+                      <FaEdit /> Edit
+                    </button>
+                    <button type="button" className="delete-button" onClick={() => handleImageDelete("image")} style={{ background: '#e74c3c', border: 'none', color: 'white', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>
+                      <FaTrash /> Delete
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <img
@@ -2182,20 +2362,36 @@ const CreateItemPage = () => {
               )}
             </div>
             <div className="form-group">
-              <label>Multiple Images</label>
+              <label>
+                Multiple Images
+                <span style={{ fontSize: "12px", color: "red", marginLeft: "10px" }}>
+                  (Image size is 768px width and 768px height)
+                </span>
+              </label>
               <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, "images")} className="input" />
               {imagePreviews.multiple.length > 0 ? (
                 <div className="image-gallery">
                   {imagePreviews.multiple.map((img, index) => (
                     <div key={index} className="image-container">
                       <img src={img} alt={`Multiple ${index}`} className="image-preview" />
-                      <button
-                        type="button"
-                        className="delete-button"
-                        onClick={() => handleImageDelete("images", null, index)}
-                      >
-                        Delete
-                      </button>
+                      <div className="button-group" style={{ display: 'flex', gap: '5px', marginTop: '5px' }}>
+                        <button
+                          type="button"
+                          className="edit-button"
+                          onClick={() => handleEditImage(img, "images", null, null, null)} // Edit logical might need specific handling if index matters for saving back
+                          style={{ background: '#3498db', border: 'none', color: 'white', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}
+                        >
+                          <FaEdit />
+                        </button>
+                        <button
+                          type="button"
+                          className="delete-button"
+                          onClick={() => handleImageDelete("images", null, index)}
+                          style={{ background: '#e74c3c', border: 'none', color: 'white', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}
+                        >
+                          <FaTrash />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -2339,12 +2535,13 @@ const CreateItemPage = () => {
                     onChange={(e) => handleVariantFieldChange("spicy", "spicy_price", e.target.value)}
                     onFocus={(e) => handleVariantNumericFieldFocus(e, "spicy", "spicy_price")}
                     onBlur={(e) => handleVariantNumericFieldBlur(e, "spicy", "spicy_price")}
-                    onWheel={disableNumberInputScroll}
-                    className="input"
-                    min="0"
-                    step="0.01"
                   />
-                  <label>Spicy Image</label>
+                  <label>
+                    Spicy Image
+                    <span style={{ fontSize: "12px", color: "red", marginLeft: "10px" }}>
+                      (Image size is 768px width and 768px height)
+                    </span>
+                  </label>
                   <input
                     type="file"
                     accept="image/*"
@@ -2358,13 +2555,19 @@ const CreateItemPage = () => {
                         alt="Spicy Preview"
                         className="image-preview"
                       />
-                      <button
-                        type="button"
-                        className="delete-button"
-                        onClick={() => handleImageDelete("spicy", "spicy_image")}
-                      >
-                        Delete Spicy Image
-                      </button>
+                      <div className="button-group" style={{ display: 'flex', gap: '5px', marginTop: '5px' }}>
+                        <button type="button" className="edit-button" onClick={() => handleEditImage(imagePreviews.spicy, "spicy", "spicy_image")} style={{ background: '#3498db', border: 'none', color: 'white', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>
+                          <FaEdit /> Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="delete-button"
+                          onClick={() => handleImageDelete("spicy", "spicy_image")}
+                          style={{ background: '#e74c3c', border: 'none', color: 'white', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}
+                        >
+                          <FaTrash /> Delete
+                        </button>
+                      </div>
                     </div>
                   )}
                   <label>Non-Spicy Price (₹)</label>
@@ -2379,7 +2582,12 @@ const CreateItemPage = () => {
                     min="0"
                     step="0.01"
                   />
-                  <label>Non-Spicy Image</label>
+                  <label>
+                    Non-Spicy Image
+                    <span style={{ fontSize: "12px", color: "red", marginLeft: "10px" }}>
+                      (Image size is 768px width and 768px height)
+                    </span>
+                  </label>
                   <input
                     type="file"
                     accept="image/*"
@@ -2393,13 +2601,19 @@ const CreateItemPage = () => {
                         alt="Non-Spicy Preview"
                         className="image-preview"
                       />
-                      <button
-                        type="button"
-                        className="delete-button"
-                        onClick={() => handleImageDelete("spicy", "non_spicy_image")}
-                      >
-                        Delete Non-Spicy Image
-                      </button>
+                      <div className="button-group" style={{ display: 'flex', gap: '5px', marginTop: '5px' }}>
+                        <button type="button" className="edit-button" onClick={() => handleEditImage(imagePreviews.non_spicy, "spicy", "non_spicy_image")} style={{ background: '#3498db', border: 'none', color: 'white', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>
+                          <FaEdit /> Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="delete-button"
+                          onClick={() => handleImageDelete("spicy", "non_spicy_image")}
+                          style={{ background: '#e74c3c', border: 'none', color: 'white', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}
+                        >
+                          <FaTrash /> Delete
+                        </button>
+                      </div>
                     </div>
                   )}
                   <button type="button" className="save-button" onClick={() => handleVariantSave("spicy")}>
@@ -2978,14 +3192,24 @@ const CreateItemPage = () => {
                 </option>
               ))}
             </select>
-            <label>Image</label>
+            <label>
+              Image
+              <span style={{ fontSize: "12px", color: "red", marginLeft: "10px" }}>
+                (Image size is 768px width and 768px height)
+              </span>
+            </label>
             <input type="file" accept="image/*" onChange={(e) => handleModalImageUpload(e)} className="input" />
             {modalState.data.imagePreview && (
               <div className="image-container">
                 <img src={modalState.data.imagePreview} alt="Preview" className="image-preview" />
-                <button type="button" className="delete-button" onClick={() => handleModalImageDelete()}>
-                  Delete Image
-                </button>
+                <div className="button-group" style={{ display: 'flex', gap: '5px', marginTop: '5px' }}>
+                  <button type="button" className="edit-button" onClick={() => handleEditImage(modalState.data.imagePreview, null, null, null, null, true)} style={{ background: '#3498db', border: 'none', color: 'white', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>
+                    <FaEdit /> Edit
+                  </button>
+                  <button type="button" className="delete-button" onClick={() => handleModalImageDelete()} style={{ background: '#e74c3c', border: 'none', color: 'white', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>
+                    <FaTrash /> Delete Image
+                  </button>
+                </div>
               </div>
             )}
             <h6 className="alent-title">Variants</h6>
@@ -3129,7 +3353,12 @@ const CreateItemPage = () => {
                         min="0"
                         step="0.01"
                       />
-                      <label>Spicy Image</label>
+                      <label>
+                        Spicy Image
+                        <span style={{ fontSize: "12px", color: "red", marginLeft: "10px" }}>
+                          (Image size is 768px width and 768px height)
+                        </span>
+                      </label>
                       <input
                         type="file"
                         accept="image/*"
@@ -3143,13 +3372,19 @@ const CreateItemPage = () => {
                             alt="Spicy Preview"
                             className="image-preview"
                           />
-                          <button
-                            type="button"
-                            className="delete-button"
-                            onClick={() => handleModalImageDelete("spicy", "spicy_image")}
-                          >
-                            Delete Spicy Image
-                          </button>
+                          <div className="button-group" style={{ display: 'flex', gap: '5px', marginTop: '5px' }}>
+                            <button type="button" className="edit-button" onClick={() => handleEditImage(modalState.data.variants.spicy.spicy_imageTemp || `${baseUrl}/api/images/${modalState.data.variants.spicy.spicy_image}`, null, "spicy_image", "spicy", null, true)} style={{ background: '#3498db', border: 'none', color: 'white', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>
+                              <FaEdit /> Edit
+                            </button>
+                            <button
+                              type="button"
+                              className="delete-button"
+                              onClick={() => handleModalImageDelete("spicy", "spicy_image")}
+                              style={{ background: '#e74c3c', border: 'none', color: 'white', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}
+                            >
+                              <FaTrash /> Delete Spicy Image
+                            </button>
+                          </div>
                         </div>
                       )}
                       <label>Non-Spicy Price (₹)</label>
@@ -3165,7 +3400,12 @@ const CreateItemPage = () => {
                         min="0"
                         step="0.01"
                       />
-                      <label>Non-Spicy Image</label>
+                      <label>
+                        Non-Spicy Image
+                        <span style={{ fontSize: "12px", color: "red", marginLeft: "10px" }}>
+                          (Image size is 768px width and 768px height)
+                        </span>
+                      </label>
                       <input
                         type="file"
                         accept="image/*"
@@ -3179,13 +3419,19 @@ const CreateItemPage = () => {
                             alt="Non-Spicy Preview"
                             className="image-preview"
                           />
-                          <button
-                            type="button"
-                            className="delete-button"
-                            onClick={() => handleModalImageDelete("spicy", "non_spicy_image")}
-                          >
-                            Delete Non-Spicy Image
-                          </button>
+                          <div className="button-group" style={{ display: 'flex', gap: '5px', marginTop: '5px' }}>
+                            <button type="button" className="edit-button" onClick={() => handleEditImage(modalState.data.variants.spicy.non_spicy_imageTemp || `${baseUrl}/api/images/${modalState.data.variants.spicy.non_spicy_image}`, null, "non_spicy_image", "spicy", null, true)} style={{ background: '#3498db', border: 'none', color: 'white', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>
+                              <FaEdit /> Edit
+                            </button>
+                            <button
+                              type="button"
+                              className="delete-button"
+                              onClick={() => handleModalImageDelete("spicy", "non_spicy_image")}
+                              style={{ background: '#e74c3c', border: 'none', color: 'white', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}
+                            >
+                              <FaTrash /> Delete Non-Spicy Image
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -3423,7 +3669,7 @@ const CreateItemPage = () => {
                 Manage Ingredients and Nutrition
               </button>
             </div>
-    
+
             <div className="modal-actions">
               <button type="button" className="save-button" onClick={handleModalSave}>
                 Save
@@ -3436,6 +3682,122 @@ const CreateItemPage = () => {
             </div>
           </>
         )}
+      </Modal>
+
+
+      <Modal isOpen={cropModalOpen} onClose={() => setCropModalOpen(false)} title="Edit Image" className="crop-modal">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div className="crop-container" style={{ position: 'relative', width: '100%', height: '400px', background: '#fff', borderRadius: '8px', overflow: 'hidden', border: '1px solid #ddd' }}>
+            <Cropper
+              image={currentImageToCrop}
+              crop={crop}
+              zoom={zoom}
+              aspect={aspect}
+              onCropChange={setCrop}
+              onCropComplete={onCropComplete}
+              onZoomChange={setZoom}
+              style={{
+                containerStyle: { backgroundColor: '#FFFFFF' },
+                mediaStyle: { backgroundColor: '#FFFFFF' },
+                cropAreaStyle: { borderColor: '#FFFFFF' }
+              }}
+            />
+          </div>
+
+          <div className="controls" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            {/* Dimensions Display and Inputs */}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', alignItems: 'center' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <label style={{ fontSize: '0.8rem', color: '#7f8c8d' }}>Width (px)</label>
+                <input
+                  type="number"
+                  value={targetSize.width}
+                  onChange={(e) => {
+                    const newWidth = Number(e.target.value);
+                    setTargetSize(prev => ({ ...prev, width: newWidth }));
+                    setAspect(newWidth / targetSize.height);
+                  }}
+                  style={{ padding: '5px', borderRadius: '4px', border: '1px solid #ddd', width: '80px', textAlign: 'center' }}
+                />
+              </div>
+              <div style={{ fontSize: '1.2rem', color: '#7f8c8d', marginTop: '15px' }}>x</div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <label style={{ fontSize: '0.8rem', color: '#7f8c8d' }}>Height (px)</label>
+                <input
+                  type="number"
+                  value={targetSize.height}
+                  onChange={(e) => {
+                    const newHeight = Number(e.target.value);
+                    setTargetSize(prev => ({ ...prev, height: newHeight }));
+                    setAspect(targetSize.width / newHeight);
+                  }}
+                  style={{ padding: '5px', borderRadius: '4px', border: '1px solid #ddd', width: '80px', textAlign: 'center' }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', color: '#555' }}>
+              <span style={{ minWidth: '50px', fontWeight: 'bold' }}>Zoom:</span>
+              <FaSearchMinus style={{ color: '#000' }} />
+              <input
+                type="range"
+                value={zoom}
+                min={1}
+                max={3}
+                step={0.1}
+                aria-labelledby="Zoom"
+                onChange={(e) => setZoom(Number(e.target.value))}
+                className="zoom-range"
+                style={{ flex: 1, cursor: 'pointer', accentColor: '#3498db' }}
+              />
+              <FaSearchPlus style={{ color: '#000' }} />
+            </div>
+
+            {/* Hint about size */}
+            <div style={{ fontSize: '0.9rem', color: '#7f8c8d', textAlign: 'center' }}>
+              Final saved image will be {targetSize.width}x{targetSize.height} pixels.
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '15px', marginTop: '10px' }}>
+              <button
+                onClick={() => setCropModalOpen(false)}
+                style={{
+                  padding: '10px 25px',
+                  borderRadius: '8px',
+                  border: '1px solid #bdc3c7',
+                  background: '#f8f9fa',
+                  color: '#555',
+                  cursor: 'pointer',
+                  fontSize: '1rem',
+                  fontWeight: '600',
+                  transition: 'all 0.2s'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCropSave}
+                style={{
+                  padding: '10px 25px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #3498db 0%, #2980b9 100%)',
+                  color: 'white',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '1rem',
+                  fontWeight: '600',
+                  boxShadow: '0 4px 6px rgba(52, 152, 219, 0.3)',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <FaSave /> Save Image
+              </button>
+            </div>
+          </div>
+        </div>
       </Modal>
     </div>
   );
