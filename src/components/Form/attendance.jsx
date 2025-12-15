@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { FaArrowLeft, FaClock, FaUserCheck, FaCalendarAlt, FaSearch, FaEdit, FaTrash, FaTimes } from 'react-icons/fa';
+
 const Attendance = () => {
   const navigate = useNavigate();
   const [employees, setEmployees] = useState([]);
@@ -25,6 +26,7 @@ const Attendance = () => {
   const [editingRecord, setEditingRecord] = useState(null);
   const [editStatus, setEditStatus] = useState('Full Day');
   const [editNotes, setEditNotes] = useState('');
+
   // NEW: Special timings map for quick lookup by date
   const specialMap = useMemo(() => {
     if (!selectedEmployee?.specialTimings) return {};
@@ -34,6 +36,7 @@ const Attendance = () => {
     });
     return map;
   }, [selectedEmployee]);
+
   // Fetch base URL and settings (including new fields)
   useEffect(() => {
     const fetchConfig = async () => {
@@ -58,6 +61,7 @@ const Attendance = () => {
     };
     fetchConfig();
   }, []);
+
   // Fetch settings (renamed from fetchCurrency, now includes totalWorkingDays and applyCompanyLeaves)
   const fetchSettings = async (currentBaseUrl) => {
     try {
@@ -76,6 +80,7 @@ const Attendance = () => {
       setApplyCompanyLeaves(false);
     }
   };
+
   const getCurrencySymbol = (code) => {
     const symbols = {
       'USD': '$',
@@ -89,6 +94,7 @@ const Attendance = () => {
     };
     return symbols[code] || code;
   };
+
   // Fetch employees list from /api/add-employee
   const fetchEmployees = async (currentBaseUrl) => {
     try {
@@ -102,6 +108,7 @@ const Attendance = () => {
       setLoading(false);
     }
   };
+
   // Fetch attendance records for month and employeeId
   const fetchAttendance = async (currentBaseUrl, month, employeeId = null) => {
     try {
@@ -117,6 +124,7 @@ const Attendance = () => {
       setError('Failed to load attendance records');
     }
   };
+
   // Load data for selected employee/month: attendance + holidays (if apply) + compute effective
   useEffect(() => {
     const loadData = async () => {
@@ -147,7 +155,8 @@ const Attendance = () => {
         setCompanyLeaveCount(companyLeaveCountLocal);
         setEffectiveWorkingDays(eff);
         // UPDATED: Use effectiveWorkingDays for dailyRate (salary / eff)
-        const dailyRateLocal = eff > 0 ? selectedEmployee.salary / eff : 0;
+        const salary = selectedEmployee.salary || 0; // Ensure salary is defined
+        const dailyRateLocal = eff > 0 ? salary / eff : 0;
         setDailyRate(dailyRateLocal);
         setLoading(false);
       } else {
@@ -160,6 +169,7 @@ const Attendance = () => {
     };
     loadData();
   }, [selectedMonth, selectedEmployee, baseUrl, totalWorkingDays, applyCompanyLeaves]);
+
   // Edit attendance
   const editAttendance = () => {
     try {
@@ -189,6 +199,7 @@ const Attendance = () => {
       setError(`Failed to update attendance: ${err.message}`);
     }
   };
+
   // Delete attendance
   const deleteAttendance = async (recordId) => {
     try {
@@ -201,15 +212,18 @@ const Attendance = () => {
       setError(`Failed to delete attendance: ${err.response?.data?.error || err.message}`);
     }
   };
+
   // Handle month change
   const handleMonthChange = (e) => {
     setSelectedMonth(e.target.value);
   };
+
   // Filter employees based on search
   const filteredEmployees = employees.filter((emp) =>
     emp.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     emp.email?.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
   // Generate days in month
   const year = parseInt(selectedMonth.split('-')[0]);
   const monthIndex = parseInt(selectedMonth.split('-')[1]) - 1;
@@ -218,8 +232,10 @@ const Attendance = () => {
   for (let d = 1; d <= daysInMonth; d++) {
     monthDays.push(d);
   }
+
   // Check if date is holiday
   const isHolidayDate = (date) => holidays.some(h => h.date === date);
+
   // Get status style
   const getStatusStyle = (status) => {
     let statusStyle = {};
@@ -234,6 +250,7 @@ const Attendance = () => {
     }
     return statusStyle;
   };
+
   // UPDATED: Get schedule display for a date (special if applicable, else regular)
   const getScheduleDisplay = (date, record = null) => {
     if (record && record.startTime && record.endTime) {
@@ -245,12 +262,14 @@ const Attendance = () => {
     }
     return selectedEmployee?.startTime && selectedEmployee?.endTime ? `${selectedEmployee.startTime} - ${selectedEmployee.endTime}` : 'N/A';
   };
+
   // Summary calculations - UPDATED: Use effectiveWorkingDays, marked = full + off, absent = effective - marked
   const fullCount = attendanceRecords.filter((r) => r.status === 'Full Day').length;
   const offCount = attendanceRecords.filter((r) => r.status === 'Off Day').length;
   const markedCount = fullCount + offCount;
   const absentCount = effectiveWorkingDays - markedCount;
   const totalSalary = attendanceRecords.reduce((sum, rec) => sum + (rec.dailySalary || 0), 0);
+
   if (loading && !selectedEmployee) {
     return (
       <div style={{
@@ -271,6 +290,7 @@ const Attendance = () => {
       </div>
     );
   }
+
   return (
     <div style={{
       minHeight: '100vh',
@@ -313,6 +333,7 @@ const Attendance = () => {
       >
         <FaArrowLeft /> Back to Admin
       </button>
+
       {/* Main Container - Styled like EmployeeList */}
       <div style={{
         maxWidth: '1250px',
@@ -349,6 +370,7 @@ const Attendance = () => {
           </h2>
           <div></div> {/* Empty right for balance */}
         </div>
+
         {/* Error and Message - Styled like EmployeeList Alerts */}
         {error && (
           <div style={{
@@ -388,6 +410,7 @@ const Attendance = () => {
             {message}
           </div>
         )}
+
         {/* Month Selector - Styled consistently */}
         <div style={{
           display: 'flex',
@@ -415,6 +438,7 @@ const Attendance = () => {
             onBlur={(e) => e.target.style.borderColor = '#3498db'}
           />
         </div>
+
         {selectedEmployee ? (
           /* UPDATED: Employee Monthly View: Added Schedule column. For no record, show scheduled times (special if applicable). Notes from marking. */
           <div>
@@ -494,7 +518,7 @@ const Attendance = () => {
                     } else if (record) {
                       // Existing record - show edit/delete; notes now includes auto-generated details from marking
                       status = record.status;
-                      dailySalary = record.dailySalary;
+                      dailySalary = record.dailySalary || 0; // FIXED: Ensure dailySalary is always a number to prevent toFixed error
                       notes = record.notes || '';
                       scheduleDisplay = getScheduleDisplay(date, record);
                       actions = (
@@ -586,7 +610,7 @@ const Attendance = () => {
                         <td style={{ padding: '15px 12px', borderRight: '1px solid #e9ecef', ...scheduleStyle }}>
                           {scheduleDisplay}
                         </td>
-                        <td style={{ padding: '15px 12px', borderRight: '1px solid #e9ecef', textAlign: 'right', color: '#2c3e50' }}>{currency}{dailySalary.toFixed(2)}</td>
+                        <td style={{ padding: '15px 12px', borderRight: '1px solid #e9ecef', textAlign: 'right', color: '#2c3e50' }}>{currency}{(dailySalary || 0).toFixed(2)}</td>
                         <td style={{ padding: '15px 12px', borderRight: '1px solid #e9ecef', color: '#2c3e50' }}>{notes}</td>
                         {actions}
                       </tr>
@@ -595,6 +619,7 @@ const Attendance = () => {
                 </tbody>
               </table>
             </div>
+
             {/* Monthly Summary for Employee - Styled like EmployeeList Card */}
             <div style={{
               marginTop: '20px',
@@ -704,7 +729,7 @@ const Attendance = () => {
                     <tr key={employee._id} style={{ borderBottom: '1px solid #e9ecef', cursor: 'pointer', transition: 'all 0.2s ease', backgroundColor: '#f8f9fa' }}>
                       <td style={{ padding: '15px 12px', borderRight: '1px solid #e9ecef', color: '#2c3e50' }}>{employee.name}</td>
                       <td style={{ padding: '15px 12px', borderRight: '1px solid #e9ecef', color: '#2c3e50' }}>{employee.email}</td>
-                      <td style={{ padding: '15px 12px', borderRight: '1px solid #e9ecef', textAlign: 'right', color: '#2c3e50' }}>{currency}{employee.salary.toFixed(2)}</td>
+                      <td style={{ padding: '15px 12px', borderRight: '1px solid #e9ecef', textAlign: 'right', color: '#2c3e50' }}>{currency}{(employee.salary || 0).toFixed(2)}</td>
                       <td style={{ padding: '15px 12px', textAlign: 'center' }}>
                         <button
                           onClick={() => setSelectedEmployee(employee)}
@@ -753,6 +778,7 @@ const Attendance = () => {
             </div>
           </div>
         )}
+
         {/* Edit Modal - Styled like EmployeeList Modal */}
         {showEditModal && editingRecord && (
           <div
@@ -911,4 +937,5 @@ const Attendance = () => {
     </div>
   );
 };
+
 export default Attendance;

@@ -1,21 +1,10 @@
-// EmployeeType.jsx - Full completed detailed React component
-// Updated: Matched design from AddEmployee - gradient background, fixed back button with hover effects
-// Main container: maxWidth 1000px (wider for table), margin 80px auto 20px, white bg, padding 30px, borderRadius 15px, boxShadow
-// Header: Flex layout with empty left for balance, title centered
-// Alerts: Matched gradient styles for error and message
-// Search and buttons: Integrated with consistent styling
-// Changes: Search shows all when empty or partial matches (enter anything, filters dynamically, all on empty); Removed window.confirm for delete; direct delete with success/error messages (no popups/alerts, only warning messages via error div)
-// Table small is okay; full responsive with overflowX
-// Fixed: Ensured error handling for DELETE 400 responses displays backend error messages clearly
-// Additional Update: Added Grade and Branch columns to the table to display all fields from the form
-// Latest Update: Actions column buttons - Edit on left, Delete on right with space-between flex layout
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { FaPlus, FaEdit, FaTrash, FaSearch, FaArrowLeft, FaUsersCog } from 'react-icons/fa';
-
 const EmployeeType = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [types, setTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -25,7 +14,13 @@ const EmployeeType = () => {
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({ name: '', description: '', salaryRange: '', designation: '', reportTo: '', grade: '', branch: '' });
   const [baseUrl, setBaseUrl] = useState('');
-
+  // Check if coming from AddEmployee to show form by default
+  useEffect(() => {
+    if (location.state?.fromAddEmployee) {
+      setShowForm(true);
+      setEditingId(null); // Ensure create mode
+    }
+  }, [location.state]);
   // Fetch baseUrl
   useEffect(() => {
     const fetchConfig = async () => {
@@ -44,7 +39,6 @@ const EmployeeType = () => {
     };
     fetchConfig();
   }, []);
-
   // Fetch types
   const fetchTypes = async () => {
     if (!baseUrl) return;
@@ -60,13 +54,11 @@ const EmployeeType = () => {
       setLoading(false);
     }
   };
-
   useEffect(() => {
     if (baseUrl) {
       fetchTypes();
     }
   }, [baseUrl]);
-
   // Handle search - shows all when empty, filters on name/description/salaryRange (case-insensitive); dynamic on every enter/keypress
   const filteredTypes = types.filter(type =>
     searchQuery === '' ||
@@ -74,13 +66,11 @@ const EmployeeType = () => {
     type.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
     type.salaryRange.toLowerCase().includes(searchQuery.toLowerCase())
   );
-
   // Handle form change
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
-
   // Validate form
   const validateForm = () => {
     if (!formData.name.trim()) {
@@ -98,7 +88,6 @@ const EmployeeType = () => {
     setError(null);
     return true;
   };
-
   // Handle submit
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -113,6 +102,11 @@ const EmployeeType = () => {
         response = await axios.post(`${baseUrl}/api/employee-types`, formData);
         setMessage('Type added successfully');
       }
+      // If from AddEmployee, navigate back with preserved formData
+      if (location.state?.fromAddEmployee) {
+        navigate('/add-employee', { state: { formData: location.state.formData } });
+        return;
+      }
       setShowForm(false);
       setEditingId(null);
       setFormData({ name: '', description: '', salaryRange: '', designation: '', reportTo: '', grade: '', branch: '' });
@@ -123,7 +117,6 @@ const EmployeeType = () => {
       setLoading(false);
     }
   };
-
   // Handle edit
   const handleEdit = (type) => {
     setFormData({ name: type.name, description: type.description, salaryRange: type.salaryRange, designation: type.designation || '', reportTo: type.reportTo || '', grade: type.grade || '', branch: type.branch || '' });
@@ -132,7 +125,6 @@ const EmployeeType = () => {
     setError(null);
     setMessage('');
   };
-
   // Handle delete - No confirmation popup; direct action with warning via error message on failure
   const handleDelete = async (id) => {
     try {
@@ -143,7 +135,6 @@ const EmployeeType = () => {
       setError(err.response?.data?.error || `Failed to delete type: ${err.message}`);
     }
   };
-
   // Handle cancel
   const handleCancel = () => {
     setShowForm(false);
@@ -151,8 +142,11 @@ const EmployeeType = () => {
     setFormData({ name: '', description: '', salaryRange: '', designation: '', reportTo: '', grade: '', branch: '' });
     setError(null);
     setMessage('');
+    // If from AddEmployee, navigate back with preserved formData
+    if (location.state?.fromAddEmployee) {
+      navigate('/add-employee', { state: { formData: location.state.formData } });
+    }
   };
-
   if (loading && types.length === 0) {
     return (
       <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #ffffff 0%, #3498db 100%)', padding: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -160,7 +154,6 @@ const EmployeeType = () => {
       </div>
     );
   }
-
   return (
     <div style={{
       minHeight: '100vh',
@@ -170,7 +163,13 @@ const EmployeeType = () => {
     }}>
       {/* Fixed Back Button - Matched from AddEmployee */}
       <button
-        onClick={() => navigate('/admin')}
+        onClick={() => {
+          if (location.state?.fromAddEmployee) {
+            navigate('/add-employee', { state: { formData: location.state.formData } });
+          } else {
+            navigate('/admin');
+          }
+        }}
         style={{
           position: 'fixed',
           top: '20px',
@@ -201,9 +200,8 @@ const EmployeeType = () => {
           e.target.style.transform = 'scale(1)';
         }}
       >
-        <FaArrowLeft /> Back to Admin
+        <FaArrowLeft /> {location.state?.fromAddEmployee ? 'Back to Add Employee' : 'Back to Admin'}
       </button>
-
       {/* Main Container - Adjusted maxWidth to 1000px for table */}
       <div style={{
         maxWidth: '1000px',
@@ -239,7 +237,7 @@ const EmployeeType = () => {
             Employee Types
           </h2>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            {!showForm && (
+            {!showForm && !location.state?.fromAddEmployee && (
               <button
                 type="button"
                 onClick={() => setShowForm(true)}
@@ -271,7 +269,6 @@ const EmployeeType = () => {
             )}
           </div>
         </div>
-
         {/* Error and Message - Matched from AddEmployee; Warning messages only via these */}
         {error && (
           <div style={{
@@ -311,7 +308,6 @@ const EmployeeType = () => {
             {message}
           </div>
         )}
-
         {/* Search - Enhanced styling; shows all on empty input, filters dynamically on every character/enter */}
         <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'center' }}>
           <div style={{ position: 'relative', display: 'inline-block', width: '300px' }}>
@@ -335,7 +331,6 @@ const EmployeeType = () => {
             />
           </div>
         </div>
-
         {/* Form for Add/Edit - Enhanced styling */}
         {showForm && (
           <div style={{
@@ -486,7 +481,6 @@ const EmployeeType = () => {
             </form>
           </div>
         )}
-
         {/* Table - Enhanced styling; small table okay, shows all filtered results; Added Grade and Branch columns for all fields */}
         <div style={{
           backgroundColor: '#fff',
@@ -527,12 +521,12 @@ const EmployeeType = () => {
                       <td style={{ padding: '15px 10px', border: '1px solid #dee2e6' }}>{type.grade || '-'}</td>
                       <td style={{ padding: '15px 10px', border: '1px solid #dee2e6' }}>{type.branch || '-'}</td>
                       <td style={{ padding: '15px 10px', border: '1px solid #dee2e6' }}>{type.salaryRange}</td>
-                      <td style={{ 
-                        padding: '15px 10px', 
-                        border: '1px solid #dee2e6', 
-                        display: 'flex', 
-                        justifyContent: 'space-between', 
-                        alignItems: 'center' 
+                      <td style={{
+                        padding: '15px 10px',
+                        border: '1px solid #dee2e6',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
                       }}>
                         <button
                           onClick={() => handleEdit(type)}
@@ -598,5 +592,4 @@ const EmployeeType = () => {
     </div>
   );
 };
-
 export default EmployeeType;

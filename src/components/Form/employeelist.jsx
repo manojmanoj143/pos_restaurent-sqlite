@@ -1,9 +1,10 @@
-// EmployeeList.jsx - Updated: Added Manage Columns feature similar to SalesPage, with dynamic table columns
+// EmployeeList.jsx - Updated: Enhanced Schedule & Other section in details modal to fetch shift timing from active schedule assignment
+// Also ensures special days display from assignments in modal. Table columns for shiftTiming and specialDays are optional via column management.
+// UPDATED: Removed salutation and dateOfBirth from default columns; they are available in possibleColumns for optional addition.
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { FaUserTie, FaArrowLeft, FaEdit, FaTrash, FaPlus, FaTimes, FaClock, FaSearch, FaFilter, FaEye, FaCalendarCheck } from 'react-icons/fa';
-
+import { FaUserTie, FaArrowLeft, FaEdit, FaTrash, FaPlus, FaTimes, FaClock, FaSearch, FaFilter, FaEye, FaCalendarCheck, FaGift } from 'react-icons/fa';
 const EmployeeList = () => {
   const navigate = useNavigate();
   const [employeesList, setEmployeesList] = useState([]);
@@ -40,9 +41,7 @@ const EmployeeList = () => {
   const [columnOrder, setColumnOrder] = useState([
     { key: "employeeId", label: "Employee ID", align: "left" },
     { key: "name", label: "Full Name", align: "left" },
-    { key: "salutation", label: "Salutation", align: "left" },
-    { key: "gender", label: "Gender", align: "left" },
-    { key: "dateOfBirth", label: "DOB", align: "left" },
+    // REMOVED: salutation and dateOfBirth from default - now optional via add columns
     { key: "phoneNumber", label: "Phone", align: "left" },
     { key: "email", label: "Email", align: "left" },
     { key: "employeeDesignation", label: "Designation", align: "left" },
@@ -54,14 +53,14 @@ const EmployeeList = () => {
   const [showColumnModal, setShowColumnModal] = useState(false);
   const [selectedFieldToAdd, setSelectedFieldToAdd] = useState('');
   const [selectedPosition, setSelectedPosition] = useState(0);
-  // NEW: All possible columns (excluding actions)
+  // NEW: All possible columns (excluding actions) - Added specialDays
   const possibleColumns = [
     { key: "employeeId", label: "Employee ID", align: "left" },
     { key: "profile", label: "Profile", align: "center" },
     { key: "name", label: "Full Name", align: "left" },
-    { key: "salutation", label: "Salutation", align: "left" },
+    { key: "salutation", label: "Salutation", align: "left" }, // Now optional
     { key: "gender", label: "Gender", align: "left" },
-    { key: "dateOfBirth", label: "DOB", align: "left" },
+    { key: "dateOfBirth", label: "DOB", align: "left" }, // Now optional
     { key: "phoneNumber", label: "Phone", align: "left" },
     { key: "email", label: "Email", align: "left" },
     { key: "address", label: "Address", align: "left" },
@@ -93,6 +92,7 @@ const EmployeeList = () => {
     { key: "familyDetails", label: "Family Details", align: "left" },
     { key: "username", label: "Username", align: "left" },
     { key: "shiftTiming", label: "Shift Timing", align: "left" },
+    { key: "specialDays", label: "Special Days", align: "left" }, // NEW: Added for schedule assignments special days
     { key: "created_at", label: "Created At", align: "left" },
   ];
   // Fetch baseUrl on component mount
@@ -156,7 +156,6 @@ const EmployeeList = () => {
       fetchScheduleData(); // NEW: Fetch schedule data
     }
   }, [baseUrl]);
-
   // NEW: Fetch Schedule Data (Assignments, Rules, Shifts)
   const fetchScheduleData = async () => {
     try {
@@ -399,8 +398,12 @@ const EmployeeList = () => {
     fontSize: '0.85rem',
     transition: 'all 0.3s ease'
   };
-  // Helper to get cell content based on column key
+  // Helper to get cell content based on column key - UPDATED: Added specialDays case
   const getCellContent = (emp, col) => {
+    // Helper to find active assignment for this employee
+    const getActiveAssignment = (empId) => {
+      return assignments.find(a => String(a.employee_id) === String(empId) && a.is_active);
+    };
     switch (col.key) {
       case 'profile':
         return (
@@ -449,19 +452,46 @@ const EmployeeList = () => {
         return emp.specialTimings ? emp.specialTimings.length : 0;
       case 'shiftTiming':
         // Match employee to active assignment -> rule -> shift
-        const assign = assignments.find(a => String(a.employee_id) === String(emp._id) && a.is_active);
-        if (!assign) return <span style={{ color: '#95a5a6', fontStyle: 'italic' }}>Unassigned</span>;
-
-        const rule = scheduleRules.find(r => String(r._id) === String(assign.schedule_id));
+        const assignForShift = getActiveAssignment(emp._id);
+        if (!assignForShift) return <span style={{ color: '#95a5a6', fontStyle: 'italic' }}>Unassigned</span>;
+        const rule = scheduleRules.find(r => String(r._id) === String(assignForShift.schedule_id));
         if (!rule) return <span style={{ color: '#e74c3c' }}>Rule Missing</span>;
-
         const shift = shifts.find(s => String(s._id) === String(rule.shift_id));
         if (!shift) return <span style={{ color: '#e74c3c' }}>Shift Missing</span>;
-
         return (
           <div>
             <div style={{ fontWeight: '600', color: '#2c3e50' }}>{shift.start_time} - {shift.end_time}</div>
             <div style={{ fontSize: '0.75rem', color: '#7f8c8d' }}>{rule.schedule_name}</div>
+          </div>
+        );
+      case 'specialDays': // NEW: Display special day assignments from active schedule assignment
+        const assign = getActiveAssignment(emp._id);
+        if (!assign || !assign.special_day_assignments || assign.special_day_assignments.length === 0) {
+          return <span style={{ color: '#95a5a6', fontStyle: 'italic' }}>None</span>;
+        }
+        return (
+          <div style={{ maxHeight: '80px', overflowY: 'auto', fontSize: '0.8rem' }}>
+            {assign.special_day_assignments.slice(0, 3).map((sd, idx) => (
+              <div key={idx} style={{
+                marginBottom: '4px',
+                padding: '4px 6px',
+                background: '#f0f8ff',
+                borderRadius: '4px',
+                borderLeft: `3px solid ${sd.type === 'Holiday' ? '#e74c3c' : sd.type === 'Half-Day' ? '#f39c12' : '#9b59b6'}`
+              }}>
+                <div style={{ fontWeight: 'bold', color: '#2c3e50' }}>
+                  {sd.date} <span style={{ fontWeight: 'normal', color: '#7f8c8d' }}>({sd.type})</span>
+                </div>
+                <div style={{ color: '#34495e', fontSize: '0.75rem' }}>{sd.description}</div>
+                {sd.type === 'Half-Day' && <div style={{ fontSize: '0.7rem', color: '#f39c12' }}><FaClock /> {sd.start_time} - {sd.end_time}</div>}
+                {sd.type === 'Extended' && <div style={{ fontSize: '0.7rem', color: '#9b59b6' }}><FaClock /> {sd.extended_start} - {sd.extended_end}</div>}
+              </div>
+            ))}
+            {assign.special_day_assignments.length > 3 && (
+              <div style={{ fontSize: '0.7rem', color: '#7f8c8d', textAlign: 'center', marginTop: '4px' }}>
+                +{assign.special_day_assignments.length - 3} more
+              </div>
+            )}
           </div>
         );
       case 'created_at':
@@ -1049,6 +1079,10 @@ const EmployeeList = () => {
                         baseCellStyle.minWidth = '200px';
                         baseCellStyle.whiteSpace = 'normal';
                       }
+                      if (col.key === 'specialDays') {
+                        baseCellStyle.minWidth = '250px';
+                        baseCellStyle.whiteSpace = 'normal';
+                      }
                       const content = getCellContent(emp, col);
                       return (
                         <td key={col.key} style={baseCellStyle}>
@@ -1092,7 +1126,7 @@ const EmployeeList = () => {
           </div>
         )}
       </div>
-      {/* Employee Details Modal */}
+      {/* Employee Details Modal - UPDATED: Added Special Days section and Shift Timing from active assignment */}
       {showDetailsModal && detailsEmployee && (
         <div
           style={{
@@ -1223,15 +1257,29 @@ const EmployeeList = () => {
                     </div>
                   </div>
                 </div>
-                {/* Schedule & Others */}
+                {/* Schedule & Others - UPDATED: Fetch Shift Timing from active assignment, Special Days from assignments */}
                 <div style={{ background: 'white', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
                   <h4 style={{ color: '#e67e22', borderBottom: '2px solid #ecf0f1', paddingBottom: '10px', marginBottom: '15px', marginTop: 0 }}>
                     <FaClock style={{ marginRight: '8px' }} /> Schedule & Other
                   </h4>
+                  {/* UPDATED: Shift Timing from active schedule assignment */}
                   <div style={{ marginBottom: '15px' }}>
                     <strong>Shift Timing:</strong>
                     <p style={{ margin: '5px 0' }}>
-                      {detailsEmployee.startTime ? `${detailsEmployee.startTime} - ${detailsEmployee.endTime}` : 'No fixed shift'}
+                      {(() => {
+                        const assign = assignments.find(a => String(a.employee_id) === String(detailsEmployee._id) && a.is_active);
+                        if (!assign) return 'No assigned schedule';
+                        const rule = scheduleRules.find(r => String(r._id) === String(assign.schedule_id));
+                        if (!rule) return 'Schedule rule missing';
+                        const shift = shifts.find(s => String(s._id) === String(rule.shift_id));
+                        if (!shift) return 'Shift missing';
+                        return (
+                          <div>
+                            <div style={{ fontWeight: '600', color: '#2c3e50' }}>{shift.start_time} - {shift.end_time}</div>
+                            <div style={{ fontSize: '0.8rem', color: '#7f8c8d' }}>{rule.schedule_name}</div>
+                          </div>
+                        );
+                      })()}
                     </p>
                   </div>
                   {detailsEmployee.specialTimings && detailsEmployee.specialTimings.length > 0 && (
@@ -1244,6 +1292,30 @@ const EmployeeList = () => {
                       </ul>
                     </div>
                   )}
+                  {/* NEW: Special Days from Schedule Assignments */}
+                  {(() => {
+                    const assign = assignments.find(a => String(a.employee_id) === String(detailsEmployee._id) && a.is_active);
+                    if (assign && assign.special_day_assignments && assign.special_day_assignments.length > 0) {
+                      return (
+                        <div style={{ marginBottom: '15px' }}>
+                          <strong>Special Days & Exceptions:</strong>
+                          <ul style={{ paddingLeft: '20px', margin: '5px 0' }}>
+                            {assign.special_day_assignments.map((sd, idx) => (
+                              <li key={idx} style={{ fontSize: '0.9rem', marginBottom: '5px' }}>
+                                <div style={{ fontWeight: 'bold', color: '#2c3e50' }}>
+                                  {sd.date} <span style={{ fontWeight: 'normal', color: '#7f8c8d' }}>({sd.type})</span>
+                                </div>
+                                <div style={{ color: '#34495e' }}>{sd.description}</div>
+                                {sd.type === 'Half-Day' && <div style={{ fontSize: '0.8rem', color: '#f39c12' }}><FaClock style={{ fontSize: '0.7rem' }} /> {sd.start_time} - {sd.end_time}</div>}
+                                {sd.type === 'Extended' && <div style={{ fontSize: '0.8rem', color: '#9b59b6' }}><FaClock style={{ fontSize: '0.7rem' }} /> {sd.extended_start} - {sd.extended_end}</div>}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px' }}>
                     <div><strong>Education:</strong> <p style={{ margin: '5px 0' }}>{detailsEmployee.education || 'N/A'}</p></div>
                     <div><strong>Experience:</strong> <p style={{ margin: '5px 0' }}>{detailsEmployee.previousExperience || 'N/A'}</p></div>
@@ -1806,5 +1878,4 @@ const EmployeeList = () => {
     </div>
   );
 };
-
 export default EmployeeList;

@@ -1,19 +1,10 @@
-// EmployeeDesignation.jsx - Full completed detailed React component
-// Updated: Matched design from AddEmployee - gradient background, fixed back button with hover effects
-// Main container: maxWidth 1000px (wider for table), margin 80px auto 20px, white bg, padding 30px, borderRadius 15px, boxShadow
-// Header: Flex layout with empty left for balance, title centered
-// Alerts: Matched gradient styles for error and message
-// Search and buttons: Integrated with consistent styling
-// Changes: Removed window.confirm for delete; direct delete with success/error messages (no popups/alerts)
-// Search shows all when empty or partial matches
-// Fixed: Ensured error handling for DELETE 400 responses displays backend error messages clearly; Added explicit empty search filter
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { FaPlus, FaEdit, FaTrash, FaSearch, FaArrowLeft, FaUsersCog } from 'react-icons/fa';
-
 const EmployeeDesignation = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [designations, setDesignations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -23,7 +14,13 @@ const EmployeeDesignation = () => {
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({ name: '', description: '', reportTo: '' });
   const [baseUrl, setBaseUrl] = useState('');
-
+  // Check if coming from AddEmployee to show form by default
+  useEffect(() => {
+    if (location.state?.fromAddEmployee) {
+      setShowForm(true);
+      setEditingId(null); // Ensure create mode
+    }
+  }, [location.state]);
   // Fetch baseUrl
   useEffect(() => {
     const fetchConfig = async () => {
@@ -42,7 +39,6 @@ const EmployeeDesignation = () => {
     };
     fetchConfig();
   }, []);
-
   // Fetch designations
   const fetchDesignations = async () => {
     if (!baseUrl) return;
@@ -58,26 +54,22 @@ const EmployeeDesignation = () => {
       setLoading(false);
     }
   };
-
   useEffect(() => {
     if (baseUrl) {
       fetchDesignations();
     }
   }, [baseUrl]);
-
   // Handle search - shows all when empty, filters on name/description (case-insensitive)
   const filteredDesignations = designations.filter(designation =>
     searchQuery === '' ||
     designation.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     designation.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
-
   // Handle form change
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
-
   // Validate form
   const validateForm = () => {
     if (!formData.name.trim()) {
@@ -91,7 +83,6 @@ const EmployeeDesignation = () => {
     setError(null);
     return true;
   };
-
   // Handle submit
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -106,6 +97,11 @@ const EmployeeDesignation = () => {
         response = await axios.post(`${baseUrl}/api/employee-designations`, formData);
         setMessage('Designation added successfully');
       }
+      // If from AddEmployee, navigate back with preserved formData
+      if (location.state?.fromAddEmployee) {
+        navigate('/add-employee', { state: { formData: location.state.formData } });
+        return;
+      }
       setShowForm(false);
       setEditingId(null);
       setFormData({ name: '', description: '', reportTo: '' });
@@ -116,7 +112,6 @@ const EmployeeDesignation = () => {
       setLoading(false);
     }
   };
-
   // Handle edit
   const handleEdit = (designation) => {
     setFormData({ name: designation.name, description: designation.description, reportTo: designation.reportTo || '' });
@@ -125,7 +120,6 @@ const EmployeeDesignation = () => {
     setError(null);
     setMessage('');
   };
-
   // Handle delete - No confirmation popup; direct action with warning via error message on failure
   const handleDelete = async (id) => {
     try {
@@ -136,7 +130,6 @@ const EmployeeDesignation = () => {
       setError(err.response?.data?.error || `Failed to delete designation: ${err.message}`);
     }
   };
-
   // Handle cancel
   const handleCancel = () => {
     setShowForm(false);
@@ -144,8 +137,11 @@ const EmployeeDesignation = () => {
     setFormData({ name: '', description: '', reportTo: '' });
     setError(null);
     setMessage('');
+    // If from AddEmployee, navigate back with preserved formData
+    if (location.state?.fromAddEmployee) {
+      navigate('/add-employee', { state: { formData: location.state.formData } });
+    }
   };
-
   if (loading && designations.length === 0) {
     return (
       <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #ffffff 0%, #3498db 100%)', padding: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -153,7 +149,6 @@ const EmployeeDesignation = () => {
       </div>
     );
   }
-
   return (
     <div style={{
       minHeight: '100vh',
@@ -163,7 +158,13 @@ const EmployeeDesignation = () => {
     }}>
       {/* Fixed Back Button - Matched from AddEmployee */}
       <button
-        onClick={() => navigate('/admin')}
+        onClick={() => {
+          if (location.state?.fromAddEmployee) {
+            navigate('/add-employee', { state: { formData: location.state.formData } });
+          } else {
+            navigate('/admin');
+          }
+        }}
         style={{
           position: 'fixed',
           top: '20px',
@@ -194,7 +195,7 @@ const EmployeeDesignation = () => {
           e.target.style.transform = 'scale(1)';
         }}
       >
-        <FaArrowLeft /> Back to Admin
+        <FaArrowLeft /> {location.state?.fromAddEmployee ? 'Back to Add Employee' : 'Back to Admin'}
       </button>
       {/* Main Container - Adjusted maxWidth to 1000px for table */}
       <div style={{
@@ -231,7 +232,7 @@ const EmployeeDesignation = () => {
             Employee Designations
           </h2>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            {!showForm && (
+            {!showForm && !location.state?.fromAddEmployee && (
               <button
                 type="button"
                 onClick={() => setShowForm(true)}
@@ -525,5 +526,4 @@ const EmployeeDesignation = () => {
     </div>
   );
 };
-
 export default EmployeeDesignation;

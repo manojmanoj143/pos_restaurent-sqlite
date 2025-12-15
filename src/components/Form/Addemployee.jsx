@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
-import { FaUserTie, FaArrowLeft, FaSave, FaPlus, FaTimes, FaUsersCog, FaUpload, FaUser, FaIdCard, FaBriefcase, FaGraduationCap, FaStethoscope, FaUsers } from 'react-icons/fa';
+import { FaUserTie, FaArrowLeft, FaSave, FaPlus, FaTimes, FaUsersCog, FaUpload, FaUser, FaIdCard, FaBriefcase, FaGraduationCap, FaStethoscope, FaUsers, FaClock } from 'react-icons/fa';
 
 const AddEmployee = () => {
   const navigate = useNavigate();
@@ -116,6 +116,56 @@ const AddEmployee = () => {
     };
     fetchConfig();
   }, []);
+  // Unified restore logic for formData (handles initial edit, restore from sub-pages, preserves editing state)
+  useEffect(() => {
+    if (location.state?.editingEmployee) {
+      // Initial edit load
+      const emp = location.state.editingEmployee;
+      const parsedFormData = { ...emp, password: '' };
+      setEditingId(emp._id);
+      setIsEditingDraft(false);
+      setFormData(parsedFormData);
+      // Set image preview
+      if (emp.profileImage) {
+        setImagePreview(emp.profileImage.startsWith('data:') ? emp.profileImage : null);
+      }
+      // Parse phone to digits and set ISD
+      if (emp.phoneNumber) {
+        const fullPhone = emp.phoneNumber;
+        const isdMatch = isdCodes.find(c => fullPhone.startsWith(c.code));
+        if (isdMatch) {
+          setSelectedISDCode(isdMatch.code);
+          parsedFormData.phoneNumber = fullPhone.slice(isdMatch.code.length);
+          setFormData(parsedFormData); // Update with parsed phone
+        }
+      }
+    } else if (location.state?.formData) {
+      // Restore from sub-page (designation/type) or other
+      const restored = location.state.formData;
+      // Set ISD if provided in state
+      if (location.state.selectedISDCode) {
+        setSelectedISDCode(location.state.selectedISDCode);
+      }
+      // Check if editing (has _id)
+      if (restored._id) {
+        setEditingId(restored._id);
+        setIsEditingDraft(false);
+        // Set image preview
+        if (restored.profileImage) {
+          setImagePreview(restored.profileImage.startsWith('data:') ? restored.profileImage : null);
+        }
+        // Phone is already digits in restored formData
+      } else {
+        setEditingId(null);
+      }
+      setFormData(restored);
+      // Refetch lists to include new items
+      if (baseUrl) {
+        fetchEmployeeDesignations();
+        fetchEmployeeTypes();
+      }
+    }
+  }, [location.state, baseUrl]); // Depend on baseUrl for refetch
   // Fetch employee designations and types when baseUrl changes
   useEffect(() => {
     if (baseUrl) {
@@ -123,32 +173,6 @@ const AddEmployee = () => {
       fetchEmployeeTypes();
     }
   }, [baseUrl]);
-  // Handle editing from navigation state (for finalized employees)
-  useEffect(() => {
-    if (location.state?.editingEmployee) {
-      const emp = location.state.editingEmployee;
-      setEditingId(emp._id);
-      setIsEditingDraft(false);
-      setFormData({
-        ...emp,
-        password: '',
-        // Parse phone if needed
-      });
-      // Set image preview
-      if (emp.profileImage) {
-        setImagePreview(emp.profileImage.startsWith('data:') ? emp.profileImage : null);
-      }
-      // Parse phone
-      if (emp.phoneNumber) {
-        const fullPhone = emp.phoneNumber;
-        const isdMatch = isdCodes.find(c => fullPhone.startsWith(c.code));
-        if (isdMatch) {
-          setSelectedISDCode(isdMatch.code);
-          setFormData(prev => ({ ...prev, phoneNumber: fullPhone.slice(isdMatch.code.length) }));
-        }
-      }
-    }
-  }, [location.state]);
   const fetchEmployeeDesignations = async () => {
     try {
       const url = `${baseUrl}/api/employee-designations`;
@@ -201,7 +225,16 @@ const AddEmployee = () => {
   const handleDesignationChange = (e) => {
     const value = e.target.value;
     if (value === 'create_new') {
-      navigate('/employee-designations');
+      // Pass current formData, editing state, and selectedISDCode to preserve on return
+      navigate('/employee-designations', {
+        state: {
+          fromAddEmployee: true,
+          formData: { ...formData, employeeDesignation: '' }, // Ensure empty for now
+          selectedISDCode: selectedISDCode,
+          isEditing: !!editingId,
+          editingId: editingId
+        }
+      });
     } else {
       setFormData(prev => ({ ...prev, employeeDesignation: value }));
     }
@@ -209,7 +242,16 @@ const AddEmployee = () => {
   const handleEmployeeTypeChange = (e) => {
     const value = e.target.value;
     if (value === 'create_new') {
-      navigate('/employee-types');
+      // Pass current formData, editing state, and selectedISDCode to preserve on return
+      navigate('/employee-types', {
+        state: {
+          fromAddEmployee: true,
+          formData: { ...formData, employeeType: '' }, // Ensure empty for now
+          selectedISDCode: selectedISDCode,
+          isEditing: !!editingId,
+          editingId: editingId
+        }
+      });
     } else {
       setFormData(prev => ({ ...prev, employeeType: value }));
     }
@@ -288,6 +330,8 @@ const AddEmployee = () => {
       if (editingId && !dataToSend.password) {
         delete dataToSend.password;
       }
+      // If updating email and it's the same as original, backend should handle unique exclusion by ID
+      // Note: Ensure backend PUT /add-employee/:id excludes current ID in unique email validation
       const response = await axios({
         method,
         url,
@@ -674,7 +718,7 @@ const AddEmployee = () => {
                   {renderSelect('maritalStatus', maritalOptions, 'Marital Status')}
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginTop: '10px' }}>
-                  {renderSelect('nationality', nationalityOptions, 'Nationality')}
+                  {renderInput('text', 'nationality', 'Nationality', false, 'Enter Nationality (e.g., Indian, American, etc.)')}
                   {renderInput('date', 'dateOfJoining', 'Date of Joining')}
                 </div>
                 {renderSelect('status', statusOptions, 'Status')}
@@ -942,4 +986,5 @@ const AddEmployee = () => {
     </div>
   );
 };
+
 export default AddEmployee;
