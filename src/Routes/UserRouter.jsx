@@ -53,6 +53,7 @@ import Hiddenitems from "../components/Form/Hiddenitems";
 import AddEmployee from "../components/Form/Addemployee";
 import EmployeeList from "../components/Form/employeelist";
 import Attendance from "../components/Form/attendance";
+import AttendanceView from "../components/Form/attendanceview";
 import Working from "../components/Form/working";
 import SalarySlip from "../components/Form/salaryslip";
 
@@ -100,6 +101,7 @@ const UserRouter = () => {
         <Route path="/add-employee" element={<AddEmployee />} />
         <Route path="/employee-list" element={<EmployeeList />} />
         <Route path="/attendance" element={<Attendance />} />
+        <Route path="/attendance-view" element={<AttendanceView />} />
         <Route path="/salary-slip" element={<SalarySlip />} />
         {/* UPDATED: Employee Designation and Type Routes (plural, no /admin prefix) */}
         <Route path="/employee-designations" element={<EmployeeDesignation />} />

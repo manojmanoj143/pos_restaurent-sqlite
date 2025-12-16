@@ -1,8 +1,10 @@
 // src/components/admin/AdminPage.jsx
-// FULLY UPDATED: Added "Schedule" submenu under Employee with Schedule Master, Schedule Rule Master, and Schedule Assign Employee
-// Paths: /schedule-master, /schedule-rule-master, /schedule-assign-employee (root-level, no /admin prefix)
-// Added necessary icon imports for new items (FaCalendar, FaCog, FaUserPlus)
-// All previous features preserved
+// FULLY UPDATED: Under Employee submenu, added "Attendance" with sub-children: Create Attendance (/attendance-create), View Attendance (/attendance-view)
+// Used FaPlusCircle for Create, FaEye for View.
+// All previous features preserved, including Schedule submenu.
+// Paths are root-level, no /admin prefix.
+// Added necessary icon imports: FaPlusCircle (already there), FaEye.
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -38,6 +40,7 @@ import {
   FaIdCard, // For Employee Types (plural)
   FaCalendar, // For Schedule Master
   FaUserPlus, // For Schedule Assign Employee
+  FaEye, // NEW: For View Attendance
 } from 'react-icons/fa';
 function AdminPage() {
   const navigate = useNavigate();
@@ -53,6 +56,7 @@ function AdminPage() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSalesOpen, setIsSalesOpen] = useState(false); // State for Sales menu
   const [isScheduleOpen, setIsScheduleOpen] = useState(false); // NEW: State for Schedule submenu under Employee
+  const [isAttendanceOpen, setIsAttendanceOpen] = useState(false); // NEW: State for Attendance submenu under Employee
   const [importFile, setImportFile] = useState(null);
   const [message, setMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -262,7 +266,7 @@ function AdminPage() {
   const handleSearchChange = (e) => {
     setSearchQuery(e.target.value);
   };
-  // Menu items - UPDATED: Added Schedule submenu under Employee
+  // Menu items - UPDATED: Added Attendance submenu under Employee with Create and View
   const masterMenuItems = [
     {
       icon: <FaUsers />,
@@ -296,7 +300,7 @@ function AdminPage() {
         { icon: <FaUserTie />, text: 'Delivery Person', path: '/employees' },
         { icon: <FaUsers />, text: 'Users', path: '/users' },
         { icon: <FaPlusCircle />, text: 'Add New Employee', path: '/add-employee' },
-        { icon: <FaClock />, text: 'Attendance', path: '/attendance' },
+        // { icon: <FaClock />, text: 'Attendance', path: '/attendance' },
         { icon: <FaFileInvoiceDollar />, text: 'Salary Slip', path: '/salary-slip' },
         // UPDATED: Employee Designations and Employee Types (plural paths)
         { icon: <FaBriefcase />, text: 'Employee Designations', path: '/employee-designations' },
@@ -309,6 +313,15 @@ function AdminPage() {
             { icon: <FaCalendar />, text: 'Schedule Master', path: '/schedule-master' },
             { icon: <FaCog />, text: 'Schedule Rule Master', path: '/schedule-rule-master' },
             { icon: <FaUserPlus />, text: 'Schedule Assign Employee', path: '/schedule-assign-employee' },
+          ],
+        },
+        // NEW: Attendance submenu
+        {
+          icon: <FaClock />,
+          text: 'Attendance Management',
+          children: [
+            { icon: <FaPlusCircle />, text: 'Create Attendance', path: '/attendance' },
+            { icon: <FaEye />, text: 'View Attendance', path: '/attendance-view' },
           ],
         },
       ],
@@ -371,7 +384,8 @@ function AdminPage() {
       case 'Employee': return isEmployeeAppOpen;
       case 'Settings': return isSettingsOpen;
       case 'Sales': return isSalesOpen;
-      case 'Schedule': return isScheduleOpen; // NEW
+      case 'Schedule': return isScheduleOpen;
+      case 'Attendance Management': return isAttendanceOpen; // NEW
       default: return false;
     }
   };
@@ -383,7 +397,8 @@ function AdminPage() {
       case 'Employee': setIsEmployeeAppOpen(!isEmployeeAppOpen); break;
       case 'Settings': setIsSettingsOpen(!isSettingsOpen); break;
       case 'Sales': setIsSalesOpen(!isSalesOpen); break;
-      case 'Schedule': setIsScheduleOpen(!isScheduleOpen); break; // NEW
+      case 'Schedule': setIsScheduleOpen(!isScheduleOpen); break;
+      case 'Attendance Management': setIsAttendanceOpen(!isAttendanceOpen); break; // NEW
     }
   };
   // Helper to set expand state
@@ -394,7 +409,8 @@ function AdminPage() {
       case 'Employee': setIsEmployeeAppOpen(value); break;
       case 'Settings': setIsSettingsOpen(value); break;
       case 'Sales': setIsSalesOpen(value); break;
-      case 'Schedule': setIsScheduleOpen(value); break; // NEW
+      case 'Schedule': setIsScheduleOpen(value); break;
+      case 'Attendance Management': setIsAttendanceOpen(value); break; // NEW
     }
   };
   return (
@@ -695,7 +711,7 @@ function AdminPage() {
                                   {item.children.map((subItem, subIndex) => (
                                     <React.Fragment key={subIndex}>
                                       {subItem.children ? (
-                                        // NEW: Handle nested children for Schedule
+                                        // Handle nested children for Schedule and Attendance Management
                                         <>
                                           <button
                                             onClick={() => toggleExpandState(subItem.text)}

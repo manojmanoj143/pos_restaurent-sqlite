@@ -1,36 +1,39 @@
-// src/components/Form/SalarySlip.jsx - UPDATED: Back button and background styled to match EmployeeList (gradient bg, fixed transparent bordered back button).
+// src/components/Form/SalarySlip.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { FaArrowLeft, FaFileInvoiceDollar, FaUser, FaCalendarAlt, FaSave, FaPrint, FaInfoCircle, FaTable, FaPlus, FaTrash, FaUniversity, FaMoneyBillWave, FaCalculator } from 'react-icons/fa';
-import jsPDF from 'jspdf'; // Assume installed: npm install jspdf
-import 'jspdf-autotable'; // Assume installed: npm install jspdf-autotable
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+
 const SalarySlip = () => {
   const navigate = useNavigate();
   const [employees, setEmployees] = useState([]);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
-  const [selectedMonth, setSelectedMonth] = useState('2025-11'); // Default to November 2025
+  const [selectedMonth, setSelectedMonth] = useState('2025-11');
   const [attendanceSummary, setAttendanceSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
-  const [companyName, setCompanyName] = useState('My Company'); // Fetched from company details
-  const [currency, setCurrency] = useState('AED'); // Updated default to AED
+  const [companyName, setCompanyName] = useState('My Company');
+  const [currency, setCurrency] = useState('AED');
   const [totalWorkingDays, setTotalWorkingDays] = useState(30);
   const [applyCompanyLeaves, setApplyCompanyLeaves] = useState(false);
   const [holidays, setHolidays] = useState([]);
   const [effectiveWorkingDays, setEffectiveWorkingDays] = useState(0);
   const [companyLeaveCount, setCompanyLeaveCount] = useState(0);
   const [dailyRate, setDailyRate] = useState(0);
-  const [activeTab, setActiveTab] = useState('summary'); // Tabs: 'summary', 'details', 'payment-days', 'earnings-deductions', 'bank-details', 'net-pay'
+  const [activeTab, setActiveTab] = useState('summary');
   const [leaveWithoutPay, setLeaveWithoutPay] = useState(0);
+
   // New states for Net Pay tab
   const [netPay, setNetPay] = useState(0);
   const [yearToDate, setYearToDate] = useState(0);
   const [monthToDate, setMonthToDate] = useState(0);
   const [totalInWords, setTotalInWords] = useState('');
-  // New states for Earnings (Deductions removed)
+
+  // New states for Earnings
   const [earnings, setEarnings] = useState([
     { component: 'Basic', amount: 6000.00 },
     { component: 'House Rent Allowance', amount: 4200.00 },
@@ -39,6 +42,12 @@ const SalarySlip = () => {
   const [grossPay, setGrossPay] = useState(12000.00);
   const [grossYearToDate, setGrossYearToDate] = useState(106285.71);
   const totalDeductions = 0.00; // Fixed to 0 since deductions removed
+
+  // Helper to safely format currency numbers
+  const formatCurrency = (amount) => {
+    return Number(amount || 0).toFixed(2);
+  };
+
   // Fetch base URL, settings, and company name
   useEffect(() => {
     const fetchConfig = async () => {
@@ -52,17 +61,13 @@ const SalarySlip = () => {
         } else {
           setBaseUrl("");
         }
-        // Fetch settings with baseUrl
         await fetchSettings(currentBaseUrl);
-        // Fetch company name with baseUrl
         await fetchCompanyName(currentBaseUrl);
-        // Fetch employees with baseUrl
         await fetchEmployees(currentBaseUrl);
       } catch (error) {
         console.error("Failed to fetch config:", error);
         setBaseUrl('');
         setError('Failed to load configuration');
-        // Fallback fetches
         await fetchSettings('');
         await fetchCompanyName('');
         await fetchEmployees('');
@@ -70,10 +75,10 @@ const SalarySlip = () => {
     };
     fetchConfig();
   }, []);
-  // Fetch company name from company details
+
   const fetchCompanyName = async (currentBaseUrl) => {
     try {
-      const response = await axios.get(`${currentBaseUrl}/api/company-details`);
+      const response = await axios.get(`${currentBaseUrl || ''}/api/company-details`);
       if (response.data.companyDetails && response.data.companyDetails.length > 0) {
         const latestDetails = response.data.companyDetails[response.data.companyDetails.length - 1];
         setCompanyName(latestDetails.restaurantName || 'My Company');
@@ -85,23 +90,25 @@ const SalarySlip = () => {
       setCompanyName('My Company');
     }
   };
+
   const fetchSettings = async (currentBaseUrl) => {
     try {
       const url = currentBaseUrl ? `${currentBaseUrl}/api/settings` : '/api/settings';
       const response = await axios.get(url);
       const settingsData = response.data;
-      const currencyCode = settingsData.currency || 'AED'; // Updated default to AED
+      const currencyCode = settingsData.currency || 'AED';
       const currencySymbol = getCurrencySymbol(currencyCode);
       setCurrency(currencySymbol);
-      setTotalWorkingDays(settingsData.totalWorkingDays || 30);
+      setTotalWorkingDays(Number(settingsData.totalWorkingDays) || 30);
       setApplyCompanyLeaves(settingsData.applyCompanyLeaves || false);
     } catch (err) {
       console.error('Error fetching settings:', err);
-      setCurrency('AED'); // Updated default
+      setCurrency('AED');
       setTotalWorkingDays(30);
       setApplyCompanyLeaves(false);
     }
   };
+
   const getCurrencySymbol = (code) => {
     const symbols = {
       'USD': '$',
@@ -115,7 +122,7 @@ const SalarySlip = () => {
     };
     return symbols[code] || code;
   };
-  // Fetch employees
+
   const fetchEmployees = async (currentBaseUrl) => {
     try {
       const url = currentBaseUrl ? `${currentBaseUrl}/api/add-employee` : '/api/add-employee';
@@ -128,75 +135,80 @@ const SalarySlip = () => {
       setLoading(false);
     }
   };
-  // Fetch attendance summary for selected employee and month - UPDATED: Logic for effectiveWorkingDays based on applyCompanyLeaves
+
   const fetchAttendanceSummary = async (currentBaseUrl, month, employeeId) => {
     try {
       let url = currentBaseUrl ? `${currentBaseUrl}/api/attendance?month=${month}` : `/api/attendance?month=${month}`;
       url += `&employeeId=${employeeId}`;
       const response = await axios.get(url);
       const records = response.data;
+
       const fullCount = records.filter((r) => r.status === 'Full Day').length;
       const offCount = records.filter((r) => r.status === 'Off Day').length;
       const leaveWithoutPayCount = records.filter((r) => r.status === 'Leave Without Pay').length;
       const absentCount = records.filter((r) => r.status === 'Absent').length;
-      // UPDATED: Compute daysInMonth
+
       const year = parseInt(month.split('-')[0]);
       const mon = parseInt(month.split('-')[1]);
       const daysInMonth = new Date(year, mon, 0).getDate();
-      // UPDATED: Set effectiveWorkingDays based on applyCompanyLeaves
+
       let eff = applyCompanyLeaves ? totalWorkingDays : daysInMonth;
       let companyLeaveCountLocal = 0;
       let holidayData = [];
+
       if (applyCompanyLeaves) {
         try {
-          const res = await axios.get(`${currentBaseUrl}/api/working-days?year=${year}&month=${mon}`);
+          const res = await axios.get(`${currentBaseUrl || ''}/api/working-days?year=${year}&month=${mon}`);
           holidayData = res.data.holidays || [];
           companyLeaveCountLocal = holidayData.length;
           eff = Math.max(0, totalWorkingDays - companyLeaveCountLocal);
         } catch (e) {
           console.error('Failed to fetch holidays:', e);
         }
-      } else {
-        // If not applying leaves, no holidays, company leaves = 0
-        companyLeaveCountLocal = 0;
       }
+
       setHolidays(holidayData);
       setCompanyLeaveCount(companyLeaveCountLocal);
       setEffectiveWorkingDays(eff);
       setLeaveWithoutPay(leaveWithoutPayCount);
-      // UPDATED: Use eff for dailyRate
-      const dailyRateLocal = selectedEmployee ? selectedEmployee.salary / eff : 0;
+
+      // Safe access to salary
+      const salary = selectedEmployee?.salary ? Number(selectedEmployee.salary) : 0;
+      const dailyRateLocal = eff > 0 ? salary / eff : 0;
       setDailyRate(dailyRateLocal);
-      const totalSalary = records.reduce((sum, rec) => sum + (rec.dailySalary || 0), 0);
+
+      const totalSalary = records.reduce((sum, rec) => sum + (Number(rec.dailySalary) || 0), 0);
       const paymentDays = fullCount + offCount;
-      const grossSalary = selectedEmployee ? selectedEmployee.salary : 0;
-      const deductions = totalDeductions; // Fixed 0
+      const grossSalary = salary;
+      const deductions = totalDeductions;
       const netPayLocal = totalSalary - deductions;
+
       setAttendanceSummary({
         fullCount,
         offCount,
         leaveWithoutPay: leaveWithoutPayCount,
         absentCount,
         paymentDays,
-        totalSalary,
-        grossSalary,
-        deductions,
-        netPay: netPayLocal,
-        dailyRate: dailyRateLocal
+        totalSalary: Number(totalSalary || 0),
+        grossSalary: Number(grossSalary || 0),
+        deductions: Number(deductions || 0),
+        netPay: Number(netPayLocal || 0),
+        dailyRate: Number(dailyRateLocal || 0)
       });
-      // Update net pay states
-      setNetPay(netPayLocal);
-      setMonthToDate(netPayLocal); // Month to date is current net pay
-      // Fetch year to date and total in words from backend (new API call)
+
+      setNetPay(Number(netPayLocal || 0));
+      setMonthToDate(Number(netPayLocal || 0));
+
+      // Fetch YTD Data
       try {
         const ytdResponse = await axios.get(`${currentBaseUrl || ''}/api/salary-slip/year-to-date?employeeId=${employeeId}&month=${month}`);
         const { year_to_date, total_in_words, gross_year_to_date } = ytdResponse.data;
-        setYearToDate(year_to_date);
-        setTotalInWords(total_in_words);
-        setGrossYearToDate(gross_year_to_date);
+        
+        setYearToDate(Number(year_to_date || 0));
+        setTotalInWords(total_in_words || '');
+        setGrossYearToDate(Number(gross_year_to_date || 0));
       } catch (ytdErr) {
         console.error('Failed to fetch YTD data:', ytdErr);
-        // Fallback to 0 or hardcoded if needed
         setYearToDate(0);
         setTotalInWords('');
         setGrossYearToDate(0);
@@ -206,54 +218,60 @@ const SalarySlip = () => {
       setError('Failed to load attendance summary');
     }
   };
-  // Load summary when employee or month changes
+
   useEffect(() => {
     if (selectedEmployee) {
       setLoading(true);
       fetchAttendanceSummary(baseUrl, selectedMonth, selectedEmployee._id);
-      // Update grossPay to employee's salary
-      setGrossPay(selectedEmployee.salary || 0);
+      setGrossPay(Number(selectedEmployee.salary || 0));
       setLoading(false);
     } else {
       setAttendanceSummary(null);
     }
   }, [selectedEmployee, selectedMonth, baseUrl]);
-  // Handle month change
+
   const handleMonthChange = (e) => {
     setSelectedMonth(e.target.value);
   };
-  // Handle employee selection
+
   const handleEmployeeSelect = (e) => {
     const empId = e.target.value;
     const emp = employees.find(e => e._id === empId);
     setSelectedEmployee(emp);
     setError('');
   };
-  // Earnings handlers (Deductions removed)
+
   const updateEarningsAmount = (index, value) => {
     const newEarnings = [...earnings];
     newEarnings[index].amount = parseFloat(value) || 0;
     setEarnings(newEarnings);
     updateTotals();
   };
+
   const addEarningsRow = () => {
     setEarnings([...earnings, { component: '', amount: 0 }]);
   };
+
   const deleteEarningsRow = (index) => {
     const newEarnings = earnings.filter((_, i) => i !== index);
     setEarnings(newEarnings);
     updateTotals();
   };
+
   const updateEarningsComponent = (index, value) => {
     const newEarnings = [...earnings];
     newEarnings[index].component = value;
     setEarnings(newEarnings);
   };
+
   const updateTotals = () => {
     const totalEarnings = earnings.reduce((sum, e) => sum + e.amount, 0);
-    setGrossPay(selectedEmployee ? selectedEmployee.salary : totalEarnings); // Prioritize employee's salary for gross pay
+    // If manually editing earnings, we might want to update gross pay or keep employee salary
+    // Logic here depends on requirement: usually sum of components = gross pay
+    // setGrossPay(totalEarnings); 
+    // Keeping logic as requested: prioritize employee salary for display, but user can edit components
   };
-  // Save salary slip
+
   const saveSalarySlip = async () => {
     if (!selectedEmployee || !attendanceSummary) {
       setError('Please select an employee and load summary first.');
@@ -268,15 +286,14 @@ const SalarySlip = () => {
         employeeType: selectedEmployee.employeeType,
         employeeIdCode: selectedEmployee.employeeId,
         ...attendanceSummary,
-        earnings, // Add earnings array
+        earnings,
         grossPay,
         grossYearToDate,
-        totalDeductions, // Fixed 0
-        netPay, // Current net pay
-        yearToDate, // YTD net pay
-        monthToDate, // MTD net pay
-        totalInWords, // In words
-        // Add bank details
+        totalDeductions,
+        netPay,
+        yearToDate,
+        monthToDate,
+        totalInWords,
         bankName: selectedEmployee.bankName || '',
         accountNumber: selectedEmployee.accountNumber || '',
         ifscCode: selectedEmployee.ifscCode || '',
@@ -288,13 +305,13 @@ const SalarySlip = () => {
       setError('Failed to save salary slip.');
     }
   };
-  // Function to get month abbreviation
+
   const getMonthAbbr = (monthStr) => {
     const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
     const monthIndex = parseInt(monthStr.split('-')[1]) - 1;
     return monthNames[monthIndex] || '';
   };
-  // Generate PDF (updated: removed deductions table, updated final box with month abbr)
+
   const generatePDF = () => {
     if (!selectedEmployee || !attendanceSummary) return;
     const monthAbbr = getMonthAbbr(selectedMonth);
@@ -307,8 +324,9 @@ const SalarySlip = () => {
     doc.text(`Month: ${selectedMonth}`, 20, 50);
     doc.text(`Employee ID: ${selectedEmployee.employeeId}`, 20, 60);
     doc.text(`Designation: ${selectedEmployee.employeeType}`, 20, 70);
+
     let startY = 80;
-    // Bank Details Table
+
     doc.autoTable({
       startY,
       head: [['Bank Details', 'Value']],
@@ -321,42 +339,45 @@ const SalarySlip = () => {
       theme: 'grid',
       margin: { left: 20, right: 20 }
     });
+
     startY = doc.lastAutoTable.finalY + 10;
-    // Earnings Table
+
     doc.autoTable({
       startY,
       head: [['Earnings Component', 'Amount']],
-      body: earnings.map(e => [e.component, `${currency}${e.amount.toFixed(2)}`]),
+      body: earnings.map(e => [e.component, `${currency}${formatCurrency(e.amount)}`]),
       theme: 'striped',
       margin: { left: 20, right: 20 }
     });
+
     startY = doc.lastAutoTable.finalY + 10;
-    // Totals including new fields (removed Total Deductions row)
+
     doc.autoTable({
       startY,
       head: [['Totals', 'Amount']],
       body: [
-        ['Gross Pay', `${currency}${grossPay.toFixed(2)}`],
-        ['Gross Year To Date', `${currency}${grossYearToDate.toFixed(2)}`],
-        ['Net Pay', `${currency}${netPay.toFixed(2)}`],
-        ['Year To Date', `${currency}${yearToDate.toFixed(2)}`],
-        ['Month To Date', `${currency}${monthToDate.toFixed(2)}`]
+        ['Gross Pay', `${currency}${formatCurrency(grossPay)}`],
+        ['Gross Year To Date', `${currency}${formatCurrency(grossYearToDate)}`],
+        ['Net Pay', `${currency}${formatCurrency(netPay)}`],
+        ['Year To Date', `${currency}${formatCurrency(yearToDate)}`],
+        ['Month To Date', `${currency}${formatCurrency(monthToDate)}`]
       ],
       theme: 'grid',
       margin: { left: 20, right: 20 }
     });
+
     startY = doc.lastAutoTable.finalY + 10;
-    // Total in Words
     doc.text(`Total in Words: ${totalInWords}`, 20, startY);
     startY += 10;
-    // Final Summary Box for Total Salary and Month Salary (with month abbr)
-    doc.setFillColor(39, 174, 96); // Green background
+
+    doc.setFillColor(39, 174, 96);
     doc.rect(20, startY, 170, 20, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(14);
-    doc.text(`Total Salary: ${currency}${grossPay.toFixed(2)} | ${monthAbbr} Month Salary: ${currency}${monthToDate.toFixed(2)}`, 25, startY + 12);
+    doc.text(`Total Salary: ${currency}${formatCurrency(grossPay)} | ${monthAbbr} Month Salary: ${currency}${formatCurrency(monthToDate)}`, 25, startY + 12);
     doc.save(`SalarySlip_${selectedEmployee.name}_${selectedMonth}.pdf`);
   };
+
   if (loading && employees.length === 0) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: 'linear-gradient(135deg, #ffffff 0%, #3498db 100%)' }}>
@@ -367,40 +388,43 @@ const SalarySlip = () => {
       </div>
     );
   }
+
   const employeeDetails = selectedEmployee ? {
     employeeId: selectedEmployee.employeeId,
     employeeName: selectedEmployee.name,
-    company: companyName, // Use fetched company name
+    company: companyName,
     designation: selectedEmployee.employeeType,
-    postingDate: selectedEmployee.created_at ? new Date(selectedEmployee.created_at).toLocaleDateString() : '2025-11-01', // Use created_at as proxy for posting date
+    postingDate: selectedEmployee.created_at ? new Date(selectedEmployee.created_at).toLocaleDateString() : '2025-11-01',
     status: 'Submitted',
     currency: currency
   } : null;
-  // Enhanced input style for neater appearance
+
   const inputStyle = {
-    padding: '10px 12px', // Increased padding
-    border: '2px solid #bdc3c7', // Thicker border
-    borderRadius: '6px', // Slightly larger radius
-    fontSize: '1rem', // Larger font
-    transition: 'border-color 0.3s ease', // Smooth transition
+    padding: '10px 12px',
+    border: '2px solid #bdc3c7',
+    borderRadius: '6px',
+    fontSize: '1rem',
+    transition: 'border-color 0.3s ease',
     outline: 'none',
-    width: '100%', // Full width where applicable
+    width: '100%',
     boxSizing: 'border-box'
   };
+
   const readonlyInputStyle = {
     ...inputStyle,
     backgroundColor: '#f8f9fa',
     color: '#495057',
     cursor: 'not-allowed'
   };
+
   const amountInputStyle = {
     ...inputStyle,
-    width: '150px', // Increased width for amount fields
+    width: '150px',
     textAlign: 'right'
   };
+
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #ffffff 0%, #3498db 100%)', padding: '20px', position: 'relative' }}>
-      {/* Fixed Back Button in Top-Left Corner - Styled like EmployeeList */}
       <button
         onClick={() => navigate('/admin')}
         style={{
@@ -435,8 +459,9 @@ const SalarySlip = () => {
       >
         <FaArrowLeft /> Back to Admin
       </button>
-      <div style={{ maxWidth: '1200px', margin: '80px auto 20px', backgroundColor: '#ffffff', padding: '30px', borderRadius: '15px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)', overflow: 'hidden' }}> {/* Main Container - Styled like EmployeeList Card */}
-        {/* Header with Title - Styled like EmployeeList Header */}
+
+      <div style={{ maxWidth: '1200px', margin: '80px auto 20px', backgroundColor: '#ffffff', padding: '30px', borderRadius: '15px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)', overflow: 'hidden' }}>
+        
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
@@ -445,7 +470,7 @@ const SalarySlip = () => {
           paddingBottom: '20px',
           borderBottom: '2px solid #3498db'
         }}>
-          <div></div> {/* Empty left for balance */}
+          <div></div>
           <h2 style={{
             textAlign: 'center',
             color: '#2c3e50',
@@ -460,9 +485,9 @@ const SalarySlip = () => {
             <FaFileInvoiceDollar style={{ color: '#3498db', fontSize: '2rem' }} />
             Salary Slip
           </h2>
-          <div></div> {/* Empty right for balance */}
+          <div></div>
         </div>
-        {/* Selection - Centered - Styled like EmployeeList Filter Section */}
+
         <div style={{ background: '#ffffff', padding: '20px', borderRadius: '15px', marginBottom: '20px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)', border: '1px solid #e9ecef' }}>
           <div style={{
             display: 'flex',
@@ -540,7 +565,7 @@ const SalarySlip = () => {
             </div>
           </div>
         </div>
-        {/* Error and Message - Styled like EmployeeList Alerts */}
+
         {error && (
           <div style={{
             background: 'linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%)',
@@ -579,15 +604,15 @@ const SalarySlip = () => {
             {message}
           </div>
         )}
-        {/* Salary Slip Display - Main content in white card like EmployeeList */}
+
         {selectedEmployee && attendanceSummary ? (
-          <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.95)', padding: '25px', borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}> {/* Semi-transparent white */}
-            {/* Tabs - Removed deductions references */}
+          <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.95)', padding: '25px', borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
+            
             <div style={{ display: 'flex', marginBottom: '25px', borderBottom: '2px solid #dee2e6', overflowX: 'auto' }}>
               <button
                 onClick={() => setActiveTab('summary')}
                 style={{
-                  padding: '12px 20px', // Increased padding
+                  padding: '12px 20px',
                   backgroundColor: activeTab === 'summary' ? 'rgb(52, 152, 219)' : 'transparent',
                   color: activeTab === 'summary' ? 'white' : '#2c3e50',
                   border: 'none',
@@ -680,6 +705,7 @@ const SalarySlip = () => {
                 <FaMoneyBillWave style={{ marginRight: '5px' }} /> Net Pay
               </button>
             </div>
+
             {/* Summary Tab */}
             {activeTab === 'summary' && (
               <>
@@ -689,7 +715,6 @@ const SalarySlip = () => {
                     {selectedEmployee.name} - {selectedMonth}
                   </p>
                 </div>
-                {/* Employee Details */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '25px' }}>
                   <div style={{ backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '8px' }}>
                     <h3 style={{ color: '#2c3e50', marginBottom: '12px' }}><FaUser /> Employee Details</h3>
@@ -697,7 +722,7 @@ const SalarySlip = () => {
                     <p><strong>Type:</strong> {selectedEmployee.employeeType}</p>
                     <p><strong>Email:</strong> {selectedEmployee.email}</p>
                     <p><strong>Phone:</strong> {selectedEmployee.phoneNumber}</p>
-                    <p><strong>Gross Salary (Monthly):</strong> {currency}{attendanceSummary.grossSalary.toFixed(2)}</p>
+                    <p><strong>Gross Salary (Monthly):</strong> {currency}{formatCurrency(attendanceSummary.grossSalary)}</p>
                   </div>
                   <div style={{ backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '8px' }}>
                     <h3 style={{ color: '#2c3e50', marginBottom: '12px' }}>Attendance Summary</h3>
@@ -710,17 +735,17 @@ const SalarySlip = () => {
                     <p><strong>Payment Days:</strong> {attendanceSummary.paymentDays}</p>
                   </div>
                 </div>
-                {/* Net Pay - Moved up for emphasis */}
                 <div style={{ textAlign: 'center', marginBottom: '25px', backgroundColor: '#f8f9fa', padding: '20px', borderRadius: '8px' }}>
                   <h3 style={{ color: '#27ae60', fontSize: '1.8rem' }}>
-                    Net Payable: {currency}{netPay.toFixed(2)}
+                    Net Payable: {currency}{formatCurrency(netPay)}
                   </h3>
                   <p style={{ fontSize: '1.1rem', color: '#7f8c8d' }}>
-                    Gross Year To Date: {currency}{grossYearToDate.toFixed(2)}
+                    Gross Year To Date: {currency}{formatCurrency(grossYearToDate)}
                   </p>
                 </div>
               </>
             )}
+
             {/* Details Tab */}
             {activeTab === 'details' && employeeDetails && (
               <div>
@@ -761,7 +786,8 @@ const SalarySlip = () => {
                 </div>
               </div>
             )}
-            {/* Payment Days Tab - UPDATED: Removed Company Leaves and Leave Without Pay fields */}
+
+            {/* Payment Days Tab */}
             {activeTab === 'payment-days' && (
               <div>
                 <h3 style={{ color: '#2c3e50', marginBottom: '20px' }}>Payment Days Details</h3>
@@ -833,11 +859,11 @@ const SalarySlip = () => {
                 </div>
               </div>
             )}
-            {/* Earnings Tab (Deductions removed) */}
+
+            {/* Earnings Tab */}
             {activeTab === 'earnings-deductions' && (
               <div>
                 <h3 style={{ color: '#2c3e50', marginBottom: '20px' }}>Earnings</h3>
-                {/* Earnings Editable Table */}
                 <div style={{ marginBottom: '25px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                     <h4 style={{ color: '#34495e', margin: 0, fontSize: '1.2rem' }}>Earnings</h4>
@@ -918,19 +944,20 @@ const SalarySlip = () => {
                         ))}
                         <tr style={{ backgroundColor: '#f8f9fa' }}>
                           <td style={{ padding: '10px', border: '1px solid #dee2e6', fontWeight: 'bold', fontSize: '1.1rem' }}>Gross Pay (Employee Monthly Salary)</td>
-                          <td style={{ padding: '10px', textAlign: 'right', border: '1px solid #dee2e6', fontWeight: 'bold', fontSize: '1.1rem' }}>{currency}{grossPay.toFixed(2)}</td>
+                          <td style={{ padding: '10px', textAlign: 'right', border: '1px solid #dee2e6', fontWeight: 'bold', fontSize: '1.1rem' }}>{currency}{formatCurrency(grossPay)}</td>
                           <td style={{ padding: '10px', border: '1px solid #dee2e6' }}></td>
                         </tr>
                         <tr style={{ backgroundColor: '#d4edda' }}>
                           <td style={{ padding: '10px', border: '1px solid #dee2e6', fontWeight: 'bold', fontSize: '1.1rem' }}>Gross Year To Date ({currency})</td>
-                          <td style={{ padding: '10px', textAlign: 'right', border: '1px solid #dee2e6', fontWeight: 'bold', fontSize: '1.1rem' }}>{currency}{grossYearToDate.toFixed(2)}</td>
+                          <td style={{ padding: '10px', textAlign: 'right', border: '1px solid #dee2e6', fontWeight: 'bold', fontSize: '1.1rem' }}>{currency}{formatCurrency(grossYearToDate)}</td>
                           <td style={{ padding: '10px', border: '1px solid #dee2e6' }}></td>
                         </tr>
                       </tbody>
                     </table>
                   </div>
                 </div>
-                {/* Totals Section (Deductions removed) */}
+
+                {/* Totals Section */}
                 <div style={{ marginBottom: '25px', backgroundColor: '#f8f9fa', padding: '20px', borderRadius: '8px' }}>
                   <h4 style={{ color: '#34495e', marginBottom: '15px', fontSize: '1.2rem' }}>Totals</h4>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
@@ -956,6 +983,7 @@ const SalarySlip = () => {
                 </div>
               </div>
             )}
+
             {/* Bank Details Tab */}
             {activeTab === 'bank-details' && selectedEmployee && (
               <div>
@@ -984,7 +1012,8 @@ const SalarySlip = () => {
                 </div>
               </div>
             )}
-            {/* New Net Pay Tab */}
+
+            {/* Net Pay Tab */}
             {activeTab === 'net-pay' && (
               <div>
                 <h3 style={{ color: '#2c3e50', marginBottom: '20px' }}><FaCalculator style={{ marginRight: '5px' }} /> Net Pay Details</h3>
@@ -1010,7 +1039,7 @@ const SalarySlip = () => {
                           readOnly
                           style={readonlyInputStyle}
                         />
-                        <small style={{ color: '#7f8c8d', fontSize: '0.9rem' }}>Total salary booked for this employee from the beginning of the year (payroll period or fiscal year) up to the current salary slip's end date.</small>
+                        <small style={{ color: '#7f8c8d', fontSize: '0.9rem' }}>Total salary booked for this employee from the beginning of the year up to now.</small>
                         <small style={{ color: '#7f8c8d', fontSize: '0.8rem' }}>year_to_date</small>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
@@ -1021,7 +1050,7 @@ const SalarySlip = () => {
                           readOnly
                           style={readonlyInputStyle}
                         />
-                        <small style={{ color: '#7f8c8d', fontSize: '0.9rem' }}>Total salary booked for this employee from the beginning of the month up to the current salary slip's end date.</small>
+                        <small style={{ color: '#7f8c8d', fontSize: '0.9rem' }}>Total salary booked for this employee from the beginning of the month up to now.</small>
                         <small style={{ color: '#7f8c8d', fontSize: '0.8rem' }}>month_to_date</small>
                       </div>
                     </div>
@@ -1035,14 +1064,15 @@ const SalarySlip = () => {
                         readOnly
                         style={{ ...readonlyInputStyle, minHeight: '60px', fontSize: '0.95rem', resize: 'none' }}
                       />
-                      <small style={{ color: '#7f8c8d', fontSize: '0.8rem' }}>AED Ten Thousand, Eight Hundred And Thirty Eight and Seventy One Fils only. (Example)</small>
+                      <small style={{ color: '#7f8c8d', fontSize: '0.8rem' }}>Example: AED Ten Thousand, Eight Hundred And Thirty Eight and Seventy One Fils only.</small>
                       <small style={{ color: '#7f8c8d', fontSize: '0.8rem' }}>total_in_words</small>
                     </div>
                   </div>
                 </div>
               </div>
             )}
-            {/* Actions - Styled like EmployeeList Buttons */}
+
+            {/* Actions */}
             <div style={{ display: 'flex', gap: '15px', justifyContent: 'center', marginTop: '25px' }}>
               <button
                 onClick={saveSalarySlip}
@@ -1105,7 +1135,7 @@ const SalarySlip = () => {
             </div>
           </div>
         ) : selectedEmployee ? (
-          <div style={{ textAlign: 'center', padding: '50px', color: '#7f8c8d', backgroundColor: '#f8f9fa', borderRadius: '10px', border: '2px dashed #bdc3c7' }}> {/* Styled loading with better contrast */}
+          <div style={{ textAlign: 'center', padding: '50px', color: '#7f8c8d', backgroundColor: '#f8f9fa', borderRadius: '10px', border: '2px dashed #bdc3c7' }}>
             <FaFileInvoiceDollar style={{ fontSize: '4rem', marginBottom: '15px', color: '#3498db' }} />
             <p style={{ fontSize: '1.2rem' }}>Loading salary slip...</p>
           </div>
@@ -1119,4 +1149,5 @@ const SalarySlip = () => {
     </div>
   );
 };
+
 export default SalarySlip;

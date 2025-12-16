@@ -5811,136 +5811,390 @@ def manage_employee(emp_id):
 # FIXED: Updated /api/attendance GET handler to support month + employeeId filtering
 # FIXED: Updated /api/attendance GET handler to support month + employeeId filtering
 # UPDATED: In PUT, now also updates dailySalary if provided
+# ATTENDANCE (Full, with logic for weekoff, special holiday, extended hours)
 @app.route('/api/attendance', methods=['GET', 'POST', 'PUT', 'DELETE'])
 @db_required
 def attendance():
     mode = config.get("mode", "server")
     if mode == 'client':
+        server_ip = config.get('server_ip', 'localhost')
+        server_url = f"http://{server_ip}:8000/api/attendance"
         if request.method == 'GET':
-            server_url = f"http://{config['server_ip']}:8000/api/attendance"
             params = request.args
-            response = requests.get(server_url, params=params)
-            if response.status_code == 200:
-                return jsonify(response.json()), 200
-            else:
-                return jsonify({"error": "Proxy fetch failed"}), response.status_code
+            response = requests.get(server_url, params=params, timeout=10)
+            return jsonify(response.json()), response.status_code
         elif request.method == 'POST':
-            server_url = f"http://{config['server_ip']}:8000/api/attendance"
-            response = requests.post(server_url, json=request.get_json())
-            if response.status_code in [200, 201]:
-                return jsonify(response.json()), response.status_code
-            else:
-                return jsonify({"error": "Proxy create failed"}), response.status_code
+            data = request.get_json()
+            response = requests.post(server_url, json=data, timeout=10)
+            return jsonify(response.json()), response.status_code
         elif request.method == 'PUT':
-            server_url = f"http://{config['server_ip']}:8000/api/attendance"
-            response = requests.put(server_url, json=request.get_json())
-            if response.status_code == 200:
-                return jsonify(response.json()), 200
-            else:
-                return jsonify({"error": "Proxy update failed"}), response.status_code
+            data = request.get_json()
+            response = requests.put(server_url, json=data, timeout=10)
+            return jsonify(response.json()), response.status_code
         elif request.method == 'DELETE':
-            server_url = f"http://{config['server_ip']}:8000/api/attendance"
-            response = requests.delete(server_url, json=request.get_json())
-            if response.status_code == 200:
-                return jsonify(response.json()), 200
-            else:
-                return jsonify({"error": "Proxy delete failed"}), response.status_code
+            data = request.get_json()
+            response = requests.delete(server_url, json=data, timeout=10)
+            return jsonify(response.json()), response.status_code
+        return jsonify({"error": "Method not supported"}), 405
     if request.method == 'GET':
         try:
-            # FIXED: Handle month and employeeId params for filtering
-            month = request.args.get('month') # e.g., "2025-11"
-            employee_id = request.args.get('employeeId')
-            date = request.args.get('date') # Backward compat for single date
-            if employee_id and month:
-                # Filter by employeeId exactly, then Python-filter dates by month prefix
-                filter_dict = {"employeeId": employee_id}
-                all_records = attendance_collection.find(filter_dict)
-                records = [r for r in all_records if r.get('date', '').startswith(month)]
-                logger.info(f"Filtered {len(records)} attendance records for employee {employee_id} in month {month}")
-            elif employee_id:
-                # All records for employee (no month filter)
-                records = attendance_collection.find({"employeeId": employee_id})
+            employee_id = request.args.get('employee_id')
+            date = request.args.get('date')
+            month = request.args.get('month')
+            # Case 1: employee_id only (no date/month) - Get active assignment for auto-populate
+            if employee_id and not date and not month:
+                # Validate employee
+                emp = worker_collection.find_one({'_id': employee_id})
+                if not emp:
+                    return jsonify({"error": "Employee not found"}), 404
+                # FIXED: Python-side filter/sort for SQLite compatibility
+                all_assignments = list(employee_schedule_assign_collection.find({'employee_id': employee_id}))
+                active_assignments = [a for a in all_assignments if a.get('is_active') is True]
+                active_assignments.sort(key=lambda x: x.get('assigned_date', '1900-01-01'), reverse=True)
+                if not active_assignments:
+                    return jsonify({"error": "No active schedule assignment found for employee"}), 404
+                assignment = active_assignments[0]
+                schedule_id = assignment['schedule_id']
+                schedule = schedule_master_collection.find_one({'_id': schedule_id})
+                if not schedule:
+                    return jsonify({"error": "Schedule not found"}), 404
+                shift_id = schedule.get('shift_id', '')
+                shift = shift_master_collection.find_one({'_id': shift_id}) if shift_id else None
+                if not shift:
+                    return jsonify({"error": "Shift not found"}), 404
+                response_data = {
+                    'assignment': convert_objectid_to_str(assignment),
+                    'schedule': convert_objectid_to_str(schedule),
+                    'shift': convert_objectid_to_str(shift)
+                }
+                return jsonify(response_data), 200
+            # Case 2: employee_id + date - Existing or compute daily (for auto-populate with date)
+            elif employee_id and date:
+                # Validate employee
+                emp = worker_collection.find_one({'_id': employee_id})
+                if not emp:
+                    return jsonify({"error": "Employee not found"}), 404
+                # Check existing attendance
+                existing = attendance_collection.find_one({
+                    'employee_id': employee_id,
+                    'attendance_date': date
+                })
+                if existing:
+                    # Populate employee for consistency
+                    employee = worker_collection.find_one({'_id': employee_id})
+                    populated = convert_objectid_to_str(existing)
+                    populated['employee'] = convert_objectid_to_str(employee) if employee else None
+                    return jsonify(populated), 200
+                # FIXED: Python-side filter/sort for SQLite
+                all_assignments = list(employee_schedule_assign_collection.find({'employee_id': employee_id}))
+                active_assignments = [a for a in all_assignments if a.get('is_active') is True]
+                active_assignments.sort(key=lambda x: x.get('assigned_date', '1900-01-01'), reverse=True)
+                if not active_assignments:
+                    return jsonify({"error": "No active schedule assignment found"}), 404
+                assignment = active_assignments[0]
+                schedule_id = assignment['schedule_id']
+                schedule = schedule_master_collection.find_one({'_id': schedule_id})
+                if not schedule:
+                    return jsonify({"error": "Schedule not found"}), 404
+                # Parse date for weekday/special checks
+                try:
+                    dt = datetime.strptime(date, '%Y-%m-%d')
+                    weekday = dt.weekday() # 0=Mon, 6=Sun
+                    weekday_name = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][weekday]
+                except ValueError:
+                    return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
+                # Defaults
+                status = 'Present'
+                special_day_type = 'None'
+                notes = ''
+                shift_id = schedule.get('shift_id', '')
+                # Check special_day_assignments in assignment (for extended/halfday custom shifts)
+                special_assign = next((s for s in assignment.get('special_day_assignments', [])
+                                       if s.get('date') == date), None)
+                custom_start = None
+                custom_end = None
+                custom_overnight = None
+                if special_assign:
+                    shift_id = special_assign.get('shift_id', shift_id)
+                    notes = special_assign.get('notes', '') or special_assign.get('description', '')
+                    special_day_type = special_assign.get('type', special_day_type) # e.g., 'Extended', 'HalfDay'
+                    if special_day_type == 'Extended':
+                        status = 'Extended'
+                        custom_start = special_assign.get('extended_start')
+                        custom_end = special_assign.get('extended_end')
+                        custom_overnight = True
+                    elif special_day_type == 'HalfDay':
+                        status = 'HalfDay'
+                        custom_start = special_assign.get('start_time')
+                        custom_end = special_assign.get('end_time')
+                        # overnight remains from shift
+                # Check weekly_off
+                weekly_off = schedule.get('weekly_off', [])
+                if isinstance(weekly_off, list) and weekday_name in weekly_off:
+                    status = 'WeeklyOff'
+                    special_day_type = 'WeeklyOff'
+                # Check special_days in schedule (holidays/extended)
+                special_days = schedule.get('special_days', [])
+                special_day = next((sd for sd in special_days if sd.get('date') == date), None)
+                if special_day:
+                    day_type = special_day.get('type', 'Holiday') # 'Holiday', 'Extended', 'HalfDay'
+                    status = day_type if day_type != 'Holiday' else 'Holiday'
+                    special_day_type = day_type
+                    notes = special_day.get('description', '') or notes
+                    if day_type == 'Extended':
+                        shift_id = special_day.get('shift_id', shift_id)
+                        custom_start = special_day.get('extended_start')
+                        custom_end = special_day.get('extended_end')
+                        custom_overnight = True
+                    elif day_type == 'HalfDay':
+                        shift_id = special_day.get('shift_id', shift_id)
+                        custom_start = special_day.get('start_time')
+                        custom_end = special_day.get('end_time')
+                        # overnight from shift
+                # Get shift
+                if not shift_id:
+                    return jsonify({"error": "No shift_id found"}), 400
+                shift = shift_master_collection.find_one({'_id': shift_id})
+                if not shift:
+                    return jsonify({"error": "Shift not found"}), 404
+                planned_start_time = shift.get('start_time')
+                planned_end_time = shift.get('end_time')
+                is_overnight = shift.get('is_overnight', False)
+                # Override with custom if present
+                if custom_start:
+                    planned_start_time = custom_start
+                if custom_end:
+                    planned_end_time = custom_end
+                if custom_overnight is not None:
+                    is_overnight = custom_overnight
+                response_data = {
+                    'auto_filled': True,
+                    'schedule_id': str(schedule_id),
+                    'shift_id': str(shift_id),
+                    'status': status,
+                    'special_day_type': special_day_type,
+                    'planned_start_time': planned_start_time,
+                    'planned_end_time': planned_end_time,
+                    'is_overnight': is_overnight,
+                    'notes': notes
+                }
+                return jsonify(response_data), 200
+            # Case 3: Other filters (month, date without employee, or NO filters = fetch ALL)
+            filter_dict = {}
+            fetch_all = not employee_id and not date and not month # NEW: Detect no filters to fetch all
+            if employee_id:
+                filter_dict['employee_id'] = employee_id
+            if date:
+                filter_dict['attendance_date'] = date
             elif month:
-                # All records in month (no employee filter) - fetch all and filter
-                all_records = attendance_collection.find()
-                records = [r for r in all_records if r.get('date', '').startswith(month)]
+                # For month, use Python filter since regex might not be supported in SQLite find
+                filter_dict = {} # Will filter after fetch if needed
+                month_filter = month # Handle below
+            # FIXED: Always fetch as list, then Python filter/sort for SQLite compatibility
+            if fetch_all:
+                # Fetch all records
+                raw_records = list(attendance_collection.find({}))
             else:
-                # Fallback: Single exact date (backward compat)
-                date = date or datetime.now(ZoneInfo("UTC")).date().isoformat()
-                filter_date = {"date": date}
-                records = attendance_collection.find(filter_date)
-            converted_records = [convert_objectid_to_str(rec) for rec in records]
-            return jsonify(converted_records), 200
+                raw_records = list(attendance_collection.find(filter_dict))
+            # Apply month filter if needed (Python-side)
+            if month and not date:
+                raw_records = [rec for rec in raw_records if str(rec.get('attendance_date', '')).startswith(month + '-')]
+            # Python sort: desc by attendance_date
+            raw_records.sort(key=lambda x: x.get('attendance_date', '1900-01-01'), reverse=True)
+            # Populate employee for each record (join)
+            records = []
+            for rec in raw_records:
+                populated = convert_objectid_to_str(rec)
+                emp_id = rec.get('employee_id')
+                if emp_id:
+                    employee = worker_collection.find_one({'_id': emp_id})
+                    populated['employee'] = convert_objectid_to_str(employee) if employee else None
+                else:
+                    populated['employee'] = None
+                records.append(populated)
+            return jsonify(records), 200
         except Exception as e:
             logger.error(f"Error fetching attendance: {str(e)}")
+            logger.error(traceback.format_exc())
             return jsonify({"error": str(e)}), 500
     elif request.method == 'POST':
         try:
             data = request.get_json()
             if not isinstance(data, dict):
-                return jsonify({"error": "JSON data must be an object"}), 400
-            required_fields = ['employeeId', 'date', 'status']
+                return jsonify({"error": "Invalid JSON"}), 400
+            required_fields = ['employee_id', 'attendance_date', 'status', 'schedule_id', 'shift_id']
             if not all(field in data for field in required_fields):
-                return jsonify({"error": "Missing required fields: employeeId, date, status"}), 400
-            # Check if record exists for this employee and date
-            existing = attendance_collection.find_one({"employeeId": data['employeeId'], "date": data['date']})
+                return jsonify({"error": f"Missing required fields: {', '.join(required_fields)}"}), 400
+            # Check duplicate
+            existing = attendance_collection.find_one({
+                "employee_id": data['employee_id'],
+                "attendance_date": data['attendance_date']
+            })
             if existing:
-                return jsonify({"error": "Attendance already marked for this employee and date"}), 400
+                return jsonify({"error": "Attendance already exists for this employee and date"}), 400
+            # Validate FKs
+            if not worker_collection.find_one({"_id": data['employee_id']}):
+                return jsonify({"error": "Invalid employee_id"}), 400
+            if not schedule_master_collection.find_one({"_id": data['schedule_id']}):
+                return jsonify({"error": "Invalid schedule_id"}), 400
+            if not shift_master_collection.find_one({"_id": data['shift_id']}):
+                return jsonify({"error": "Invalid shift_id"}), 400
+            # Fetch shift for defaults
+            shift = shift_master_collection.find_one({"_id": data['shift_id']})
+            planned_start_time = data.get('planned_start_time') or shift.get('start_time')
+            planned_end_time = data.get('planned_end_time') or shift.get('end_time')
+            is_overnight = data.get('is_overnight', shift.get('is_overnight', False))
+            # Auto-compute minutes if times provided
+            worked_minutes = data.get('worked_minutes', 0)
+            overtime_minutes = data.get('overtime_minutes', 0)
+            late_minutes = data.get('late_minutes', 0)
+            early_exit_minutes = data.get('early_exit_minutes', 0)
+            if data.get('actual_check_in') and data.get('actual_check_out') and planned_start_time and planned_end_time:
+                def parse_time_to_minutes(time_str):
+                    if not time_str:
+                        return 0
+                    h, m = map(int, time_str.split(':'))
+                    return h * 60 + m
+                in_mins = parse_time_to_minutes(data.get('actual_check_in'))
+                out_mins = parse_time_to_minutes(data.get('actual_check_out'))
+                plan_start = parse_time_to_minutes(planned_start_time)
+                plan_end = parse_time_to_minutes(planned_end_time)
+                # Compute planned_duration
+                planned_duration = plan_end - plan_start if plan_end >= plan_start else plan_end + 1440 - plan_start
+                # Simple calc; for overnight, assume out > in or adjust if needed (e.g., +24h if out < in)
+                if is_overnight and out_mins < in_mins:
+                    out_mins += 24 * 60
+                worked = max(0, out_mins - in_mins)
+                late = max(0, in_mins - plan_start)
+                # For early: adjust plan_end if overnight
+                early_plan_end = plan_end + (1440 if is_overnight and plan_end < plan_start else 0)
+                early = max(0, early_plan_end - out_mins)
+                overtime = max(0, worked - planned_duration)
+                worked_minutes = worked
+                overtime_minutes = overtime
+                late_minutes = late
+                early_exit_minutes = early
+            # If status is off/holiday/absent/leave, force 0 minutes
+            if data['status'] in ['WeeklyOff', 'Holiday', 'Absent', 'Leave']:
+                worked_minutes = overtime_minutes = late_minutes = early_exit_minutes = 0
             new_record = {
                 "_id": str(uuid.uuid4()),
-                "employeeId": data['employeeId'],
-                "employeeName": data.get('employeeName', ''),
-                "date": data['date'],
-                "status": data['status'], # 'Full Day' or 'Off Day'
-                "startTime": data.get('startTime', ''),
-                "endTime": data.get('endTime', ''),
-                "dailySalary": float(data.get('dailySalary', 0)), # One-day salary
-                "timeIn": data.get('timeIn', datetime.now(ZoneInfo("UTC")).isoformat()),
-                "timeOut": data.get('timeOut', ''),
+                "employee_id": data['employee_id'],
+                "attendance_date": data['attendance_date'],
+                "schedule_id": data['schedule_id'],
+                "shift_id": data['shift_id'],
+                "status": data['status'],
+                "planned_start_time": planned_start_time,
+                "planned_end_time": planned_end_time,
+                "actual_check_in": data.get('actual_check_in', ''),
+                "actual_check_out": data.get('actual_check_out', ''),
+                "worked_minutes": worked_minutes,
+                "overtime_minutes": overtime_minutes,
+                "late_minutes": late_minutes,
+                "early_exit_minutes": early_exit_minutes,
+                "is_overnight": is_overnight,
+                "special_day_type": data.get('special_day_type', 'None'),
                 "notes": data.get('notes', ''),
-                "created_at": datetime.now(ZoneInfo("UTC")).isoformat()
+                "created_at": datetime.now(ZoneInfo("UTC")).isoformat(),
+                "updated_at": datetime.now(ZoneInfo("UTC")).isoformat()
             }
             attendance_collection.insert_one(new_record)
-            logger.info(f"Attendance marked for {data['employeeName']} ({data['status']}) on {data['date']}")
-            return jsonify({"message": "Attendance marked successfully", "record": new_record}), 201
+            # Populate for response
+            populated = convert_objectid_to_str(new_record)
+            emp_id = new_record['employee_id']
+            employee = worker_collection.find_one({'_id': emp_id})
+            populated['employee'] = convert_objectid_to_str(employee) if employee else None
+            logger.info(f"Attendance created for {data['employee_id']} on {data['attendance_date']}")
+            return jsonify({"message": "Attendance created successfully", "record": populated}), 201
         except Exception as e:
-            logger.error(f"Error marking attendance: {str(e)}")
+            logger.error(f"Error creating attendance: {str(e)}")
+            logger.error(traceback.format_exc())
             return jsonify({"error": str(e)}), 500
     elif request.method == 'PUT':
         try:
             data = request.get_json()
-            if not isinstance(data, dict):
-                return jsonify({"error": "JSON data must be an object"}), 400
-            required_fields = ['_id', 'status']
-            if not all(field in data for field in required_fields):
-                return jsonify({"error": "Missing required fields: _id, status"}), 400
-            update_data = {"$set": {"status": data['status'], "updated_at": datetime.now(ZoneInfo("UTC")).isoformat()}}
-            if 'notes' in data:
-                update_data["$set"]["notes"] = data['notes']
-            if 'dailySalary' in data:
-                update_data["$set"]["dailySalary"] = float(data['dailySalary'])
-            result = attendance_collection.update_one({"_id": data['_id']}, update_data)
+            if not data or '_id' not in data:
+                return jsonify({"error": "Missing _id"}), 400
+            current = attendance_collection.find_one({"_id": data['_id']})
+            if not current:
+                return jsonify({"error": "Record not found"}), 404
+            # Fetch shift for recompute
+            shift = shift_master_collection.find_one({"_id": current['shift_id']})
+            planned_start_time = data.get('planned_start_time', current.get('planned_start_time') or shift.get('start_time'))
+            planned_end_time = data.get('planned_end_time', current.get('planned_end_time') or shift.get('end_time'))
+            is_overnight = data.get('is_overnight', current.get('is_overnight', False))
+            # Recompute if times changed
+            if 'actual_check_in' in data or 'actual_check_out' in data:
+                def parse_time_to_minutes(time_str):
+                    if not time_str:
+                        return 0
+                    h, m = map(int, time_str.split(':'))
+                    return h * 60 + m
+                in_mins = parse_time_to_minutes(data.get('actual_check_in', current['actual_check_in']))
+                out_mins = parse_time_to_minutes(data.get('actual_check_out', current['actual_check_out']))
+                plan_start = parse_time_to_minutes(planned_start_time)
+                plan_end = parse_time_to_minutes(planned_end_time)
+                # Compute planned_duration
+                planned_duration = plan_end - plan_start if plan_end >= plan_start else plan_end + 1440 - plan_start
+                # Overnight handling
+                if is_overnight and out_mins < in_mins:
+                    out_mins += 24 * 60
+                worked = max(0, out_mins - in_mins)
+                late = max(0, in_mins - plan_start)
+                # For early: adjust plan_end if overnight
+                early_plan_end = plan_end + (1440 if is_overnight and plan_end < plan_start else 0)
+                early = max(0, early_plan_end - out_mins)
+                overtime = max(0, worked - planned_duration)
+                data['worked_minutes'] = worked
+                data['overtime_minutes'] = overtime
+                data['late_minutes'] = late
+                data['early_exit_minutes'] = early
+            # If status off, zero minutes
+            if data.get('status', current['status']) in ['WeeklyOff', 'Holiday', 'Absent', 'Leave']:
+                data['worked_minutes'] = data['overtime_minutes'] = data['late_minutes'] = data['early_exit_minutes'] = 0
+            # Update fields
+            update_set = {"$set": {
+                "status": data.get('status', current['status']),
+                "planned_start_time": planned_start_time,
+                "planned_end_time": planned_end_time,
+                "actual_check_in": data.get('actual_check_in', current['actual_check_in']),
+                "actual_check_out": data.get('actual_check_out', current['actual_check_out']),
+                "worked_minutes": data.get('worked_minutes', current['worked_minutes']),
+                "overtime_minutes": data.get('overtime_minutes', current['overtime_minutes']),
+                "late_minutes": data.get('late_minutes', current['late_minutes']),
+                "early_exit_minutes": data.get('early_exit_minutes', current['early_exit_minutes']),
+                "is_overnight": data.get('is_overnight', current['is_overnight']),
+                "special_day_type": data.get('special_day_type', current['special_day_type']),
+                "notes": data.get('notes', current['notes']),
+                "updated_at": datetime.now(ZoneInfo("UTC")).isoformat()
+            }}
+            result = attendance_collection.update_one({"_id": data['_id']}, update_set)
             if result.modified_count == 0:
-                return jsonify({"error": "Attendance record not found"}), 404
-            logger.info(f"Attendance updated for record {data['_id']}")
-            return jsonify({"message": "Attendance updated successfully"}), 200
+                return jsonify({"error": "No changes or record not found"}), 404
+            updated = attendance_collection.find_one({"_id": data['_id']})
+            # Populate for response
+            populated = convert_objectid_to_str(updated)
+            emp_id = updated['employee_id']
+            employee = worker_collection.find_one({'_id': emp_id})
+            populated['employee'] = convert_objectid_to_str(employee) if employee else None
+            return jsonify({"message": "Attendance updated successfully", "record": populated}), 200
         except Exception as e:
             logger.error(f"Error updating attendance: {str(e)}")
             return jsonify({"error": str(e)}), 500
     elif request.method == 'DELETE':
         try:
             data = request.get_json()
-            if not isinstance(data, dict) or '_id' not in data:
-                return jsonify({"error": "Missing _id in request body"}), 400
+            if not data or '_id' not in data:
+                return jsonify({"error": "Missing _id"}), 400
             result = attendance_collection.delete_one({"_id": data['_id']})
             if result.deleted_count == 0:
-                return jsonify({"error": "Attendance record not found"}), 404
-            logger.info(f"Attendance deleted for record {data['_id']}")
+                return jsonify({"error": "Record not found"}), 404
             return jsonify({"message": "Attendance deleted successfully"}), 200
         except Exception as e:
             logger.error(f"Error deleting attendance: {str(e)}")
             return jsonify({"error": str(e)}), 500
-
+    return jsonify({"error": "Method not allowed"}), 405
+        
 @app.route('/api/working-days', methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
 @db_required
 def working_days_handler():
