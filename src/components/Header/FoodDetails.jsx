@@ -144,7 +144,7 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
             item_group: data.item_group || item.item_group,
             price_list_rate: data.price_list_rate || item.price_list_rate || 100,
             image: data.image || item.image,
-            images: Array.isArray(data.images) ? data.images : item.images || [],
+            images: Array.isArray(data.images) ? data.images.map(img => img.startsWith('/api/images/') ? img : `/api/images/${img}`) : (item.images || []).map(img => img.startsWith('/api/images/') ? img : `/api/images/${img}`),
             ingredients: Array.isArray(data.ingredients) ? data.ingredients.map(ing => ({
               ...ing,
               base_price: ing.base_price || 100,

@@ -1,10 +1,14 @@
 // src/components/Form/schedulemaster.jsx
 // FULLY DETAILED: Shift Master page (Renamed internally from Schedule Master but file remains schedulemaster.jsx for now or can rely on user preference for filenames)
 // Manages "shift_master" table via /api/schedules endpoint (as per plan backend mapping)
+// UPDATED: Support multiple time slots per shift. Shift has schedule_name, time_slots array [{start_time, end_time, is_overnight}], description.
+// Form allows adding/removing slots. Table displays time slots in a new column.
+// Column management updated: removed startTime, endTime, isOvernight; added timeSlots.
+// Validation ensures at least one valid slot.
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { FaArrowLeft, FaClock, FaSave, FaEdit, FaTrash, FaTimes, FaPlus, FaMoon, FaSun } from 'react-icons/fa';
+import { FaArrowLeft, FaClock, FaSave, FaEdit, FaTrash, FaTimes, FaPlus, FaMoon, FaSun, FaExclamationTriangle } from 'react-icons/fa';
 
 const ScheduleMaster = () => {
   const navigate = useNavigate();
@@ -14,33 +18,29 @@ const ScheduleMaster = () => {
   const [message, setMessage] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({
-    schedule_name: '', // Maps to shift_name
-    start_time: '',
-    end_time: '',
-    is_overnight: false,
+    schedule_name: '',
+    time_slots: [{ start_time: '', end_time: '', is_overnight: false }],
     description: '',
   });
   const [baseUrl, setBaseUrl] = useState(null);
 
+  // Delete Confirmation State
+  const [deleteId, setDeleteId] = useState(null);
+
   // Column management states
   const [columnOrder, setColumnOrder] = useState([
     { key: "scheduleName", label: "Shift Name", align: "left" },
-    { key: "startTime", label: "Start Time", align: "left" },
-    { key: "endTime", label: "End Time", align: "left" },
-    { key: "isOvernight", label: "Overnight", align: "center" },
+    { key: "timeSlots", label: "Time Slots", align: "left" },
     { key: "description", label: "Description", align: "left" },
     { key: "actions", label: "Actions", align: "center" },
   ]);
   const [showColumnModal, setShowColumnModal] = useState(false);
   const [selectedFieldToAdd, setSelectedFieldToAdd] = useState('');
   const [selectedPosition, setSelectedPosition] = useState(0);
-
   const possibleColumns = [
     { key: "id", label: "ID", align: "left" },
     { key: "scheduleName", label: "Shift Name", align: "left" },
-    { key: "startTime", label: "Start Time", align: "left" },
-    { key: "endTime", label: "End Time", align: "left" },
-    { key: "isOvernight", label: "Overnight", align: "center" },
+    { key: "timeSlots", label: "Time Slots", align: "left" },
     { key: "description", label: "Description", align: "left" },
     { key: "created_at", label: "Created At", align: "left" },
   ];
@@ -86,68 +86,130 @@ const ScheduleMaster = () => {
     }
   }, [baseUrl]);
 
-  // Handle input change
+  // Handle input change for non-array fields
   const handleInputChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    const val = type === 'checkbox' ? checked : value;
-    setFormData(prev => ({ ...prev, [name]: val }));
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  // Time slots handlers
+  const addSlot = () => {
+    setFormData(prev => ({
+      ...prev,
+      time_slots: [...prev.time_slots, { start_time: '', end_time: '', is_overnight: false }]
+    }));
+  };
+
+  const removeSlot = (index) => {
+    if (formData.time_slots.length > 1) {
+      setFormData(prev => ({
+        ...prev,
+        time_slots: prev.time_slots.filter((_, i) => i !== index)
+      }));
+    }
+  };
+
+  const updateSlot = (index, field, value) => {
+    setFormData(prev => {
+      const newSlots = [...prev.time_slots];
+      newSlots[index][field] = value;
+      return { ...prev, time_slots: newSlots };
+    });
   };
 
   // Add shift
   const handleAddShift = async (e) => {
     e.preventDefault();
+    // Validate slots
+    if (formData.time_slots.length === 0 || !formData.time_slots.every(slot => slot.start_time && slot.end_time)) {
+      setError('Each time slot must have start and end time.');
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
+    if (!formData.schedule_name.trim()) {
+      setError('Shift name is required.');
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
     try {
       const url = baseUrl ? `${baseUrl}/api/schedules` : '/api/schedules';
       await axios.post(url, formData);
       setMessage('Shift added successfully!');
-      setFormData({ schedule_name: '', start_time: '', end_time: '', is_overnight: false, description: '' });
+      setFormData({
+        schedule_name: '',
+        time_slots: [{ start_time: '', end_time: '', is_overnight: false }],
+        description: '',
+      });
       fetchShifts();
       setTimeout(() => setMessage(''), 3000);
     } catch (err) {
       setError(`Failed to add shift: ${err.response?.data?.error || err.message}`);
+      setTimeout(() => setError(null), 3000);
     }
   };
 
   // Edit shift
   const handleEditShift = (shift) => {
     setFormData({
-      schedule_name: shift.schedule_name,
-      start_time: shift.start_time,
-      end_time: shift.end_time,
-      is_overnight: shift.is_overnight || false,
+      schedule_name: shift.schedule_name || '',
+      time_slots: shift.time_slots || [{ start_time: '', end_time: '', is_overnight: false }],
       description: shift.description || '',
     });
-    setEditingId(shift.id);
+    setEditingId(shift.id || shift._id);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // Update shift
   const handleUpdateShift = async (e) => {
     e.preventDefault();
+    // Validate slots
+    if (formData.time_slots.length === 0 || !formData.time_slots.every(slot => slot.start_time && slot.end_time)) {
+      setError('Each time slot must have start and end time.');
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
+    if (!formData.schedule_name.trim()) {
+      setError('Shift name is required.');
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
     try {
       const url = baseUrl ? `${baseUrl}/api/schedules/${editingId}` : `/api/schedules/${editingId}`;
       await axios.put(url, formData);
       setMessage('Shift updated successfully!');
       setEditingId(null);
-      setFormData({ schedule_name: '', start_time: '', end_time: '', is_overnight: false, description: '' });
+      setFormData({
+        schedule_name: '',
+        time_slots: [{ start_time: '', end_time: '', is_overnight: false }],
+        description: '',
+      });
       fetchShifts();
       setTimeout(() => setMessage(''), 3000);
     } catch (err) {
       setError(`Failed to update shift: ${err.response?.data?.error || err.message}`);
+      setTimeout(() => setError(null), 3000);
     }
   };
 
-  // Delete shift
-  const handleDeleteShift = async (id) => {
-    if (window.confirm('Are you sure you want to delete this shift?')) {
-      try {
-        const url = baseUrl ? `${baseUrl}/api/schedules/${id}` : `/api/schedules/${id}`;
-        await axios.delete(url);
-        setMessage('Shift deleted successfully!');
-        fetchShifts();
-        setTimeout(() => setMessage(''), 3000);
-      } catch (err) {
-        setError(`Failed to delete shift: ${err.response?.data?.error || err.message}`);
-      }
+  // Trigger Delete flow
+  const confirmDeleteShift = (id) => {
+    setDeleteId(id);
+  };
+
+  // Execute Delete
+  const handleExecuteDelete = async () => {
+    if (!deleteId) return;
+    try {
+      const url = baseUrl ? `${baseUrl}/api/schedules/${deleteId}` : `/api/schedules/${deleteId}`;
+      await axios.delete(url);
+      setMessage('Shift deleted successfully!');
+      setDeleteId(null);
+      fetchShifts();
+      setTimeout(() => setMessage(''), 3000);
+    } catch (err) {
+      setError(`Failed to delete shift: ${err.response?.data?.error || err.message}`);
+      setTimeout(() => setError(null), 3000);
+      setDeleteId(null);
     }
   };
 
@@ -184,10 +246,6 @@ const ScheduleMaster = () => {
     e.target.style.backgroundColor = 'rgba(46, 204, 113, 0.2)';
   };
 
-  const handleDragLeave = (e) => {
-    e.target.style.backgroundColor = '';
-  };
-
   const handleDrop = (e, targetIndex) => {
     e.preventDefault();
     const sourceIndex = parseInt(e.dataTransfer.getData("text/plain"), 10);
@@ -195,12 +253,6 @@ const ScheduleMaster = () => {
     const [draggedColumn] = newOrder.splice(sourceIndex, 1);
     newOrder.splice(targetIndex, 0, draggedColumn);
     setColumnOrder(newOrder);
-    document.querySelectorAll('table th').forEach(th => {
-      th.style.backgroundColor = '';
-    });
-  };
-
-  const handleDragEnd = (e) => {
     document.querySelectorAll('table th').forEach(th => {
       th.style.backgroundColor = '';
     });
@@ -218,7 +270,7 @@ const ScheduleMaster = () => {
   const tdStyle = {
     padding: '15px 12px',
     borderRight: '1px solid #e9ecef',
-    whiteSpace: 'nowrap',
+    whiteSpace: 'normal',
     color: '#2c3e50'
   };
 
@@ -226,12 +278,13 @@ const ScheduleMaster = () => {
     switch (col.key) {
       case 'scheduleName':
         return shift.schedule_name;
-      case 'startTime':
-        return shift.start_time;
-      case 'endTime':
-        return shift.end_time;
-      case 'isOvernight':
-        return shift.is_overnight ? <span style={{ color: '#8e44ad', fontWeight: 'bold' }}><FaMoon /> Yes</span> : <span style={{ color: '#f39c12' }}><FaSun /> No</span>;
+      case 'timeSlots':
+        if (!shift.time_slots || shift.time_slots.length === 0) return 'N/A';
+        return (
+          <div style={{ whiteSpace: 'pre-line', lineHeight: '1.4' }}>
+            {shift.time_slots.map((slot, i) => `${slot.start_time} - ${slot.end_time}${slot.is_overnight ? ' (Overnight)' : ''}`).join('\n')}
+          </div>
+        );
       case 'description':
         return shift.description || 'N/A';
       case 'created_at':
@@ -247,7 +300,7 @@ const ScheduleMaster = () => {
               <FaEdit />
             </button>
             <button
-              onClick={(e) => { e.stopPropagation(); handleDeleteShift(shift.id); }}
+              onClick={(e) => { e.stopPropagation(); confirmDeleteShift(shift.id || shift._id); }}
               style={{ padding: '6px 10px', background: 'linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)', color: 'white', border: 'none', borderRadius: '20px', cursor: 'pointer', fontSize: '0.85rem' }}
               title="Delete"
             >
@@ -302,27 +355,65 @@ const ScheduleMaster = () => {
               <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#2c3e50' }}>Shift Name</label>
               <input type="text" name="schedule_name" placeholder="e.g. Morning Shift" value={formData.schedule_name} onChange={handleInputChange} style={{ width: '100%', padding: '12px', border: '1px solid #3498db', borderRadius: '10px', background: '#f8f9fa' }} required />
             </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#2c3e50' }}>Start Time</label>
-              <input type="time" name="start_time" value={formData.start_time} onChange={handleInputChange} style={{ width: '100%', padding: '12px', border: '1px solid #3498db', borderRadius: '10px', background: '#f8f9fa' }} required />
-            </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#2c3e50' }}>End Time</label>
-              <input type="time" name="end_time" value={formData.end_time} onChange={handleInputChange} style={{ width: '100%', padding: '12px', border: '1px solid #3498db', borderRadius: '10px', background: '#f8f9fa' }} required />
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '30px' }}>
-              <input type="checkbox" name="is_overnight" checked={formData.is_overnight} onChange={handleInputChange} style={{ width: '20px', height: '20px', cursor: 'pointer' }} />
-              <label style={{ fontWeight: '600', color: '#2c3e50', cursor: 'pointer' }}>Is Overnight Shift? (Crosses Midnight)</label>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#2c3e50' }}>Time Slots (Add multiple for multi-shift days)</label>
+              {formData.time_slots.map((slot, index) => (
+                <div key={index} style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px', padding: '10px', border: '1px solid #ddd', borderRadius: '5px', background: '#f8f9fa' }}>
+                  <input
+                    type="time"
+                    placeholder="Start Time"
+                    value={slot.start_time}
+                    onChange={(e) => updateSlot(index, 'start_time', e.target.value)}
+                    style={{ flex: 1, padding: '8px', border: '1px solid #3498db', borderRadius: '5px' }}
+                    required
+                  />
+                  <input
+                    type="time"
+                    placeholder="End Time"
+                    value={slot.end_time}
+                    onChange={(e) => updateSlot(index, 'end_time', e.target.value)}
+                    style={{ flex: 1, padding: '8px', border: '1px solid #3498db', borderRadius: '5px' }}
+                    required
+                  />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '5px', margin: 0, fontSize: '0.9rem' }}>
+                    <input
+                      type="checkbox"
+                      checked={slot.is_overnight}
+                      onChange={(e) => updateSlot(index, 'is_overnight', e.target.checked)}
+                      style={{ width: '18px', height: '18px' }}
+                    />
+                    Overnight
+                    {slot.is_overnight ? <FaMoon style={{ color: '#8e44ad', fontSize: '1rem' }} /> : <FaSun style={{ color: '#f39c12', fontSize: '1rem' }} />}
+                  </label>
+                  {formData.time_slots.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeSlot(index)}
+                      style={{ padding: '8px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}
+                    >
+                      <FaTrash />
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={addSlot}
+                style={{ background: 'linear-gradient(135deg, #27ae60, #2ecc71)', color: 'white', border: 'none', cursor: 'pointer', padding: '10px 20px', borderRadius: '25px', fontSize: '0.95rem', fontWeight: '600' }}
+              >
+                <FaPlus /> Add Time Slot
+              </button>
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#2c3e50' }}>Description</label>
               <textarea name="description" placeholder="Optional description" value={formData.description} onChange={handleInputChange} style={{ width: '100%', padding: '12px', border: '1px solid #3498db', borderRadius: '10px', background: '#f8f9fa', minHeight: '80px' }} />
             </div>
+
             <button type="submit" style={{ background: 'linear-gradient(135deg, #3498db, #2980b9)', color: 'white', border: 'none', cursor: 'pointer', padding: '12px 24px', borderRadius: '50px', fontSize: '1rem', fontWeight: '600', gridColumn: '1 / -1', boxShadow: '0 4px 8px rgba(52, 152, 219, 0.3)' }}>
               <FaSave /> {editingId ? 'Update Shift' : 'Add Shift'}
             </button>
             {editingId && (
-              <button type="button" onClick={() => { setEditingId(null); setFormData({ schedule_name: '', start_time: '', end_time: '', is_overnight: false, description: '' }); }} style={{ background: '#95a5a6', color: 'white', border: 'none', cursor: 'pointer', padding: '12px 24px', borderRadius: '50px', fontSize: '1rem', fontWeight: '600', gridColumn: '1 / -1' }}>
+              <button type="button" onClick={() => { setEditingId(null); setFormData({ schedule_name: '', time_slots: [{ start_time: '', end_time: '', is_overnight: false }], description: '' }); }} style={{ background: '#95a5a6', color: 'white', border: 'none', cursor: 'pointer', padding: '12px 24px', borderRadius: '50px', fontSize: '1rem', fontWeight: '600', gridColumn: '1 / -1' }}>
                 Cancel Edit
               </button>
             )}
@@ -343,7 +434,7 @@ const ScheduleMaster = () => {
               </thead>
               <tbody>
                 {shifts.map((shift, index) => (
-                  <tr key={shift.id} style={{ borderBottom: '1px solid #e9ecef', backgroundColor: index % 2 === 0 ? '#f8f9fa' : '#ffffff' }}>
+                  <tr key={shift.id || shift._id} style={{ borderBottom: '1px solid #e9ecef', backgroundColor: index % 2 === 0 ? '#f8f9fa' : '#ffffff' }}>
                     {columnOrder.map((col) => (
                       <td key={col.key} style={{ ...tdStyle, textAlign: col.align }}>{getCellContent(shift, col)}</td>
                     ))}
@@ -378,6 +469,31 @@ const ScheduleMaster = () => {
                 ))}
               </select>
               <button onClick={addColumn} disabled={!selectedFieldToAdd} style={{ width: '100%', padding: '10px', background: '#3498db', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer' }}>Add Column</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Warning Modal */}
+      {deleteId && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1100 }}>
+          <div style={{ backgroundColor: '#fff', padding: '30px', borderRadius: '15px', width: '90%', maxWidth: '400px', textAlign: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
+            <FaExclamationTriangle style={{ fontSize: '3rem', color: '#e74c3c', marginBottom: '20px' }} />
+            <h3 style={{ color: '#2c3e50', margin: '0 0 15px 0' }}>Confirm Deletion</h3>
+            <p style={{ color: '#7f8c8d', marginBottom: '25px' }}>Are you sure you want to delete this shift? This action cannot be undone.</p>
+            <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
+              <button
+                onClick={handleExecuteDelete}
+                style={{ padding: '10px 25px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer' }}
+              >
+                Yes, Delete
+              </button>
+              <button
+                onClick={() => setDeleteId(null)}
+                style={{ padding: '10px 25px', background: '#95a5a6', color: 'white', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>

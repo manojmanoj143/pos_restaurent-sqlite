@@ -5529,7 +5529,7 @@ def add_employee():
             for field in required_fields:
                 if field not in data or (isinstance(data[field], str) and not data[field].strip()):
                     missing_fields.append(field)
-           
+       
             if missing_fields:
                 return jsonify({"error": f"Missing required fields: {', '.join(missing_fields)}"}), 400
             # Check if email exists
@@ -5629,183 +5629,224 @@ def add_employee():
             logger.error(f"Error creating employee: {str(e)}")
             logger.error(traceback.format_exc())
             return jsonify({"error": f"Internal Server Error: {str(e)}"}), 500
-@app.route('/api/add-employee/<emp_id>', methods=['PUT', 'DELETE'])
+
+@app.route('/api/add-employee/<emp_id>', methods=['GET', 'PUT', 'DELETE'])
 @db_required
 def manage_employee(emp_id):
     mode = config.get("mode", "server")
     if mode == 'client':
-        if request.method == 'PUT':
-            server_url = f"http://{config['server_ip']}:8000/api/add-employee/{emp_id}"
-            response = requests.put(server_url, json=request.get_json())
-            if response.status_code == 200:
-                return jsonify(response.json()), 200
-            else:
-                return jsonify({"error": "Proxy update failed"}), response.status_code
+        server_ip = config.get('server_ip', 'localhost') # Fix explicit IP
+        server_url = f"http://{server_ip}:8000/api/add-employee/{emp_id}"
+        if request.method == 'GET':
+            try:
+                response = requests.get(server_url, timeout=5)
+                return jsonify(response.json()), response.status_code
+            except Exception as e:
+                return jsonify({"error": f"Proxy GET error: {str(e)}"}), 500
+        elif request.method == 'PUT':
+            try:
+                data = request.get_json()
+                response = requests.put(server_url, json=data, timeout=5)
+                return jsonify(response.json()), response.status_code
+            except Exception as e:
+                return jsonify({"error": f"Proxy PUT error: {str(e)}"}), 500
         elif request.method == 'DELETE':
-            server_url = f"http://{config['server_ip']}:8000/api/add-employee/{emp_id}"
-            response = requests.delete(server_url)
-            if response.status_code == 200:
-                return jsonify(response.json()), 200
-            else:
-                return jsonify({"error": "Proxy delete failed"}), response.status_code
-    if request.method == 'PUT':
+            try:
+                response = requests.delete(server_url, timeout=5)
+                return jsonify(response.json()), response.status_code
+            except Exception as e:
+                return jsonify({"error": f"Proxy DELETE error: {str(e)}"}), 500
+    if request.method == 'GET':
+        try:
+            # Fetch single employee by ID, filter out drafts
+            emp = worker_collection.find_one({'_id': emp_id})
+            if not emp:
+                return jsonify({"error": "Employee not found"}), 404
+            if emp.get('isDraft') is True:
+                return jsonify({"error": "Employee not found"}), 404
+            if '_id' in emp:
+                emp['_id'] = str(emp['_id'])
+            # NEW: Fetch assigned schedule details for Attendance & Leaves
+            assignment = employee_schedule_assign_collection.find_one({'employee_id': emp_id})
+            assigned_schedule = None
+            if assignment:
+                schedule_id = assignment.get('schedule_id')
+                if schedule_id:
+                    rule = schedule_master_collection.find_one({'_id': schedule_id})
+                    if rule:
+                        shift_id = rule.get('shift_id')
+                        shift = shift_master_collection.find_one({'_id': shift_id}) if shift_id else None
+                        # Convert _id to str if present
+                        if '_id' in rule:
+                            rule['_id'] = str(rule['_id'])
+                        if shift and '_id' in shift:
+                            shift['_id'] = str(shift['_id'])
+                        if '_id' in assignment:
+                            assignment['_id'] = str(assignment['_id'])
+                        # UPDATED: Build assigned_schedule object - Handle multiple time_slots for split shifts
+                        # Build default_shift string with all slots
+                        if shift and 'time_slots' in shift and shift['time_slots']:
+                            slot_str = ', '.join([
+                                f"{s.get('start_time', 'N/A')}-{s.get('end_time', 'N/A')}{ ' (O)' if s.get('is_overnight', False) else '' }"
+                                for s in shift['time_slots']
+                            ])
+                            default_shift = f"{shift.get('schedule_name', 'N/A')} ({slot_str})"
+                        else:
+                            # Fallback to single if no time_slots (legacy)
+                            default_shift = f"{shift.get('schedule_name', 'N/A')} {shift.get('start_time', 'N/A')} to {shift.get('end_time', 'N/A')}" if shift else 'N/A'
+                        # Merge special days: Rule specials + Assignment overrides (prefer assignment if exists)
+                        all_special_days = rule.get('special_days', [])
+                        assignment_specials = assignment.get('special_day_assignments', [])
+                        merged_specials = []
+                        special_map = {f"{sd.get('date', '')}-{sd.get('description', '')}": sd for sd in assignment_specials} # Key for quick lookup
+                        for sd in all_special_days:
+                            key = f"{sd.get('date', '')}-{sd.get('description', '')}"
+                            if key in special_map:
+                                merged_specials.append({**sd, **special_map[key], 'is_observed': True}) # Override with assignment
+                            else:
+                                merged_specials.append({**sd, 'is_observed': sd.get('type') == 'Holiday'}) # Default observed for holidays
+                        # Add any assignment-only specials
+                        for sd in assignment_specials:
+                            key = f"{sd.get('date', '')}-{sd.get('description', '')}"
+                            if not any(f"{existing.get('date', '')}-{existing.get('description', '')}" == key for existing in all_special_days):
+                                merged_specials.append(sd)
+                       
+                        assigned_schedule = {
+                            'schedule_name': rule.get('schedule_name', 'N/A'), # Used as Holiday List code e.g., HL-IND-KL-2025
+                            'start_date': rule.get('start_date'), # NEW: Full period for weekly off generation
+                            'end_date': rule.get('end_date'), # NEW
+                            'default_shift': default_shift,
+                            'working_days': rule.get('working_days', []),
+                            'weekly_off': rule.get('weekly_off', []), # NEW: For weekly off list
+                            'special_days': all_special_days, # Original rule specials (for reference)
+                            'special_day_assignments': merged_specials, # Merged for employee-specific
+                            'assignment_notes': assignment.get('notes', ''),
+                        }
+            emp['assigned_schedule'] = assigned_schedule
+            return jsonify(emp), 200
+        except Exception as e:
+            logger.error(f"Error fetching employee: {str(e)}")
+            logger.error(traceback.format_exc())
+            return jsonify({"error": str(e)}), 500
+    elif request.method == 'PUT':
         try:
             data = request.get_json()
             if not isinstance(data, dict):
                 return jsonify({"error": "JSON data must be an object"}), 400
-            if not data:
-                return jsonify({"error": "No data provided"}), 400
-            # Minimal required fields for update (no password)
-            required_fields = ['name', 'phoneNumber', 'email', 'address', 'username', 'employeeDesignation', 'employeeType']
-            if not all(field in data for field in required_fields):
-                missing = [f for f in required_fields if f not in data]
-                return jsonify({"error": f"Missing required fields: {', '.join(missing)}"}), 400
-            # Non-empty check for minimal
-            non_empty_required = required_fields.copy()
-            if not all(str(data[field]).strip() for field in non_empty_required):
-                 return jsonify({"error": "All required fields must be non-empty"}), 400
-            # Check if employee exists (non-draft) - Python filtering
-            # SQLiteCollection workaround for $ne
-            current_emp = worker_collection.find_one({'_id': emp_id})
-            if not current_emp or current_emp.get('isDraft') is True:
+           
+            existing_emp = worker_collection.find_one({'_id': emp_id})
+            if not existing_emp:
                 return jsonify({"error": "Employee not found"}), 404
-            # Check if email already exists (excluding current, non-drafts) - Python filtering
-            all_workers = worker_collection.find()
-            existing_worker = next((
-                w for w in all_workers
-                if w.get('email') == data['email'] and w.get('_id') != emp_id and w.get('isDraft') is not True
-            ), None)
-            existing_user = users_collection.find_one({"email": data['email']})
-            # If user exists, check if it's the SAME user (by checking if the email matches current employee's email)
-            # If email is changing, we need to ensure the new email isn't taken.
+            # Check email uniqueness (excluding self)
+            if 'email' in data and data['email'] != existing_emp.get('email'):
+                if worker_collection.find_one({"email": data['email'], "_id": {"$ne": emp_id}, "isDraft": {"$ne": True}}):
+                     return jsonify({"error": "Email already in use by another employee"}), 400
            
-            if existing_worker:
-                 return jsonify({"error": "Email already exists (assigned to another employee)"}), 400
-           
-            if existing_user and existing_user.get('email') != current_emp.get('email'):
-                 return jsonify({"error": "Email already exists (assigned to a system user)"}), 400
-            # Validate dates if changed/provided
-            date_of_birth = data.get('dateOfBirth', current_emp.get('dateOfBirth', ''))
-            if date_of_birth and date_of_birth != current_emp.get('dateOfBirth', ''):
+            # Safe float conversion helper
+            def safe_float(val, default=0.0):
                 try:
-                    datetime.fromisoformat(date_of_birth)
-                except ValueError:
-                    return jsonify({"error": "Invalid Date of Birth format. Use YYYY-MM-DD."}), 400
-            date_of_joining = data.get('dateOfJoining', current_emp.get('dateOfJoining', ''))
-            if date_of_joining and date_of_joining != current_emp.get('dateOfJoining', ''):
-                try:
-                    datetime.fromisoformat(date_of_joining)
-                except ValueError:
-                    return jsonify({"error": "Invalid Date of Joining format. Use YYYY-MM-DD."}), 400
-           
-            id_expiry = data.get('idExpiry', current_emp.get('idExpiry', ''))
-            if id_expiry and id_expiry != current_emp.get('idExpiry', ''):
-                try:
-                    datetime.fromisoformat(id_expiry)
-                except ValueError:
-                    return jsonify({"error": "Invalid ID Expiry format. Use YYYY-MM-DD."}), 400
-            # Safe float for salary
-            def safe_float(val_str, default=0.0):
-                if val_str is None or str(val_str).strip() == '':
+                    return float(val) if val else default
+                except (ValueError, TypeError):
                     return default
-                try:
-                    return float(str(val_str))
-                except ValueError:
-                    return default
-            basic = safe_float(data.get('basicSalary', current_emp.get('basicSalary', 0)))
-            hra = safe_float(data.get('hra', current_emp.get('hra', 0)))
-            ta = safe_float(data.get('ta', current_emp.get('ta', 0)))
-            oa = safe_float(data.get('oa', current_emp.get('oa', 0)))
-            total_salary = basic + hra + ta + oa
-            update_data = {
-                '$set': {
-                    'name': data['name'],
-                    'phoneNumber': data['phoneNumber'],
-                    'email': data['email'],
-                    'address': data['address'],
-                    'employeeDesignation': data['employeeDesignation'],
-                    'employeeType': data['employeeType'],
-                    'basicSalary': basic,
-                    'hra': hra,
-                    'ta': ta,
-                    'oa': oa,
-                    'totalSalary': total_salary,
-                    'username': data['username'],
-                    'dateOfJoining': date_of_joining,
-                    'status': data.get('status', current_emp.get('status', 'Active')),
-                    'salutation': data.get('salutation', current_emp.get('salutation', '')),
-                    'maritalStatus': data.get('maritalStatus', current_emp.get('maritalStatus', '')),
-                    'gender': data.get('gender', current_emp.get('gender', '')),
-                    'dateOfBirth': date_of_birth,
-                    'company': data.get('company', current_emp.get('company', 'POS 8')),
-                    'idNumber': data.get('idNumber', current_emp.get('idNumber', '')),
-                    'idExpiry': id_expiry,
-                    'bankName': data.get('bankName', current_emp.get('bankName', '')),
-                    'accountHolderName': data.get('accountHolderName', current_emp.get('accountHolderName', '')),
-                    'accountNumber': data.get('accountNumber', current_emp.get('accountNumber', '')),
-                    'ifscCode': data.get('ifscCode', current_emp.get('ifscCode', '')),
-                    'nationality': data.get('nationality', current_emp.get('nationality', '')),
-                    'education': data.get('education', current_emp.get('education', '')),
-                    'previousExperience': data.get('previousExperience', current_emp.get('previousExperience', '')),
-                    'skills': data.get('skills', current_emp.get('skills', '')),
-                    'healthInfo': data.get('healthInfo', current_emp.get('healthInfo', '')),
-                    'familyDetails': data.get('familyDetails', current_emp.get('familyDetails', '')),
-                    'profileImage': data.get('profileImage', current_emp.get('profileImage', '')),
-                }
+            # Prepare update fields
+            update_fields = {
+                "name": data.get('name', existing_emp.get('name')),
+                "phoneNumber": data.get('phoneNumber', existing_emp.get('phoneNumber')),
+                "email": data.get('email', existing_emp.get('email')),
+                "gender": data.get('gender', existing_emp.get('gender')),
+                "dateOfBirth": data.get('dateOfBirth', existing_emp.get('dateOfBirth')),
+                "dateOfJoining": data.get('dateOfJoining', existing_emp.get('dateOfJoining')),
+                "company": data.get('company', existing_emp.get('company')),
+                "status": data.get('status', existing_emp.get('status')),
+                "salutation": data.get('salutation', existing_emp.get('salutation')),
+                "maritalStatus": data.get('maritalStatus', existing_emp.get('maritalStatus')),
+                "address": data.get('address', existing_emp.get('address')),
+                "idNumber": data.get('idNumber', existing_emp.get('idNumber')),
+                "idExpiry": data.get('idExpiry', existing_emp.get('idExpiry')),
+                "employeeDesignation": data.get('employeeDesignation', existing_emp.get('employeeDesignation')),
+                "employeeType": data.get('employeeType', existing_emp.get('employeeType')),
+                # Bank Details
+                "bankName": data.get('bankName', existing_emp.get('bankName', '')),
+                "accountHolderName": data.get('accountHolderName', existing_emp.get('accountHolderName', '')),
+                "accountNumber": data.get('accountNumber', existing_emp.get('accountNumber', '')),
+                "ifscCode": data.get('ifscCode', existing_emp.get('ifscCode', '')),
+                # Salary
+                "basicSalary": safe_float(data.get('basicSalary')),
+                "hra": safe_float(data.get('hra')),
+                "ta": safe_float(data.get('ta')),
+                "oa": safe_float(data.get('oa')),
+                # Extra
+                "nationality": data.get('nationality', existing_emp.get('nationality')),
+                "education": data.get('education', existing_emp.get('education')),
+                "previousExperience": data.get('previousExperience', existing_emp.get('previousExperience')),
+                "skills": data.get('skills', existing_emp.get('skills')),
+                "healthInfo": data.get('healthInfo', existing_emp.get('healthInfo')),
+                "familyDetails": data.get('familyDetails', existing_emp.get('familyDetails')),
+                "username": data.get('username', existing_emp.get('username')),
+                "updated_at": datetime.now(ZoneInfo("UTC")).isoformat()
             }
-            if data.get('password') and data['password'].strip():
-                hashed_password = bcrypt.hashpw(data['password'].encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-                update_data['$set']['password'] = hashed_password
-           
-            # Update Worker Collection
-            worker_collection.update_one({'_id': emp_id}, update_data)
-            # Update Users Collection (if user entry exists)
-            # First, check if there's a user linked to this email *before* update (using current_emp['email'])
-            # Or just update/upsert based on email?
-            # Best practice: Update user based on old email if it changed, or use logic to keep them in sync.
-            # Here, we assume the user's email key matches. If email changed, we need to handle that carefully.
-            # Simplified: Update user with matching email (if email didn't change) or update user with old email to new email.
-           
-            # If email changed:
-            if data['email'] != current_emp['email']:
-                # Update user with OLD email to NEW email + details
-                user_update_filter = {'email': current_emp['email']}
+            # Recalculate total salary if components provided, else use provided, else sum
+            basic = update_fields['basicSalary']
+            hra = update_fields['hra']
+            ta = update_fields['ta']
+            oa = update_fields['oa']
+            if data.get('totalSalary'):
+                update_fields['totalSalary'] = safe_float(data.get('totalSalary'))
             else:
-                user_update_filter = {'email': data['email']}
-            user_update_data = {
-                '$set': {
-                    'email': data['email'], # In case it changed
-                    'username': data['username'],
-                    'firstName': data['name'],
-                    'phone_number': data['phoneNumber'],
-                    'role': data['employeeDesignation'].lower(),
-                    'company': data.get('company', current_emp.get('company', 'POS 8')),
-                    'status': data.get('status', 'Active')
-                }
-            }
-            if data.get('password') and data['password'].strip():
-                 user_update_data['$set']['password'] = update_data['$set']['password']
-            users_collection.update_one(user_update_filter, user_update_data)
-            logger.info(f"Employee updated: {data['name']} ({data['email']})")
-            return jsonify({"message": "Employee updated successfully"}), 200
+                update_fields['totalSalary'] = basic + hra + ta + oa
+            # Handle password update
+            if 'password' in data and data['password']:
+                try:
+                    hashed_password = bcrypt.hashpw(str(data['password']).encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                    update_fields['password'] = hashed_password
+                except Exception as e:
+                    return jsonify({"error": "Invalid password format"}), 400
+           
+            # Handle profile image
+            if 'profileImage' in data:
+                update_fields['profileImage'] = data['profileImage']
+            worker_collection.update_one({'_id': emp_id}, {'$set': update_fields})
+           
+            # Update user collection if relevant fields changed
+            user_update = {}
+            if 'email' in update_fields: user_update['email'] = update_fields['email']
+            if 'username' in update_fields: user_update['username'] = update_fields['username']
+            if 'name' in update_fields: user_update['firstName'] = update_fields['name']
+            if 'phoneNumber' in update_fields: user_update['phone_number'] = update_fields['phoneNumber']
+            if 'employeeDesignation' in update_fields: user_update['role'] = update_fields['employeeDesignation'].lower()
+            if 'status' in update_fields: user_update['status'] = update_fields['status']
+            if 'password' in update_fields: user_update['password'] = update_fields['password']
+           
+            # Try to find associated user by email (original or new)
+            # Strategy: find by original email if possible, else current.
+            # Since email might change, we should rely on what was in existing_emp
+            users_collection.update_one({'email': existing_emp.get('email')}, {'$set': user_update})
+            return jsonify({"message": "Employee updated successfully", "id": emp_id}), 200
         except Exception as e:
             logger.error(f"Error updating employee: {str(e)}")
             logger.error(traceback.format_exc())
             return jsonify({"error": f"Internal Server Error: {str(e)}"}), 500
     elif request.method == 'DELETE':
         try:
-            # Check if employee exists first
-            current_emp = worker_collection.find_one({'_id': emp_id})
-            if not current_emp:
+            existing_emp = worker_collection.find_one({'_id': emp_id})
+            if not existing_emp:
                 return jsonify({"error": "Employee not found"}), 404
-            # Delete from Worker Collection
+           
+            # Delete employee
             worker_collection.delete_one({'_id': emp_id})
-            users_collection.delete_one({'email': current_emp['email']})
-            logger.info(f"Employee deleted: {current_emp['name']} ({current_emp['email']})")
+           
+            # Delete associated user
+            if existing_emp.get('email'):
+                users_collection.delete_one({'email': existing_emp['email']})
+           
+            # Optional: Delete/Archive assignments?
+            # Keeping it simple: Delete assignments
+            employee_schedule_assign_collection.delete_many({'employee_id': emp_id})
+           
             return jsonify({"message": "Employee deleted successfully"}), 200
         except Exception as e:
             logger.error(f"Error deleting employee: {str(e)}")
-            return jsonify({"error": str(e)}), 500 # 1. SHIFT MASTER
+            return jsonify({"error": f"Internal Server Error: {str(e)}"}), 500# 1. SHIFT MASTER
 
 
 # FIXED: Updated /api/attendance GET handler to support month + employeeId filtering
@@ -5960,6 +6001,12 @@ def attendance():
                 planned_start_time = shift.get('start_time')
                 planned_end_time = shift.get('end_time')
                 is_overnight = shift.get('is_overnight', False)
+                # Fallback to time_slots[0] if top-level missing
+                if not planned_start_time and shift.get('time_slots') and len(shift.get('time_slots', [])) > 0:
+                    first_slot = shift['time_slots'][0]
+                    planned_start_time = first_slot.get('start_time')
+                    planned_end_time = first_slot.get('end_time')
+                    is_overnight = first_slot.get('is_overnight', False)
                 # Override with custom if present
                 if custom_start:
                     planned_start_time = custom_start
@@ -6025,13 +6072,15 @@ def attendance():
             required_fields = ['employee_id', 'attendance_date', 'status', 'schedule_id', 'shift_id']
             if not all(field in data for field in required_fields):
                 return jsonify({"error": f"Missing required fields: {', '.join(required_fields)}"}), 400
-            # Check duplicate
+            # Duplicate Check: Check for existing record with same Emp + Date + Start Time
+            # This allows split shifts (different start times) but prevents exact duplicate entries
             existing = attendance_collection.find_one({
                 "employee_id": data['employee_id'],
-                "attendance_date": data['attendance_date']
+                "attendance_date": data['attendance_date'],
+                "planned_start_time": data.get('planned_start_time')
             })
             if existing:
-                return jsonify({"error": "Attendance already exists for this employee and date"}), 400
+                return jsonify({"error": "Attendance record already exists for this employee, date, and time slot."}), 400
             # Validate FKs
             if not worker_collection.find_one({"_id": data['employee_id']}):
                 return jsonify({"error": "Invalid employee_id"}), 400
@@ -6040,10 +6089,22 @@ def attendance():
             if not shift_master_collection.find_one({"_id": data['shift_id']}):
                 return jsonify({"error": "Invalid shift_id"}), 400
             # Fetch shift for defaults
+            # Fetch shift for defaults
             shift = shift_master_collection.find_one({"_id": data['shift_id']})
-            planned_start_time = data.get('planned_start_time') or shift.get('start_time')
-            planned_end_time = data.get('planned_end_time') or shift.get('end_time')
-            is_overnight = data.get('is_overnight', shift.get('is_overnight', False))
+            
+            # Determine base times from shift (top-level or first slot)
+            base_start = shift.get('start_time')
+            base_end = shift.get('end_time')
+            base_overnight = shift.get('is_overnight', False)
+            if not base_start and shift.get('time_slots') and len(shift.get('time_slots', [])) > 0:
+                first_slot = shift['time_slots'][0]
+                base_start = first_slot.get('start_time')
+                base_end = first_slot.get('end_time')
+                base_overnight = first_slot.get('is_overnight', False)
+
+            planned_start_time = data.get('planned_start_time') or base_start
+            planned_end_time = data.get('planned_end_time') or base_end
+            is_overnight = data.get('is_overnight', base_overnight)
             # Auto-compute minutes if times provided
             worked_minutes = data.get('worked_minutes', 0)
             overtime_minutes = data.get('overtime_minutes', 0)
@@ -6119,10 +6180,22 @@ def attendance():
             if not current:
                 return jsonify({"error": "Record not found"}), 404
             # Fetch shift for recompute
+            # Fetch shift for recompute
             shift = shift_master_collection.find_one({"_id": current['shift_id']})
-            planned_start_time = data.get('planned_start_time', current.get('planned_start_time') or shift.get('start_time'))
-            planned_end_time = data.get('planned_end_time', current.get('planned_end_time') or shift.get('end_time'))
-            is_overnight = data.get('is_overnight', current.get('is_overnight', False))
+            
+            # Determine base times from shift (top-level or first slot)
+            base_start = shift.get('start_time')
+            base_end = shift.get('end_time')
+            base_overnight = shift.get('is_overnight', False)
+            if not base_start and shift.get('time_slots') and len(shift.get('time_slots', [])) > 0:
+                first_slot = shift['time_slots'][0]
+                base_start = first_slot.get('start_time')
+                base_end = first_slot.get('end_time')
+                base_overnight = first_slot.get('is_overnight', False)
+
+            planned_start_time = data.get('planned_start_time', current.get('planned_start_time') or base_start)
+            planned_end_time = data.get('planned_end_time', current.get('planned_end_time') or base_end)
+            is_overnight = data.get('is_overnight', current.get('is_overnight', base_overnight))
             # Recompute if times changed
             if 'actual_check_in' in data or 'actual_check_out' in data:
                 def parse_time_to_minutes(time_str):
@@ -6458,11 +6531,28 @@ def add_shift():
         data = request.json
         if not data:
             return jsonify({'error': 'No data provided'}), 400
-        shift = {
-            'schedule_name': data.get('schedule_name'),
+        
+        # Handle single slot backward compatibility or array
+        time_slots_single = {
             'start_time': data.get('start_time'),
             'end_time': data.get('end_time'),
-            'is_overnight': data.get('is_overnight', False),
+            'is_overnight': data.get('is_overnight', False)
+        }
+        time_slots = data.get('time_slots', [])
+        if not time_slots:
+            if time_slots_single['start_time'] and time_slots_single['end_time']:
+                time_slots = [time_slots_single]
+            else:
+                return jsonify({'error': 'At least one time slot with start and end time is required'}), 400
+        
+        # Validate each slot
+        for slot in time_slots:
+            if not slot.get('start_time') or not slot.get('end_time'):
+                return jsonify({'error': 'Each time slot must have start_time and end_time'}), 400
+        
+        shift = {
+            'schedule_name': data.get('schedule_name'),
+            'time_slots': time_slots,
             'description': data.get('description', ''),
             'created_at': datetime.now(timezone.utc).isoformat()
         }
@@ -6477,15 +6567,20 @@ def add_shift():
 def update_shift(id):
     try:
         data = request.json
+        time_slots = data.get('time_slots', [])
+        if not time_slots:
+            return jsonify({'error': 'time_slots array is required'}), 400
+        
+        # Validate each slot
+        for slot in time_slots:
+            if not slot.get('start_time') or not slot.get('end_time'):
+                return jsonify({'error': 'Each time slot must have start_time and end_time'}), 400
+        
         update_data = {
             'schedule_name': data.get('schedule_name'),
-            'start_time': data.get('start_time'),
-            'end_time': data.get('end_time'),
+            'time_slots': time_slots,
             'description': data.get('description', ''),
         }
-        if 'is_overnight' in data:
-            update_data['is_overnight'] = data['is_overnight']
-           
         result = shift_master_collection.update_one({'_id': id}, {'$set': update_data})
         if result.matched_count == 0:
             return jsonify({'error': 'Shift not found'}), 404
@@ -6504,7 +6599,7 @@ def delete_shift(id):
     except Exception as e:
         return jsonify({'error': f"Failed to delete shift: {str(e)}"}), 500
 
-# 2. SCHEDULE RULE MASTER
+# SCHEDULE RULE MASTER routes remain unchanged
 @app.route('/api/schedule-rules', methods=['GET'])
 @db_required
 def get_schedule_rules():
@@ -6555,7 +6650,7 @@ def update_schedule_rule(id):
         return jsonify({'message': 'Rule updated successfully'}), 200
     except Exception as e:
          return jsonify({'error': f"Failed to update rule: {str(e)}"}), 500
-        
+      
 @app.route('/api/schedule-rules/<id>', methods=['DELETE'])
 @db_required
 def delete_schedule_rule(id):
@@ -6567,7 +6662,7 @@ def delete_schedule_rule(id):
     except Exception as e:
         return jsonify({'error': f"Failed to delete rule: {str(e)}"}), 500
 
-# 3. SCHEDULE ASSIGNMENT
+# SCHEDULE ASSIGNMENT routes - minor update for auto-populate special_days with time_slots awareness (but since shift_id, no change needed)
 @app.route('/api/schedule-assignments', methods=['GET'])
 @db_required
 def get_assignments():
@@ -6587,10 +6682,17 @@ def add_assignment():
             'schedule_id': data.get('schedule_id'),
             'assigned_date': data.get('assigned_date'),
             'is_active': data.get('is_active', True),
-            'special_day_assignments': data.get('special_day_assignments', []), # NEW: Store special day configurations
+            'special_day_assignments': data.get('special_day_assignments', []), # From form
             'notes': data.get('notes', ''),
             'created_at': datetime.now(timezone.utc).isoformat()
         }
+        # NEW: If no special_day_assignments provided, fetch from rule and auto-set is_observed: true for Holidays
+        if not assignment['special_day_assignments']:
+            rule = schedule_master_collection.find_one({'_id': assignment['schedule_id']})
+            if rule and rule.get('special_days'):
+                assignment['special_day_assignments'] = [
+                    {**sd, 'is_observed': sd.get('type') == 'Holiday'} for sd in rule['special_days']
+                ]
         result = employee_schedule_assign_collection.insert_one(assignment)
         inserted_assign = employee_schedule_assign_collection.find_one({'_id': result.inserted_id})
         return jsonify(convert_objectid_to_str(inserted_assign)), 201
@@ -6607,9 +6709,16 @@ def update_assignment(id):
             'schedule_id': data.get('schedule_id'),
             'assigned_date': data.get('assigned_date'),
             'is_active': data.get('is_active', True),
-            'special_day_assignments': data.get('special_day_assignments', []), # NEW: Store special day configurations
+            'special_day_assignments': data.get('special_day_assignments', []),
             'notes': data.get('notes', '')
         }
+        # NEW: Same auto-set logic if empty
+        if not update_data['special_day_assignments']:
+            rule = schedule_master_collection.find_one({'_id': update_data['schedule_id']})
+            if rule and rule.get('special_days'):
+                update_data['special_day_assignments'] = [
+                    {**sd, 'is_observed': sd.get('type') == 'Holiday'} for sd in rule['special_days']
+                ]
         result = employee_schedule_assign_collection.update_one({'_id': id}, {'$set': update_data})
         if result.matched_count == 0:
             return jsonify({'error': 'Assignment not found'}), 404

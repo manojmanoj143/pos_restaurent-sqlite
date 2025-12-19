@@ -1,42 +1,33 @@
 // src/components/Form/scheduleassignemployee.jsx
-// FULLY DETAILED: Schedule Assign Employee
-// Manages "employee_schedule_assign" table via /api/schedule-assignments
-// Fixed: Ensured schedule and employee name resolution by trimming IDs.
-// Enhanced: All special days (both from Rule AND previously Assigned) are displayed.
-// This prevents "hidden" assigned days if the rule changes or if they differ.
-// Logic:
-// 1. Get days from selected Schedule Rule.
-// 2. Get days from current Assignment (formData).
-// 3. Merge them based on unique date+description.
-// 4. Display all. Checked = in formData. Unchecked = only in Rule (or removed from formData).
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { FaArrowLeft, FaUserTag, FaSave, FaEdit, FaTrash, FaTimes, FaCheck, FaBan, FaCalendarCheck, FaGift, FaClock } from 'react-icons/fa';
+import { FaArrowLeft, FaUserTag, FaSave, FaEdit, FaTrash, FaTimes, FaCheck, FaBan, FaCalendarCheck, FaGift, FaClock, FaMoon, FaExclamationTriangle } from 'react-icons/fa';
 
 const ScheduleAssignEmployee = () => {
   const navigate = useNavigate();
   const [assignments, setAssignments] = useState([]);
   const [employees, setEmployees] = useState([]);
-  const [schedules, setSchedules] = useState([]); // Rules from schedule_master
+  const [schedules, setSchedules] = useState([]);
+  const [shifts, setShifts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [message, setMessage] = useState('');
   const [editingId, setEditingId] = useState(null);
   const editingIdRef = useRef(null);
 
-  // Selected Schedule Details (for checking special days)
+  // Delete Modal State
+  const [deleteId, setDeleteId] = useState(null);
+
   const [selectedScheduleDetails, setSelectedScheduleDetails] = useState(null);
 
-  // Form Data
   const [formData, setFormData] = useState({
     employee_id: '',
     schedule_id: '',
     assigned_date: '',
     is_active: true,
     notes: '',
-    special_day_assignments: [] // Array of applied special days 
+    special_day_assignments: []
   });
 
   const [baseUrl, setBaseUrl] = useState(null);
@@ -59,16 +50,17 @@ const ScheduleAssignEmployee = () => {
     if (baseUrl === null) return;
     setLoading(true);
     try {
-      const [assignRes, empRes, schedRes] = await Promise.all([
+      const [assignRes, empRes, schedRes, shiftsRes] = await Promise.all([
         axios.get(`${baseUrl}/api/schedule-assignments`),
         axios.get(`${baseUrl}/api/add-employee`),
-        axios.get(`${baseUrl}/api/schedule-rules`)
+        axios.get(`${baseUrl}/api/schedule-rules`),
+        axios.get(`${baseUrl}/api/schedules`)
       ]);
-
       setAssignments(assignRes.data || []);
       const empData = Array.isArray(empRes.data) ? empRes.data : (empRes.data?.data || []);
       setEmployees(empData);
       setSchedules(schedRes.data || []);
+      setShifts(shiftsRes.data || []);
       setError(null);
     } catch (err) {
       console.error("Fetch error:", err);
@@ -82,25 +74,36 @@ const ScheduleAssignEmployee = () => {
     fetchData();
   }, [baseUrl]);
 
-  // Effect to update selectedScheduleDetails when schedule_id changes
+  // FIX: Clear and re-populate special days when schedule_id changes
   useEffect(() => {
     if (formData.schedule_id) {
       const rule = schedules.find(s => String(s._id) === String(formData.schedule_id));
       setSelectedScheduleDetails(rule || null);
 
-      // If creating NEW assignment (not editing), auto-populate defaults from rule
-      if (!editingIdRef.current && rule && rule.special_days) {
-        const initialSpecialDays = rule.special_days
-          .map(sd => ({
-            ...sd,
-            is_observed: sd.type === 'Holiday' // Default true for Holiday
-          }))
-          .filter(sd => sd.is_observed);
+      // If we are creating a NEW assignment OR if we just changed the rule while editing
+      // we must reset the special_day_assignments to the new rule's defaults.
+      // We check if the current schedule_id in form matches the one in the assignment being edited.
+      const originalAssignment = assignments.find(a => a._id === editingIdRef.current);
+      const isSwitchingRule = originalAssignment && String(originalAssignment.schedule_id) !== String(formData.schedule_id);
 
-        setFormData(prev => ({
-          ...prev,
-          special_day_assignments: initialSpecialDays
-        }));
+      if (!editingIdRef.current || isSwitchingRule) {
+        if (rule && rule.special_days) {
+          const initialSpecialDays = rule.special_days.map(sd => ({
+            ...sd,
+            is_observed: sd.type === 'Holiday' || sd.is_observed === true
+          })).filter(sd => sd.is_observed);
+
+          setFormData(prev => ({
+            ...prev,
+            special_day_assignments: initialSpecialDays
+          }));
+        } else {
+          // If the selected rule has NO special days, clear the array explicitly
+          setFormData(prev => ({
+            ...prev,
+            special_day_assignments: []
+          }));
+        }
       }
     } else {
       setSelectedScheduleDetails(null);
@@ -108,13 +111,10 @@ const ScheduleAssignEmployee = () => {
         setFormData(prev => ({ ...prev, special_day_assignments: [] }));
       }
     }
-  }, [formData.schedule_id, schedules]);
+  }, [formData.schedule_id, schedules, assignments]);
 
-  // MEMOIZED SPECIAL DAYS: Merge Rule Days + Assigned Days
-  // This ensures we show EVERYTHING that is relevant
   const displayedSpecialDays = useMemo(() => {
     const combined = new Map();
-
     // 1. Add days from the Rule
     if (selectedScheduleDetails && selectedScheduleDetails.special_days) {
       selectedScheduleDetails.special_days.forEach(sd => {
@@ -122,22 +122,16 @@ const ScheduleAssignEmployee = () => {
         combined.set(key, { ...sd, source: 'rule' });
       });
     }
-
     // 2. Add days from the Assignment (overrides rule if same, adds if new)
     if (formData.special_day_assignments) {
       formData.special_day_assignments.forEach(sd => {
         const key = `${sd.date}-${sd.description}`;
-        // If it exists from rule, we prefer the 'assignment' version status, but keep metadata if needed.
-        // Actually, we just need to ensure it's in the list.
         const existing = combined.get(key) || {};
         combined.set(key, { ...existing, ...sd, source: 'assignment' });
       });
     }
-
-    // Convert to array and sort by date
     return Array.from(combined.values()).sort((a, b) => new Date(a.date) - new Date(b.date));
   }, [selectedScheduleDetails, formData.special_day_assignments]);
-
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -149,15 +143,11 @@ const ScheduleAssignEmployee = () => {
 
   const toggleSpecialDay = (specialDay) => {
     setFormData(prev => {
-      // Check if currently assigned/observed
       const exists = prev.special_day_assignments.find(sd => sd.date === specialDay.date && sd.description === specialDay.description);
-
       let newAssignments;
       if (exists) {
-        // Remove it
         newAssignments = prev.special_day_assignments.filter(sd => !(sd.date === specialDay.date && sd.description === specialDay.description));
       } else {
-        // Add it
         newAssignments = [...prev.special_day_assignments, { ...specialDay, is_observed: true }];
       }
       return { ...prev, special_day_assignments: newAssignments };
@@ -177,16 +167,12 @@ const ScheduleAssignEmployee = () => {
     try {
       const url = `${baseUrl}/api/schedule-assignments${editingId ? `/${editingId}` : ''}`;
       const method = editingId ? 'put' : 'post';
-      const submitData = { ...formData };
-
-      await axios[method](url, submitData);
-
+      await axios[method](url, formData);
       setMessage(`Assignment ${editingId ? 'updated' : 'created'} successfully!`);
       resetForm();
       fetchData();
       setTimeout(() => setMessage(''), 3000);
     } catch (err) {
-      console.error("Submit error:", err);
       setError(`Failed to save: ${err.response?.data?.error || err.message}`);
     }
   };
@@ -201,11 +187,8 @@ const ScheduleAssignEmployee = () => {
   const handleEdit = (item) => {
     setEditingId(item._id);
     editingIdRef.current = item._id;
-
-    // Find rule
     const rule = schedules.find(s => String(s._id) === String(item.schedule_id));
     setSelectedScheduleDetails(rule || null);
-
     setFormData({
       employee_id: item.employee_id || '',
       schedule_id: item.schedule_id || '',
@@ -214,18 +197,26 @@ const ScheduleAssignEmployee = () => {
       notes: item.notes || '',
       special_day_assignments: item.special_day_assignments || []
     });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure?")) return;
+  // Trigger Confirmation
+  const confirmDelete = (id) => {
+    setDeleteId(id);
+  };
+
+  // Execute Deletion
+  const handleExecuteDelete = async () => {
+    if (!deleteId) return;
     try {
-      await axios.delete(`${baseUrl}/api/schedule-assignments/${id}`);
+      await axios.delete(`${baseUrl}/api/schedule-assignments/${deleteId}`);
       setMessage("Deleted successfully!");
+      setDeleteId(null);
       fetchData();
       setTimeout(() => setMessage(''), 3000);
     } catch (err) {
-      console.error("Delete error:", err);
       setError(`Failed to delete: ${err.message}`);
+      setDeleteId(null);
     }
   };
 
@@ -236,11 +227,22 @@ const ScheduleAssignEmployee = () => {
     return emp ? (emp.name || emp.employeeName) : 'Unknown Employee';
   };
 
-  const getSchedName = (id) => {
-    if (!id) return 'Unknown Schedule';
-    const idStr = String(id).trim();
-    const sched = schedules.find(s => String(s._id).trim() === idStr);
-    return sched ? sched.schedule_name : 'Unknown Schedule';
+  const getShiftName = (shiftId) => {
+    if (!shiftId) return 'No Shift';
+    const idStr = String(shiftId).trim();
+    const shift = shifts.find(s => String(s._id).trim() === idStr);
+    if (!shift) return 'Unknown Shift';
+    const slotsStr = shift.time_slots ? shift.time_slots.map(t => `${t.start_time}-${t.end_time}${t.is_overnight ? ' (O)' : ''}`).join(', ') : '';
+    return `${shift.schedule_name} (${slotsStr})`;
+  };
+
+  const getRuleName = (ruleId) => {
+    if (!ruleId) return 'Unknown Schedule';
+    const idStr = String(ruleId).trim();
+    const rule = schedules.find(s => String(s._id).trim() === idStr);
+    if (!rule) return 'Unknown Schedule';
+    const shiftStr = getShiftName(rule.shift_id);
+    return `${rule.schedule_name} (${rule.start_date} to ${rule.end_date}) - ${shiftStr}`;
   };
 
   if (loading && !baseUrl) return <div style={{ padding: '50px', textAlign: 'center' }}>Initializing...</div>;
@@ -250,10 +252,7 @@ const ScheduleAssignEmployee = () => {
       <button onClick={() => navigate('/admin')} style={{ ...buttonStyle, position: 'fixed', top: '20px', left: '20px', zIndex: 100 }}>
         <FaArrowLeft /> Back
       </button>
-
       <div style={{ maxWidth: '1100px', margin: '60px auto', background: 'white', padding: '30px', borderRadius: '15px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
-
-        {/* Header */}
         <div style={{ borderBottom: '2px solid #3498db', paddingBottom: '15px', marginBottom: '25px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2 style={{ color: '#2c3e50', margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
             <FaUserTag style={{ color: '#3498db' }} /> Assign Employee Schedule
@@ -263,19 +262,14 @@ const ScheduleAssignEmployee = () => {
           </span>
         </div>
 
-        {/* Alerts */}
         {error && <div style={{ background: '#ffdddd', color: '#c0392b', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>{error}</div>}
         {message && <div style={{ background: '#ddffdd', color: '#27ae60', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>{message}</div>}
 
-        {/* Form */}
         <div style={{ background: '#f8f9fa', padding: '25px', borderRadius: '12px', border: '1px solid #e9ecef', marginBottom: '30px' }}>
           <h3 style={{ marginTop: 0, color: '#34495e', borderBottom: '1px dashed #bdc3c7', paddingBottom: '10px', marginBottom: '20px' }}>
             {editingId ? 'Edit Assignment' : 'New Assignment'}
           </h3>
-
           <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
-
-            {/* Employee Selection */}
             <div>
               <label style={labelStyle}>Select Employee</label>
               <select required name="employee_id" value={formData.employee_id} onChange={handleInputChange} style={inputStyle}>
@@ -286,25 +280,19 @@ const ScheduleAssignEmployee = () => {
                 })}
               </select>
             </div>
-
-            {/* Schedule Selection */}
             <div>
               <label style={labelStyle}>Select Schedule Rule</label>
               <select required name="schedule_id" value={formData.schedule_id} onChange={handleInputChange} style={inputStyle}>
                 <option value="">-- Choose Schedule --</option>
                 {schedules.map(s => (
-                  <option key={s._id} value={s._id}>{s.schedule_name} ({s.start_date} to {s.end_date})</option>
+                  <option key={s._id} value={s._id}>{getRuleName(s._id)}</option>
                 ))}
               </select>
             </div>
-
-            {/* Assigned Date */}
             <div>
               <label style={labelStyle}>Assigned Date (Start)</label>
               <input required type="date" name="assigned_date" value={formData.assigned_date} onChange={handleInputChange} style={inputStyle} />
             </div>
-
-            {/* Active Checkbox */}
             <div style={{ display: 'flex', alignItems: 'center', marginTop: '30px' }}>
               <label style={{ ...labelStyle, marginBottom: 0, marginRight: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
                 <input type="checkbox" name="is_active" checked={formData.is_active} onChange={handleInputChange} style={{ width: '18px', height: '18px', marginRight: '8px' }} />
@@ -312,14 +300,13 @@ const ScheduleAssignEmployee = () => {
               </label>
             </div>
 
-            {/* Special Days Section - MERGED DISPLAY */}
             {displayedSpecialDays.length > 0 && (
               <div style={{ gridColumn: '1 / -1', background: 'white', padding: '15px', borderRadius: '8px', border: '1px solid #dcdcdc' }}>
                 <h4 style={{ marginTop: 0, color: '#e67e22', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <FaGift /> Special Days & Exceptions
                 </h4>
                 <p style={{ fontSize: '0.85rem', color: '#7f8c8d', fontStyle: 'italic' }}>
-                  Showing all special days defined in the schedule rule AND any manually assigned exceptions. Check to apply/observe.
+                  Showing special days for the selected rule. Check to apply.
                 </p>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '15px', marginTop: '10px' }}>
                   {displayedSpecialDays.map((sd, idx) => {
@@ -349,7 +336,7 @@ const ScheduleAssignEmployee = () => {
                           <div style={{ fontSize: '0.85rem', color: '#34495e' }}>{sd.description}</div>
                           {sd.type === 'Half-Day' && <div style={{ fontSize: '0.8rem', color: '#8e44ad' }}><FaClock style={{ fontSize: '0.7rem' }} /> {sd.start_time} - {sd.end_time}</div>}
                           {sd.type === 'Extended' && <div style={{ fontSize: '0.8rem', color: '#e67e22' }}><FaClock style={{ fontSize: '0.7rem' }} /> Ext: {sd.extended_start} - {sd.extended_end}</div>}
-                          {sd.type === 'Special-Shift' && <div style={{ fontSize: '0.8rem', color: '#9b59b6' }}>Shift ID: {sd.shift_id}</div>}
+                          {sd.type === 'Special-Shift' && <div style={{ fontSize: '0.8rem', color: '#9b59b6' }}>Replace: {getShiftName(sd.shift_id)}</div>}
                         </div>
                       </div>
                     );
@@ -358,13 +345,11 @@ const ScheduleAssignEmployee = () => {
               </div>
             )}
 
-            {/* Notes */}
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Notes (Optional)</label>
               <textarea name="notes" value={formData.notes} onChange={handleInputChange} placeholder="Additional details..." style={{ ...inputStyle, minHeight: '80px' }} />
             </div>
 
-            {/* Buttons */}
             <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '15px' }}>
               <button type="submit" style={{ ...buttonStyle, flex: 1, background: '#27ae60' }}>
                 <FaSave /> {editingId ? 'Update Assignment' : 'Assign Schedule'}
@@ -378,7 +363,6 @@ const ScheduleAssignEmployee = () => {
           </form>
         </div>
 
-        {/* List */}
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
             <thead>
@@ -396,7 +380,7 @@ const ScheduleAssignEmployee = () => {
               ) : assignments.map((a, i) => (
                 <tr key={a._id} style={{ background: i % 2 === 0 ? 'white' : '#f9f9f9', borderBottom: '1px solid #eee' }}>
                   <td style={tdStyle}>{getEmpName(a.employee_id)}</td>
-                  <td style={tdStyle}>{getSchedName(a.schedule_id)}</td>
+                  <td style={tdStyle}>{getRuleName(a.schedule_id)}</td>
                   <td style={tdStyle}>{a.assigned_date}</td>
                   <td style={tdStyle}>
                     {a.is_active ?
@@ -406,7 +390,7 @@ const ScheduleAssignEmployee = () => {
                   </td>
                   <td style={{ ...tdStyle, textAlign: 'center' }}>
                     <button onClick={() => handleEdit(a)} style={iconBtnStyle} title="Edit"><FaEdit /></button>
-                    <button onClick={() => handleDelete(a._id)} style={{ ...iconBtnStyle, color: '#e74c3c' }} title="Delete"><FaTrash /></button>
+                    <button onClick={() => confirmDelete(a._id)} style={{ ...iconBtnStyle, color: '#e74c3c' }} title="Delete"><FaTrash /></button>
                   </td>
                 </tr>
               ))}
@@ -414,6 +398,31 @@ const ScheduleAssignEmployee = () => {
           </table>
         </div>
       </div>
+
+      {/* Delete Warning Modal */}
+      {deleteId && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1100 }}>
+          <div style={{ backgroundColor: '#fff', padding: '30px', borderRadius: '15px', width: '90%', maxWidth: '400px', textAlign: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
+            <FaExclamationTriangle style={{ fontSize: '3rem', color: '#e74c3c', marginBottom: '20px' }} />
+            <h3 style={{ color: '#2c3e50', margin: '0 0 15px 0' }}>Confirm Deletion</h3>
+            <p style={{ color: '#7f8c8d', marginBottom: '25px' }}>Are you sure you want to delete this assignment? This action cannot be undone.</p>
+            <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
+              <button
+                onClick={handleExecuteDelete}
+                style={{ padding: '10px 25px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer' }}
+              >
+                Yes, Delete
+              </button>
+              <button
+                onClick={() => setDeleteId(null)}
+                style={{ padding: '10px 25px', background: '#95a5a6', color: 'white', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

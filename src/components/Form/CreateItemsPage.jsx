@@ -178,7 +178,7 @@ const CreateItemPage = () => {
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
   const [cropModalOpen, setCropModalOpen] = useState(false);
   const [currentImageToCrop, setCurrentImageToCrop] = useState(null);
-  const [cropTarget, setCropTarget] = useState({ field: null, subField: null, variantId: null, subheading: null, isModal: false });
+  const [cropTarget, setCropTarget] = useState({ field: null, subField: null, variantId: null, subheading: null, isModal: false, index: null });
   const [originalFile, setOriginalFile] = useState(null);
   const [targetSize, setTargetSize] = useState({ width: 768, height: 768 });
   const [aspect, setAspect] = useState(1);
@@ -660,10 +660,10 @@ const CreateItemPage = () => {
     e.target.value = "";
   };
 
-  const handleEditImage = (imageUrl, field, subField = null, variantId = null, subheading = null, isModal = false) => {
+  const handleEditImage = (imageUrl, field, subField = null, variantId = null, subheading = null, isModal = false, index = null) => {
     if (!imageUrl) return;
     setCurrentImageToCrop(imageUrl);
-    setCropTarget({ field, subField, variantId, subheading, isModal });
+    setCropTarget({ field, subField, variantId, subheading, isModal, index });
     setOriginalFile(null); // Indicating this is an edit of an existing image
     setCropModalOpen(true);
     setZoom(1);
@@ -700,7 +700,8 @@ const CreateItemPage = () => {
           cropTarget.field,
           cropTarget.subField,
           cropTarget.variantId,
-          cropTarget.subheading
+          cropTarget.subheading,
+          cropTarget.index
         );
       }
 
@@ -715,14 +716,22 @@ const CreateItemPage = () => {
     }
   };
 
-  const uploadImageToBackend = async (file, field, subField, variantId, subheading) => {
+  const uploadImageToBackend = async (file, field, subField, variantId, subheading, index = null) => {
     const localUrl = URL.createObjectURL(file);
 
     // Optimistic update
     if (field === "image") {
       setImagePreviews(prev => ({ ...prev, item: localUrl }));
     } else if (field === "images") {
-      setImagePreviews(prev => ({ ...prev, multiple: [...prev.multiple, localUrl] }));
+      if (index !== null) {
+        setImagePreviews(prev => {
+          const newMultiple = [...prev.multiple];
+          newMultiple[index] = localUrl;
+          return { ...prev, multiple: newMultiple };
+        });
+      } else {
+        setImagePreviews(prev => ({ ...prev, multiple: [...prev.multiple, localUrl] }));
+      }
     } else if (subField === "spicy_image") {
       setImagePreviews(prev => ({ ...prev, spicy: localUrl }));
     } else if (subField === "non_spicy_image") {
@@ -750,12 +759,25 @@ const CreateItemPage = () => {
         setFormData(prev => ({ ...prev, image: filename }));
         setImagePreviews(prev => ({ ...prev, item: serverUrl }));
       } else if (field === "images") {
-        setFormData(prev => ({ ...prev, images: [...prev.images, filename] }));
-        setImagePreviews(prev => {
-          const newMultiple = [...prev.multiple];
-          newMultiple[newMultiple.length - 1] = serverUrl;
-          return { ...prev, multiple: newMultiple };
-        });
+        if (index !== null) {
+          setFormData(prev => {
+            const newImages = [...prev.images];
+            newImages[index] = filename;
+            return { ...prev, images: newImages };
+          });
+          setImagePreviews(prev => {
+            const newMultiple = [...prev.multiple];
+            newMultiple[index] = serverUrl;
+            return { ...prev, multiple: newMultiple };
+          });
+        } else {
+          setFormData(prev => ({ ...prev, images: [...prev.images, filename] }));
+          setImagePreviews(prev => {
+            const newMultiple = [...prev.multiple];
+            newMultiple[newMultiple.length - 1] = serverUrl;
+            return { ...prev, multiple: newMultiple };
+          });
+        }
       } else if (subField === "spicy_image") {
         setFormData(prev => ({
           ...prev,
@@ -886,11 +908,70 @@ const CreateItemPage = () => {
     // Optimistic update: remove immediately
     updateFormData();
     updatePreview();
+
+    // Check if the image is actually saved in the backend (i.e., exists in itemToEdit)
+    // If it's a new image (not in itemToEdit), it's not in the DB, so api/delete-image will return 404.
+    // In that case, we can skip the API call (the file remains on server as orphan, or we need a different API).
+    // For now, we just skip the error to satisfy the user requirement.
+    let isSavedInBackend = false;
+    if (itemToEdit) {
+      const savedImageName = (img) => img ? extractImageName(img) : "";
+
+      if (subField === "customVariantImage") {
+        const variant = itemToEdit.custom_variants?.find((v) => v._id === variantId);
+        const sub = variant?.subheadings.find((s) => s.name === subheading);
+        if (sub && savedImageName(sub.image) === filename) {
+          isSavedInBackend = true;
+        }
+      } else if (subField) {
+        // spicy_image or non_spicy_image
+        if (field === "variants" && itemToEdit.variants && itemToEdit.variants[field === "variants" ? "spicy" : field]) {
+          // field is 'variants', subField is 'spicy_image', accessed as formData.variants.spicy.spicy_image
+          // itemToEdit structure matches formData usually
+          // Actually, in formData it is variants.spicy.spicy_image.
+          // in itemToEdit it is likely variants.spicy.spicy_image too.
+          // Let's check safely.
+          const variantKey = subField.includes("spicy") ? "spicy" : "";
+          if (variantKey && itemToEdit.variants[variantKey]) {
+            if (savedImageName(itemToEdit.variants[variantKey][subField]) === filename) {
+              isSavedInBackend = true;
+            }
+          }
+        }
+      } else if (field === "images" && index !== null) {
+        // Multiple images
+        // itemToEdit.images is array of strings (filenames or paths). 
+        // We compare extracted names.
+        if (itemToEdit.images && itemToEdit.images.some(img => savedImageName(img) === filename)) {
+          isSavedInBackend = true;
+        }
+      } else {
+        // Single image field 'image'
+        if (field === "image" && savedImageName(itemToEdit.image) === filename) {
+          isSavedInBackend = true;
+        }
+      }
+    }
+
+    if (!isSavedInBackend) {
+      // Not saved in backend, so just return (optimistic delete is enough).
+      // We set a message to confirm removal from UI.
+      setWarningMessage(`${subField ? subField.replace("_", " ") : field} image removed.`);
+      return;
+    }
+
     try {
       await axios.delete(`${baseUrl}/api/delete-image/${filename}?field=${subField || field}&item_id=${itemToEdit?._id || "new"}`);
       setWarningMessage(`${subField ? subField.replace("_", " ") : field} image deleted successfully!`);
     } catch (error) {
-      // Revert on failure
+      // If 404, it means image not found in backend (already deleted or never saved).
+      // Treat as success (do not revert).
+      if (error.response && error.response.status === 404) {
+        setWarningMessage(`${subField ? subField.replace("_", " ") : field} image removed (cleanup).`);
+        return;
+      }
+
+      // Revert on failure (non-404)
       if (subField === "customVariantImage") {
         setFormData(prev => ({
           ...prev,
@@ -1055,7 +1136,7 @@ const CreateItemPage = () => {
           <label className="field-label">
             {`${sub.name} Image`}
             <span style={{ fontSize: "12px", color: "red", marginLeft: "10px" }}>
-              (Image size is 768px width and 768px height)
+              (Image size should be 768/768px)
             </span>
           </label>
           <input
@@ -1308,7 +1389,7 @@ const CreateItemPage = () => {
                 <label className="field-label">
                   {`${sub.name} Image`}
                   <span style={{ fontSize: "12px", color: "red", marginLeft: "10px" }}>
-                    (Image size is 768px width and 768px height)
+                    (Image size should be 768/768px)
                   </span>
                 </label>
                 <input
@@ -2337,7 +2418,7 @@ const CreateItemPage = () => {
               <label>
                 Item Image
                 <span style={{ fontSize: "12px", color: "red", marginLeft: "10px" }}>
-                  (Image size is 768px width and 768px height)
+                  (Image size should be 768/768px)
                 </span>
               </label>
               <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, "image")} className="input" />
@@ -2365,7 +2446,7 @@ const CreateItemPage = () => {
               <label>
                 Multiple Images
                 <span style={{ fontSize: "12px", color: "red", marginLeft: "10px" }}>
-                  (Image size is 768px width and 768px height)
+                  (Image size should be 768/768px)
                 </span>
               </label>
               <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, "images")} className="input" />
@@ -2378,7 +2459,7 @@ const CreateItemPage = () => {
                         <button
                           type="button"
                           className="edit-button"
-                          onClick={() => handleEditImage(img, "images", null, null, null)} // Edit logical might need specific handling if index matters for saving back
+                          onClick={() => handleEditImage(img, "images", null, null, null, false, index)}
                           style={{ background: '#3498db', border: 'none', color: 'white', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}
                         >
                           <FaEdit />
@@ -2539,7 +2620,7 @@ const CreateItemPage = () => {
                   <label>
                     Spicy Image
                     <span style={{ fontSize: "12px", color: "red", marginLeft: "10px" }}>
-                      (Image size is 768px width and 768px height)
+                      (Image size should be 768/768px)
                     </span>
                   </label>
                   <input
@@ -2585,7 +2666,7 @@ const CreateItemPage = () => {
                   <label>
                     Non-Spicy Image
                     <span style={{ fontSize: "12px", color: "red", marginLeft: "10px" }}>
-                      (Image size is 768px width and 768px height)
+                      (Image size should be 768/768px)
                     </span>
                   </label>
                   <input
@@ -3195,7 +3276,7 @@ const CreateItemPage = () => {
             <label>
               Image
               <span style={{ fontSize: "12px", color: "red", marginLeft: "10px" }}>
-                (Image size is 768px width and 768px height)
+                (Image size should be 768/768px)
               </span>
             </label>
             <input type="file" accept="image/*" onChange={(e) => handleModalImageUpload(e)} className="input" />
@@ -3356,7 +3437,7 @@ const CreateItemPage = () => {
                       <label>
                         Spicy Image
                         <span style={{ fontSize: "12px", color: "red", marginLeft: "10px" }}>
-                          (Image size is 768px width and 768px height)
+                          (Image size should be 768/768px)
                         </span>
                       </label>
                       <input
@@ -3403,7 +3484,7 @@ const CreateItemPage = () => {
                       <label>
                         Non-Spicy Image
                         <span style={{ fontSize: "12px", color: "red", marginLeft: "10px" }}>
-                          (Image size is 768px width and 768px height)
+                          (Image size should be 768/768px)
                         </span>
                       </label>
                       <input

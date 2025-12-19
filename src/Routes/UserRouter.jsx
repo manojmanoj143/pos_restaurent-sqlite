@@ -1,9 +1,6 @@
-// src/UserRouter.jsx
-// FULLY UPDATED: Added routes for Schedule Master (/schedule-master), Schedule Rule Master (/schedule-rule-master), Schedule Assign Employee (/schedule-assign-employee)
-// All previous routes preserved, no /admin prefix
+// src/UserRouter.jsx (UPDATED: Added route for /extended-doctype)
 import React from "react";
 import { Route, Routes } from "react-router-dom";
-
 // Import Pages
 import TablePage from "../Pages/TablePage";
 import FrontPage from "../Pages/FrontPage";
@@ -13,7 +10,6 @@ import CashPage from "../Pages/CashPage";
 import CardPage from "../Pages/CardPage";
 import SavedOrderPage from "../Pages/SavedOrderPage";
 import SalesPage from "../Pages/SalesPage";
-
 // Import Components
 import FirstTab from "../components/FirstTab/FirstTab";
 import AdminPage from "../components/admin/AdminPage";
@@ -56,15 +52,18 @@ import Attendance from "../components/Form/attendance";
 import AttendanceView from "../components/Form/attendanceview";
 import Working from "../components/Form/working";
 import SalarySlip from "../components/Form/salaryslip";
-
 // UPDATED: Imports for Employee Designation and Type (plural routes)
 import EmployeeDesignation from "../components/Form/Employeedesignation";
 import EmployeeType from "../components/Form/Employeetype";
-
 // NEW: Imports for Schedule pages (FIXED: Corrected import path to match file name 'schedulerulemaster.jsx')
 import ScheduleMaster from "../components/Form/schedulemaster";
 import ScheduleRuleMaster from "../components/Form/shedulerulemaster";
 import ScheduleAssignEmployee from "../components/Form/scheduleassignemployee";
+// NEW: Import for Employee Details Page
+import EmployeeDocType from "../components/Form/employeelistdoctype";
+import HolidayDocType from "../components/Form/holidaydoctype";
+// NEW: Import for Extended DocType
+import ExtendedDocType from "../components/Form/extendeddoctype";
 
 const UserRouter = () => {
   return (
@@ -100,6 +99,11 @@ const UserRouter = () => {
         <Route path="/working" element={<Working />} />
         <Route path="/add-employee" element={<AddEmployee />} />
         <Route path="/employee-list" element={<EmployeeList />} />
+        {/* NEW: Employee Details Route */}
+        <Route path="/holiday-doctype" element={<HolidayDocType />} />
+        <Route path="/employee-details/:id" element={<EmployeeDocType />} />
+        {/* NEW: Extended DocType Route */}
+        <Route path="/extended-doctype" element={<ExtendedDocType />} />
         <Route path="/attendance" element={<Attendance />} />
         <Route path="/attendance-view" element={<AttendanceView />} />
         <Route path="/salary-slip" element={<SalarySlip />} />

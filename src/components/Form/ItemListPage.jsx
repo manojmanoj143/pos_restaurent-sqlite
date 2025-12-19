@@ -522,8 +522,8 @@ const ItemListPage = () => {
   const filteredItems = selectedCategory === "All Items"
     ? itemList
     : selectedCategory === "Combos Offer"
-    ? comboList
-    : itemList.filter(item => item.item_group === selectedCategory);
+      ? comboList
+      : itemList.filter(item => item.item_group === selectedCategory);
   // Check if item has an active offer
   const hasActiveOffer = (item) => {
     if (item.offer_price === undefined || !item.offer_start_time || !item.offer_end_time) {
@@ -827,7 +827,7 @@ const ItemListPage = () => {
                         <span>₹{item.price_list_rate || item.total_price}</span>
                       )}
                     </div>
-                     <Button variant="success" onClick={() => handleItemClick(item, selectedCategory === "Combos Offer")}
+                    <Button variant="success" onClick={() => handleItemClick(item, selectedCategory === "Combos Offer")}
                       className="w-100"
                       style={{ marginTop: "10px", backgroundColor: "#28a745", borderColor: "#28a745" }}
                     >
@@ -897,7 +897,7 @@ const ItemListPage = () => {
                       {selectedItem.images.map((img, idx) => {
                         const src = selectedItem.isCombo
                           ? `${baseUrl}/api/combo-images/${img}`
-                          : `${baseUrl}${img}`;
+                          : `${baseUrl}/api/images/${img}`; // FIXED: Added /api/images/ prefix
                         return (
                           <img
                             key={idx}
@@ -985,7 +985,7 @@ const ItemListPage = () => {
                               {variant.type_of_variants && <p>Type: {variant.type_of_variants}</p>}
                               {variant.variant_image && (
                                 <img
-                                  src={`${baseUrl}${variant.variant_image}`}
+                                  src={`${baseUrl}/api/images/${variant.variant_image}`} // FIXED: Added /api/images/ prefix
                                   alt={variant.type_of_variants}
                                   style={{ width: "100px", height: "100px", objectFit: "cover" }}
                                 />

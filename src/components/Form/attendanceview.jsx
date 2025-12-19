@@ -2,16 +2,17 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { 
-  FaArrowLeft, FaUser, FaCalendarAlt, FaClock, FaCheck, FaTimes, 
-  FaEdit, FaTrash, FaEye, FaSearch, FaFilter, FaBriefcase, FaBed, 
-  FaStar, FaExclamationTriangle 
+import {
+  FaArrowLeft, FaUser, FaCalendarAlt, FaClock, FaCheck, FaTimes,
+  FaEdit, FaTrash, FaEye, FaSearch, FaFilter, FaBriefcase, FaBed,
+  FaStar, FaExclamationTriangle
 } from 'react-icons/fa';
 
 const AttendanceView = () => {
   const navigate = useNavigate();
   const [attendances, setAttendances] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [shifts, setShifts] = useState([]); // Add logic to fetch shifts
   const [selectedEmployee, setSelectedEmployee] = useState('');
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
   const [summary, setSummary] = useState(null);
@@ -20,7 +21,7 @@ const AttendanceView = () => {
   const [error, setError] = useState(null);
   const [message, setMessage] = useState('');
   const [baseUrl, setBaseUrl] = useState('http://localhost:8000');
-  
+
   // Modal States
   const [selectedAttendance, setSelectedAttendance] = useState(null);
   const [itemToDelete, setItemToDelete] = useState(null); // Stores ID of record to delete
@@ -33,7 +34,7 @@ const AttendanceView = () => {
     }
   }, [message]);
 
-  // Initial Fetch: Config & Employees
+  // Initial Fetch: Config & Employees & Shifts
   useEffect(() => {
     const init = async () => {
       try {
@@ -44,8 +45,13 @@ const AttendanceView = () => {
         setBaseUrl(currentBaseUrl);
 
         // 2. Get Employees
-        const empRes = await axios.get(`${currentBaseUrl}/api/add-employee`); 
+        const empRes = await axios.get(`${currentBaseUrl}/api/add-employee`);
         setEmployees(empRes.data || []);
+
+        // 3. Get Shifts (to display split details)
+        const shiftRes = await axios.get(`${currentBaseUrl}/api/schedules`);
+        setShifts(shiftRes.data || []);
+
       } catch (err) {
         console.error("Init Error:", err);
         setError("Failed to initialize. Ensure server is running.");
@@ -81,7 +87,7 @@ const AttendanceView = () => {
       }
 
       setAttendances(data);
-      calculateSummary(data); 
+      calculateSummary(data);
 
       setLoading(false);
     } catch (err) {
@@ -91,9 +97,61 @@ const AttendanceView = () => {
     }
   };
 
+  // Helper to get planned time display - MOVED UP
+  const getPlannedTimeDisplay = (att) => {
+    // Return only the record's specific time. 
+    // DO NOT look up the entire shift definition here, because we want to show 
+    // ONLY what is actually existent in the record.
+    return `${att.planned_start_time} - ${att.planned_end_time}`;
+  };
+
+  // Group records by Employee + Date
+  const getGroupedAttendances = () => {
+    const groups = {};
+    attendances.forEach(att => {
+      const key = `${att.attendance_date}_${att.employee_id}`;
+      if (!groups[key]) {
+        groups[key] = [];
+      }
+      groups[key].push(att);
+    });
+
+    // Convert groups to array of singular display items
+    return Object.values(groups).map(group => {
+      const base = { ...group[0] }; // Clone first record as base
+      if (group.length > 1) {
+        // It's a split shift day with multiple EXISTING records
+        // Sort by time
+        group.sort((a, b) => (a.planned_start_time || '').localeCompare(b.planned_start_time || ''));
+
+        // Merge Fields
+        base.planned_time_display = group.map(g => `${g.planned_start_time}-${g.planned_end_time}`).join(', ');
+        base.actual_time_display = group.map(g => `${g.actual_check_in || 'N/A'}-${g.actual_check_out || 'N/A'}`).join(', ');
+        base.worked_minutes = group.reduce((sum, g) => sum + (Number(g.worked_minutes) || 0), 0);
+
+        // Combine unique notes
+        const allNotes = group.map(g => g.notes).filter(n => n).join('; ');
+        base.notes = allNotes;
+
+        // Mark as merged
+        base.isMerged = true;
+        base.relatedRecords = group;
+      } else {
+        // Single record (Even if part of a split shift, if only one exists, we show only one)
+        // If it's a virtual record (projected), getPlannedTimeDisplay will show its scheduled time.
+        // If it's a real record, it shows its stored planned time.
+        base.planned_time_display = getPlannedTimeDisplay(base);
+        base.actual_time_display = `${base.actual_check_in || 'N/A'} - ${base.actual_check_out || 'N/A'}`;
+      }
+      return base;
+    }).sort((a, b) => b.attendance_date.localeCompare(a.attendance_date)); // Sort by date desc
+  };
+
+  const groupedAttendances = getGroupedAttendances();
+
   const calculateSummary = (data) => {
     const stats = {
-      total_days: data.length,
+      total_days: 0, // Unique days
       working_days: 0,
       weekly_offs: 0,
       holidays: 0,
@@ -101,23 +159,31 @@ const AttendanceView = () => {
       special_shifts: 0
     };
 
+    // Use a Set to track unique (employee + date) to count distinct days
+    const uniqueDays = new Set();
+
     data.forEach(att => {
-      const status = att.status;
-      const specialType = att.special_day_type;
+      const key = `${att.attendance_date}_${att.employee_id}`;
+      if (!uniqueDays.has(key)) {
+        uniqueDays.add(key);
+        stats.total_days++;
 
-      if (status === 'WeeklyOff') stats.weekly_offs++;
-      else if (status === 'Holiday') stats.holidays++;
+        // Only count stats for the first record of the day to avoid double counting split shifts
+        const status = att.status;
+        const specialType = att.special_day_type;
 
-      if (status === 'Extended' || specialType === 'Extended') stats.extended_days++;
+        if (status === 'WeeklyOff') stats.weekly_offs++;
+        else if (status === 'Holiday') stats.holidays++;
 
-      // Special Shifts (exclude if it's already counted as extended/off/holiday)
-      if (specialType && !['None', 'WeeklyOff', 'Holiday', 'Extended'].includes(specialType)) {
-        stats.special_shifts++;
-      }
+        if (status === 'Extended' || specialType === 'Extended') stats.extended_days++;
 
-      // Working Days logic
-      if (!['WeeklyOff', 'Holiday', 'Absent', 'Leave'].includes(status)) {
-        stats.working_days++;
+        if (specialType && !['None', 'WeeklyOff', 'Holiday', 'Extended'].includes(specialType)) {
+          stats.special_shifts++;
+        }
+
+        if (!['WeeklyOff', 'Holiday', 'Absent', 'Leave'].includes(status)) {
+          stats.working_days++;
+        }
       }
     });
 
@@ -125,7 +191,7 @@ const AttendanceView = () => {
   };
 
   // --- DELETE HANDLERS ---
-  
+
   // 1. Triggered when trash icon is clicked (opens modal)
   const initiateDelete = (id) => {
     setItemToDelete(id);
@@ -134,7 +200,7 @@ const AttendanceView = () => {
   // 2. Triggered when "Yes, Delete" is clicked in the modal
   const confirmDelete = async () => {
     if (!itemToDelete) return;
-    
+
     try {
       await axios.delete(`${baseUrl}/api/attendance`, { data: { _id: itemToDelete } });
       setMessage('Record deleted successfully');
@@ -154,12 +220,11 @@ const AttendanceView = () => {
   // --- END DELETE HANDLERS ---
 
   const handleEdit = (rec) => {
-    // If virtual, we pass params to create new
-    if (rec.is_virtual) {
-      navigate(`/attendance?employee_id=${rec.employee_id}&date=${rec.attendance_date}`);
-    } else {
-      navigate(`/attendance?id=${rec._id}`);
-    }
+    // Navigate by Employee & Date so form loads all records for that day (split slots)
+    // Pass the record in state just in case, but form should rely on fetching by date
+    navigate(`/attendance?employee_id=${rec.employee_id}&date=${rec.attendance_date}`, {
+      state: { attendance: rec.isMerged ? rec.relatedRecords[0] : rec }
+    });
   };
 
   // Helper to get status color
@@ -313,9 +378,9 @@ const AttendanceView = () => {
             <tbody>
               {loading ? (
                 <tr><td colSpan="8" style={{ padding: '30px', textAlign: 'center', color: '#7f8c8d' }}>Loading data...</td></tr>
-              ) : attendances.length > 0 ? (
-                attendances.map((att, idx) => (
-                  <tr key={att._id} style={{ borderBottom: '1px solid #f0f0f0', backgroundColor: idx % 2 === 0 ? '#fafafa' : 'white' }}>
+              ) : groupedAttendances.length > 0 ? (
+                groupedAttendances.map((att, idx) => (
+                  <tr key={idx} style={{ borderBottom: '1px solid #f0f0f0', backgroundColor: idx % 2 === 0 ? '#fafafa' : 'white' }}>
                     <td style={{ padding: '12px 15px', color: '#2c3e50' }}>
                       {att.employee?.name || (employees.find(e => e._id === selectedEmployee)?.name)} <br />
                       <small style={{ color: '#7f8c8d' }}>{att.employee?.employeeId || 'N/A'}</small>
@@ -330,8 +395,10 @@ const AttendanceView = () => {
                         {att.status}
                       </span>
                     </td>
-                    <td style={{ padding: '12px 15px' }}>{att.planned_start_time} - {att.planned_end_time}</td>
-                    <td style={{ padding: '12px 15px' }}>{att.actual_check_in || 'N/A'} - {att.actual_check_out || 'N/A'}</td>
+                    <td style={{ padding: '12px 15px' }}>
+                      {att.planned_time_display}
+                    </td>
+                    <td style={{ padding: '12px 15px' }}>{att.actual_time_display}</td>
                     <td style={{ padding: '12px 15px' }}>{att.worked_minutes}</td>
                     <td style={{ padding: '12px 15px', maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{att.notes || 'N/A'}</td>
                     <td style={{ padding: '12px 15px', textAlign: 'center' }}>
@@ -339,10 +406,14 @@ const AttendanceView = () => {
                         <ActionButton icon={<FaEye />} color="#3498db" onClick={() => setSelectedAttendance(att)} />
                         <ActionButton icon={<FaEdit />} color="#f39c12" onClick={() => handleEdit(att)} />
                         {!att.is_virtual && (
-                          <ActionButton 
-                            icon={<FaTrash />} 
-                            color="#e74c3c" 
-                            onClick={() => initiateDelete(att._id)} 
+                          <ActionButton
+                            icon={<FaTrash />}
+                            color="#e74c3c"
+                            onClick={() => {
+                              // If merged, we might need to delete all or ask user. For now, delete the primary/first ID or handle bulk delete?
+                              // Simplified: Delete the first one or primary one using _id.
+                              initiateDelete(att._id);
+                            }}
                           />
                         )}
                       </div>
@@ -375,8 +446,8 @@ const AttendanceView = () => {
               <DetailRow label="Status" value={selectedAttendance.status} strong color={getStatusColor(selectedAttendance.status)} />
               <DetailRow label="Special Type" value={selectedAttendance.special_day_type} />
               <div style={{ background: '#f8f9fa', padding: '10px', borderRadius: '8px', marginTop: '5px' }}>
-                <DetailRow label="Planned" value={`${selectedAttendance.planned_start_time} - ${selectedAttendance.planned_end_time}`} />
-                <DetailRow label="Actual" value={`${selectedAttendance.actual_check_in || '---'} - ${selectedAttendance.actual_check_out || '---'}`} />
+                <DetailRow label="Planned" value={selectedAttendance.planned_time_display || getPlannedTimeDisplay(selectedAttendance)} />
+                <DetailRow label="Actual" value={selectedAttendance.actual_time_display || `${selectedAttendance.actual_check_in || '---'} - ${selectedAttendance.actual_check_out || '---'}`} />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <DetailRow label="Worked" value={`${selectedAttendance.worked_minutes} min`} />
@@ -400,53 +471,53 @@ const AttendanceView = () => {
           position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
           background: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2100, backdropFilter: 'blur(2px)'
         }}>
-          <div style={{ 
-            background: 'white', 
-            borderRadius: '16px', 
-            padding: '30px', 
-            width: '90%', 
-            maxWidth: '400px', 
+          <div style={{
+            background: 'white',
+            borderRadius: '16px',
+            padding: '30px',
+            width: '90%',
+            maxWidth: '400px',
             textAlign: 'center',
             boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
             animation: 'fadeIn 0.2s ease-in-out'
           }}>
-            <div style={{ 
-              width: '60px', height: '60px', background: '#ffebee', borderRadius: '50%', 
-              display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' 
+            <div style={{
+              width: '60px', height: '60px', background: '#ffebee', borderRadius: '50%',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px'
             }}>
               <FaExclamationTriangle style={{ color: '#e74c3c', fontSize: '28px' }} />
             </div>
-            
+
             <h3 style={{ margin: '0 0 10px', color: '#2c3e50', fontSize: '1.4rem' }}>Are you sure?</h3>
             <p style={{ color: '#7f8c8d', margin: '0 0 25px', lineHeight: '1.5' }}>
               Do you really want to delete this attendance record? This process cannot be undone.
             </p>
-            
+
             <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
-              <button 
-                onClick={cancelDelete} 
+              <button
+                onClick={cancelDelete}
                 style={{
-                  padding: '12px 24px', 
-                  borderRadius: '8px', 
-                  border: 'none', 
-                  background: '#ecf0f1', 
-                  color: '#7f8c8d', 
-                  fontWeight: '600', 
+                  padding: '12px 24px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: '#ecf0f1',
+                  color: '#7f8c8d',
+                  fontWeight: '600',
                   cursor: 'pointer',
                   flex: 1
                 }}
               >
                 Cancel
               </button>
-              <button 
-                onClick={confirmDelete} 
+              <button
+                onClick={confirmDelete}
                 style={{
-                  padding: '12px 24px', 
-                  borderRadius: '8px', 
-                  border: 'none', 
-                  background: '#e74c3c', 
-                  color: 'white', 
-                  fontWeight: '600', 
+                  padding: '12px 24px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: '#e74c3c',
+                  color: 'white',
+                  fontWeight: '600',
                   cursor: 'pointer',
                   flex: 1,
                   boxShadow: '0 4px 10px rgba(231, 76, 60, 0.3)'

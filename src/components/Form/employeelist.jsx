@@ -1,6 +1,9 @@
-// EmployeeList.jsx - Updated: Enhanced Schedule & Other section in details modal to fetch shift timing from active schedule assignment
+// src/components/Form/employeelist.jsx
+// EmployeeList.jsx - Updated: Removed attendance modal and functionality. Row click now navigates to /employee-details/:id for full details page.
+// Kept details modal for View Details button. Enhanced Schedule & Other section in details modal to fetch shift timing from active schedule assignment.
 // Also ensures special days display from assignments in modal. Table columns for shiftTiming and specialDays are optional via column management.
 // UPDATED: Removed salutation and dateOfBirth from default columns; they are available in possibleColumns for optional addition.
+// UPDATED: Handle multiple time_slots in shifts for shiftTiming display in table and modal (split shifts).
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -16,14 +19,8 @@ const EmployeeList = () => {
   const [shifts, setShifts] = useState([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
-  const [showAttendanceModal, setShowAttendanceModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [detailsEmployee, setDetailsEmployee] = useState(null);
-  const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
-  const [startTime, setStartTime] = useState('');
-  const [endTime, setEndTime] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState('Full Day');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -241,52 +238,9 @@ const EmployeeList = () => {
       salary: ''
     });
   };
-  // UPDATED: Handle click on employee row to open attendance modal - Pre-populate times with special if date matches
+  // UPDATED: Handle click on employee row - Now navigates to details page instead of attendance modal
   const handleEmployeeClick = (emp) => {
-    setSelectedEmployee(emp);
-    const dateStr = new Date().toISOString().split('T')[0];
-    setAttendanceDate(dateStr);
-    // Check for special timing on this date
-    const special = emp.specialTimings?.find(s => s.date === dateStr);
-    if (special) {
-      setStartTime(special.startTime);
-      setEndTime(special.endTime);
-    } else {
-      setStartTime(emp.startTime || '');
-      setEndTime(emp.endTime || '');
-    }
-    setSelectedStatus('Full Day');
-    setShowAttendanceModal(true);
-  };
-  // Mark attendance for selected employee - UPDATED: Auto-set notes to include status and times
-  const markTodayAttendance = async () => {
-    if (!selectedEmployee) return;
-    try {
-      setLoading(true);
-      const url = baseUrl ? `${baseUrl}/api/attendance` : '/api/attendance';
-      const dailySalary = selectedEmployee.totalSalary / 30; // Full daily salary (assume 30 working days)
-      const computedDailySalary = selectedStatus === 'Full Day' ? dailySalary : dailySalary * 0.5; // 50% for Off Day
-      // UPDATED: Auto-generate notes with status and times
-      const notes = `${selectedStatus} from ${startTime || 'N/A'} to ${endTime || 'N/A'}`;
-      const response = await axios.post(url, {
-        employeeId: selectedEmployee._id,
-        employeeName: selectedEmployee.name,
-        date: attendanceDate,
-        status: selectedStatus,
-        startTime: startTime,
-        endTime: endTime,
-        dailySalary: computedDailySalary,
-        notes: notes // Set notes here for display in Attendance page
-      });
-      setMessage(`Attendance marked as ${selectedStatus} for ${attendanceDate}!`);
-      setShowAttendanceModal(false);
-      setSelectedEmployee(null);
-      fetchEmployees(); // Refresh list if needed
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to mark attendance.');
-    } finally {
-      setLoading(false);
-    }
+    navigate(`/employee-details/${emp._id}`);
   };
   const handleEditEmployee = (emp) => {
     navigate('/add-employee', { state: { editingEmployee: emp } });
@@ -398,7 +352,21 @@ const EmployeeList = () => {
     fontSize: '0.85rem',
     transition: 'all 0.3s ease'
   };
-  // Helper to get cell content based on column key - UPDATED: Added specialDays case
+  // Helper to get shift timing string (handles single or multiple time_slots)
+  const getShiftTimingString = (shift) => {
+    if (!shift) return 'N/A';
+    if (shift.time_slots && shift.time_slots.length > 0) {
+      // Multiple slots (split shift)
+      const slotStr = shift.time_slots.map(s => 
+        `${s.start_time}-${s.end_time}${s.is_overnight ? ' (O)' : ''}`
+      ).join(', ');
+      return `${shift.schedule_name} (${slotStr})`;
+    } else {
+      // Legacy single slot
+      return `${shift.schedule_name} ${shift.start_time} - ${shift.end_time}`;
+    }
+  };
+  // Helper to get cell content based on column key - UPDATED: Handle time_slots for shiftTiming
   const getCellContent = (emp, col) => {
     // Helper to find active assignment for this employee
     const getActiveAssignment = (empId) => {
@@ -454,14 +422,15 @@ const EmployeeList = () => {
         // Match employee to active assignment -> rule -> shift
         const assignForShift = getActiveAssignment(emp._id);
         if (!assignForShift) return <span style={{ color: '#95a5a6', fontStyle: 'italic' }}>Unassigned</span>;
-        const rule = scheduleRules.find(r => String(r._id) === String(assignForShift.schedule_id));
-        if (!rule) return <span style={{ color: '#e74c3c' }}>Rule Missing</span>;
-        const shift = shifts.find(s => String(s._id) === String(rule.shift_id));
-        if (!shift) return <span style={{ color: '#e74c3c' }}>Shift Missing</span>;
+        const ruleForShift = scheduleRules.find(r => String(r._id) === String(assignForShift.schedule_id));
+        if (!ruleForShift) return <span style={{ color: '#e74c3c' }}>Rule Missing</span>;
+        const shiftForTiming = shifts.find(s => String(s._id) === String(ruleForShift.shift_id));
+        if (!shiftForTiming) return <span style={{ color: '#e74c3c' }}>Shift Missing</span>;
+        const timingStr = getShiftTimingString(shiftForTiming);
         return (
-          <div>
-            <div style={{ fontWeight: '600', color: '#2c3e50' }}>{shift.start_time} - {shift.end_time}</div>
-            <div style={{ fontSize: '0.75rem', color: '#7f8c8d' }}>{rule.schedule_name}</div>
+          <div style={{ whiteSpace: 'normal' }}>
+            <div style={{ fontWeight: '600', color: '#2c3e50' }}>{timingStr}</div>
+            <div style={{ fontSize: '0.75rem', color: '#7f8c8d' }}>{ruleForShift.schedule_name}</div>
           </div>
         );
       case 'specialDays': // NEW: Display special day assignments from active schedule assignment
@@ -1126,7 +1095,7 @@ const EmployeeList = () => {
           </div>
         )}
       </div>
-      {/* Employee Details Modal - UPDATED: Added Special Days section and Shift Timing from active assignment */}
+      {/* Employee Details Modal - UPDATED: Added Special Days section and Shift Timing from active assignment - Handle time_slots */}
       {showDetailsModal && detailsEmployee && (
         <div
           style={{
@@ -1257,12 +1226,12 @@ const EmployeeList = () => {
                     </div>
                   </div>
                 </div>
-                {/* Schedule & Others - UPDATED: Fetch Shift Timing from active assignment, Special Days from assignments */}
+                {/* Schedule & Others - UPDATED: Fetch Shift Timing from active assignment, Special Days from assignments - Handle time_slots */}
                 <div style={{ background: 'white', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
                   <h4 style={{ color: '#e67e22', borderBottom: '2px solid #ecf0f1', paddingBottom: '10px', marginBottom: '15px', marginTop: 0 }}>
                     <FaClock style={{ marginRight: '8px' }} /> Schedule & Other
                   </h4>
-                  {/* UPDATED: Shift Timing from active schedule assignment */}
+                  {/* UPDATED: Shift Timing from active schedule assignment - Handle time_slots */}
                   <div style={{ marginBottom: '15px' }}>
                     <strong>Shift Timing:</strong>
                     <p style={{ margin: '5px 0' }}>
@@ -1273,9 +1242,10 @@ const EmployeeList = () => {
                         if (!rule) return 'Schedule rule missing';
                         const shift = shifts.find(s => String(s._id) === String(rule.shift_id));
                         if (!shift) return 'Shift missing';
+                        const timingStr = getShiftTimingString(shift);
                         return (
-                          <div>
-                            <div style={{ fontWeight: '600', color: '#2c3e50' }}>{shift.start_time} - {shift.end_time}</div>
+                          <div style={{ whiteSpace: 'normal' }}>
+                            <div style={{ fontWeight: '600', color: '#2c3e50' }}>{timingStr}</div>
                             <div style={{ fontSize: '0.8rem', color: '#7f8c8d' }}>{rule.schedule_name}</div>
                           </div>
                         );
@@ -1369,221 +1339,6 @@ const EmployeeList = () => {
                 }}
               >
                 Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* UPDATED: Attendance Modal - Now pre-populates with special times if date matches */}
-      {showAttendanceModal && selectedEmployee && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 1000
-          }}
-          onClick={(e) => { if (e.target === e.currentTarget) setShowAttendanceModal(false); }}
-        >
-          <div style={{
-            backgroundColor: '#ffffff',
-            padding: '30px',
-            borderRadius: '15px',
-            width: '90%',
-            maxWidth: '500px',
-            boxShadow: '0 10px 20px rgba(0, 0, 0, 0.2)',
-            textAlign: 'center',
-            border: '1px solid #e9ecef'
-          }}>
-            <h3 style={{
-              color: '#2c3e50',
-              marginBottom: '20px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '10px',
-              margin: '0 auto'
-            }}>
-              <FaClock style={{ color: '#3498db', fontSize: '1.5rem' }} />
-              Mark Attendance for {selectedEmployee.name}
-            </h3>
-            <div style={{ marginBottom: '20px', textAlign: 'left' }}>
-              <div style={{ marginBottom: '15px' }}>
-                <label style={{
-                  display: 'block',
-                  marginBottom: '8px',
-                  fontWeight: '600',
-                  color: '#2c3e50'
-                }}>Date:</label>
-                <input
-                  type="date"
-                  value={attendanceDate}
-                  onChange={(e) => {
-                    setAttendanceDate(e.target.value);
-                    // UPDATED: On date change, check for special timing and update times
-                    const newDateStr = e.target.value;
-                    const special = selectedEmployee.specialTimings?.find(s => s.date === newDateStr);
-                    if (special) {
-                      setStartTime(special.startTime);
-                      setEndTime(special.endTime);
-                    } else {
-                      setStartTime(selectedEmployee.startTime || '');
-                      setEndTime(selectedEmployee.endTime || '');
-                    }
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid #3498db',
-                    borderRadius: '10px',
-                    fontSize: '1rem',
-                    outline: 'none',
-                    transition: 'border-color 0.3s ease',
-                    background: '#f8f9fa'
-                  }}
-                  onFocus={(e) => e.target.style.borderColor = '#2980b9'}
-                  onBlur={(e) => e.target.style.borderColor = '#3498db'}
-                />
-              </div>
-              <div style={{ marginBottom: '15px' }}>
-                <label style={{
-                  display: 'block',
-                  marginBottom: '8px',
-                  fontWeight: '600',
-                  color: '#2c3e50'
-                }}>Status:</label>
-                <select
-                  value={selectedStatus}
-                  onChange={(e) => setSelectedStatus(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid #3498db',
-                    borderRadius: '10px',
-                    fontSize: '1rem',
-                    outline: 'none',
-                    background: '#f8f9fa',
-                    color: '#2c3e50'
-                  }}
-                >
-                  <option value="Full Day">Full Day</option>
-                  <option value="Off Day">Off Day (50% Pay)</option>
-                </select>
-              </div>
-              <div style={{ marginBottom: '15px' }}>
-                <label style={{
-                  display: 'block',
-                  marginBottom: '8px',
-                  fontWeight: '600',
-                  color: '#2c3e50'
-                }}>Start Time:</label>
-                <input
-                  type="time"
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid #3498db',
-                    borderRadius: '10px',
-                    fontSize: '1rem',
-                    outline: 'none',
-                    background: '#f8f9fa'
-                  }}
-                  onFocus={(e) => e.target.style.borderColor = '#2980b9'}
-                  onBlur={(e) => e.target.style.borderColor = '#3498db'}
-                />
-              </div>
-              <div style={{ marginBottom: '15px' }}>
-                <label style={{
-                  display: 'block',
-                  marginBottom: '8px',
-                  fontWeight: '600',
-                  color: '#2c3e50'
-                }}>End Time:</label>
-                <input
-                  type="time"
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid #3498db',
-                    borderRadius: '10px',
-                    fontSize: '1rem',
-                    outline: 'none',
-                    background: '#f8f9fa'
-                  }}
-                  onFocus={(e) => e.target.style.borderColor = '#2980b9'}
-                  onBlur={(e) => e.target.style.borderColor = '#3498db'}
-                />
-              </div>
-            </div>
-            <div style={{
-              display: 'flex',
-              gap: '15px',
-              justifyContent: 'center',
-              flexWrap: 'wrap'
-            }}>
-              <button
-                onClick={markTodayAttendance}
-                disabled={loading}
-                style={{
-                  padding: '12px 24px',
-                  background: 'linear-gradient(135deg, #27ae60 0%, #229954 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '25px',
-                  cursor: 'pointer',
-                  fontSize: '1rem',
-                  fontWeight: '600',
-                  boxShadow: '0 4px 8px rgba(39, 174, 96, 0.3)',
-                  transition: 'all 0.3s ease',
-                  minWidth: '140px'
-                }}
-                onMouseOver={(e) => {
-                  e.target.style.transform = 'translateY(-2px)';
-                  e.target.style.boxShadow = '0 6px 12px rgba(39, 174, 96, 0.4)';
-                }}
-                onMouseOut={(e) => {
-                  e.target.style.transform = 'translateY(0)';
-                  e.target.style.boxShadow = '0 4px 8px rgba(39, 174, 96, 0.3)';
-                }}
-              >
-                {loading ? 'Saving...' : 'Save Attendance'}
-              </button>
-              <button
-                onClick={() => setShowAttendanceModal(false)}
-                disabled={loading}
-                style={{
-                  padding: '12px 24px',
-                  background: 'linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '25px',
-                  cursor: 'pointer',
-                  fontSize: '1rem',
-                  fontWeight: '600',
-                  boxShadow: '0 4px 8px rgba(149, 165, 166, 0.3)',
-                  transition: 'all 0.3s ease',
-                  minWidth: '140px'
-                }}
-                onMouseOver={(e) => {
-                  e.target.style.transform = 'translateY(-2px)';
-                  e.target.style.boxShadow = '0 6px 12px rgba(149, 165, 166, 0.4)';
-                }}
-                onMouseOut={(e) => {
-                  e.target.style.transform = 'translateY(0)';
-                  e.target.style.boxShadow = '0 4px 8px rgba(149, 165, 166, 0.3)';
-                }}
-              >
-                Cancel
               </button>
             </div>
           </div>

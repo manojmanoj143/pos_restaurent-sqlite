@@ -5,10 +5,13 @@
 // Enhanced: Special Days now support types (Holiday, Half-Day, Extended, Special-Shift) with conditional fields.
 // Fixed: Ensured shift name resolution by trimming IDs and logging for debug (remove logs in prod).
 // All IDs treated as strings for comparison.
+// UPDATED: For 'Holiday' type, auto-set is_observed: true in special_days (for merging later).
+// UPDATED: Shift dropdown and displays now show multiple time slots from shift.time_slots.
+// REFACTOR: Replaced window.confirm with Custom Delete Warning Modal
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { FaArrowLeft, FaCalendarAlt, FaSave, FaEdit, FaTrash, FaTimes, FaPlus, FaCheckCircle, FaCalendarPlus } from 'react-icons/fa';
+import { FaArrowLeft, FaCalendarAlt, FaSave, FaEdit, FaTrash, FaTimes, FaPlus, FaCheckCircle, FaCalendarPlus, FaClock, FaMoon, FaExclamationTriangle } from 'react-icons/fa';
 
 const ScheduleRuleMaster = () => {
   const navigate = useNavigate();
@@ -18,6 +21,10 @@ const ScheduleRuleMaster = () => {
   const [error, setError] = useState(null);
   const [message, setMessage] = useState('');
   const [editingId, setEditingId] = useState(null);
+
+  // Delete Modal State
+  const [deleteId, setDeleteId] = useState(null);
+
   // Form State
   const [formData, setFormData] = useState({
     schedule_name: '',
@@ -26,7 +33,7 @@ const ScheduleRuleMaster = () => {
     shift_id: '',
     working_days: [], // Array of day strings ["Mon", "Tue"...]
     weekly_off: [], // Derived or explicit, we'll auto-derive for simplicity or allow manual toggle
-    special_days: [] // Array of { date: '', type: '', description: '', ...conditional fields }
+    special_days: [] // Array of { date: '', type: '', description: '', ...conditional fields, is_observed: bool }
   });
   const [baseUrl, setBaseUrl] = useState(null);
   // Constants
@@ -37,17 +44,6 @@ const ScheduleRuleMaster = () => {
     { value: 'Extended', label: 'Extended Hours' },
     { value: 'Special-Shift', label: 'Special Shift (Replace with Another Shift)' }
   ];
-  // Column management
-  const [columnOrder, setColumnOrder] = useState([
-    { key: "scheduleName", label: "Schedule Name", align: "left" },
-    { key: "dateRange", label: "Date Range", align: "left" },
-    { key: "workingDays", label: "Working Days", align: "left" },
-    { key: "shiftName", label: "Shift", align: "left" },
-    { key: "specialDaysSummary", label: "Special Days", align: "left" },
-    { key: "actions", label: "Actions", align: "center" },
-  ]);
-  const [showColumnModal, setShowColumnModal] = useState(false);
-  // ... (Simplifying column management for brevity in this complex form, but providing core functionality)
   // Fetch base URL & Data
   useEffect(() => {
     const init = async () => {
@@ -75,7 +71,7 @@ const ScheduleRuleMaster = () => {
       setShifts(shiftsRes.data || []);
       setError(null);
     } catch (err) {
-      console.error("Fetch error:", err); // Debug log
+      console.error("Fetch error:", err);
       setError(`Failed to fetch data: ${err.message}`);
     } finally {
       setLoading(false);
@@ -105,7 +101,7 @@ const ScheduleRuleMaster = () => {
   const addSpecialDay = () => {
     setFormData(prev => ({
       ...prev,
-      special_days: [...prev.special_days, { date: '', type: '', description: '', start_time: '', end_time: '', extended_start: '', extended_end: '', shift_id: '' }]
+      special_days: [...prev.special_days, { date: '', type: '', description: '', start_time: '', end_time: '', extended_start: '', extended_end: '', shift_id: '', is_observed: false }]
     }));
   };
   const removeSpecialDay = (index) => {
@@ -118,6 +114,10 @@ const ScheduleRuleMaster = () => {
     setFormData(prev => {
       const newSpecial = [...prev.special_days];
       newSpecial[index][field] = value;
+      // UPDATED: Auto-set is_observed true for 'Holiday' type
+      if (field === 'type' && value === 'Holiday') {
+        newSpecial[index].is_observed = true;
+      }
       return { ...prev, special_days: newSpecial };
     });
   };
@@ -182,15 +182,27 @@ const ScheduleRuleMaster = () => {
               style={inputStyle}
             >
               <option value="">-- Select Shift --</option>
-              {shifts.map(s => (
-                <option key={s._id} value={s._id}>{s.schedule_name} ({s.start_time} - {s.end_time})</option>
-              ))}
+              {shifts.map(s => {
+                const slotsStr = s.time_slots ? s.time_slots.map(t => `${t.start_time}-${t.end_time}${t.is_overnight ? ' (O)' : ''}`).join(', ') : '';
+                return <option key={s._id} value={s._id}>{s.schedule_name} ({slotsStr})</option>;
+              })}
             </select>
           </div>
         );
       default:
         return null;
     }
+  };
+  // Helper to get shift name with slots
+  const getShiftName = (shiftId) => {
+    if (!shiftId) return 'No Shift Assigned';
+    const idStr = String(shiftId).trim();
+    const shift = shifts.find(s => String(s._id).trim() === idStr);
+    if (!shift) {
+      return 'Unknown Shift';
+    }
+    const slotsStr = shift.time_slots ? shift.time_slots.map(t => `${t.start_time}-${t.end_time}${t.is_overnight ? ' (O)' : ''}`).join(', ') : '';
+    return `${shift.schedule_name} (${slotsStr})`;
   };
   // Submit
   const handleSubmit = async (e) => {
@@ -225,7 +237,7 @@ const ScheduleRuleMaster = () => {
     try {
       const url = `${baseUrl}/api/schedule-rules${editingId ? `/${editingId}` : ''}`;
       const method = editingId ? 'put' : 'post';
-      const submitData = { ...formData }; // Ensure all fields are sent
+      const submitData = { ...formData }; // Ensure all fields are sent, including is_observed
       await axios[method](url, submitData);
       setMessage(`Schedule Rule ${editingId ? 'updated' : 'added'} successfully!`);
       setEditingId(null);
@@ -233,7 +245,6 @@ const ScheduleRuleMaster = () => {
       fetchData();
       setTimeout(() => setMessage(''), 3000);
     } catch (err) {
-      console.error("Submit error:", err); // Debug log
       setError(`Failed to save rule: ${err.response?.data?.error || err.message}`);
     }
   };
@@ -246,32 +257,31 @@ const ScheduleRuleMaster = () => {
       shift_id: rule.shift_id || '',
       working_days: rule.working_days || [],
       weekly_off: rule.weekly_off || [],
-      special_days: rule.special_days || [] // Already has type and conditional fields
+      special_days: (rule.special_days || []).map(sd => ({ ...sd, is_observed: sd.is_observed ?? (sd.type === 'Holiday') })) // Ensure is_observed
     });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-  const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure?")) return;
+
+  // Trigger Confirmation
+  const confirmDelete = (id) => {
+    setDeleteId(id);
+  };
+
+  // Execute Deletion
+  const handleExecuteDelete = async () => {
+    if (!deleteId) return;
     try {
-      await axios.delete(`${baseUrl}/api/schedule-rules/${id}`);
+      await axios.delete(`${baseUrl}/api/schedule-rules/${deleteId}`);
       setMessage("Rule deleted!");
+      setDeleteId(null);
       fetchData();
       setTimeout(() => setMessage(''), 3000);
     } catch (err) {
-      console.error("Delete error:", err); // Debug log
       setError(`Failed to delete: ${err.message}`);
+      setDeleteId(null);
     }
   };
-  // Helper to get shift name - Enhanced with string trimming and debug
-  const getShiftName = (shiftId) => {
-    if (!shiftId) return 'No Shift Assigned';
-    const idStr = String(shiftId).trim();
-    const shift = shifts.find(s => String(s._id).trim() === idStr);
-    if (!shift) {
-      console.warn(`Shift not found for ID: ${idStr}`, { shifts }); // Debug log - remove in prod
-      return 'Unknown Shift';
-    }
-    return shift.schedule_name;
-  };
+
   // Helper for special days summary in table
   const getSpecialDaysSummary = (specialDays) => {
     if (!specialDays || specialDays.length === 0) return 'None';
@@ -320,9 +330,10 @@ const ScheduleRuleMaster = () => {
                 <label style={labelStyle}>Assign Shift</label>
                 <select required name="shift_id" value={formData.shift_id} onChange={handleInputChange} style={inputStyle}>
                   <option value="">-- Select Shift --</option>
-                  {shifts.map(s => (
-                    <option key={s._id} value={s._id}>{s.schedule_name} ({s.start_time} - {s.end_time})</option>
-                  ))}
+                  {shifts.map(s => {
+                    const slotsStr = s.time_slots ? s.time_slots.map(t => `${t.start_time}-${t.end_time}${t.is_overnight ? ' (O)' : ''}`).join(', ') : '';
+                    return <option key={s._id} value={s._id}>{s.schedule_name} ({slotsStr})</option>;
+                  })}
                 </select>
               </div>
             </div>
@@ -451,7 +462,7 @@ const ScheduleRuleMaster = () => {
                   </td>
                   <td style={{ ...tdStyle, textAlign: 'center' }}>
                     <button onClick={() => handleEdit(r)} style={iconBtnStyle} title="Edit"><FaEdit /></button>
-                    <button onClick={() => handleDelete(r._id)} style={{ ...iconBtnStyle, color: '#e74c3c' }} title="Delete"><FaTrash /></button>
+                    <button onClick={() => confirmDelete(r._id)} style={{ ...iconBtnStyle, color: '#e74c3c' }} title="Delete"><FaTrash /></button>
                   </td>
                 </tr>
               ))}
@@ -459,10 +470,35 @@ const ScheduleRuleMaster = () => {
           </table>
         </div>
       </div>
+
+      {/* Delete Warning Modal */}
+      {deleteId && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1100 }}>
+          <div style={{ backgroundColor: '#fff', padding: '30px', borderRadius: '15px', width: '90%', maxWidth: '400px', textAlign: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
+            <FaExclamationTriangle style={{ fontSize: '3rem', color: '#e74c3c', marginBottom: '20px' }} />
+            <h3 style={{ color: '#2c3e50', margin: '0 0 15px 0' }}>Confirm Deletion</h3>
+            <p style={{ color: '#7f8c8d', marginBottom: '25px' }}>Are you sure you want to delete this rule? This action cannot be undone.</p>
+            <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
+              <button
+                onClick={handleExecuteDelete}
+                style={{ padding: '10px 25px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer' }}
+              >
+                Yes, Delete
+              </button>
+              <button
+                onClick={() => setDeleteId(null)}
+                style={{ padding: '10px 25px', background: '#95a5a6', color: 'white', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
-// Styles
+// Styles (unchanged)
 const inputStyle = {
   padding: '10px',
   borderRadius: '8px',
