@@ -130,7 +130,7 @@ const AttendanceView = () => {
         base.worked_minutes = group.reduce((sum, g) => sum + (Number(g.worked_minutes) || 0), 0);
 
         // Combine unique notes
-        const allNotes = group.map(g => g.notes).filter(n => n).join('; ');
+        const allNotes = [...new Set(group.map(g => g.notes).filter(n => n))].join('; ');
         base.notes = allNotes;
 
         // Mark as merged
@@ -154,9 +154,10 @@ const AttendanceView = () => {
       total_days: 0, // Unique days
       working_days: 0,
       weekly_offs: 0,
-      holidays: 0,
+      holidays: 0, // Now counts based on special_day_type too
       extended_days: 0,
-      special_shifts: 0
+      special_shifts: 0,
+      on_leave: 0
     };
 
     // Use a Set to track unique (employee + date) to count distinct days
@@ -164,24 +165,48 @@ const AttendanceView = () => {
 
     data.forEach(att => {
       const key = `${att.attendance_date}_${att.employee_id}`;
+      // We process every unique day. 
+      // Note: If multiple records exist for one day (split), we only count day-level stats once.
       if (!uniqueDays.has(key)) {
         uniqueDays.add(key);
         stats.total_days++;
 
-        // Only count stats for the first record of the day to avoid double counting split shifts
         const status = att.status;
         const specialType = att.special_day_type;
 
-        if (status === 'WeeklyOff') stats.weekly_offs++;
-        else if (status === 'Holiday') stats.holidays++;
+        // 1. Weekly Offs
+        if (status === 'WeeklyOff' || specialType === 'WeeklyOff') {
+          stats.weekly_offs++;
+        }
 
-        if (status === 'Extended' || specialType === 'Extended') stats.extended_days++;
+        // 2. Holidays (Prioritize Special Type)
+        else if (status === 'Holiday' || specialType === 'Holiday') {
+          stats.holidays++;
+        }
 
+        // 3. On Leave (Count as leave only if NOT a Holiday/WeeklyOff)
+        else if (status === 'On Leave' || status === 'Leave' || status === 'Paid Leave') {
+          stats.on_leave++;
+        }
+
+        // 4. Extended (Can overlap with Working Day, so separate check often preferred, 
+        // but if mutually exclusive in user model, keep structure. 
+        // Usually Extended is a type of working day or special day.)
+        if (status === 'Extended' || specialType === 'Extended') {
+          stats.extended_days++;
+        }
+
+        // 5. Special Shifts
         if (specialType && !['None', 'WeeklyOff', 'Holiday', 'Extended'].includes(specialType)) {
           stats.special_shifts++;
         }
 
-        if (!['WeeklyOff', 'Holiday', 'Absent', 'Leave'].includes(status)) {
+        // 6. Working Days
+        // Statuses that imply work: Present, HalfDay, Extended
+        // Statuses that imply NO work: Absent, On Leave, Leave, WeeklyOff, Holiday
+        const nonWorkingStatuses = ['Absent', 'On Leave', 'Leave', 'WeeklyOff', 'Holiday'];
+        if (!nonWorkingStatuses.includes(status)) {
+          // If it's a Holiday date but status is Present, it IS a working day (worked on holiday)
           stats.working_days++;
         }
       }
@@ -236,6 +261,8 @@ const AttendanceView = () => {
       case 'Holiday': return '#8e44ad';
       case 'Extended': return '#f39c12';
       case 'HalfDay': return '#d35400';
+      case 'On Leave': return '#e67e22';
+      case 'Paid Leave': return '#16a085';
       default: return '#2c3e50';
     }
   };
@@ -354,8 +381,6 @@ const AttendanceView = () => {
             <SummaryCard title="Total Days" value={summary.total_days} icon={<FaCalendarAlt />} color="#3498db" />
             <SummaryCard title="Total Working Days" value={summary.working_days} icon={<FaBriefcase />} color="#27ae60" />
             <SummaryCard title="Total Extended" value={summary.extended_days} icon={<FaClock />} color="#f39c12" />
-            <SummaryCard title="Total Weekly Offs" value={summary.weekly_offs} icon={<FaBed />} color="#95a5a6" />
-            <SummaryCard title="Total Holidays" value={summary.holidays} icon={<FaStar />} color="#8e44ad" />
             <SummaryCard title="Total Special Shifts" value={summary.special_shifts} icon={<FaFilter />} color="#d35400" />
           </div>
         )}
@@ -404,7 +429,7 @@ const AttendanceView = () => {
                     <td style={{ padding: '12px 15px', textAlign: 'center' }}>
                       <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
                         <ActionButton icon={<FaEye />} color="#3498db" onClick={() => setSelectedAttendance(att)} />
-                        <ActionButton icon={<FaEdit />} color="#f39c12" onClick={() => handleEdit(att)} />
+                        {!att.is_virtual && <ActionButton icon={<FaEdit />} color="#f39c12" onClick={() => handleEdit(att)} />}
                         {!att.is_virtual && (
                           <ActionButton
                             icon={<FaTrash />}

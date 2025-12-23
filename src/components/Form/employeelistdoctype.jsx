@@ -14,6 +14,8 @@ const EmployeeDocType = () => {
   const navigate = useNavigate();
   const [employee, setEmployee] = useState(null);
   const [allAttendanceData, setAllAttendanceData] = useState({}); // State for all months' attendance data, object with month keys
+  const [leaveApplications, setLeaveApplications] = useState([]);
+  const [leaveSummary, setLeaveSummary] = useState([]);
   const [activeTab, setActiveTab] = useState('Overview');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -157,8 +159,27 @@ const EmployeeDocType = () => {
   useEffect(() => {
     if (employee?._id) {
       fetchAllAttendance();
+      fetchLeaveData();
     }
   }, [employee, baseUrl]);
+
+  const fetchLeaveData = async () => {
+    try {
+      const summaryUrl = baseUrl ? `${baseUrl}/api/leave-summary?employee_id=${employee._id}` : `/api/leave-summary?employee_id=${employee._id}`;
+      const appsUrl = baseUrl ? `${baseUrl}/api/leave-applications?employee_id=${employee._id}` : `/api/leave-applications?employee_id=${employee._id}`;
+
+      const [summaryRes, appsRes] = await Promise.all([
+        axios.get(summaryUrl),
+        axios.get(appsUrl)
+      ]);
+
+      setLeaveSummary(summaryRes.data || []);
+      setLeaveApplications(appsRes.data || []);
+    } catch (err) {
+      console.error('Error fetching leave data:', err);
+    }
+  };
+
   const fetchAllAttendance = async () => {
     const year = 2025;
     const promises = [];
@@ -332,7 +353,7 @@ const EmployeeDocType = () => {
         <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px', display: 'block' }}>Employment Type</label>
         <input type="text" value={employee.employeeType || ''} readOnly style={{ width: '100%', padding: '8px', border: '1px solid #e9ecef', borderRadius: '4px', background: '#f8f9fa' }} />
       </div>
-      
+
     </div>
   );
   const renderAddressTab = () => (
@@ -424,7 +445,7 @@ const EmployeeDocType = () => {
           View Extended Hours
         </span>
       </div>
-      
+
     </div>
   );
   const renderSalaryTab = () => (
@@ -538,19 +559,22 @@ const EmployeeDocType = () => {
                 }
                 const dateStr = cell.date.toISOString().split('T')[0];
                 const att = monthAttData.find(a => a.attendance_date === dateStr);
-                let level = 0;
+                let color = '#ebedf0'; // Default for no activity
                 if (att) {
                   if (att.status === 'Present' || att.status === 'Extended') {
-                    level = 4;
+                    color = '#216e39'; // Green
                   } else if (att.status === 'HalfDay') {
-                    level = 2;
+                    color = '#40c463'; // Lighter Green
+                  } else if (att.status === 'Paid Leave') {
+                    color = '#e67e22'; // Orange
+                  } else if (att.status === 'On Leave' || att.status === 'Leave') { // Handle both just in case
+                    color = '#e74c3c'; // Red
+                  } else if (att.status === 'Absent') {
+                    // User requested NO colour for Absent (default)
+                    color = '#ebedf0';
                   }
                 }
-                let color = '#ebedf0'; // Default for no activity
-                if (level === 1) color = '#9be9a8';
-                if (level === 2) color = '#40c463';
-                if (level === 3) color = '#30a14e';
-                if (level === 4) color = '#216e39';
+
                 const monthShort = monDate.toLocaleString('default', { month: 'short' });
                 return (
                   <div
@@ -574,14 +598,29 @@ const EmployeeDocType = () => {
     };
     return (
       <div style={{ padding: '20px 0' }}>
-        {/* Activity Header - Removed the arrow icon */}
+        {/* Activity Header with Legend */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'flex-start',
+          justifyContent: 'space-between',
           marginBottom: '20px'
         }}>
           <h3 style={{ margin: 0, color: '#333', fontSize: '16px', fontWeight: '600' }}>Activity</h3>
+          {/* Legend */}
+          <div style={{ display: 'flex', gap: '15px', fontSize: '12px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <div style={{ width: '10px', height: '10px', backgroundColor: '#216e39', borderRadius: '1px' }}></div>
+              <span>Present</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <div style={{ width: '10px', height: '10px', backgroundColor: '#e67e22', borderRadius: '1px' }}></div>
+              <span>Paid Leave</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <div style={{ width: '10px', height: '10px', backgroundColor: '#e74c3c', borderRadius: '1px' }}></div>
+              <span>On Leave</span>
+            </div>
+          </div>
         </div>
         {/* All Months Grid - 3 rows x 4 columns */}
         <div style={{
@@ -598,6 +637,103 @@ const EmployeeDocType = () => {
       </div>
     );
   };
+
+  const renderLeavesTab = () => (
+    <div style={{ padding: '20px 0' }}>
+      {/* Leave Balance Summary */}
+      <div style={{ marginBottom: '30px' }}>
+        <h4 style={{ margin: '0 0 15px 0', color: '#2c3e50', fontWeight: '600', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>
+          <FaUmbrellaBeach style={{ color: '#3498db', marginRight: '8px' }} /> Leave Balance Summary
+        </h4>
+        {leaveSummary.length > 0 ? (
+          <div style={{ overflowX: 'auto', borderRadius: '10px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', border: '1px solid #e9ecef' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+              <thead>
+                <tr style={{ background: '#f8f9fa', color: '#2c3e50' }}>
+                  <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #dee2e6' }}>Leave Type</th>
+                  <th style={{ padding: '10px', textAlign: 'center', borderBottom: '1px solid #dee2e6' }}>Total Allocated</th>
+                  <th style={{ padding: '10px', textAlign: 'center', borderBottom: '1px solid #dee2e6' }}>Monthly Credit</th>
+                  <th style={{ padding: '10px', textAlign: 'center', borderBottom: '1px solid #dee2e6' }}>Pending</th>
+                  <th style={{ padding: '10px', textAlign: 'center', borderBottom: '1px solid #dee2e6' }}>Available</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leaveSummary.map((item, idx) => (
+                  <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? '#ffffff' : '#f8f9fa' }}>
+                    <td style={{ padding: '10px', fontWeight: '600', color: '#2c3e50' }}>{item.leave_name}</td>
+                    <td style={{ padding: '10px', textAlign: 'center', color: '#3498db' }}>{item.total_allocated}</td>
+                    <td style={{ padding: '10px', textAlign: 'center', color: '#7f8c8d' }}>{item.monthly_credit}</td>
+                    <td style={{ padding: '10px', textAlign: 'center', color: '#95a5a6' }}>{item.pending}</td>
+                    <td style={{ padding: '10px', textAlign: 'center', color: '#27ae60', fontWeight: 'bold' }}>{item.available}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p style={{ color: '#7f8c8d', fontStyle: 'italic' }}>No leave summary available.</p>
+        )}
+      </div>
+
+      {/* Leave Applications */}
+      <div>
+        <h4 style={{ margin: '0 0 15px 0', color: '#2c3e50', fontWeight: '600', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>
+          <FaClipboardList style={{ color: '#e67e22', marginRight: '8px' }} /> Leave Applications
+        </h4>
+        {leaveApplications.length > 0 ? (
+          <div style={{ overflowX: 'auto', borderRadius: '10px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', border: '1px solid #e9ecef' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+              <thead>
+                <tr style={{ background: '#f8f9fa', color: '#2c3e50' }}>
+                  <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #dee2e6' }}>Type</th>
+                  <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #dee2e6' }}>Dates</th>
+                  <th style={{ padding: '10px', textAlign: 'center', borderBottom: '1px solid #dee2e6' }}>Mode</th>
+                  <th style={{ padding: '10px', textAlign: 'center', borderBottom: '1px solid #dee2e6' }}>Details</th>
+                  <th style={{ padding: '10px', textAlign: 'center', borderBottom: '1px solid #dee2e6' }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leaveApplications.map((app, idx) => (
+                  <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? '#ffffff' : '#f8f9fa', borderBottom: '1px solid #eee' }}>
+                    <td style={{ padding: '10px' }}>
+                      <div style={{ fontWeight: '600', color: '#2c3e50' }}>{app.leave_name}</div>
+                      <div style={{ fontSize: '0.8rem', color: '#7f8c8d' }}>{app.leave_code}</div>
+                    </td>
+                    <td style={{ padding: '10px' }}>
+                      <div style={{ color: '#2c3e50' }}>{app.from_date} to {app.to_date}</div>
+                      {app.leave_mode === 'HOURLY' && (
+                        <div style={{ fontSize: '0.8rem', color: '#7f8c8d' }}>{app.from_time} - {app.to_time}</div>
+                      )}
+                    </td>
+                    <td style={{ padding: '10px', textAlign: 'center', color: '#34495e' }}>{app.leave_mode}</td>
+                    <td style={{ padding: '10px', textAlign: 'center' }}>
+                      <div style={{ fontWeight: 'bold', color: '#2980b9' }}>{app.total_units} {app.unit_type}</div>
+                      {app.reason && <div style={{ fontSize: '0.8rem', color: '#95a5a6', maxWidth: '150px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', margin: '0 auto' }} title={app.reason}>{app.reason}</div>}
+                    </td>
+                    <td style={{ padding: '10px', textAlign: 'center' }}>
+                      <span style={{
+                        padding: '4px 10px',
+                        borderRadius: '20px',
+                        fontSize: '0.8rem',
+                        fontWeight: '600',
+                        background: app.status === 'APPROVED' ? '#d4edda' : app.status === 'REJECTED' ? '#f8d7da' : '#fff3cd',
+                        color: app.status === 'APPROVED' ? '#155724' : app.status === 'REJECTED' ? '#721c24' : '#856404'
+                      }}>
+                        {app.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p style={{ color: '#7f8c8d', fontStyle: 'italic' }}>No leave applications found.</p>
+        )}
+      </div>
+    </div>
+  );
+
   const renderTabContent = () => {
     switch (activeTab) {
       case 'Overview': return renderOverviewTab();
@@ -606,6 +742,7 @@ const EmployeeDocType = () => {
       case 'Shift & Holiday': return renderAttendanceTab();
       case 'Salary': return renderSalaryTab();
       case 'Attendace': return renderConnectionsTab();
+      case 'Leaves': return renderLeavesTab();
       default: return null;
     }
   };
@@ -786,7 +923,7 @@ const EmployeeDocType = () => {
             marginBottom: '20px'
           }}>
             <div style={{ display: 'flex', gap: '0', borderBottom: '1px solid #e9ecef', marginBottom: '20px' }}>
-              {['Overview', 'Joining', 'Address & Contacts', 'Shift & Holiday', 'Salary', 'Attendace'].map(tab => (
+              {['Overview', 'Joining', 'Address & Contacts', 'Shift & Holiday', 'Salary', 'Attendace', 'Leaves'].map(tab => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}

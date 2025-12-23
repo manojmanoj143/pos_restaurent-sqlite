@@ -1,17 +1,306 @@
 // src/components/Form/schedulerulemaster.jsx
 // FULLY DETAILED: Schedule Rule Master (Rule Master)
-// Manages "schedule_master" table via /api/schedule-rules
-// Key requirement: Define weekly working days, weekly offs, date range, and shift.
-// Enhanced: Special Days now support types (Holiday, Half-Day, Extended, Special-Shift) with conditional fields.
-// Fixed: Ensured shift name resolution by trimming IDs and logging for debug (remove logs in prod).
-// All IDs treated as strings for comparison.
-// UPDATED: For 'Holiday' type, auto-set is_observed: true in special_days (for merging later).
-// UPDATED: Shift dropdown and displays now show multiple time slots from shift.time_slots.
-// REFACTOR: Replaced window.confirm with Custom Delete Warning Modal
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { FaArrowLeft, FaCalendarAlt, FaSave, FaEdit, FaTrash, FaTimes, FaPlus, FaCheckCircle, FaCalendarPlus, FaClock, FaMoon, FaExclamationTriangle } from 'react-icons/fa';
+import { FaArrowLeft, FaCalendarAlt, FaSave, FaEdit, FaTrash, FaTimes, FaPlus, FaCheckCircle, FaClock, FaMoon, FaExclamationTriangle } from 'react-icons/fa';
+
+// --- Helper Functions for Format Conversion ---
+const to12h = (h, m) => {
+  let hour = parseInt(h);
+  const minute = m.toString().padStart(2, '0');
+  const period = hour >= 12 ? 'PM' : 'AM';
+  hour = hour % 12;
+  hour = hour ? hour : 12; // 0 becomes 12
+  return `${hour.toString().padStart(2, '0')}:${minute} ${period}`;
+};
+
+const to24h = (h, m, p) => {
+  let hour = parseInt(h);
+  if (p === 'PM' && hour !== 12) hour += 12;
+  if (p === 'AM' && hour === 12) hour = 0;
+  return { h: hour.toString().padStart(2, '0'), m: m.toString().padStart(2, '0') };
+};
+
+// --- Custom Time Picker Component ---
+const CustomTimePicker = ({ value, onChange, format24, placeholder }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const wrapperRef = useRef(null);
+  const pickerId = useRef(Math.random().toString(36).substr(2, 9));
+
+  // Internal state is separate from "value" prop logic to support smooth typing
+  const [h, setH] = useState('');
+  const [m, setM] = useState('');
+  const [p, setP] = useState('AM');
+
+  // Sync internal state with external value AND current format mode
+  useEffect(() => {
+    if (!value) {
+      setH(''); setM(''); setP('AM');
+      return;
+    }
+    const match = value.match(/^(\d{1,2})[:.]?(\d{0,2})\s*([AP]M)?$/i);
+    if (match) {
+      let hour = match[1];
+      let minute = match[2] || '00';
+      let period = match[3] ? match[3].toUpperCase() : 'AM';
+
+      if (format24) {
+        // Convert incoming 12h string to 24h parts for display
+        const { h: h24, m: m24 } = to24h(hour, minute, period);
+        setH(h24);
+        setM(m24);
+        setP(''); // Not used in 24h
+      } else {
+        // Use 12h parts directly
+        setH(hour.toString().padStart(2, '0'));
+        setM(minute.toString().padStart(2, '0'));
+        setP(period);
+      }
+    }
+  }, [value, format24]);
+
+  // Scroll to selection
+  useEffect(() => {
+    if (isOpen) {
+      setTimeout(() => {
+        const hElem = document.getElementById(`h-${pickerId.current}-${parseInt(h)}`);
+        const mElem = document.getElementById(`m-${pickerId.current}-${parseInt(m)}`);
+        const pElem = document.getElementById(`p-${pickerId.current}-${p}`); // Only exists in 12h
+
+        if (hElem) hElem.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        if (mElem) mElem.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        if (pElem) pElem.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }, 100);
+    }
+  }, [isOpen, h, m, p]);
+
+  const notifyChange = (newH, newM, newP) => {
+    // ALWAYS emit "HH:MM AM/PM" (12h format) back to parent
+    // If in 24h mode, we must convert internal 24h parts -> 12h string first
+    if (format24) {
+      if (newH !== '' && newM !== '') {
+        // Treat newH as 0-23
+        const val12 = to12h(newH, newM);
+        onChange(val12);
+      } else {
+        // Partial inputs? Hard to represent in strict 12h format parent expects
+        // We just won't update parent until valid, or clear it.
+        if (newH === '' && newM === '') onChange('');
+      }
+    } else {
+      // 12h mode: just emit what we have
+      const hh = newH.padStart(2, '0');
+      const mm = newM.padStart(2, '0');
+      if (newH && newM) onChange(`${hh}:${mm} ${newP}`);
+      else if (!newH && !newM) onChange('');
+    }
+  };
+
+  const handleHChange = (e) => {
+    let val = e.target.value.replace(/\D/g, '');
+    if (val.length > 2) val = val.slice(-2);
+    setH(val);
+    notifyChange(val, m, p);
+    setIsOpen(true);
+  };
+
+  const handleMChange = (e) => {
+    let val = e.target.value.replace(/\D/g, '');
+    if (val.length > 2) val = val.slice(-2);
+    setM(val);
+    notifyChange(h, val, p);
+    setIsOpen(true);
+  };
+
+  const handlePChange = (e) => {
+    if (format24) return;
+    let val = e.target.value.toUpperCase();
+    if (val.length > 2) val = val.slice(-2);
+    let nextP = p;
+    if (val.includes('A')) nextP = 'AM';
+    else if (val.includes('P')) nextP = 'PM';
+    setP(nextP);
+    notifyChange(h, m, nextP);
+  };
+
+  const handleSelect = (type, val) => {
+    let newH = h;
+    let newM = m;
+    let newP = p;
+
+    if (type === 'h') newH = val.toString().padStart(2, '0');
+    if (type === 'm') newM = val.toString().padStart(2, '0');
+    if (type === 'p') newP = val;
+
+    setH(newH);
+    setM(newM);
+    setP(newP);
+    notifyChange(newH, newM, newP);
+  };
+
+  const handleFocus = (e) => e.target.select();
+
+  // Close logic
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [wrapperRef]);
+
+  // Dropdown data generation
+  const hours = format24
+    ? Array.from({ length: 24 }, (_, i) => i) // 0-23
+    : Array.from({ length: 12 }, (_, i) => i + 1); // 1-12
+
+  const minutes = Array.from({ length: 60 }, (_, i) => i);
+  const periods = ['AM', 'PM'];
+
+  return (
+    <div ref={wrapperRef} style={{ position: 'relative', width: '100%' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          border: isOpen ? '1px solid #3498db' : '1px solid #bdc3c7',
+          borderRadius: '8px',
+          padding: '10px 10px',
+          backgroundColor: '#fff',
+          cursor: 'text',
+          transition: 'all 0.2s ease',
+          boxShadow: isOpen ? '0 0 0 3px rgba(52, 152, 219, 0.2)' : 'none',
+          width: '100%',
+          justifyContent: 'space-between'
+        }}
+        onClick={() => setIsOpen(true)}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+          <input
+            type="text"
+            placeholder="HH"
+            value={h}
+            onChange={handleHChange}
+            onFocus={handleFocus}
+            onClick={(e) => { e.stopPropagation(); setIsOpen(true); }}
+            style={{ border: 'none', width: '30px', textAlign: 'center', fontSize: '0.95rem', outline: 'none', color: '#2c3e50', background: 'transparent', fontWeight: '500' }}
+          />
+          <span style={{ fontWeight: 'bold', userSelect: 'none', color: '#95a5a6', margin: '0 2px' }}>:</span>
+          <input
+            type="text"
+            placeholder="MM"
+            value={m}
+            onChange={handleMChange}
+            onFocus={handleFocus}
+            onClick={(e) => { e.stopPropagation(); setIsOpen(true); }}
+            style={{ border: 'none', width: '30px', textAlign: 'center', fontSize: '0.95rem', outline: 'none', color: '#2c3e50', background: 'transparent', fontWeight: '500' }}
+          />
+          {!format24 && (
+            <input
+              type="text"
+              value={p}
+              onChange={handlePChange}
+              onFocus={handleFocus}
+              onClick={(e) => { e.stopPropagation(); setIsOpen(true); }}
+              style={{ border: 'none', width: '40px', textAlign: 'center', fontSize: '0.85rem', marginLeft: 'auto', outline: 'none', color: '#fff', background: p === 'AM' ? '#f1c40f' : '#34495e', borderRadius: '4px', cursor: 'pointer', padding: '2px 0', fontWeight: 'bold' }}
+            />
+          )}
+        </div>
+        <FaClock style={{ color: isOpen ? '#3498db' : '#95a5a6', cursor: 'pointer', marginLeft: '10px' }} onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }} />
+      </div>
+
+      {isOpen && (
+        <div style={{
+          position: 'absolute',
+          top: '110%',
+          left: 0,
+          zIndex: 1500, // Higher than modal backdrop
+          backgroundColor: '#fff',
+          border: '1px solid #eee',
+          borderRadius: '8px',
+          boxShadow: '0 8px 25px rgba(0,0,0,0.1)',
+          display: 'flex',
+          height: '220px',
+          overflow: 'hidden',
+          width: '100%',
+          animation: 'fadeIn 0.2s ease-out'
+        }}>
+          <style>{`@keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+          <div style={{ flex: 1, overflowY: 'auto', borderRight: '1px solid #f0f0f0', scrollbarWidth: 'thin' }}>
+            <div style={{ padding: '8px', textAlign: 'center', fontWeight: 'bold', background: '#f8f9fa', borderBottom: '1px solid #eee', color: '#7f8c8d', fontSize: '0.8rem' }}>HH</div>
+            {hours.map(hr => (
+              <div
+                key={hr}
+                id={`h-${pickerId.current}-${hr}`}
+                onClick={() => handleSelect('h', hr)}
+                style={{
+                  padding: '8px',
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  backgroundColor: parseInt(h) === hr ? '#ebf5fb' : 'transparent',
+                  color: parseInt(h) === hr ? '#3498db' : '#333',
+                  fontWeight: parseInt(h) === hr ? 'bold' : 'normal'
+                }}
+              >
+                {hr.toString().padStart(2, '0')}
+              </div>
+            ))}
+          </div>
+
+          <div style={{ flex: 1, overflowY: 'auto', borderRight: format24 ? 'none' : '1px solid #f0f0f0', scrollbarWidth: 'thin' }}>
+            <div style={{ padding: '8px', textAlign: 'center', fontWeight: 'bold', background: '#f8f9fa', borderBottom: '1px solid #eee', color: '#7f8c8d', fontSize: '0.8rem' }}>MM</div>
+            {minutes.map(mn => (
+              <div
+                key={mn}
+                id={`m-${pickerId.current}-${mn}`}
+                onClick={() => handleSelect('m', mn)}
+                style={{
+                  padding: '8px',
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  backgroundColor: parseInt(m) === mn ? '#ebf5fb' : 'transparent',
+                  color: parseInt(m) === mn ? '#3498db' : '#333',
+                  fontWeight: parseInt(m) === mn ? 'bold' : 'normal'
+                }}
+              >
+                {mn.toString().padStart(2, '0')}
+              </div>
+            ))}
+          </div>
+
+          {!format24 && (
+            <div style={{ flex: 1, overflowY: 'auto', scrollbarWidth: 'thin' }}>
+              <div style={{ padding: '8px', textAlign: 'center', fontWeight: 'bold', background: '#f8f9fa', borderBottom: '1px solid #eee', color: '#7f8c8d', fontSize: '0.8rem' }}>AM/PM</div>
+              {periods.map(per => (
+                <div
+                  key={per}
+                  id={`p-${pickerId.current}-${per}`}
+                  onClick={() => handleSelect('p', per)}
+                  style={{
+                    padding: '10px 8px',
+                    textAlign: 'center',
+                    cursor: 'pointer',
+                    fontSize: '0.9rem',
+                    backgroundColor: p === per ? '#ebf5fb' : 'transparent',
+                    color: p === per ? '#3498db' : '#333',
+                    fontWeight: p === per ? 'bold' : 'normal'
+                  }}
+                >
+                  {per}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const ScheduleRuleMaster = () => {
   const navigate = useNavigate();
@@ -22,6 +311,9 @@ const ScheduleRuleMaster = () => {
   const [message, setMessage] = useState('');
   const [editingId, setEditingId] = useState(null);
 
+  // Toggle for 12h/24h format
+  const [use24Hour, setUse24Hour] = useState(false);
+
   // Delete Modal State
   const [deleteId, setDeleteId] = useState(null);
 
@@ -31,9 +323,9 @@ const ScheduleRuleMaster = () => {
     start_date: '',
     end_date: '',
     shift_id: '',
-    working_days: [], // Array of day strings ["Mon", "Tue"...]
-    weekly_off: [], // Derived or explicit, we'll auto-derive for simplicity or allow manual toggle
-    special_days: [] // Array of { date: '', type: '', description: '', ...conditional fields, is_observed: bool }
+    working_days: [],
+    weekly_off: [],
+    special_days: []
   });
   const [baseUrl, setBaseUrl] = useState(null);
   // Constants
@@ -44,6 +336,7 @@ const ScheduleRuleMaster = () => {
     { value: 'Extended', label: 'Extended Hours' },
     { value: 'Special-Shift', label: 'Special Shift (Replace with Another Shift)' }
   ];
+
   // Fetch base URL & Data
   useEffect(() => {
     const init = async () => {
@@ -59,6 +352,7 @@ const ScheduleRuleMaster = () => {
     };
     init();
   }, []);
+
   const fetchData = async () => {
     if (baseUrl === null) return;
     setLoading(true);
@@ -77,14 +371,17 @@ const ScheduleRuleMaster = () => {
       setLoading(false);
     }
   };
+
   useEffect(() => {
     fetchData();
   }, [baseUrl]);
+
   // Handlers
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
+
   // Toggle Day Selection
   const toggleDay = (day) => {
     setFormData(prev => {
@@ -97,6 +394,7 @@ const ScheduleRuleMaster = () => {
       return { ...prev, working_days: newWorking, weekly_off: newOff };
     });
   };
+
   // Special Days Logic
   const addSpecialDay = () => {
     setFormData(prev => ({
@@ -104,12 +402,14 @@ const ScheduleRuleMaster = () => {
       special_days: [...prev.special_days, { date: '', type: '', description: '', start_time: '', end_time: '', extended_start: '', extended_end: '', shift_id: '', is_observed: false }]
     }));
   };
+
   const removeSpecialDay = (index) => {
     setFormData(prev => ({
       ...prev,
       special_days: prev.special_days.filter((_, i) => i !== index)
     }));
   };
+
   const updateSpecialDay = (index, field, value) => {
     setFormData(prev => {
       const newSpecial = [...prev.special_days];
@@ -121,6 +421,7 @@ const ScheduleRuleMaster = () => {
       return { ...prev, special_days: newSpecial };
     });
   };
+
   // Helper to get conditional fields for a special day
   const getConditionalFields = (item, index) => {
     switch (item.type) {
@@ -130,21 +431,21 @@ const ScheduleRuleMaster = () => {
         return (
           <>
             <div>
-              <label style={{ fontSize: '0.8rem', color: '#7f8c8d' }}>Start Time</label>
-              <input
-                type="time"
+              <label style={{ fontSize: '0.8rem', color: '#7f8c8d' }}>Start {use24Hour ? '(24h)' : '(12h)'}</label>
+              <CustomTimePicker
                 value={item.start_time}
-                onChange={(e) => updateSpecialDay(index, 'start_time', e.target.value)}
-                style={{ ...inputStyle, width: '100px' }}
+                onChange={(val) => updateSpecialDay(index, 'start_time', val)}
+                format24={use24Hour}
+                placeholder="Start"
               />
             </div>
             <div>
-              <label style={{ fontSize: '0.8rem', color: '#7f8c8d' }}>End Time</label>
-              <input
-                type="time"
+              <label style={{ fontSize: '0.8rem', color: '#7f8c8d' }}>End {use24Hour ? '(24h)' : '(12h)'}</label>
+              <CustomTimePicker
                 value={item.end_time}
-                onChange={(e) => updateSpecialDay(index, 'end_time', e.target.value)}
-                style={{ ...inputStyle, width: '100px' }}
+                onChange={(val) => updateSpecialDay(index, 'end_time', val)}
+                format24={use24Hour}
+                placeholder="End"
               />
             </div>
           </>
@@ -153,21 +454,21 @@ const ScheduleRuleMaster = () => {
         return (
           <>
             <div>
-              <label style={{ fontSize: '0.8rem', color: '#7f8c8d' }}>Extended Start</label>
-              <input
-                type="time"
+              <label style={{ fontSize: '0.8rem', color: '#7f8c8d' }}>Extended Start {use24Hour ? '(24h)' : '(12h)'}</label>
+              <CustomTimePicker
                 value={item.extended_start}
-                onChange={(e) => updateSpecialDay(index, 'extended_start', e.target.value)}
-                style={{ ...inputStyle, width: '100px' }}
+                onChange={(val) => updateSpecialDay(index, 'extended_start', val)}
+                format24={use24Hour}
+                placeholder="Start"
               />
             </div>
             <div>
-              <label style={{ fontSize: '0.8rem', color: '#7f8c8d' }}>Extended End</label>
-              <input
-                type="time"
+              <label style={{ fontSize: '0.8rem', color: '#7f8c8d' }}>Extended End {use24Hour ? '(24h)' : '(12h)'}</label>
+              <CustomTimePicker
                 value={item.extended_end}
-                onChange={(e) => updateSpecialDay(index, 'extended_end', e.target.value)}
-                style={{ ...inputStyle, width: '100px' }}
+                onChange={(val) => updateSpecialDay(index, 'extended_end', val)}
+                format24={use24Hour}
+                placeholder="End"
               />
             </div>
           </>
@@ -193,6 +494,7 @@ const ScheduleRuleMaster = () => {
         return null;
     }
   };
+
   // Helper to get shift name with slots
   const getShiftName = (shiftId) => {
     if (!shiftId) return 'No Shift Assigned';
@@ -204,6 +506,7 @@ const ScheduleRuleMaster = () => {
     const slotsStr = shift.time_slots ? shift.time_slots.map(t => `${t.start_time}-${t.end_time}${t.is_overnight ? ' (O)' : ''}`).join(', ') : '';
     return `${shift.schedule_name} (${slotsStr})`;
   };
+
   // Submit
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -248,6 +551,7 @@ const ScheduleRuleMaster = () => {
       setError(`Failed to save rule: ${err.response?.data?.error || err.message}`);
     }
   };
+
   const handleEdit = (rule) => {
     setEditingId(rule._id);
     setFormData({
@@ -287,7 +591,9 @@ const ScheduleRuleMaster = () => {
     if (!specialDays || specialDays.length === 0) return 'None';
     return specialDays.map(sd => `${sd.type}: ${sd.description.substring(0, 20)}${sd.description.length > 20 ? '...' : ''}`).join('; ');
   };
+
   if (loading && !baseUrl) return <div style={{ padding: '50px', textAlign: 'center' }}>Initializing...</div>;
+
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)', padding: '20px' }}>
       <button onClick={() => navigate('/admin')} style={{ ...buttonStyle, position: 'fixed', top: '20px', left: '20px', zIndex: 100 }}>
@@ -303,14 +609,56 @@ const ScheduleRuleMaster = () => {
             {rules.length} Rules Defined
           </span>
         </div>
+
         {/* Alerts */}
         {error && <div style={{ background: '#ffdddd', color: '#c0392b', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>{error}</div>}
         {message && <div style={{ background: '#ddffdd', color: '#27ae60', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>{message}</div>}
+
         {/* Form */}
-        <div style={{ background: '#f8f9fa', padding: '25px', borderRadius: '12px', border: '1px solid #e9ecef', marginBottom: '30px' }}>
+        <div style={{ background: '#f8f9fa', padding: '25px', borderRadius: '12px', border: '1px solid #e9ecef', marginBottom: '30px', position: 'relative' }}>
+
+          {/* Format Toggle Button - Absolute positioned top-left of this section */}
+          <div style={{ position: 'absolute', top: '20px', right: '20px', padding: '4px', background: '#e0e0e0', borderRadius: '8px', display: 'flex', gap: '4px', zIndex: 10 }}>
+            <button
+              type="button"
+              onClick={() => setUse24Hour(false)}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '6px',
+                border: 'none',
+                fontWeight: 'bold',
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+                background: !use24Hour ? '#3498db' : 'transparent',
+                color: !use24Hour ? '#fff' : '#7f8c8d',
+                transition: 'all 0.2s'
+              }}
+            >
+              12 Hour
+            </button>
+            <button
+              type="button"
+              onClick={() => setUse24Hour(true)}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '6px',
+                border: 'none',
+                fontWeight: 'bold',
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+                background: use24Hour ? '#3498db' : 'transparent',
+                color: use24Hour ? '#fff' : '#7f8c8d',
+                transition: 'all 0.2s'
+              }}
+            >
+              24 Hour
+            </button>
+          </div>
+
           <h3 style={{ marginTop: 0, color: '#34495e', borderBottom: '1px dashed #bdc3c7', paddingBottom: '10px', marginBottom: '20px' }}>
             {editingId ? 'Edit Schedule Rule' : 'Create New Schedule Rule'}
           </h3>
+
           <form onSubmit={handleSubmit}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '20px' }}>
               {/* Basic Info */}
@@ -337,6 +685,7 @@ const ScheduleRuleMaster = () => {
                 </select>
               </div>
             </div>
+
             {/* Working Days Selector */}
             <div style={{ marginBottom: '25px' }}>
               <label style={labelStyle}>Set Working Days (Unselected days become Weekly Offs)</label>
@@ -368,6 +717,7 @@ const ScheduleRuleMaster = () => {
                 <strong>Weekly Offs:</strong> {formData.weekly_off.length > 0 ? formData.weekly_off.join(", ") : "None (7 days working)"}
               </div>
             </div>
+
             {/* Special Days Section */}
             <div style={{ marginBottom: '25px', border: '1px dashed #bdc3c7', padding: '15px', borderRadius: '10px', background: 'white' }}>
               <label style={{ ...labelStyle, display: 'flex', justifyContent: 'space-between' }}>
@@ -405,7 +755,9 @@ const ScheduleRuleMaster = () => {
                       style={{ ...inputStyle, marginTop: '5px' }}
                       required
                     />
-                    {getConditionalFields(item, idx)}
+                    <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                      {getConditionalFields(item, idx)}
+                    </div>
                   </div>
                   <button type="button" onClick={() => removeSpecialDay(idx)} style={{ color: '#e74c3c', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem' }}>
                     <FaTimes />
@@ -414,6 +766,7 @@ const ScheduleRuleMaster = () => {
               ))}
               {formData.special_days.length === 0 && <span style={{ color: '#bdc3c7', fontStyle: 'italic', fontSize: '0.9rem' }}>No special days added.</span>}
             </div>
+
             {/* Actions */}
             <div style={{ display: 'flex', gap: '15px' }}>
               <button type="submit" style={{ ...buttonStyle, flex: 1, background: '#3498db' }}>
@@ -427,6 +780,7 @@ const ScheduleRuleMaster = () => {
             </div>
           </form>
         </div>
+
         {/* List */}
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
@@ -498,6 +852,7 @@ const ScheduleRuleMaster = () => {
     </div>
   );
 };
+
 // Styles (unchanged)
 const inputStyle = {
   padding: '10px',
@@ -544,4 +899,5 @@ const iconBtnStyle = {
   fontSize: '1.1rem',
   margin: '0 5px'
 };
+
 export default ScheduleRuleMaster;

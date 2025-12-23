@@ -2880,11 +2880,11 @@ function Purchase() {
                           <th rowSpan="2">Item Name</th>
                           <th rowSpan="2">Grams</th>
                           <th rowSpan="2">Nos per Box</th>
-                          <th rowSpan="2">Carton UOM</th>
+                          <th rowSpan="2">UOM</th>
                           <th rowSpan="2">Packets per Carton</th>
-                          <th rowSpan="2">Packet UOM</th>
+                          <th rowSpan="2">UOM</th>
                           <th rowSpan="2">Units per Packet</th>
-                          <th rowSpan="2">Unit UOM</th>
+                          <th rowSpan="2">UOM</th>
                           <th rowSpan="2">Suppliers</th>
                           <th rowSpan="2">Actions</th>
                         </tr>

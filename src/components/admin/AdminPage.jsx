@@ -1,10 +1,10 @@
 // src/components/admin/AdminPage.jsx
-// FULLY UPDATED: Under Employee submenu, added "Attendance" with sub-children: Create Attendance (/attendance-create), View Attendance (/attendance-view)
-// Used FaPlusCircle for Create, FaEye for View.
-// All previous features preserved, including Schedule submenu.
+// FULLY UPDATED: Fixed Leave Management submenu expansion under Employee.
+// Added state: isLeaveOpen, and handlers in getExpandState, toggleExpandState, setExpandState.
+// All previous features preserved, including Attendance, Schedule, etc.
 // Paths are root-level, no /admin prefix.
-// Added necessary icon imports: FaPlusCircle (already there), FaEye.
-
+// Added necessary icon imports: All previous plus any needed.
+// FIXED: Leave Management now expands properly on click.
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -40,8 +40,11 @@ import {
   FaIdCard, // For Employee Types (plural)
   FaCalendar, // For Schedule Master
   FaUserPlus, // For Schedule Assign Employee
-  FaEye, // NEW: For View Attendance
+  FaEye, // For View Attendance
+  FaCreditCard, // For Leave Allocation
+  FaPaperPlane, // For Leave Apply
 } from 'react-icons/fa';
+
 function AdminPage() {
   const navigate = useNavigate();
   const [customerCount, setCustomerCount] = useState(0);
@@ -55,8 +58,9 @@ function AdminPage() {
   const [isEmployeeAppOpen, setIsEmployeeAppOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSalesOpen, setIsSalesOpen] = useState(false); // State for Sales menu
-  const [isScheduleOpen, setIsScheduleOpen] = useState(false); // NEW: State for Schedule submenu under Employee
-  const [isAttendanceOpen, setIsAttendanceOpen] = useState(false); // NEW: State for Attendance submenu under Employee
+  const [isScheduleOpen, setIsScheduleOpen] = useState(false); // State for Schedule submenu under Employee
+  const [isAttendanceOpen, setIsAttendanceOpen] = useState(false); // State for Attendance submenu under Employee
+  const [isLeaveOpen, setIsLeaveOpen] = useState(false); // NEW: State for Leave Management submenu under Employee
   const [importFile, setImportFile] = useState(null);
   const [message, setMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -66,22 +70,28 @@ function AdminPage() {
   const [previewUrl, setPreviewUrl] = useState(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false); // State for logout modal
+
   // Navigation handlers
   // Updated to show confirmation modal instead of immediate logout
   const handleLogoutClick = () => {
     setShowLogoutConfirm(true);
   };
+
   // Handle confirmed logout
   const confirmLogout = () => {
     setShowLogoutConfirm(false);
     navigate('/');
   };
+
   // Handle canceled logout
   const cancelLogout = () => {
     setShowLogoutConfirm(false);
   };
+
   const handleNavigation = (path) => navigate(path);
+
   const toggleMasterMenu = () => setIsMasterOpen(!isMasterOpen);
+
   // Fetch logo
   const fetchLogo = async (currentBaseUrl) => {
     try {
@@ -93,6 +103,7 @@ function AdminPage() {
       console.error("Failed to fetch logo:", err);
     }
   };
+
   // Handle logo upload
   const handleLogoChange = (e) => {
     const file = e.target.files[0];
@@ -109,11 +120,13 @@ function AdminPage() {
       setError('Please select a valid image file (PNG, JPG, JPEG, GIF, WebP)');
     }
   };
+
   // Check allowed file types for logo
   const allowedFile = (filename) => {
     const allowed = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'jfif','ico'];
     return allowed.some(ext => filename.toLowerCase().endsWith(`.${ext}`));
   };
+
   // Upload logo
   const handleUploadLogo = async () => {
     if (!logoFile) {
@@ -150,6 +163,7 @@ function AdminPage() {
       setUploadingLogo(false);
     }
   };
+
   // Delete logo
   const handleDeleteLogo = async () => {
     // Removed window.confirm - no alert, direct action with message feedback
@@ -165,6 +179,7 @@ function AdminPage() {
       setError(`Failed to delete logo: ${err.message}`);
     }
   };
+
   // Fetch dashboard counts
   const fetchCounts = async (currentBaseUrl) => {
     try {
@@ -181,6 +196,7 @@ function AdminPage() {
       setLoading(false);
     }
   };
+
   useEffect(() => {
     const fetchConfig = async () => {
       let currentBaseUrl = "";
@@ -204,6 +220,7 @@ function AdminPage() {
     };
     fetchConfig();
   }, []);
+
   // Clean up preview URL
   useEffect(() => {
     return () => {
@@ -212,6 +229,7 @@ function AdminPage() {
       }
     };
   }, [previewUrl]);
+
   // File import handlers
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -225,6 +243,7 @@ function AdminPage() {
       setError('Please select a valid JSON file');
     }
   };
+
   const handleImportMongoDB = async () => {
     if (!importFile) {
       setError('Please select a JSON file to import');
@@ -262,11 +281,13 @@ function AdminPage() {
       setLoading(false);
     }
   };
+
   // Search handler
   const handleSearchChange = (e) => {
     setSearchQuery(e.target.value);
   };
-  // Menu items - UPDATED: Added Attendance submenu under Employee with Create and View
+
+  // Menu items - Leave Management is now fully handled with nested expansion
   const masterMenuItems = [
     {
       icon: <FaUsers />,
@@ -324,6 +345,16 @@ function AdminPage() {
             { icon: <FaEye />, text: 'View Attendance', path: '/attendance-view' },
           ],
         },
+        // FIXED: Leave Management submenu - now with proper state handling
+        {
+          icon: <FaCalendar />,
+          text: 'Leave Management',
+          children: [
+            { icon: <FaList />, text: 'Leave Types', path: '/leave-type' },
+            { icon: <FaCreditCard />, text: 'Leave Allocation', path: '/leave-allocation' },
+            { icon: <FaPaperPlane />, text: 'Leave Apply', path: '/leave-apply' },
+          ],
+        },
       ],
     },
     { icon: <FaTable />, text: 'Add New Table', path: '/add-table' },
@@ -349,10 +380,12 @@ function AdminPage() {
       ],
     },
   ];
+
   const otherMenuItems = [
     // { icon: <FaFileAlt />, text: 'Record', path: '/record' },
     // Note: System Settings has been moved to Settings submenu under Master
   ];
+
   // Filter menu items based on search query
   const filterMenu = (items, query) => {
     const lowerQuery = query.toLowerCase();
@@ -372,10 +405,13 @@ function AdminPage() {
       return acc;
     }, []);
   };
+
   const filteredMasterMenuItems = filterMenu(masterMenuItems, searchQuery);
   const filteredOtherMenuItems = filterMenu(otherMenuItems, searchQuery);
+
   // Determine if "Master" should be shown based on search
   const showMasterMenu = searchQuery ? filteredMasterMenuItems.length > 0 : true;
+
   // Helper to get expand state for a menu item
   const getExpandState = (itemText) => {
     switch (itemText) {
@@ -385,10 +421,12 @@ function AdminPage() {
       case 'Settings': return isSettingsOpen;
       case 'Sales': return isSalesOpen;
       case 'Schedule': return isScheduleOpen;
-      case 'Attendance Management': return isAttendanceOpen; // NEW
+      case 'Attendance Management': return isAttendanceOpen;
+      case 'Leave Management': return isLeaveOpen; // FIXED: Added for Leave Management
       default: return false;
     }
   };
+
   // Helper to toggle expand state
   const toggleExpandState = (itemText) => {
     switch (itemText) {
@@ -398,9 +436,11 @@ function AdminPage() {
       case 'Settings': setIsSettingsOpen(!isSettingsOpen); break;
       case 'Sales': setIsSalesOpen(!isSalesOpen); break;
       case 'Schedule': setIsScheduleOpen(!isScheduleOpen); break;
-      case 'Attendance Management': setIsAttendanceOpen(!isAttendanceOpen); break; // NEW
+      case 'Attendance Management': setIsAttendanceOpen(!isAttendanceOpen); break;
+      case 'Leave Management': setIsLeaveOpen(!isLeaveOpen); break; // FIXED: Added for Leave Management
     }
   };
+
   // Helper to set expand state
   const setExpandState = (itemText, value) => {
     switch (itemText) {
@@ -410,9 +450,11 @@ function AdminPage() {
       case 'Settings': setIsSettingsOpen(value); break;
       case 'Sales': setIsSalesOpen(value); break;
       case 'Schedule': setIsScheduleOpen(value); break;
-      case 'Attendance Management': setIsAttendanceOpen(value); break; // NEW
+      case 'Attendance Management': setIsAttendanceOpen(value); break;
+      case 'Leave Management': setIsLeaveOpen(value); break; // FIXED: Added for Leave Management
     }
   };
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f4f6f9' }}>
       {/* Sidebar */}
@@ -711,7 +753,7 @@ function AdminPage() {
                                   {item.children.map((subItem, subIndex) => (
                                     <React.Fragment key={subIndex}>
                                       {subItem.children ? (
-                                        // Handle nested children for Schedule and Attendance Management
+                                        // Handle nested children for Schedule, Attendance Management, Leave Management
                                         <>
                                           <button
                                             onClick={() => toggleExpandState(subItem.text)}
@@ -1126,4 +1168,5 @@ function AdminPage() {
     </div>
   );
 }
+
 export default AdminPage;

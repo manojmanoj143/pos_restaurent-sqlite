@@ -64,6 +64,9 @@ import EmployeeDocType from "../components/Form/employeelistdoctype";
 import HolidayDocType from "../components/Form/holidaydoctype";
 // NEW: Import for Extended DocType
 import ExtendedDocType from "../components/Form/extendeddoctype";
+import LeaveType from "../components/Form/leavetype";           // leavetype.jsx
+import LeaveAllocation from "../components/Form/leaveallocation"; // leaveallocation.jsx
+import LeaveApply from "../components/Form/leaveapply";           // New page we'll create
 
 const UserRouter = () => {
   return (
@@ -114,6 +117,10 @@ const UserRouter = () => {
         <Route path="/schedule-master" element={<ScheduleMaster />} />
         <Route path="/schedule-rule-master" element={<ScheduleRuleMaster />} />
         <Route path="/schedule-assign-employee" element={<ScheduleAssignEmployee />} />
+        {/* NEW: Leave Management Routes */}
+        <Route path="/leave-type" element={<LeaveType />} />
+        <Route path="/leave-allocation" element={<LeaveAllocation />} />
+        <Route path="/leave-apply" element={<LeaveApply />} />
         {/* System Configuration Routes */}
         <Route path="/backup" element={<BackupPage />} />
         <Route path="/system-settings" element={<SystemSettings />} />
