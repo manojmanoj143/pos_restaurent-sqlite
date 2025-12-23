@@ -1,4 +1,9 @@
 // src/components/Form/LeaveAllocation.jsx - Full and Complete
+// Updates:
+// - Monthly/Yearly Credit fields now clear "0" on focus.
+// - Fields revert to "0" if left empty on blur.
+// - Handling for partial decimal inputs.
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -69,7 +74,6 @@ const LeaveAllocation = () => {
       setLeaveTypes(activeTypes);
     } catch (err) {
       console.error('Error fetching leave types:', err);
-      // Optional: Set specific error for types if needed
     }
   };
 
@@ -86,17 +90,38 @@ const LeaveAllocation = () => {
     }
   };
 
+  // Helper handlers for input UX
+  const handleFocus = (field) => {
+    if (form[field] === 0 || form[field] === '0') {
+      setForm(prev => ({ ...prev, [field]: '' }));
+    }
+  };
+
+  const handleBlur = (field) => {
+    if (form[field] === '' || form[field] === null || form[field] === undefined) {
+      setForm(prev => ({ ...prev, [field]: 0 }));
+    }
+  };
+
+  const handleChange = (field, value) => {
+    // Allow empty string, decimals, etc.
+    setForm(prev => ({ ...prev, [field]: value }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    // Ensure numeric values are sent as numbers
+
+    // Convert inputs to numbers safely
     const payload = {
       ...form,
-      monthly_credit: Number(form.monthly_credit),
-      yearly_credit: Number(form.yearly_credit)
+      monthly_credit: Number(form.monthly_credit) || 0,
+      yearly_credit: Number(form.yearly_credit) || 0
     };
-    console.log("Submitting payload:", payload); // Debugging
+
+    console.log("Submitting payload:", payload);
+
     try {
       if (editingId) {
         await axios.put(`${baseUrlResolved}/api/leave-allocations/${editingId}`, payload);
@@ -437,7 +462,9 @@ const LeaveAllocation = () => {
                   min="0"
                   step="0.01"
                   value={form.monthly_credit}
-                  onChange={(e) => setForm({ ...form, monthly_credit: parseFloat(e.target.value) || 0 })}
+                  onChange={(e) => handleChange('monthly_credit', e.target.value)}
+                  onFocus={() => handleFocus('monthly_credit')}
+                  onBlur={() => handleBlur('monthly_credit')}
                   required
                   style={{
                     width: '100%',
@@ -456,7 +483,9 @@ const LeaveAllocation = () => {
                   min="0"
                   step="0.01"
                   value={form.yearly_credit}
-                  onChange={(e) => setForm({ ...form, yearly_credit: parseFloat(e.target.value) || 0 })}
+                  onChange={(e) => handleChange('yearly_credit', e.target.value)}
+                  onFocus={() => handleFocus('yearly_credit')}
+                  onBlur={() => handleBlur('yearly_credit')}
                   required
                   style={{
                     width: '100%',
