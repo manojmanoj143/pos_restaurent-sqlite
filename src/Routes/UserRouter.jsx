@@ -67,6 +67,7 @@ import ExtendedDocType from "../components/Form/extendeddoctype";
 import LeaveType from "../components/Form/leavetype";           // leavetype.jsx
 import LeaveAllocation from "../components/Form/leaveallocation"; // leaveallocation.jsx
 import LeaveApply from "../components/Form/leaveapply";           // New page we'll create
+import SalaryReceiptList from "../components/Form/salaryreceptlist";
 
 const UserRouter = () => {
   return (
@@ -121,6 +122,8 @@ const UserRouter = () => {
         <Route path="/leave-type" element={<LeaveType />} />
         <Route path="/leave-allocation" element={<LeaveAllocation />} />
         <Route path="/leave-apply" element={<LeaveApply />} />
+        {/* NEW: Salary Receipt List Route */}
+        <Route path="/salary-receipt-list" element={<SalaryReceiptList />} />
         {/* System Configuration Routes */}
         <Route path="/backup" element={<BackupPage />} />
         <Route path="/system-settings" element={<SystemSettings />} />

@@ -45,6 +45,7 @@ COMBO_IMAGES_DIR = os.path.join(
 )
 
 
+
 def is_valid_secret_key(secret_key):
     """Validate secret key is exactly 6 digits."""
     return secret_key.isdigit() and len(secret_key) == 6
@@ -364,7 +365,7 @@ class SQLiteCollection:
             return doc
         return None
 def connect_to_sqlite():
-    global conn, items_collection, customers_collection, sales_collection, tables_collection, users_collection, settings_collection, email_tokens_collection, opening_collection, pos_closing_collection, kitchens_collection, item_groups_collection, kitchen_saved_collection, picked_up_collection, variants_collection, employees_collection, activeorders_collection, order_counters_collection, tripreports_collection, email_settings_collection, purchase_items_collection, suppliers_collection, purchase_orders_collection, purchase_receipts_collection, purchase_invoices_collection, uoms_collection, purchase_sales_collection, print_settings_collection, combo_offers_collection, vat_collection, customer_groups_collection, company_details_collection, logo_details_collection, supplier_group_collection,address_structures_collection,worker_collection, employee_designations_collection,employee_type_collection,working_days_collection,attendance_collection,brands_collection,shift_master_collection, schedule_master_collection, employee_schedule_assign_collection, leave_types_collection, leave_allocation_collection, leave_apply_collection
+    global conn, items_collection, customers_collection, sales_collection, tables_collection, users_collection, settings_collection, email_tokens_collection, opening_collection, pos_closing_collection, kitchens_collection, item_groups_collection, kitchen_saved_collection, picked_up_collection, variants_collection, employees_collection, activeorders_collection, order_counters_collection, tripreports_collection, email_settings_collection, purchase_items_collection, suppliers_collection, purchase_orders_collection, purchase_receipts_collection, purchase_invoices_collection, uoms_collection, purchase_sales_collection, print_settings_collection, combo_offers_collection, vat_collection, customer_groups_collection, company_details_collection, logo_details_collection, supplier_group_collection,address_structures_collection,worker_collection, employee_designations_collection,employee_type_collection,working_days_collection,attendance_collection,brands_collection,shift_master_collection, schedule_master_collection, employee_schedule_assign_collection, leave_types_collection, leave_allocation_collection, leave_apply_collection, salary_slips_collection
     mode = config.get("mode", "server")
     if mode == 'server':
         db_path = os.path.join(CONFIG_DIR, 'restaurant.db')
@@ -374,7 +375,7 @@ def connect_to_sqlite():
             'active_orders', 'combo_offers', 'customers', 'email_settings', 'email_tokens', 'employees', 'item_groups', 'items', 'kitchen_saved_orders', 'kitchens',
             'order_counters', 'picked_up_items', 'pos_closing_entries', 'pos_opening_entries', 'print_settings', 'purchase_invoices', 'purchase_items', 'purchase_orders',
             'purchase_receipts', 'purchase_sales', 'sales', 'suppliers', 'system_settings', 'tables', 'trip_reports', 'uoms', 'users', 'variants', 'vat', 'customer_groups', 'company_details', 'logo_details', 'supplier_groups','address_structures','new_employee','employee_designations','employee_types','working_days','attendance','brands',
-            'shift_master', 'schedule_master', 'employee_schedule_assign','leave_types', 'leave_allocation_assign', 'leave_applications' 
+            'shift_master', 'schedule_master', 'employee_schedule_assign','leave_types', 'leave_allocation_assign', 'leave_applications', 'salary_slips' 
         ]
         
         for table in tables:
@@ -427,6 +428,7 @@ def connect_to_sqlite():
         leave_types_collection = SQLiteCollection(conn, 'leave_types')  # NEW: Leave types collection
         leave_allocation_collection = SQLiteCollection(conn, 'leave_allocation_assign')
         leave_apply_collection = SQLiteCollection(conn, 'leave_applications')
+        salary_slips_collection = SQLiteCollection(conn, 'salary_slips') 
         ensure_test_users()
         return True
     else:
@@ -6343,40 +6345,35 @@ def salary_slip():
             return jsonify(response.json()), response.status_code
         else:
             return jsonify({"error": "Proxy save failed"}), response.status_code
-    
     if request.method == 'POST':
         try:
             data = request.get_json()
             if not isinstance(data, dict):
                 return jsonify({"error": "JSON data must be an object"}), 400
-            
             required_fields = ['employeeId', 'month', 'grossSalary', 'totalSalary', 'netPay']
             if not all(field in data for field in required_fields):
                 return jsonify({"error": "Missing required fields"}), 400
-            
             # Fetch employee details including bank info
             emp = worker_collection.find_one({"_id": data['employeeId']})
             if not emp:
                 return jsonify({"error": "Employee not found"}), 404
-            
             new_slip = {
                 "_id": str(uuid.uuid4()),
                 "employeeId": data['employeeId'],
                 "employeeName": emp.get('name', ''),
                 "month": data['month'],
-                "grossSalary": float(data['grossSalary']),
+                "grossSalary": safe_float(data.get('grossSalary')),
                 "fullCount": data.get('fullCount', 0),
                 "offCount": data.get('offCount', 0),
                 "leaveWithoutPay": data.get('leaveWithoutPay', 0),
                 "absentCount": data.get('absentCount', 0),
                 "paymentDays": data.get('paymentDays', 0),
-                "totalSalary": float(data['totalSalary']),
-                "deductions": float(data.get('deductions', 0)),
-                "netPay": float(data['netPay']),
-                "dailyRate": float(data.get('dailyRate', 0)),
-                "grossPay": float(data.get('grossPay', 0)),
-                "grossYearToDate": float(data.get('grossYearToDate', 0)),
-                "totalDeductions": float(data.get('totalDeductions', 0)),
+                "totalSalary": safe_float(data.get('totalSalary')),
+                "netPay": safe_float(data['netPay']),
+                "dailyRate": safe_float(data.get('dailyRate')),
+                "grossPay": safe_float(data.get('grossPay')),
+                "grossYearToDate": safe_float(data.get('grossYearToDate')),
+                "totalDeductions": safe_float(data.get('totalDeductions')),
                 "employeeType": emp.get('employeeType', ''),
                 "employeeIdCode": emp.get('employeeId', ''),
                 # Bank Details
@@ -6384,27 +6381,172 @@ def salary_slip():
                 "accountHolderName": emp.get('accountHolderName', ''),
                 "accountNumber": emp.get('accountNumber', ''),
                 "ifscCode": emp.get('ifscCode', ''),
-                # Earnings and Deductions arrays
+                # New Fields from Frontend
+                "designation": data.get('designation', ''),
+                "postingDate": data.get('postingDate', ''),
+                "payrollFrequency": data.get('payrollFrequency', ''),
+                "modeOfPayment": data.get('modeOfPayment', ''),
+                "letterHead": data.get('letterHead', ''),
+                "salaryStructure": data.get('salaryStructure', ''),
+                "startDate": data.get('startDate', ''),
+                "endDate": data.get('endDate', ''),
+                "status": data.get('status', 'Submitted'),
+                # Earnings & Deductions
                 "earnings": data.get('earnings', []),
                 "deductions": data.get('deductions', []),
                 "created_at": datetime.now(ZoneInfo("UTC")).isoformat()
             }
-            
-            if salary_slips_collection is None:
-                logger.error("salary_slips_collection not initialized")
-                return jsonify({"error": "Database not ready"}), 503
-            
             # Check if slip exists for employee and month
             existing = salary_slips_collection.find_one({"employeeId": data['employeeId'], "month": data['month']})
             if existing:
                 return jsonify({"error": "Salary slip already exists for this employee and month"}), 400
-            
             salary_slips_collection.insert_one(new_slip)
             logger.info(f"Salary slip saved for {new_slip['employeeName']} - {data['month']}")
             return jsonify({"message": "Salary slip saved successfully", "slip": new_slip}), 201
         except Exception as e:
             logger.error(f"Error saving salary slip: {str(e)}")
             return jsonify({"error": str(e)}), 500
+
+@app.route('/api/salary-slip', methods=['GET'])
+@db_required
+def get_salary_slips():
+    """Fetch all salary slips for listing. Fixed for SQLiteCollection: find() with 1 arg, Python sort, include _id (fixed exclusion bug)."""
+    try:
+        # Fetch all slips (no filter), sort by created_at descending, include _id
+        all_slips = list(salary_slips_collection.find({}))
+        # Sort in Python (reverse chronological)
+        from datetime import datetime as dt
+        slips = sorted(all_slips, key=lambda x: dt.fromisoformat(x.get('created_at', '1900-01-01T00:00:00')) if x.get('created_at') else dt.min, reverse=True)
+        # Include _id (no exclusion)
+        return jsonify(slips), 200
+    except Exception as e:
+        logger.error(f"Error fetching salary slips: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/salary-slip/<slip_id>', methods=['GET'])
+@db_required
+def get_salary_slip(slip_id):
+    """Fetch single salary slip by ID for view/print/edit."""
+    try:
+        slip = salary_slips_collection.find_one({"_id": slip_id})
+        if not slip:
+            return jsonify({"error": "Salary slip not found"}), 404
+        # Include ID for frontend (add back if excluded)
+        slip = slip.copy()
+        slip['_id'] = slip_id
+        return jsonify(slip), 200
+    except Exception as e:
+        logger.error(f"Error fetching salary slip: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/salary-slip/<slip_id>', methods=['PUT'])
+@db_required
+def update_salary_slip(slip_id):
+    """Update existing salary slip by ID."""
+    mode = config.get("mode", "server")
+    if mode == 'client':
+        server_url = f"http://{config['server_ip']}:8000/api/salary-slip/{slip_id}"
+        response = requests.put(server_url, json=request.get_json())
+        if response.status_code in [200, 201]:
+            return jsonify(response.json()), response.status_code
+        else:
+            return jsonify({"error": "Proxy update failed"}), response.status_code
+    if request.method == 'PUT':
+        try:
+            data = request.get_json()
+            if not isinstance(data, dict):
+                return jsonify({"error": "JSON data must be an object"}), 400
+            # Fetch existing to check
+            existing = salary_slips_collection.find_one({"_id": slip_id})
+            if not existing:
+                return jsonify({"error": "Salary slip not found"}), 404
+            # Fetch employee (use data's employeeId or existing)
+            emp_id = data.get('employeeId', existing['employeeId'])
+            emp = worker_collection.find_one({"_id": emp_id})
+            if not emp:
+                return jsonify({"error": "Employee not found"}), 404
+            # Prepare update data, merging data with existing defaults
+            update_data = {
+                "month": data.get('month', existing['month']),
+                "grossSalary": safe_float(data.get('grossSalary', existing.get('grossSalary'))),
+                "fullCount": data.get('fullCount', existing.get('fullCount', 0)),
+                "offCount": data.get('offCount', existing.get('offCount', 0)),
+                "leaveWithoutPay": data.get('leaveWithoutPay', existing.get('leaveWithoutPay', 0)),
+                "absentCount": data.get('absentCount', existing.get('absentCount', 0)),
+                "paymentDays": data.get('paymentDays', existing.get('paymentDays', 0)),
+                "totalSalary": safe_float(data.get('totalSalary', existing.get('totalSalary'))),
+                "netPay": safe_float(data.get('netPay', existing.get('netPay'))),
+                "dailyRate": safe_float(data.get('dailyRate', existing.get('dailyRate'))),
+                "grossPay": safe_float(data.get('grossPay', existing.get('grossPay'))),
+                "grossYearToDate": safe_float(data.get('grossYearToDate', existing.get('grossYearToDate'))),
+                "totalDeductions": safe_float(data.get('totalDeductions', existing.get('totalDeductions'))),
+                "employeeId": emp_id,
+                "employeeName": emp.get('name', existing.get('employeeName', '')),
+                "employeeType": emp.get('employeeType', existing.get('employeeType', '')),
+                "employeeIdCode": emp.get('employeeId', existing.get('employeeIdCode', '')),
+                # Bank Details
+                "bankName": emp.get('bankName', existing.get('bankName', '')),
+                "accountHolderName": emp.get('accountHolderName', existing.get('accountHolderName', '')),
+                "accountNumber": emp.get('accountNumber', existing.get('accountNumber', '')),
+                "ifscCode": emp.get('ifscCode', existing.get('ifscCode', '')),
+                # Other Fields
+                "designation": data.get('designation', existing.get('designation', '')),
+                "postingDate": data.get('postingDate', existing.get('postingDate', '')),
+                "payrollFrequency": data.get('payrollFrequency', existing.get('payrollFrequency', '')),
+                "modeOfPayment": data.get('modeOfPayment', existing.get('modeOfPayment', '')),
+                "letterHead": data.get('letterHead', existing.get('letterHead', '')),
+                "salaryStructure": data.get('salaryStructure', existing.get('salaryStructure', '')),
+                "startDate": data.get('startDate', existing.get('startDate', '')),
+                "endDate": data.get('endDate', existing.get('endDate', '')),
+                "status": data.get('status', existing.get('status', 'Submitted')),
+                # Earnings & Deductions
+                "earnings": data.get('earnings', existing.get('earnings', [])),
+                "deductions": data.get('deductions', existing.get('deductions', [])),
+                "updated_at": datetime.now(ZoneInfo("UTC")).isoformat()
+            }
+            result = salary_slips_collection.update_one({"_id": slip_id}, {"$set": update_data})
+            if result.matched_count == 0:
+                return jsonify({"error": "Salary slip not found"}), 404
+            logger.info(f"Salary slip updated for {update_data['employeeName']} - {update_data['month']}")
+            return jsonify({"message": "Salary slip updated successfully", "slip": {**existing, **update_data}}), 200
+        except Exception as e:
+            logger.error(f"Error updating salary slip: {str(e)}")
+            return jsonify({"error": str(e)}), 500
+
+@app.route('/api/salary-slip/<slip_id>', methods=['DELETE'])
+@db_required
+def delete_salary_slip(slip_id):
+    """Delete salary slip by ID."""
+    try:
+        result = salary_slips_collection.delete_one({"_id": slip_id})
+        if result.deleted_count == 0: # Assume delete_one returns dict with deleted_count
+            return jsonify({"error": "Salary slip not found"}), 404
+        logger.info(f"Salary slip deleted: {slip_id}")
+        return jsonify({"message": "Salary slip deleted successfully"}), 200
+    except Exception as e:
+        logger.error(f"Error deleting salary slip: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/salary-slip/year-to-date', methods=['GET'])
+@db_required
+def salary_slip_year_to_date():
+    try:
+        employee_id = request.args.get('employeeId')
+        current_month_str = request.args.get('month') # YYYY-MM
+        if not employee_id or not current_month_str:
+            return jsonify({"error": "employeeId and month required"}), 400
+        year = current_month_str.split('-')[0]
+        # Find all slips for this employee
+        slips = list(salary_slips_collection.find({"employeeId": employee_id}))
+        current_ytd = 0.0
+        for slip in slips:
+            s_month = slip.get('month', '')
+            if s_month.startswith(year) and s_month <= current_month_str:
+                current_ytd += float(slip.get('grossSalary', 0))
+        return jsonify({"gross_year_to_date": current_ytd}), 200
+    except Exception as e:
+        logger.error(f"Error fetching YTD: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 # NEW: Endpoint for /api/worker (alias or additional, as per request)
 @app.route('/api/worker', methods=['POST', 'GET'])
 @db_required
