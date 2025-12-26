@@ -68,7 +68,12 @@ def convert_to_24h(time_str):
         
     return time_str
 
-
+def safe_float(value):
+    """Safely convert value to float, default to 0.0 on error."""
+    try:
+        return float(value) if value is not None else 0.0
+    except (ValueError, TypeError):
+        return 0.0
 # --- Configuration Management ---
 def get_base_dir():
     """Determine the base directory, handling both development and frozen executable cases."""
@@ -6406,7 +6411,6 @@ def salary_slip():
         except Exception as e:
             logger.error(f"Error saving salary slip: {str(e)}")
             return jsonify({"error": str(e)}), 500
-
 @app.route('/api/salary-slip', methods=['GET'])
 @db_required
 def get_salary_slips():
@@ -6422,7 +6426,6 @@ def get_salary_slips():
     except Exception as e:
         logger.error(f"Error fetching salary slips: {str(e)}")
         return jsonify({"error": str(e)}), 500
-
 @app.route('/api/salary-slip/<slip_id>', methods=['GET'])
 @db_required
 def get_salary_slip(slip_id):
@@ -6438,7 +6441,6 @@ def get_salary_slip(slip_id):
     except Exception as e:
         logger.error(f"Error fetching salary slip: {str(e)}")
         return jsonify({"error": str(e)}), 500
-
 @app.route('/api/salary-slip/<slip_id>', methods=['PUT'])
 @db_required
 def update_salary_slip(slip_id):
@@ -6512,7 +6514,6 @@ def update_salary_slip(slip_id):
         except Exception as e:
             logger.error(f"Error updating salary slip: {str(e)}")
             return jsonify({"error": str(e)}), 500
-
 @app.route('/api/salary-slip/<slip_id>', methods=['DELETE'])
 @db_required
 def delete_salary_slip(slip_id):
@@ -6526,7 +6527,6 @@ def delete_salary_slip(slip_id):
     except Exception as e:
         logger.error(f"Error deleting salary slip: {str(e)}")
         return jsonify({"error": str(e)}), 500
-
 @app.route('/api/salary-slip/year-to-date', methods=['GET'])
 @db_required
 def salary_slip_year_to_date():

@@ -329,7 +329,62 @@ const SalarySlip = () => {
   };
 
   const formatCurrency = (val) => Number(val || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const numberToWords = (amount) => `${currency} ${amount.toFixed(2)} Only`;
+
+  // Proper number to words conversion for currency
+  const numberToWords = (num) => {
+    const a = [
+      '', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
+      'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'
+    ];
+    const b = [
+      '', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'
+    ];
+
+    const inWords = (n) => {
+      if (n < 20) return a[n];
+      if (n < 100) return b[Math.floor(n / 10)] + (n % 10 ? ' ' + a[n % 10] : '');
+      if (n < 1000) return inWords(Math.floor(n / 100)) + ' hundred' + (n % 100 ? ' and ' + inWords(n % 100) : '');
+      if (n < 1000000) return inWords(Math.floor(n / 1000)) + ' thousand' + (n % 1000 ? ' ' + inWords(n % 1000) : '');
+      if (n < 1000000000) return inWords(Math.floor(n / 1000000)) + ' million' + (n % 1000000 ? ' ' + inWords(n % 1000000) : '');
+      return '';
+    };
+
+    const [integerPart, decimalPart = '00'] = num.toFixed(2).split('.');
+    const integerWords = inWords(Number(integerPart)).replace(/\b(\w+)\s+(hundred|thousand|million)\b/g, '$1 $2').trim();
+    const decimalWords = inWords(Number(decimalPart)).trim();
+
+    let currencyName = '';
+    switch (currency) {
+      case '₹': currencyName = 'Rupees'; break;
+      case '$': currencyName = 'Dollars'; break;
+      case '€': currencyName = 'Euros'; break;
+      case '£': currencyName = 'Pounds'; break;
+      case '¥': currencyName = 'Yen'; break;
+      case 'A$': currencyName = 'Australian Dollars'; break;
+      case 'C$': currencyName = 'Canadian Dollars'; break;
+      case 'AED': currencyName = 'Dirhams'; break;
+      default: currencyName = `${currency} Units`;
+    }
+
+    let decimalName = '';
+    switch (currency) {
+      case '₹': decimalName = 'Paise'; break;
+      case '$':
+      case '€':
+      case '£':
+      case 'A$':
+      case 'C$':
+      case 'AED': decimalName = 'Cents'; break;
+      default: decimalName = 'Cents';
+    }
+
+    let words = `${integerWords.charAt(0).toUpperCase() + integerWords.slice(1)} ${currencyName}`;
+    if (Number(decimalPart) > 0) {
+      words += ` and ${decimalWords} ${decimalName}`;
+    }
+    words += ' Only';
+    return words;
+  };
 
   useEffect(() => {
     const fetchConfig = async () => {
@@ -886,7 +941,7 @@ const SalarySlip = () => {
                   </tbody>
                 </table>
               </div>
-              <div className="print-section-header">Totals & Tax</div>
+              <div className="print-section-header">Totals</div>
               <div className="print-grid-2">
                 <div>
                   <div className="print-totals-row"><strong>Gross Pay:</strong> <span>{currency} {formatCurrency(grossPay)}</span></div>
@@ -904,20 +959,6 @@ const SalarySlip = () => {
                   <div className="print-totals-row"><strong>Month To Date (Company Currency):</strong> <span>{currency} 0.00</span></div>
                   <div style={{ marginTop: '15px', fontStyle: 'italic', fontSize: '13px', fontWeight: 'bold' }}>Total in words: <br />{totalInWords}</div>
                   <div style={{ marginTop: '5px', fontStyle: 'italic', fontSize: '13px', fontWeight: 'bold' }}>Total in words (Company Currency): <br />{totalInWords}</div>
-                </div>
-                <div>
-                  <div className="print-totals-row"><strong>CTC:</strong> <span>{currency} 0.00</span></div>
-                  <div className="print-totals-row"><strong>Income from Other Sources:</strong> <span>{currency} 0.00</span></div>
-                  <div className="print-totals-row"><strong>Total Earnings:</strong> <span>{currency} 0.00</span></div>
-                  <div className="print-totals-row"><strong>Non Taxable Earnings:</strong> <span>{currency} 0.00</span></div>
-                  <div className="print-totals-row"><strong>Standard Tax Exemption Amount:</strong> <span>{currency} 0.00</span></div>
-                  <div className="print-totals-row"><strong>Tax Exemption Declaration:</strong> <span>{currency} 0.00</span></div>
-                  <div className="print-totals-row"><strong>Deductions before tax calculation:</strong> <span>{currency} 0.00</span></div>
-                  <div className="print-totals-row"><strong>Annual Taxable Amount:</strong> <span>{currency} 0.00</span></div>
-                  <div className="print-totals-row"><strong>Income Tax Deducted Till Date:</strong> <span>{currency} 0.00</span></div>
-                  <div className="print-totals-row"><strong>Current Month Income Tax:</strong> <span>{currency} 0.00</span></div>
-                  <div className="print-totals-row"><strong>Future Income Tax:</strong> <span>{currency} 0.00</span></div>
-                  <div className="print-totals-row"><strong>Total Income Tax:</strong> <span>{currency} 0.00</span></div>
                 </div>
               </div>
               <div className="print-section-header">Bank Details</div>

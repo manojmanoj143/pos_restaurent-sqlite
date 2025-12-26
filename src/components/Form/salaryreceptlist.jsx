@@ -464,20 +464,7 @@ const SalaryReceiptList = () => {
                   <div style="margin-top: 15px; font-style: italic; font-size: 13px; font-weight: bold;">Total in words: <br />${totalInWords}</div>
                   <div style="margin-top: 5px; font-style: italic; font-size: 13px; font-weight: bold;">Total in words (Company Currency): <br />${totalInWords}</div>
                 </div>
-                <div>
-                  <div class="print-totals-row"><strong>CTC:</strong> <span>${currency} 0.00</span></div>
-                  <div class="print-totals-row"><strong>Income from Other Sources:</strong> <span>${currency} 0.00</span></div>
-                  <div class="print-totals-row"><strong>Total Earnings:</strong> <span>${currency} 0.00</span></div>
-                  <div class="print-totals-row"><strong>Non Taxable Earnings:</strong> <span>${currency} 0.00</span></div>
-                  <div class="print-totals-row"><strong>Standard Tax Exemption Amount:</strong> <span>${currency} 0.00</span></div>
-                  <div class="print-totals-row"><strong>Tax Exemption Declaration:</strong> <span>${currency} 0.00</span></div>
-                  <div class="print-totals-row"><strong>Deductions before tax calculation:</strong> <span>${currency} 0.00</span></div>
-                  <div class="print-totals-row"><strong>Annual Taxable Amount:</strong> <span>${currency} 0.00</span></div>
-                  <div class="print-totals-row"><strong>Income Tax Deducted Till Date:</strong> <span>${currency} 0.00</span></div>
-                  <div class="print-totals-row"><strong>Current Month Income Tax:</strong> <span>${currency} 0.00</span></div>
-                  <div class="print-totals-row"><strong>Future Income Tax:</strong> <span>${currency} 0.00</span></div>
-                  <div class="print-totals-row"><strong>Total Income Tax:</strong> <span>${currency} 0.00</span></div>
-                </div>
+                
               </div>
               <div class="print-section-header">Bank Details</div>
               <div style="display: flex; gap: 50px;">
