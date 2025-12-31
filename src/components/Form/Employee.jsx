@@ -1,17 +1,29 @@
+// src/pages/EmployeePage.jsx
+// EmployeePage.jsx - Updated: Integrated dropdown for selecting existing employees from /api/add-employee.
+// Now fetches general employees and allows assigning delivery-specific details (vehicleNumber, secretKey, role).
+// Removed manual name input; name is selected from dropdown. On selection, pre-populate if possible.
+// Backend assumes PUT to /api/employees/<employeeId> updates or creates delivery profile linked to main employee ID.
+// Enhanced with better error handling, loading states, and UI consistency with EmployeeList.
+// FIXED: Include 'name' from selected general employee in POST/PUT payload to match backend requirements.
+// NEW: Added dropdown for vehicleNumber fetched from /api/vechile/management. Pre-populates on edit.
+//      Vehicle selection populates vehicleNumber in formData. Sends vehicleNumber as string in payload.
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { FaArrowLeft, FaPlusCircle, FaUsers, FaEdit, FaTrash, FaKey, FaCheck, FaTimes } from 'react-icons/fa';
+import { FaArrowLeft, FaPlusCircle, FaUsers, FaEdit, FaTrash, FaKey, FaCheck, FaTimes, FaUserTie, FaSearch, FaCar } from 'react-icons/fa';
 
 function EmployeePage() {
   const navigate = useNavigate();
-  const [employees, setEmployees] = useState([]);
+  const [employees, setEmployees] = useState([]); // Delivery employees (from /api/employees)
+  const [generalEmployees, setGeneralEmployees] = useState([]); // Main employees from /api/add-employee for dropdown
+  const [vehicles, setVehicles] = useState([]); // Vehicles from /api/vechile/management for vehicle dropdown
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [formData, setFormData] = useState({
-    name: '',
+    selectedGeneralEmployeeId: '', // Dropdown selection
+    name: '', // NEW: Store selected name for payload
     countryCode: '+91', // Default to India
     phoneNumber: '',
-    vehicleNumber: '',
+    vehicleNumber: '', // Now selected from dropdown
     role: 'Delivery Boy',
     email: '',
     secretKey: '', // Manual 6-digit input
@@ -21,7 +33,7 @@ function EmployeePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [message, setMessage] = useState('');
-  const [baseUrl, setBaseUrl] = useState(""); // Added baseUrl state similar to AdminPage
+  const [baseUrl, setBaseUrl] = useState(""); // baseUrl state similar to EmployeeList
   // New states for custom delete confirmation
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [employeeToDelete, setEmployeeToDelete] = useState(null);
@@ -33,7 +45,7 @@ function EmployeePage() {
     { code: '+44', country: 'UK' },
     { code: '+61', country: 'Australia' },
   ];
-  // Fetch config to determine baseUrl (similar to AdminPage)
+  // Fetch config to determine baseUrl (similar to EmployeeList)
   useEffect(() => {
     const fetchConfig = async () => {
       let currentBaseUrl = "";
@@ -50,26 +62,71 @@ function EmployeePage() {
         console.error("Failed to fetch config:", error);
         setBaseUrl("");
       } finally {
-        // Fetch employees after config is loaded
-        fetchEmployees(currentBaseUrl);
+        // Fetch both lists after config is loaded
+        fetchDeliveryEmployees(currentBaseUrl);
+        fetchGeneralEmployees(currentBaseUrl);
+        fetchVehicles(currentBaseUrl); // NEW: Fetch vehicles for dropdown
       }
     };
     fetchConfig();
   }, []);
-  // Fetch employees (updated to use baseUrl)
-  const fetchEmployees = async (currentBaseUrl = baseUrl) => {
+  // Fetch delivery employees (from /api/employees)
+  const fetchDeliveryEmployees = async (currentBaseUrl = baseUrl) => {
     try {
       setLoading(true);
       setError(null);
-      const apiUrl = currentBaseUrl ? `${currentBaseUrl}/api/employees` : '/api/employees'; // FIXED: Use relative if no baseUrl
+      const apiUrl = currentBaseUrl ? `${currentBaseUrl}/api/employees` : '/api/employees';
       const response = await axios.get(apiUrl);
       const data = Array.isArray(response.data) ? response.data : [];
       setEmployees(data);
     } catch (err) {
-      setError(`Failed to fetch employees: ${err.message}`);
+      setError(`Failed to fetch delivery employees: ${err.message}`);
       setEmployees([]);
     } finally {
       setLoading(false);
+    }
+  };
+  // NEW: Fetch general employees for dropdown (from /api/add-employee)
+  const fetchGeneralEmployees = async (currentBaseUrl = baseUrl) => {
+    try {
+      const apiUrl = currentBaseUrl ? `${currentBaseUrl}/api/add-employee` : '/api/add-employee';
+      const response = await axios.get(apiUrl);
+      console.log("FETCHED GENERAL EMPLOYEES FOR DROPDOWN:", response.data);
+      if (Array.isArray(response.data)) {
+        const validEmployees = response.data
+          .map(emp => ({
+            ...emp,
+            id: emp._id || emp.id // Ensure ID is accessible
+          }))
+          .filter(emp => !emp.isDraft);
+        setGeneralEmployees(validEmployees);
+      } else {
+        console.error("Unexpected API response format:", response.data);
+        setGeneralEmployees([]);
+      }
+    } catch (err) {
+      console.error('Error fetching general employees:', err);
+      setError('Failed to fetch employees for dropdown. Please try again.');
+      setGeneralEmployees([]);
+    }
+  };
+  // NEW: Fetch vehicles for vehicleNumber dropdown (from /api/vechile/management)
+  const fetchVehicles = async (currentBaseUrl = baseUrl) => {
+    try {
+      const apiUrl = currentBaseUrl ? `${currentBaseUrl}/api/vechile/management` : '/api/vechile/management';
+      const response = await axios.get(apiUrl);
+      console.log("FETCHED VEHICLES FOR DROPDOWN:", response.data);
+      if (Array.isArray(response.data)) {
+        const validVehicles = response.data.filter(v => v.vehicle_number && v.status === 'ACTIVE'); // Only active vehicles
+        setVehicles(validVehicles);
+      } else {
+        console.error("Unexpected API response format for vehicles:", response.data);
+        setVehicles([]);
+      }
+    } catch (err) {
+      console.error('Error fetching vehicles:', err);
+      setError('Failed to fetch vehicles for dropdown. Please try again.');
+      setVehicles([]);
     }
   };
   // Validate 6-digit secret key
@@ -85,99 +142,150 @@ function EmployeePage() {
       setError(null);
     }
   };
-  // Handle employee creation (updated to use baseUrl, manual secret key)
+  // NEW: Handle dropdown selection - Populate form with selected employee's details
+  const handleGeneralEmployeeSelect = (e) => {
+    const selectedId = e.target.value;
+    setFormData(prev => ({ ...prev, selectedGeneralEmployeeId: selectedId }));
+    if (selectedId) {
+      const selectedEmp = generalEmployees.find(emp => String(emp._id) === String(selectedId));
+      if (selectedEmp) {
+        // Pre-populate name, email and phone if available
+        setFormData(prev => ({
+          ...prev,
+          selectedGeneralEmployeeId: selectedId,
+          name: selectedEmp.name || '', // FIXED: Include name for payload
+          email: selectedEmp.email || '',
+          phoneNumber: selectedEmp.phoneNumber?.replace(/\D/g, '') || '', // Extract digits for phone input
+          // Note: Vehicle and secret key remain manual as they are delivery-specific
+        }));
+      }
+    }
+  };
+  // NEW: Handle vehicle dropdown selection
+  const handleVehicleSelect = (e) => {
+    const selectedVehicleNumber = e.target.value;
+    setFormData(prev => ({ ...prev, vehicleNumber: selectedVehicleNumber }));
+  };
+  // Handle employee creation/assignment (updated: uses selected general employee)
   const handleCreateEmployee = async (e) => {
     e.preventDefault();
-    const fullPhoneNumber = `${formData.countryCode}${formData.phoneNumber}`;
-    if (!formData.name || !formData.phoneNumber || !formData.vehicleNumber || !formData.email || !formData.secretKey) {
-      setError('Please fill in all fields, including a 6-digit secret key');
+    if (!formData.selectedGeneralEmployeeId || !formData.name || !formData.phoneNumber || !formData.vehicleNumber || !formData.email || !formData.secretKey) {
+      setError('Please select an employee, vehicle, and fill in all delivery fields, including a 6-digit secret key');
       return;
     }
     if (!validateSecretKey(formData.secretKey)) {
       setError('Secret key must be exactly 6 digits');
       return;
     }
+    const fullPhoneNumber = `${formData.countryCode}${formData.phoneNumber}`;
     try {
       setLoading(true);
       setError(null);
       setMessage('');
-      const apiUrl = baseUrl ? `${baseUrl}/api/employees` : '/api/employees'; // FIXED: Use relative if no baseUrl
+      const apiUrl = baseUrl ? `${baseUrl}/api/employees` : '/api/employees';
       const response = await axios.post(apiUrl, {
-        name: formData.name,
+        name: formData.name, // FIXED: Include name from selected general employee
+        generalEmployeeId: formData.selectedGeneralEmployeeId, // Link to main employee
         phoneNumber: fullPhoneNumber,
-        vehicleNumber: formData.vehicleNumber,
+        vehicleNumber: formData.vehicleNumber, // From dropdown
         role: formData.role,
         email: formData.email,
         secretKey: formData.secretKey,
       });
-      const newEmployee = response.data.employee; // Backend returns the created employee with secretKey
-      setMessage(`Employee created successfully! Secret Key: ${newEmployee.secretKey}`);
-      setFormData({ name: '', countryCode: '+91', phoneNumber: '', vehicleNumber: '', role: 'Delivery Boy', email: '', secretKey: '' });
-      fetchEmployees();
+      const newEmployee = response.data.employee; // Backend returns the created delivery employee
+      setMessage(`Delivery profile assigned successfully! Secret Key: ${newEmployee.secretKey}`);
+      // Reset form except role
+      setFormData({
+        selectedGeneralEmployeeId: '',
+        name: '',
+        countryCode: '+91',
+        phoneNumber: '',
+        vehicleNumber: '',
+        role: 'Delivery Boy',
+        email: '',
+        secretKey: ''
+      });
+      fetchDeliveryEmployees();
+      fetchGeneralEmployees(); // Refresh to update any linked status if needed
+      fetchVehicles(); // Refresh vehicles if needed
     } catch (err) {
-      console.error("Backend Error Details:", err.response?.data); // FIXED: Better logging for debugging
-      setError(`Failed to create employee: ${err.response?.data?.error || err.message}`);
+      console.error("Backend Error Details:", err.response?.data);
+      setError(`Failed to assign delivery profile: ${err.response?.data?.error || err.message}`);
     } finally {
       setLoading(false);
     }
   };
-  // Handle employee edit
+  // Handle employee edit (updated for delivery profile)
   const handleEditEmployee = (employee) => {
     setEditMode(true);
     setEditEmployeeId(employee.employeeId);
     const countryCode = countryCodes.find(code => employee.phoneNumber.startsWith(code.code))?.code || '+91';
     const phoneNumber = employee.phoneNumber.slice(countryCode.length);
+    // Find general employee for name
+    const generalEmp = generalEmployees.find(emp => String(emp._id) === String(employee.generalEmployeeId));
     setFormData({
-      name: employee.name,
+      selectedGeneralEmployeeId: employee.generalEmployeeId || '',
+      name: generalEmp ? generalEmp.name : employee.name || '', // FIXED: Ensure name is set
       countryCode,
       phoneNumber,
-      vehicleNumber: employee.vehicleNumber,
+      vehicleNumber: employee.vehicleNumber || '', // Pre-populate from existing
       role: employee.role,
       email: employee.email || '',
-      secretKey: employee.secretKey || '', // Load existing secret key for editing
+      secretKey: employee.secretKey || '', // Load existing
     });
     setSelectedEmployee(employee);
   };
-  // Handle employee update (updated to use baseUrl, manual secret key)
+  // Handle employee update (updated: uses selected general employee)
   const handleUpdateEmployee = async (e) => {
     e.preventDefault();
-    const fullPhoneNumber = `${formData.countryCode}${formData.phoneNumber}`;
-    if (!formData.name || !formData.phoneNumber || !formData.vehicleNumber || !formData.email || !formData.secretKey) {
-      setError('Please fill in all fields, including a 6-digit secret key');
+    if (!formData.selectedGeneralEmployeeId || !formData.name || !formData.phoneNumber || !formData.vehicleNumber || !formData.email || !formData.secretKey) {
+      setError('Please select an employee, vehicle, and fill in all delivery fields, including a 6-digit secret key');
       return;
     }
     if (!validateSecretKey(formData.secretKey)) {
       setError('Secret key must be exactly 6 digits');
       return;
     }
+    const fullPhoneNumber = `${formData.countryCode}${formData.phoneNumber}`;
     try {
       setLoading(true);
       setError(null);
       setMessage('');
-      const apiUrl = baseUrl ? `${baseUrl}/api/employees/${editEmployeeId}` : `/api/employees/${editEmployeeId}`; // FIXED: Use relative if no baseUrl
+      const apiUrl = baseUrl ? `${baseUrl}/api/employees/${editEmployeeId}` : `/api/employees/${editEmployeeId}`;
       const response = await axios.put(apiUrl, {
-        name: formData.name,
+        name: formData.name, // FIXED: Include name
+        generalEmployeeId: formData.selectedGeneralEmployeeId,
         phoneNumber: fullPhoneNumber,
-        vehicleNumber: formData.vehicleNumber,
+        vehicleNumber: formData.vehicleNumber, // From dropdown
         role: formData.role,
         email: formData.email,
-        secretKey: formData.secretKey, // Manual update of secret key
+        secretKey: formData.secretKey,
       });
-      const updatedEmployee = response.data.employee; // Backend returns updated with secretKey
-      setMessage(`Employee updated successfully! Secret Key: ${updatedEmployee.secretKey}`);
-      setFormData({ name: '', countryCode: '+91', phoneNumber: '', vehicleNumber: '', role: 'Delivery Boy', email: '', secretKey: '' });
+      const updatedEmployee = response.data.employee;
+      setMessage(`Delivery profile updated successfully! Secret Key: ${updatedEmployee.secretKey}`);
+      // Reset form
+      setFormData({
+        selectedGeneralEmployeeId: '',
+        name: '',
+        countryCode: '+91',
+        phoneNumber: '',
+        vehicleNumber: '',
+        role: 'Delivery Boy',
+        email: '',
+        secretKey: ''
+      });
       setEditMode(false);
       setEditEmployeeId(null);
       setSelectedEmployee(null);
-      fetchEmployees();
+      fetchDeliveryEmployees();
+      fetchVehicles(); // Refresh vehicles if needed
     } catch (err) {
-      // IMPROVED: Better logging to show exact backend error
       console.error("Backend Error Details:", {
         status: err.response?.status,
         data: err.response?.data,
         message: err.message
       });
-      setError(`Failed to update employee: ${err.response?.data?.error || err.message}`);
+      setError(`Failed to update delivery profile: ${err.response?.data?.error || err.message}`);
     } finally {
       setLoading(false);
     }
@@ -194,14 +302,14 @@ function EmployeePage() {
       setLoading(true);
       setError(null);
       setMessage('');
-      const apiUrl = baseUrl ? `${baseUrl}/api/employees/${employeeToDelete}` : `/api/employees/${employeeToDelete}`; // FIXED: Use relative if no baseUrl
+      const apiUrl = baseUrl ? `${baseUrl}/api/employees/${employeeToDelete}` : `/api/employees/${employeeToDelete}`;
       await axios.delete(apiUrl);
-      setMessage('Employee deleted successfully');
+      setMessage('Delivery profile deleted successfully');
       setSelectedEmployee(null);
-      fetchEmployees();
+      fetchDeliveryEmployees();
     } catch (err) {
-      console.error("Backend Error Details:", err.response?.data); // FIXED: Better logging
-      setError(`Failed to delete employee: ${err.response?.data?.error || err.message}`);
+      console.error("Backend Error Details:", err.response?.data);
+      setError(`Failed to delete delivery profile: ${err.response?.data?.error || err.message}`);
     } finally {
       setLoading(false);
       setShowDeleteConfirm(false);
@@ -213,14 +321,23 @@ function EmployeePage() {
     setShowDeleteConfirm(false);
     setEmployeeToDelete(null);
   };
-  // Handle employee selection
+  // Handle employee selection (for details view)
   const handleSelectEmployee = (employee) => {
     setSelectedEmployee(employee);
     setEditMode(false);
-    setFormData({ name: '', countryCode: '+91', phoneNumber: '', vehicleNumber: '', role: 'Delivery Boy', email: '', secretKey: '' });
+    // Reset form on selection
+    setFormData({
+      selectedGeneralEmployeeId: '',
+      name: '',
+      countryCode: '+91',
+      phoneNumber: '',
+      vehicleNumber: '',
+      role: 'Delivery Boy',
+      email: '',
+      secretKey: ''
+    });
   };
-
-  if (loading) {
+  if (loading && employees.length === 0 && generalEmployees.length === 0 && vehicles.length === 0) {
     return (
       <div style={{
         display: 'flex',
@@ -235,12 +352,11 @@ function EmployeePage() {
           fontSize: '18px'
         }}>
           <FaUsers style={{ fontSize: '48px', marginBottom: '20px', color: '#3498db' }} />
-          <p>Loading employees...</p>
+          <p>Loading delivery employees...</p>
         </div>
       </div>
     );
   }
-
   return (
     <div style={{
       minHeight: '100vh',
@@ -315,7 +431,7 @@ function EmployeePage() {
             gap: '10px'
           }}>
             <FaUsers style={{ color: '#3498db', fontSize: '2rem' }} />
-            Employee Management
+            Delivery Employee Management
           </h2>
         </div>
         {/* Error and Message - Styled like EmployeeList Alerts */}
@@ -359,7 +475,7 @@ function EmployeePage() {
         )}
         {/* Main Content - Flex Layout for Form and List */}
         <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-          {/* Create/Edit Employee Form - Styled like a Card */}
+          {/* Create/Edit Delivery Profile Form - Updated with Dropdown for Employee Selection and Vehicle */}
           <div
             style={{
               flex: '1',
@@ -372,34 +488,53 @@ function EmployeePage() {
             }}
           >
             <h3 style={{ marginBottom: '20px', color: '#2c3e50', fontSize: '1.3rem', fontWeight: '600', textAlign: 'center' }}>
-              {editMode ? 'Edit Employee' : 'Create Delivery Boy'}
+              {editMode ? 'Edit Delivery Profile' : 'Assign Delivery Profile'}
             </h3>
             <form onSubmit={(e) => { e.preventDefault(); editMode ? handleUpdateEmployee(e) : handleCreateEmployee(e); }} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <input
-                type="text"
-                name="name"
-                value={formData.name}
-                onChange={handleInputChange}
-                placeholder="Employee Name"
-                required
-                style={{
-                  padding: '12px',
-                  border: '1px solid #3498db',
-                  borderRadius: '8px',
-                  fontSize: '1rem',
-                  outline: 'none',
+              {/* NEW: Dropdown for selecting existing general employee */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#2c3e50' }}>Select Employee</label>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
                   background: '#ffffff',
-                  transition: 'border-color 0.3s ease'
-                }}
-                onFocus={(e) => e.target.style.borderColor = '#2980b9'}
-                onBlur={(e) => e.target.style.borderColor = '#3498db'}
-              />
+                  padding: '8px 12px',
+                  borderRadius: '10px',
+                  border: '1px solid #3498db'
+                }}>
+                  <FaUserTie style={{ color: '#3498db', fontSize: '1rem' }} />
+                  <FaSearch style={{ color: '#7f8c8d', fontSize: '1rem' }} />
+                  <select
+                    name="selectedGeneralEmployeeId"
+                    value={formData.selectedGeneralEmployeeId}
+                    onChange={handleGeneralEmployeeSelect}
+                    required
+                    style={{
+                      flex: 1,
+                      padding: '5px 0',
+                      border: 'none',
+                      background: 'transparent',
+                      fontSize: '0.9rem',
+                      color: '#2c3e50',
+                      outline: 'none'
+                    }}
+                  >
+                    <option value="">Search and Select Employee...</option>
+                    {generalEmployees.map((emp) => (
+                      <option key={emp._id} value={emp._id}>
+                        {emp.name} ({emp.employeeId} - {emp.employeeDesignation})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
               <input
                 type="email"
                 name="email"
                 value={formData.email}
                 onChange={handleInputChange}
-                placeholder="Email Address"
+                placeholder="Email Address (Auto-filled if available)"
                 required
                 style={{
                   padding: '12px',
@@ -443,7 +578,7 @@ function EmployeePage() {
                   name="phoneNumber"
                   value={formData.phoneNumber}
                   onChange={handleInputChange}
-                  placeholder="Phone Number"
+                  placeholder="Phone Number (Auto-filled if available)"
                   required
                   style={{
                     flex: '1',
@@ -459,25 +594,44 @@ function EmployeePage() {
                   onBlur={(e) => e.target.style.borderColor = '#3498db'}
                 />
               </div>
-              <input
-                type="text"
-                name="vehicleNumber"
-                value={formData.vehicleNumber}
-                onChange={handleInputChange}
-                placeholder="Vehicle Number"
-                required
-                style={{
-                  padding: '12px',
-                  border: '1px solid #3498db',
-                  borderRadius: '8px',
-                  fontSize: '1rem',
-                  outline: 'none',
+              {/* NEW: Dropdown for Vehicle Number */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#2c3e50' }}>Select Vehicle</label>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
                   background: '#ffffff',
-                  transition: 'border-color 0.3s ease'
-                }}
-                onFocus={(e) => e.target.style.borderColor = '#2980b9'}
-                onBlur={(e) => e.target.style.borderColor = '#3498db'}
-              />
+                  padding: '8px 12px',
+                  borderRadius: '10px',
+                  border: '1px solid #3498db'
+                }}>
+                  <FaCar style={{ color: '#3498db', fontSize: '1rem' }} />
+                  <FaSearch style={{ color: '#7f8c8d', fontSize: '1rem' }} />
+                  <select
+                    name="vehicleNumber"
+                    value={formData.vehicleNumber}
+                    onChange={handleVehicleSelect}
+                    required
+                    style={{
+                      flex: 1,
+                      padding: '5px 0',
+                      border: 'none',
+                      background: 'transparent',
+                      fontSize: '0.9rem',
+                      color: '#2c3e50',
+                      outline: 'none'
+                    }}
+                  >
+                    <option value="">Search and Select Vehicle...</option>
+                    {vehicles.map((vehicle) => (
+                      <option key={vehicle._id} value={vehicle.vehicle_number}>
+                        {vehicle.vehicle_number} ({vehicle.brand} {vehicle.model} - {vehicle.vehicle_type})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
               <select
                 name="role"
                 value={formData.role}
@@ -525,17 +679,17 @@ function EmployeePage() {
               </div>
               <button
                 type="submit"
-                disabled={loading || !validateSecretKey(formData.secretKey)}
+                disabled={loading || !validateSecretKey(formData.secretKey) || !formData.selectedGeneralEmployeeId || !formData.vehicleNumber}
                 style={{
                   padding: '12px 24px',
-                  background: loading || !validateSecretKey(formData.secretKey) ? 'linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%)' : 'linear-gradient(135deg, #3498db 0%, #2980b9 100%)',
+                  background: loading || !validateSecretKey(formData.secretKey) || !formData.selectedGeneralEmployeeId || !formData.vehicleNumber ? 'linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%)' : 'linear-gradient(135deg, #3498db 0%, #2980b9 100%)',
                   color: '#ffffff',
                   border: 'none',
                   borderRadius: '50px',
-                  cursor: loading || !validateSecretKey(formData.secretKey) ? 'not-allowed' : 'pointer',
+                  cursor: loading || !validateSecretKey(formData.secretKey) || !formData.selectedGeneralEmployeeId || !formData.vehicleNumber ? 'not-allowed' : 'pointer',
                   fontSize: '1rem',
                   fontWeight: '600',
-                  boxShadow: loading || !validateSecretKey(formData.secretKey) ? '0 2px 4px rgba(149, 165, 166, 0.3)' : '0 4px 8px rgba(52, 152, 219, 0.3)',
+                  boxShadow: loading || !validateSecretKey(formData.secretKey) || !formData.selectedGeneralEmployeeId || !formData.vehicleNumber ? '0 2px 4px rgba(149, 165, 166, 0.3)' : '0 4px 8px rgba(52, 152, 219, 0.3)',
                   transition: 'all 0.3s ease',
                   display: 'flex',
                   alignItems: 'center',
@@ -543,27 +697,36 @@ function EmployeePage() {
                   gap: '8px'
                 }}
                 onMouseOver={(e) => {
-                  if (!loading && validateSecretKey(formData.secretKey)) {
+                  if (!loading && validateSecretKey(formData.secretKey) && formData.selectedGeneralEmployeeId && formData.vehicleNumber) {
                     e.target.style.transform = 'translateY(-2px)';
                     e.target.style.boxShadow = '0 6px 12px rgba(52, 152, 219, 0.4)';
                   }
                 }}
                 onMouseOut={(e) => {
-                  if (!loading && validateSecretKey(formData.secretKey)) {
+                  if (!loading && validateSecretKey(formData.secretKey) && formData.selectedGeneralEmployeeId && formData.vehicleNumber) {
                     e.target.style.transform = 'translateY(0)';
                     e.target.style.boxShadow = '0 4px 8px rgba(52, 152, 219, 0.3)';
                   }
                 }}
               >
                 <FaPlusCircle />
-                {loading ? 'Processing...' : editMode ? 'Update Employee' : 'Create Employee'}
+                {loading ? 'Processing...' : editMode ? 'Update Profile' : 'Assign Profile'}
               </button>
               {editMode && (
                 <button
                   type="button"
                   onClick={() => {
                     setEditMode(false);
-                    setFormData({ name: '', countryCode: '+91', phoneNumber: '', vehicleNumber: '', role: 'Delivery Boy', email: '', secretKey: '' });
+                    setFormData({
+                      selectedGeneralEmployeeId: '',
+                      name: '',
+                      countryCode: '+91',
+                      phoneNumber: '',
+                      vehicleNumber: '',
+                      role: 'Delivery Boy',
+                      email: '',
+                      secretKey: ''
+                    });
                     setEditEmployeeId(null);
                   }}
                   style={{
@@ -595,7 +758,7 @@ function EmployeePage() {
               )}
             </form>
           </div>
-          {/* Employee List - Styled like a Card */}
+          {/* Delivery Employee List - Styled like a Card */}
           <div
             style={{
               flex: '1',
@@ -610,11 +773,11 @@ function EmployeePage() {
             }}
           >
             <h3 style={{ marginBottom: '20px', color: '#2c3e50', fontSize: '1.3rem', fontWeight: '600', textAlign: 'center' }}>
-              Employee List
+              Delivery Profiles ({employees.length})
             </h3>
             {employees.length === 0 ? (
               <div style={{ textAlign: 'center', color: '#7f8c8d', fontSize: '1rem' }}>
-                No employees found.
+                No delivery profiles assigned.
               </div>
             ) : (
               <ul style={{ listStyle: 'none', padding: '0', margin: 0 }}>
@@ -647,7 +810,10 @@ function EmployeePage() {
                       onClick={() => handleSelectEmployee(employee)}
                     >
                       <FaUsers style={{ marginRight: '10px', color: '#3498db', fontSize: '1.2rem' }} />
-                      <span style={{ fontWeight: '500', color: '#2c3e50' }}>{employee.name}</span>
+                      <div>
+                        <span style={{ fontWeight: '500', color: '#2c3e50', display: 'block' }}>{employee.name}</span>
+                        <small style={{ color: '#7f8c8d' }}>Vehicle: {employee.vehicleNumber}</small>
+                      </div>
                     </div>
                     <div style={{ display: 'flex', gap: '8px' }}>
                       <button
@@ -711,7 +877,7 @@ function EmployeePage() {
             )}
           </div>
         </div>
-        {/* Employee Details - Styled like a Card */}
+        {/* Employee Details - Updated to show linked general employee info */}
         {selectedEmployee && (
           <div
             style={{
@@ -724,15 +890,18 @@ function EmployeePage() {
             }}
           >
             <h3 style={{ marginBottom: '20px', color: '#2c3e50', fontSize: '1.3rem', fontWeight: '600', textAlign: 'center' }}>
-              Employee Details
+              Delivery Profile Details
             </h3>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '15px' }}>
-              <p style={{ margin: 0, color: '#2c3e50' }}><strong>Name:</strong> {selectedEmployee.name}</p>
+              <p style={{ margin: 0, color: '#2c3e50' }}><strong>Linked Employee:</strong> {selectedEmployee.name}</p>
               <p style={{ margin: 0, color: '#2c3e50' }}><strong>Email:</strong> {selectedEmployee.email || 'N/A'}</p>
               <p style={{ margin: 0, color: '#2c3e50' }}><strong>Phone Number:</strong> {selectedEmployee.phoneNumber}</p>
               <p style={{ margin: 0, color: '#2c3e50' }}><strong>Vehicle Number:</strong> {selectedEmployee.vehicleNumber}</p>
               <p style={{ margin: 0, color: '#2c3e50' }}><strong>Role:</strong> {selectedEmployee.role}</p>
               <p style={{ margin: 0, color: '#2c3e50' }}><strong>Secret Key:</strong> {selectedEmployee.secretKey || 'N/A'}</p>
+              {selectedEmployee.generalEmployeeId && (
+                <p style={{ margin: 0, color: '#2c3e50', gridColumn: '1 / -1' }}><strong>General Employee ID:</strong> {selectedEmployee.generalEmployeeId}</p>
+              )}
             </div>
           </div>
         )}
@@ -777,7 +946,7 @@ function EmployeePage() {
               marginBottom: '25px',
               fontSize: '1.1rem',
               lineHeight: '1.5'
-            }}>Are you sure you want to delete this employee? This action cannot be undone.</p>
+            }}>Are you sure you want to delete this delivery profile? This action cannot be undone.</p>
             <div style={{
               display: 'flex',
               gap: '15px',

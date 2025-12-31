@@ -131,7 +131,7 @@ def save_config(config_data):
 config = load_config()
 UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', os.path.join(BASE_DIR, 'static', 'uploads'))
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp','jfif','ico'}
+ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp','jfif','ico','pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'svg'}
 ALLOWED_JSON_EXTENSIONS = {'json'}
 MAX_BACKUPS = 10
 def create_directory(directory):
@@ -147,6 +147,7 @@ class SQLiteCollection:
     def __init__(self, conn, name):
         self.conn = conn
         self.name = name
+        
 
     def matches_filter(self, d, filter_):
         if not filter_:
@@ -370,7 +371,7 @@ class SQLiteCollection:
             return doc
         return None
 def connect_to_sqlite():
-    global conn, items_collection, customers_collection, sales_collection, tables_collection, users_collection, settings_collection, email_tokens_collection, opening_collection, pos_closing_collection, kitchens_collection, item_groups_collection, kitchen_saved_collection, picked_up_collection, variants_collection, employees_collection, activeorders_collection, order_counters_collection, tripreports_collection, email_settings_collection, purchase_items_collection, suppliers_collection, purchase_orders_collection, purchase_receipts_collection, purchase_invoices_collection, uoms_collection, purchase_sales_collection, print_settings_collection, combo_offers_collection, vat_collection, customer_groups_collection, company_details_collection, logo_details_collection, supplier_group_collection,address_structures_collection,worker_collection, employee_designations_collection,employee_type_collection,working_days_collection,attendance_collection,brands_collection,shift_master_collection, schedule_master_collection, employee_schedule_assign_collection, leave_types_collection, leave_allocation_collection, leave_apply_collection, salary_slips_collection
+    global conn, items_collection, customers_collection, sales_collection, tables_collection, users_collection, settings_collection, email_tokens_collection, opening_collection, pos_closing_collection, kitchens_collection, item_groups_collection, kitchen_saved_collection, picked_up_collection, variants_collection, employees_collection, activeorders_collection, order_counters_collection, tripreports_collection, email_settings_collection, purchase_items_collection, suppliers_collection, purchase_orders_collection, purchase_receipts_collection, purchase_invoices_collection, uoms_collection, purchase_sales_collection, print_settings_collection, combo_offers_collection, vat_collection, customer_groups_collection, company_details_collection, logo_details_collection, supplier_group_collection,address_structures_collection,worker_collection, employee_designations_collection,employee_type_collection,working_days_collection,attendance_collection,brands_collection,shift_master_collection, schedule_master_collection, employee_schedule_assign_collection, leave_types_collection, leave_allocation_collection, leave_apply_collection, salary_slips_collection, departments_collection, vechilemanagement_collection
     mode = config.get("mode", "server")
     if mode == 'server':
         db_path = os.path.join(CONFIG_DIR, 'restaurant.db')
@@ -380,7 +381,7 @@ def connect_to_sqlite():
             'active_orders', 'combo_offers', 'customers', 'email_settings', 'email_tokens', 'employees', 'item_groups', 'items', 'kitchen_saved_orders', 'kitchens',
             'order_counters', 'picked_up_items', 'pos_closing_entries', 'pos_opening_entries', 'print_settings', 'purchase_invoices', 'purchase_items', 'purchase_orders',
             'purchase_receipts', 'purchase_sales', 'sales', 'suppliers', 'system_settings', 'tables', 'trip_reports', 'uoms', 'users', 'variants', 'vat', 'customer_groups', 'company_details', 'logo_details', 'supplier_groups','address_structures','new_employee','employee_designations','employee_types','working_days','attendance','brands',
-            'shift_master', 'schedule_master', 'employee_schedule_assign','leave_types', 'leave_allocation_assign', 'leave_applications', 'salary_slips' 
+            'shift_master', 'schedule_master', 'employee_schedule_assign','leave_types', 'leave_allocation_assign', 'leave_applications', 'salary_slips', 'departments', 'vechile_management' 
         ]
         
         for table in tables:
@@ -433,7 +434,17 @@ def connect_to_sqlite():
         leave_types_collection = SQLiteCollection(conn, 'leave_types')  # NEW: Leave types collection
         leave_allocation_collection = SQLiteCollection(conn, 'leave_allocation_assign')
         leave_apply_collection = SQLiteCollection(conn, 'leave_applications')
-        salary_slips_collection = SQLiteCollection(conn, 'salary_slips') 
+        salary_slips_collection = SQLiteCollection(conn, 'salary_slips')
+        departments_collection = SQLiteCollection(conn, 'departments') # NEW: Departments collection
+        vechilemanagement_collection = SQLiteCollection(conn, 'vechile_management') # NEW: Vehicle Management Collection
+        
+        # Seed default departments if empty
+        if len(departments_collection.find()) == 0:
+            default_depts = ["Kitchen", "Service", "Billing", "Admin"]
+            for dept in default_depts:
+                departments_collection.insert_one({"name": dept, "is_active": True})
+            logger.info("Seeded default departments")
+
         ensure_test_users()
         return True
     else:
@@ -3316,161 +3327,165 @@ if config.get('mode') == 'server':
     VALID_COUNTRY_CODES = ['+91', '+1', '+971', '+44', '+61'] # Add more as needed
 
     # UPDATED: Endpoint for employees - Manual 6-digit secret key, no auto-generate
-    @app.route('/api/employees', methods=['GET'])
-    @db_required
-    def get_employees():
-        try:
-            employees = employees_collection.find()
-            return jsonify(convert_objectid_to_str(employees)), 200
-        except Exception as e:
-            logger.error(f"Error fetching employees: {str(e)}")
-            return jsonify({"error": str(e)}), 500
-
-    @app.route('/api/employees', methods=['POST'])
-    @db_required
-    def create_employee():
-        try:
-            data = request.get_json()
-            required_fields = ['name', 'phoneNumber', 'vehicleNumber', 'role', 'email', 'secretKey']
-            if not data or not all(key in data for key in required_fields):
-                return jsonify({'error': 'Missing required fields: name, phoneNumber, vehicleNumber, role, email, secretKey'}), 400
-            phone_number = data['phoneNumber']
-            if not any(phone_number.startswith(code) for code in VALID_COUNTRY_CODES):
-                return jsonify({'error': 'Phone number must include a valid country code (e.g., +91, +1, +971)'}), 400
-            code_length = len(next(code for code in VALID_COUNTRY_CODES if phone_number.startswith(code)))
-            if len(phone_number) < code_length + 7:
-                return jsonify({'error': 'Phone number is too short'}), 400
-            email = data['email']
-            if not validate_email(email):
-                return jsonify({'error': 'Invalid email format'}), 400
-            if employees_collection.find_one({'email': email}):
-                return jsonify({'error': 'Email already exists'}), 400
-            secret_key = data['secretKey']
-            if not is_valid_secret_key(secret_key):  # FIXED: Global helper now available
-                return jsonify({'error': 'Secret key must be exactly 6 digits'}), 400
-            if employees_collection.find_one({'secretKey': secret_key}):
-                return jsonify({'error': 'Secret key already exists. Please choose a unique 6-digit key'}), 400
-            employee_id = generate_employee_id()
-            employee = {
-                'employeeId': employee_id,
-                'name': data['name'],
-                'phoneNumber': phone_number,
-                'vehicleNumber': data['vehicleNumber'],
-                'role': data['role'],
+@app.route('/api/employees', methods=['GET'])
+@db_required
+def get_employees():
+    try:
+        employees = employees_collection.find()
+        return jsonify(convert_objectid_to_str(employees)), 200
+    except Exception as e:
+        logger.error(f"Error fetching employees: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+@app.route('/api/employees', methods=['POST'])
+@db_required
+def create_employee():
+    try:
+        data = request.get_json()
+        required_fields = ['name', 'phoneNumber', 'vehicleNumber', 'role', 'email', 'secretKey', 'generalEmployeeId'] # FIXED: Added generalEmployeeId for linking
+        if not data or not all(key in data for key in required_fields):
+            return jsonify({'error': 'Missing required fields: name, phoneNumber, vehicleNumber, role, email, secretKey, generalEmployeeId'}), 400
+        phone_number = data['phoneNumber']
+        if not any(phone_number.startswith(code) for code in VALID_COUNTRY_CODES):
+            return jsonify({'error': 'Phone number must include a valid country code (e.g., +91, +1, +971)'}), 400
+        code_length = len(next(code for code in VALID_COUNTRY_CODES if phone_number.startswith(code)))
+        if len(phone_number) < code_length + 7:
+            return jsonify({'error': 'Phone number is too short'}), 400
+        email = data['email']
+        if not validate_email(email):
+            return jsonify({'error': 'Invalid email format'}), 400
+        if employees_collection.find_one({'email': email}):
+            return jsonify({'error': 'Email already exists'}), 400
+        secret_key = data['secretKey']
+        if not is_valid_secret_key(secret_key):
+            return jsonify({'error': 'Secret key must be exactly 6 digits'}), 400
+        if employees_collection.find_one({'secretKey': secret_key}):
+            return jsonify({'error': 'Secret key already exists. Please choose a unique 6-digit key'}), 400
+        # Verify generalEmployeeId exists in worker_collection
+        if not worker_collection.find_one({'_id': data['generalEmployeeId']}):
+            return jsonify({'error': 'Invalid generalEmployeeId - linked employee not found'}), 400
+        employee_id = generate_employee_id()
+        employee = {
+            'employeeId': employee_id,
+            'generalEmployeeId': data['generalEmployeeId'], # Link to main employee
+            'name': data['name'],
+            'phoneNumber': phone_number,
+            'vehicleNumber': data['vehicleNumber'],
+            'role': data['role'],
+            'email': email,
+            'secretKey': secret_key, # Manual secret key
+            'created_at': datetime.now(ZoneInfo("UTC")).isoformat()
+        }
+        employees_collection.insert_one(employee)
+        if not users_collection.find_one({'email': email}):
+            users_collection.insert_one({
                 'email': email,
-                'secretKey': secret_key, # Manual secret key
+                'name': data['name'],
+                'role': data['role'],
                 'created_at': datetime.now(ZoneInfo("UTC")).isoformat()
-            }
-            employees_collection.insert_one(employee)
-            if not users_collection.find_one({'email': email}):
-                users_collection.insert_one({
-                    'email': email,
-                    'name': data['name'],
-                    'role': data['role'],
-                    'created_at': datetime.now(ZoneInfo("UTC")).isoformat()
-                })
-            logger.info(f"Created employee: {employee_id} with email: {email} and secret key: {secret_key}")
-            return jsonify({'message': 'Employee created successfully', 'employee': employee}), 201
-        except Exception as e:
-            logger.error(f"Error creating employee: {str(e)}")
-            logger.error(traceback.format_exc())  # Added for better debugging
-            return jsonify({'error': str(e)}), 500
-
-    @app.route('/api/employees/<employee_id>', methods=['PUT'])
-    @db_required
-    def update_employee(employee_id):
-        try:
-            data = request.get_json()
-            required_fields = ['name', 'phoneNumber', 'vehicleNumber', 'role', 'email', 'secretKey']
-            if not data or not all(key in data for key in required_fields):
-                return jsonify({'error': 'Missing required fields: name, phoneNumber, vehicleNumber, role, email, secretKey'}), 400
-            phone_number = data['phoneNumber']
-            if not any(phone_number.startswith(code) for code in VALID_COUNTRY_CODES):
-                return jsonify({'error': 'Phone number must include a valid country code (e.g., +91, +1, +971)'}), 400
-            code_length = len(next(code for code in VALID_COUNTRY_CODES if phone_number.startswith(code)))
-            if len(phone_number) < code_length + 7:
-                return jsonify({'error': 'Phone number is too short'}), 400
-            email = data['email']
-            if not validate_email(email):
-                return jsonify({'error': 'Invalid email format'}), 400
-            existing_employee = employees_collection.find_one({'email': email, 'employeeId': {'$ne': employee_id}})
-            if existing_employee:
-                return jsonify({'error': 'Email already exists'}), 400
-            secret_key = data['secretKey']
-            if not is_valid_secret_key(secret_key):  # FIXED: Global helper now available
-                return jsonify({'error': 'Secret key must be exactly 6 digits'}), 400
-            existing_secret = employees_collection.find_one({'secretKey': secret_key, 'employeeId': {'$ne': employee_id}})
-            if existing_secret:
-                return jsonify({'error': 'Secret key already exists. Please choose a unique 6-digit key'}), 400
-            updated_employee = {
-                'name': data['name'],
-                'phoneNumber': phone_number,
-                'vehicleNumber': data['vehicleNumber'],
-                'role': data['role'],
+            })
+        logger.info(f"Created employee: {employee_id} with email: {email} and secret key: {secret_key}")
+        return jsonify({'message': 'Employee created successfully', 'employee': employee}), 201
+    except Exception as e:
+        logger.error(f"Error creating employee: {str(e)}")
+        logger.error(traceback.format_exc()) # Added for better debugging
+        return jsonify({'error': str(e)}), 500
+@app.route('/api/employees/<employee_id>', methods=['PUT'])
+@db_required
+def update_employee(employee_id):
+    try:
+        data = request.get_json()
+        required_fields = ['name', 'phoneNumber', 'vehicleNumber', 'role', 'email', 'secretKey', 'generalEmployeeId']
+        if not data or not all(key in data for key in required_fields):
+            return jsonify({'error': 'Missing required fields: name, phoneNumber, vehicleNumber, role, email, secretKey, generalEmployeeId'}), 400
+        phone_number = data['phoneNumber']
+        if not any(phone_number.startswith(code) for code in VALID_COUNTRY_CODES):
+            return jsonify({'error': 'Phone number must include a valid country code (e.g., +91, +1, +971)'}), 400
+        code_length = len(next(code for code in VALID_COUNTRY_CODES if phone_number.startswith(code)))
+        if len(phone_number) < code_length + 7:
+            return jsonify({'error': 'Phone number is too short'}), 400
+        email = data['email']
+        if not validate_email(email):
+            return jsonify({'error': 'Invalid email format'}), 400
+        existing_employee = employees_collection.find_one({'email': email, 'employeeId': {'$ne': employee_id}})
+        if existing_employee:
+            return jsonify({'error': 'Email already exists'}), 400
+        secret_key = data['secretKey']
+        if not is_valid_secret_key(secret_key):
+            return jsonify({'error': 'Secret key must be exactly 6 digits'}), 400
+        existing_secret = employees_collection.find_one({'secretKey': secret_key, 'employeeId': {'$ne': employee_id}})
+        if existing_secret:
+            return jsonify({'error': 'Secret key already exists. Please choose a unique 6-digit key'}), 400
+        # Verify generalEmployeeId exists
+        if not worker_collection.find_one({'_id': data['generalEmployeeId']}):
+            return jsonify({'error': 'Invalid generalEmployeeId - linked employee not found'}), 400
+        updated_employee = {
+            'generalEmployeeId': data['generalEmployeeId'],
+            'name': data['name'],
+            'phoneNumber': phone_number,
+            'vehicleNumber': data['vehicleNumber'],
+            'role': data['role'],
+            'email': email,
+            'secretKey': secret_key, # Manual update of secret key
+            'updated_at': datetime.now(ZoneInfo("UTC")).isoformat()
+        }
+        result = employees_collection.update_one(
+            {'employeeId': employee_id},
+            {'$set': updated_employee}
+        )
+        if result.matched_count == 0:
+            return jsonify({'error': 'Employee not found'}), 404
+        users_collection.update_one(
+            {'email': email},
+            {'$set': {
                 'email': email,
-                'secretKey': secret_key, # Manual update of secret key
+                'name': data['name'],
+                'role': data['role'],
                 'updated_at': datetime.now(ZoneInfo("UTC")).isoformat()
-            }
-            result = employees_collection.update_one(
-                {'employeeId': employee_id},
-                {'$set': updated_employee}
-            )
-            if result.matched_count == 0:
-                return jsonify({'error': 'Employee not found'}), 404
-            users_collection.update_one(
-                {'email': email},
-                {'$set': {
-                    'email': email,
-                    'name': data['name'],
-                    'role': data['role'],
-                    'updated_at': datetime.now(ZoneInfo("UTC")).isoformat()
-                }},
-                upsert=True
-            )
-            # Fetch updated employee to return
-            updated_full = employees_collection.find_one({'employeeId': employee_id})
-            logger.info(f"Updated employee: {employee_id} with email: {email} and secret key: {secret_key}")
-            return jsonify({'message': 'Employee updated successfully', 'employee': updated_full}), 200
-        except Exception as e:
-            logger.error(f"Error updating employee: {str(e)}")
-            return jsonify({'error': str(e)}), 500
-
-    # FIXED: Renamed route to avoid name collision with helper function
-    @app.route('/api/employees/validate-secret-key', methods=['POST'])
-    @db_required
-    def validate_employee_secret_key(): # Renamed route function
-        try:
-            data = request.get_json()
-            secret_key = data.get('secretKey')
-            if not secret_key:
-                return jsonify({'error': 'Secret key required'}), 400
-            if not is_valid_secret_key(secret_key):  # FIXED: Global helper now available
-                return jsonify({'error': 'Secret key must be exactly 6 digits'}), 400
-            employee = employees_collection.find_one({'secretKey': secret_key})
-            if not employee:
-                return jsonify({'error': 'Invalid secret key'}), 400
-            return jsonify({'employeeId': employee['employeeId'], 'name': employee['name']}), 200
-        except Exception as e:
-            logger.error(f"Error validating secret key: {str(e)}")
-            return jsonify({'error': str(e)}), 500
-
-    @app.route('/api/employees/<employee_id>', methods=['DELETE'])
-    @db_required
-    def delete_employee(employee_id):
-        try:
-            employee = employees_collection.find_one({'employeeId': employee_id})
-            if not employee:
-                return jsonify({'error': 'Employee not found'}), 404
-            result = employees_collection.delete_one({'employeeId': employee_id})
-            if result.deleted_count == 0:
-                return jsonify({'error': 'Employee not found'}), 404
-            if not employees_collection.find_one({'email': employee['email']}):
-                users_collection.delete_one({'email': employee['email']})
-            logger.info(f"Deleted employee: {employee_id}")
-            return jsonify({'message': 'Employee deleted successfully'}), 200
-        except Exception as e:
-            logger.error(f"Error deleting employee: {str(e)}")
-            return jsonify({"error": str(e)}), 500
+            }},
+            upsert=True
+        )
+        # Fetch updated employee to return
+        updated_full = employees_collection.find_one({'employeeId': employee_id})
+        logger.info(f"Updated employee: {employee_id} with email: {email} and secret key: {secret_key}")
+        return jsonify({'message': 'Employee updated successfully', 'employee': updated_full}), 200
+    except Exception as e:
+        logger.error(f"Error updating employee: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+# FIXED: Renamed route to avoid name collision with helper function
+@app.route('/api/employees/validate-secret-key', methods=['POST'])
+@db_required
+def validate_employee_secret_key(): # Renamed route function
+    try:
+        data = request.get_json()
+        secret_key = data.get('secretKey')
+        if not secret_key:
+            return jsonify({'error': 'Secret key required'}), 400
+        if not is_valid_secret_key(secret_key):
+            return jsonify({'error': 'Secret key must be exactly 6 digits'}), 400
+        employee = employees_collection.find_one({'secretKey': secret_key})
+        if not employee:
+            return jsonify({'error': 'Invalid secret key'}), 400
+        return jsonify({'employeeId': employee['employeeId'], 'name': employee['name']}), 200
+    except Exception as e:
+        logger.error(f"Error validating secret key: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+@app.route('/api/employees/<employee_id>', methods=['DELETE'])
+@db_required
+def delete_employee(employee_id):
+    try:
+        employee = employees_collection.find_one({'employeeId': employee_id})
+        if not employee:
+            return jsonify({'error': 'Employee not found'}), 404
+        result = employees_collection.delete_one({'employeeId': employee_id})
+        if result.deleted_count == 0:
+            return jsonify({'error': 'Employee not found'}), 404
+        if not employees_collection.find_one({'email': employee['email']}):
+            users_collection.delete_one({'email': employee['email']})
+        logger.info(f"Deleted employee: {employee_id}")
+        return jsonify({'message': 'Employee deleted successfully'}), 200
+    except Exception as e:
+        logger.error(f"Error deleting employee: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
     # UPDATED: Endpoint to get trip reports - now fetches matching sales for the employee (case-insensitive deliveryPersonName, orderType='Online Delivery', status != 'Cancelled')
     @app.route('/api/tripreports/<employee_id>', methods=['GET'])
@@ -5539,13 +5554,13 @@ def add_employee():
             if not isinstance(data, dict):
                 return jsonify({"error": "JSON data must be an object"}), 400
             # Detailed validation
-            required_fields = ['name', 'phoneNumber', 'email', 'username', 'password', 'employeeDesignation', 'employeeType']
+            required_fields = ['name', 'phoneNumber', 'email', 'username', 'password', 'employeeDesignation', 'employeeType', 'department']
             # Allow empty password if it's somehow not critical (but it usually is for login)
             missing_fields = []
             for field in required_fields:
                 if field not in data or (isinstance(data[field], str) and not data[field].strip()):
                     missing_fields.append(field)
-       
+     
             if missing_fields:
                 return jsonify({"error": f"Missing required fields: {', '.join(missing_fields)}"}), 400
             # Check if email exists
@@ -5645,7 +5660,6 @@ def add_employee():
             logger.error(f"Error creating employee: {str(e)}")
             logger.error(traceback.format_exc())
             return jsonify({"error": f"Internal Server Error: {str(e)}"}), 500
-
 @app.route('/api/add-employee/<emp_id>', methods=['GET', 'PUT', 'DELETE'])
 @db_required
 def manage_employee(emp_id):
@@ -5726,7 +5740,7 @@ def manage_employee(emp_id):
                             key = f"{sd.get('date', '')}-{sd.get('description', '')}"
                             if not any(f"{existing.get('date', '')}-{existing.get('description', '')}" == key for existing in all_special_days):
                                 merged_specials.append(sd)
-                       
+                     
                         assigned_schedule = {
                             'schedule_name': rule.get('schedule_name', 'N/A'), # Used as Holiday List code e.g., HL-IND-KL-2025
                             'start_date': rule.get('start_date'), # NEW: Full period for weekly off generation
@@ -5739,6 +5753,12 @@ def manage_employee(emp_id):
                             'assignment_notes': assignment.get('notes', ''),
                         }
             emp['assigned_schedule'] = assigned_schedule
+            # NEW: Fetch linked delivery profile if exists (from /api/employees where generalEmployeeId == emp._id)
+            delivery_profile = employees_collection.find_one({'generalEmployeeId': emp_id})
+            if delivery_profile:
+                if '_id' in delivery_profile:
+                    delivery_profile['_id'] = str(delivery_profile['_id'])
+                emp['deliveryProfile'] = delivery_profile # Add as a nested object for frontend to display in details modal
             return jsonify(emp), 200
         except Exception as e:
             logger.error(f"Error fetching employee: {str(e)}")
@@ -5749,7 +5769,7 @@ def manage_employee(emp_id):
             data = request.get_json()
             if not isinstance(data, dict):
                 return jsonify({"error": "JSON data must be an object"}), 400
-           
+         
             existing_emp = worker_collection.find_one({'_id': emp_id})
             if not existing_emp:
                 return jsonify({"error": "Employee not found"}), 404
@@ -5757,7 +5777,7 @@ def manage_employee(emp_id):
             if 'email' in data and data['email'] != existing_emp.get('email'):
                 if worker_collection.find_one({"email": data['email'], "_id": {"$ne": emp_id}, "isDraft": {"$ne": True}}):
                      return jsonify({"error": "Email already in use by another employee"}), 400
-           
+         
             # Safe float conversion helper
             def safe_float(val, default=0.0):
                 try:
@@ -5781,6 +5801,7 @@ def manage_employee(emp_id):
                 "idExpiry": data.get('idExpiry', existing_emp.get('idExpiry')),
                 "employeeDesignation": data.get('employeeDesignation', existing_emp.get('employeeDesignation')),
                 "employeeType": data.get('employeeType', existing_emp.get('employeeType')),
+                "department": data.get('department', existing_emp.get('department')),
                 # Bank Details
                 "bankName": data.get('bankName', existing_emp.get('bankName', '')),
                 "accountHolderName": data.get('accountHolderName', existing_emp.get('accountHolderName', '')),
@@ -5817,12 +5838,12 @@ def manage_employee(emp_id):
                     update_fields['password'] = hashed_password
                 except Exception as e:
                     return jsonify({"error": "Invalid password format"}), 400
-           
+         
             # Handle profile image
             if 'profileImage' in data:
                 update_fields['profileImage'] = data['profileImage']
             worker_collection.update_one({'_id': emp_id}, {'$set': update_fields})
-           
+         
             # Update user collection if relevant fields changed
             user_update = {}
             if 'email' in update_fields: user_update['email'] = update_fields['email']
@@ -5832,7 +5853,7 @@ def manage_employee(emp_id):
             if 'employeeDesignation' in update_fields: user_update['role'] = update_fields['employeeDesignation'].lower()
             if 'status' in update_fields: user_update['status'] = update_fields['status']
             if 'password' in update_fields: user_update['password'] = update_fields['password']
-           
+         
             # Try to find associated user by email (original or new)
             # Strategy: find by original email if possible, else current.
             # Since email might change, we should rely on what was in existing_emp
@@ -5847,18 +5868,18 @@ def manage_employee(emp_id):
             existing_emp = worker_collection.find_one({'_id': emp_id})
             if not existing_emp:
                 return jsonify({"error": "Employee not found"}), 404
-           
+         
             # Delete employee
             worker_collection.delete_one({'_id': emp_id})
-           
+         
             # Delete associated user
             if existing_emp.get('email'):
                 users_collection.delete_one({'email': existing_emp['email']})
-           
+         
             # Optional: Delete/Archive assignments?
             # Keeping it simple: Delete assignments
             employee_schedule_assign_collection.delete_many({'employee_id': emp_id})
-           
+         
             return jsonify({"message": "Employee deleted successfully"}), 200
         except Exception as e:
             logger.error(f"Error deleting employee: {str(e)}")
@@ -6970,28 +6991,28 @@ def handle_leave_types():
             missing = [field for field in required_fields if field not in data]
             if missing:
                 return jsonify({"error": f"Missing required fields: {', '.join(missing)}"}), 400
-      
+    
             # Generate ID if not present (use UUID for leave_type_id)
             if 'leave_type_id' not in data:
                 data['leave_type_id'] = str(uuid.uuid4())
-      
+    
             # Sanitize and validate
             data['leave_code'] = data['leave_code'].strip().upper()
             if len(data['leave_code']) > 10:
                 return jsonify({"error": "Leave code must be 10 characters or less"}), 400
-      
+    
             data['leave_name'] = data['leave_name'].strip()
             if not data['leave_name']:
                 return jsonify({"error": "Leave name is required"}), 400
-      
+    
             # Check for duplicate leave_code
             existing = leave_types_collection.find_one({'leave_code': data['leave_code']})
             if existing and existing.get('leave_type_id') != data.get('leave_type_id'):
                 return jsonify({"error": "Leave code already exists"}), 409
-      
+    
             data['created_at'] = datetime.now(ZoneInfo("UTC")).isoformat()
             data['updated_at'] = data['created_at']
-      
+    
             result = leave_types_collection.insert_one(data)
             logger.info(f"Created leave type: {data['leave_name']}")
             return jsonify({"message": "Leave type created successfully", "id": data['leave_type_id']}), 201
@@ -7002,9 +7023,12 @@ def handle_leave_types():
 @app.route('/api/leave-types/<leave_type_id>', methods=['GET', 'PUT', 'DELETE'])
 @db_required
 def handle_leave_type(leave_type_id):
+    # Common filter for backward compatibility: match by leave_type_id OR _id
+    or_filter = {'$or': [{'leave_type_id': leave_type_id}, {'_id': leave_type_id}]}
+    
     if request.method == 'GET':
         try:
-            data = leave_types_collection.find_one({'leave_type_id': leave_type_id})
+            data = leave_types_collection.find_one(or_filter)
             if not data:
                 return jsonify({"error": "Leave type not found"}), 404
             return jsonify(data), 200
@@ -7018,18 +7042,36 @@ def handle_leave_type(leave_type_id):
             missing = [field for field in required_fields if field not in data]
             if missing:
                 return jsonify({"error": f"Missing required fields: {', '.join(missing)}"}), 400
-      
+    
+            # First, find the existing record using backward-compatible filter
+            existing = leave_types_collection.find_one(or_filter)
+            if not existing:
+                return jsonify({"error": "Leave type not found"}), 404
+    
             # Sanitize
             data['leave_code'] = data['leave_code'].strip().upper()
             data['leave_name'] = data['leave_name'].strip()
-      
-            # Check duplicate leave_code
-            existing = leave_types_collection.find_one({'leave_code': data['leave_code'], 'leave_type_id': {'$ne': leave_type_id}})
-            if existing:
+    
+            # Check duplicate leave_code, excluding current record (using $or for exclusion)
+            exclude_current = {'leave_code': data['leave_code']}
+            exclude_current['$or'] = [
+                {'leave_type_id': {'$ne': leave_type_id}},
+                {'_id': {'$ne': leave_type_id}}
+            ]
+            existing_duplicate = leave_types_collection.find_one(exclude_current)
+            if existing_duplicate:
                 return jsonify({"error": "Leave code already exists"}), 409
-      
-            data['updated_at'] = datetime.now(ZoneInfo("UTC")).isoformat()
-            result = leave_types_collection.update_one({'leave_type_id': leave_type_id}, {'$set': data})
+    
+            # Prepare update data
+            update_data = data.copy()
+            update_data['updated_at'] = datetime.now(ZoneInfo("UTC")).isoformat()
+            
+            # Backward compatibility: If old record (no leave_type_id), add it now for future consistency
+            if not existing.get('leave_type_id'):
+                update_data['leave_type_id'] = leave_type_id  # leave_type_id param is the _id value
+    
+            # Update using the backward-compatible filter
+            result = leave_types_collection.update_one(or_filter, {'$set': update_data})
             if result.modified_count == 0:
                 return jsonify({"error": "Leave type not found"}), 404
             logger.info(f"Updated leave type: {data['leave_name']}")
@@ -7039,12 +7081,13 @@ def handle_leave_type(leave_type_id):
             return jsonify({"error": "Failed to update leave type"}), 500
     if request.method == 'DELETE':
         try:
-            # Check if used in allocations
+            # Check if used in allocations (unchanged, as explained)
             allocs = list(leave_allocation_collection.find({'leave_type_id': leave_type_id}))
             if allocs:
                 return jsonify({"error": "Cannot delete leave type used in allocations"}), 409
-      
-            result = leave_types_collection.delete_one({'leave_type_id': leave_type_id})
+    
+            # Delete using backward-compatible filter
+            result = leave_types_collection.delete_one(or_filter)
             if result.deleted_count == 0:
                 return jsonify({"error": "Leave type not found"}), 404
             logger.info(f"Deleted leave type ID: {leave_type_id}")
@@ -7052,7 +7095,6 @@ def handle_leave_type(leave_type_id):
         except Exception as e:
             logger.error(f"Error deleting leave type: {str(e)}")
             return jsonify({"error": "Failed to delete leave type"}), 500
-
 @app.route('/api/leave-allocations', methods=['GET', 'POST'])
 @db_required
 def handle_leave_allocations():
@@ -7462,6 +7504,135 @@ def get_leave_summary():
     except Exception as e:
         logger.error(f"Error fetching leave summary: {str(e)}")
         return jsonify({"error": "Failed to fetch leave summary"}), 500
+
+# NEW: Department Routes
+@app.route('/api/departments', methods=['GET', 'POST'])
+@db_required
+def handle_departments():
+    if request.method == 'GET':
+        depts = departments_collection.find()
+        return jsonify(depts), 200
+    
+    if request.method == 'POST':
+        data = request.get_json()
+        if not data.get('name'):
+            return jsonify({"error": "Department name is required"}), 400
+        
+        # Check duplicate
+        existing = departments_collection.find_one({"name": data['name']})
+        if existing:
+             return jsonify({"error": "Department already exists"}), 400
+             
+        data['created_at'] = datetime.now(ZoneInfo("UTC")).isoformat()
+        if 'is_active' not in data:
+            data['is_active'] = True
+            
+        departments_collection.insert_one(data)
+        return jsonify({"message": "Department created", "data": data}), 201
+
+@app.route('/api/departments/<dept_id>', methods=['PUT', 'DELETE'])
+@db_required
+def handle_department_id(dept_id):
+    if request.method == 'DELETE':
+        departments_collection.delete_one({"_id": dept_id})
+        return jsonify({"message": "Department deleted"}), 200
+
+    if request.method == 'PUT':
+        data = request.get_json()
+        departments_collection.update_one({"_id": dept_id}, {"$set": data})
+        return jsonify({"message": "Department updated"}), 200
+    
+# NEW: Vehicle Management Routes
+# NEW: Vehicle Management Routes
+@app.route('/api/vechile/management', methods=['GET', 'POST', 'OPTIONS'])
+@db_required
+def manage_vehicles():
+    if request.method == 'OPTIONS':
+        return jsonify({"success": True}), 200
+
+    if request.method == 'GET':
+        vehicles = vechilemanagement_collection.find()
+        return jsonify(vehicles), 200
+    
+    if request.method == 'POST':
+        # Handle FormData
+        data = request.form.to_dict()
+        
+        # Handle boolean conversion for FormData
+        if 'is_company_owned' in data:
+            data['is_company_owned'] = data['is_company_owned'].lower() == 'true'
+            
+        # Optional: Check duplicate ONLY if vehicle_number is provided
+        if data.get('vehicle_number'):
+            existing = vechilemanagement_collection.find_one({"vehicle_number": data['vehicle_number']})
+            if existing:
+                return jsonify({"error": "Vehicle number already exists"}), 400
+        
+        # Handle file uploads
+        if 'insurance_doc' in request.files:
+            file = request.files['insurance_doc']
+            filename = handle_image_upload(file)
+            if filename:
+                data['insurance_doc'] = filename
+                
+        if 'pollution_doc' in request.files:
+            file = request.files['pollution_doc']
+            filename = handle_image_upload(file)
+            if filename:
+                data['pollution_doc'] = filename
+
+        data['created_at'] = datetime.now(ZoneInfo("UTC")).isoformat()
+        vechilemanagement_collection.insert_one(data)
+        return jsonify({"message": "Vehicle created successfully", "vehicle_id": data.get('_id')}), 201
+
+@app.route('/api/vechile/management/<vehicle_id>', methods=['PUT', 'DELETE', 'OPTIONS'])
+@db_required
+def manage_vehicle_id(vehicle_id):
+    if request.method == 'OPTIONS':
+        return jsonify({"success": True}), 200
+
+    if request.method == 'PUT':
+        # Handle FormData
+        data = request.form.to_dict()
+        
+        # Handle boolean conversion
+        if 'is_company_owned' in data:
+            data['is_company_owned'] = data['is_company_owned'].lower() == 'true'
+
+        vehicle = vechilemanagement_collection.find_one({'_id': vehicle_id})
+        if not vehicle:
+            return jsonify({"error": "Vehicle not found"}), 404
+
+        # Handle file uploads
+                
+        if 'insurance_doc' in request.files:
+            file = request.files['insurance_doc']
+            filename = handle_image_upload(file)
+            if filename:
+                data['insurance_doc'] = filename
+        elif data.get('delete_insurance_doc') == 'true':
+            data['insurance_doc'] = None
+            if 'delete_insurance_doc' in data:
+                del data['delete_insurance_doc']
+                
+        if 'pollution_doc' in request.files:
+            file = request.files['pollution_doc']
+            filename = handle_image_upload(file)
+            if filename:
+                data['pollution_doc'] = filename
+        elif data.get('delete_pollution_doc') == 'true':
+            data['pollution_doc'] = None
+            if 'delete_pollution_doc' in data:
+                del data['delete_pollution_doc']
+
+        result = vechilemanagement_collection.update_one({'_id': vehicle_id}, {'$set': data})
+        return jsonify({"message": "Vehicle updated successfully"}), 200
+        
+    if request.method == 'DELETE':
+        result = vechilemanagement_collection.delete_one({'_id': vehicle_id})
+        if result.deleted_count == 0:
+            return jsonify({"error": "Vehicle not found"}), 404
+        return jsonify({"message": "Vehicle deleted successfully"}), 200
 
 # Catch-all for React app
 @app.route('/', defaults={'path': ''})

@@ -1,12 +1,10 @@
 // src/components/admin/AdminPage.jsx
-// FULLY UPDATED: Added Salary Management submenu under Employee with Salary Receipt (reuses /salary-slip) and Salary Receipt List (/salary-receipt-list).
-// Moved existing 'Salary Slip' from direct child to submenu under 'Salary Management'.
-// Added state: isSalaryOpen, and handlers in getExpandState, toggleExpandState, setExpandState.
-// All previous features preserved, including Leave Management expansion, Attendance, Schedule, etc.
+// FULLY UPDATED: Added Vehicle Management to Employee submenu (direct child, alongside Designations, Types, and Departments).
+// Used FaCar icon for Vehicle Management.
+// All previous features preserved, including Salary Management submenu, Leave Management, etc.
 // Paths are root-level, no /admin prefix.
-// Added necessary icon imports: All previous plus FaMoneyCheckAlt for Salary Management.
-// FIXED: Leave Management expands properly. Salary Management now expands on click with two sub-items.
-
+// All icons imported, including new FaCar for Vehicles.
+// All submenus preserved.
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -45,7 +43,8 @@ import {
   FaEye, // For View Attendance
   FaCreditCard, // For Leave Allocation
   FaPaperPlane, // For Leave Apply
-  FaMoneyCheckAlt, // NEW: For Salary Management
+  FaMoneyCheckAlt, // For Salary Management
+  FaCar, // NEW: For Vehicle Management
 } from 'react-icons/fa';
 function AdminPage() {
   const navigate = useNavigate();
@@ -63,7 +62,7 @@ function AdminPage() {
   const [isScheduleOpen, setIsScheduleOpen] = useState(false); // State for Schedule submenu under Employee
   const [isAttendanceOpen, setIsAttendanceOpen] = useState(false); // State for Attendance submenu under Employee
   const [isLeaveOpen, setIsLeaveOpen] = useState(false); // State for Leave Management submenu under Employee
-  const [isSalaryOpen, setIsSalaryOpen] = useState(false); // NEW: State for Salary Management submenu under Employee
+  const [isSalaryOpen, setIsSalaryOpen] = useState(false); // State for Salary Management submenu under Employee
   const [importFile, setImportFile] = useState(null);
   const [message, setMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -273,8 +272,8 @@ function AdminPage() {
   const handleSearchChange = (e) => {
     setSearchQuery(e.target.value);
   };
-  // Menu items - Added Salary Management submenu with Salary Receipt and Salary Receipt List
-  // Removed direct 'Salary Slip' and placed it under Salary Management
+  // Menu items - Added Vehicle Management as direct child under Employee
+  // All submenus preserved
   const masterMenuItems = [
     {
       icon: <FaUsers />,
@@ -311,6 +310,10 @@ function AdminPage() {
         // UPDATED: Employee Designations and Employee Types (plural paths)
         { icon: <FaBriefcase />, text: 'Employee Designations', path: '/employee-designations' },
         { icon: <FaIdCard />, text: 'Employee Types', path: '/employee-types' },
+        // UPDATED: Employee Departments (direct child, plural path)
+        { icon: <FaBuilding />, text: 'Employee Departments', path: '/employee-departments' },
+        // NEW: Vehicle Management (direct child, plural path)
+        { icon: <FaCar />, text: 'Vehicle Management', path: '/vehicle-management' },
         // NEW: Schedule submenu
         {
           icon: <FaClock />,

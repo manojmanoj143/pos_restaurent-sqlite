@@ -318,6 +318,7 @@ const ScheduleMaster = () => {
   const [error, setError] = useState(null);
   const [message, setMessage] = useState('');
   const [editingId, setEditingId] = useState(null);
+  const [departments, setDepartments] = useState([]); // NEW: Departments state
 
   // Format Toggle State
   const [use24Hour, setUse24Hour] = useState(false); // Default to 12h
@@ -326,6 +327,7 @@ const ScheduleMaster = () => {
     schedule_name: '',
     time_slots: [{ start_time: '', end_time: '', is_overnight: false }],
     description: '',
+    department: '', // NEW: Department field
   });
   const [baseUrl, setBaseUrl] = useState(null);
 
@@ -333,6 +335,7 @@ const ScheduleMaster = () => {
 
   const [columnOrder, setColumnOrder] = useState([
     { key: "scheduleName", label: "Shift Name", align: "left" },
+    { key: "department", label: "Department", align: "left" }, // NEW: Default column
     { key: "timeSlots", label: "Time Slots", align: "left" },
     { key: "description", label: "Description", align: "left" },
     { key: "actions", label: "Actions", align: "center" },
@@ -343,6 +346,7 @@ const ScheduleMaster = () => {
   const possibleColumns = [
     { key: "id", label: "ID", align: "left" },
     { key: "scheduleName", label: "Shift Name", align: "left" },
+    { key: "department", label: "Department", align: "left" },
     { key: "timeSlots", label: "Time Slots", align: "left" },
     { key: "description", label: "Description", align: "left" },
     { key: "created_at", label: "Created At", align: "left" },
@@ -384,6 +388,8 @@ const ScheduleMaster = () => {
   useEffect(() => {
     if (baseUrl !== null) {
       fetchShifts();
+      // Fetch departments
+      axios.get(`${baseUrl}/api/departments`).then(res => setDepartments(res.data)).catch(err => console.error(err));
     }
   }, [baseUrl]);
 
@@ -460,6 +466,7 @@ const ScheduleMaster = () => {
         schedule_name: '',
         time_slots: [{ start_time: '', end_time: '', is_overnight: false }],
         description: '',
+        department: '',
       });
       fetchShifts();
       setTimeout(() => setMessage(''), 3000);
@@ -474,6 +481,7 @@ const ScheduleMaster = () => {
       schedule_name: shift.schedule_name || '',
       time_slots: shift.time_slots || [{ start_time: '', end_time: '', is_overnight: false }],
       description: shift.description || '',
+      department: shift.department || '',
     });
     setEditingId(shift.id || shift._id);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -524,6 +532,7 @@ const ScheduleMaster = () => {
         schedule_name: '',
         time_slots: [{ start_time: '', end_time: '', is_overnight: false }],
         description: '',
+        department: '',
       });
       fetchShifts();
       setTimeout(() => setMessage(''), 3000);
@@ -635,6 +644,8 @@ const ScheduleMaster = () => {
     switch (col.key) {
       case 'scheduleName':
         return shift.schedule_name;
+      case 'department':
+        return shift.department || '-';
       case 'timeSlots':
         if (!shift.time_slots || shift.time_slots.length === 0) return 'N/A';
         return (
@@ -751,6 +762,13 @@ const ScheduleMaster = () => {
             <div>
               <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#2c3e50' }}>Shift Name</label>
               <input type="text" name="schedule_name" placeholder="e.g. Morning Shift" value={formData.schedule_name} onChange={handleInputChange} style={{ width: '100%', padding: '12px', border: '1px solid #3498db', borderRadius: '10px', background: '#f8f9fa' }} required />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#2c3e50' }}>Department</label>
+              <select name="department" value={formData.department} onChange={handleInputChange} style={{ width: '100%', padding: '12px', border: '1px solid #3498db', borderRadius: '10px', background: '#f8f9fa' }}>
+                <option value="">All Departments (Global)</option>
+                {departments.map(d => <option key={d.id || d._id} value={d.name}>{d.name}</option>)}
+              </select>
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#2c3e50' }}>Time Slots (Add multiple for multi-shift days)</label>

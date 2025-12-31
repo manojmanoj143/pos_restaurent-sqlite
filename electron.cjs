@@ -87,8 +87,7 @@ if (!gotTheLock) {
     const userUploads = path.join(app.getPath('userData'), 'Uploads');
     console.log(`Flask path: ${flaskExePath}`);
     console.log(`Pre-existing uploads: ${preExistingUploads}`);
-    console.log(`User uploads: {userUploads}`);
-   
+    console.log(`User uploads: ${userUploads}`);
     if (!fsSync.existsSync(flaskExePath)) {
       console.error(`Flask executable not found at ${flaskExePath}.`);
       // If flask isn't found, the app is useless. Quit.
@@ -99,7 +98,7 @@ if (!gotTheLock) {
       fsSync.mkdirSync(userUploads, { recursive: true });
       if (fsSync.existsSync(preExistingUploads)) {
         fsSync.cpSync(preExistingUploads, userUploads, { recursive: true });
-        console.log(`Copied uploads to {userUploads}`);
+        console.log(`Copied uploads to ${userUploads}`);
       }
     }
     flaskProcess = execFile(
@@ -107,17 +106,17 @@ if (!gotTheLock) {
       [],
       { env: { ...process.env, UPLOAD_FOLDER: userUploads }, windowsHide: true },
       (err, stdout, stderr) => {
-        if (err) console.error(`Flask error: {err.message}`);
-        if (stdout) console.log(`Flask stdout: {stdout}`);
-        if (stderr) console.error(`Flask stderr: {stderr}`);
+        if (err) console.error(`Flask error: ${err.message}`);
+        if (stdout) console.log(`Flask stdout: ${stdout}`);
+        if (stderr) console.error(`Flask stderr: ${stderr}`);
       }
     );
     flaskProcess.on('spawn', () => console.log('Flask spawned'));
     flaskProcess.on('error', (err) => {
-      console.error(`Flask failed: {err.message}`);
+      console.error(`Flask failed: ${err.message}`);
       app.quit();
     });
-    flaskProcess.on('exit', (code) => console.log(`Flask exited: {code}`));
+    flaskProcess.on('exit', (code) => console.log(`Flask exited: ${code}`));
   }
   // Create main window
   function createWindow() {
@@ -240,7 +239,83 @@ if (!gotTheLock) {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
   app.whenReady().then(() => {
-    // The logic to check for mode and start MongoDB has been removed.
+    // Version change data reset logic - ENHANCED FOR ROBUSTNESS: Added file lock checks, better UTF-8 handling, and optional post-reset init.
+    // On version change, clear all userData contents except version.txt to reset DB, configs, etc.
+    // This ensures no old data persists after uninstall/install or update.
+    // For fresh installs, creates empty userData and initializes defaults via Flask.
+    const appDataPath = app.getPath("userData");
+    const versionFile = path.join(appDataPath, "version.txt");
+    const currentVersion = app.getVersion();
+ 
+    // Ensure appDataPath exists (for fresh installs)
+    if (!fsSync.existsSync(appDataPath)) {
+      fsSync.mkdirSync(appDataPath, { recursive: true });
+      console.log('Fresh install: Created userData directory.');
+    }
+ 
+    let oldVersion = null;
+    let resetPerformed = false;
+    if (fsSync.existsSync(versionFile)) {
+      try {
+        // Read with UTF-8 to avoid encoding issues
+        oldVersion = fsSync.readFileSync(versionFile, { encoding: 'utf8' }).trim();
+        if (oldVersion !== currentVersion) {
+          console.log(`Version changed from ${oldVersion} to ${currentVersion}. Resetting all data for fresh start.`);
+          // Clear all files/directories in userData except version.txt
+          // Enhanced: Check for file locks and retry deletions
+          const files = fsSync.readdirSync(appDataPath);
+          let deleteErrors = 0;
+          for (const file of files) {
+            if (file !== 'version.txt') {
+              const filePath = path.join(appDataPath, file);
+              try {
+                // Simple lock check: Try to open exclusively
+                fsSync.openSync(filePath, 'r+');
+                fsSync.closeSync(0); // Close the handle
+                if (fsSync.statSync(filePath).isDirectory()) {
+                  fsSync.rmSync(filePath, { recursive: true, force: true, maxRetries: 3 });
+                  console.log(`Deleted directory: ${filePath}`);
+                } else {
+                  fsSync.unlinkSync(filePath);
+                  console.log(`Deleted file: ${filePath}`);
+                }
+              } catch (deleteErr) {
+                console.error(`Failed to delete ${filePath}: ${deleteErr.message}. Possible lock/perms issue.`);
+                deleteErrors++;
+                // Optional: Force-kill processes locking file (Windows-specific, advanced)
+                // execSync(`handle.exe -c "${filePath}" -y`, { stdio: 'ignore' }); // Requires handle.exe tool
+              }
+            }
+          }
+          if (deleteErrors > 0) {
+            console.warn(`${deleteErrors} files failed to delete. Manual cleanup may be needed.`);
+          }
+          console.log('All old data cleared. App will initialize as new.');
+          resetPerformed = true;
+          // OPTIONAL: Add migration or init API call here if needed after reset (uncomment after Flask starts)
+          // setTimeout(async () => {
+          // try { await axios.post('http://127.0.0.1:8000/api/init-fresh-db'); } catch (e) { console.error('Init API failed:', e.message); }
+          // }, 5000);
+        } else {
+          console.log(`Version unchanged: ${currentVersion}. No reset needed.`);
+        }
+      } catch (readErr) {
+        console.error(`Failed to read version.txt: ${readErr.message}. Treating as fresh install.`);
+        oldVersion = null;
+      }
+    } else {
+      console.log('Fresh install detected. Initializing with empty defaults.');
+    }
+ 
+    // Always save current version (creates/updates file safely with UTF-8)
+    try {
+      fsSync.writeFileSync(versionFile, currentVersion, { encoding: 'utf8' });
+      console.log(`Current version saved: ${currentVersion}`);
+    } catch (writeErr) {
+      console.error(`Failed to write version.txt: ${writeErr.message}. Perms issue?`);
+    }
+ 
+    // FIXED: The logic to check for mode and start MongoDB has been removed.
     // The application now assumes an external MongoDB is available if needed by Flask.
     startFlaskServer();
     createWindow();

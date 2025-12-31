@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
-import { FaPlus, FaEdit, FaTrash, FaSearch, FaArrowLeft, FaUsersCog } from 'react-icons/fa';
+import { FaPlus, FaEdit, FaTrash, FaSearch, FaArrowLeft, FaUsersCog, FaBuilding } from 'react-icons/fa';
+
 const EmployeeDesignation = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [designations, setDesignations] = useState([]);
+  const [departmentsList, setDepartmentsList] = useState([]); // New state for departments
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [message, setMessage] = useState('');
@@ -14,6 +16,7 @@ const EmployeeDesignation = () => {
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({ name: '', description: '', reportTo: '' });
   const [baseUrl, setBaseUrl] = useState('');
+
   // Check if coming from AddEmployee to show form by default
   useEffect(() => {
     if (location.state?.fromAddEmployee) {
@@ -21,6 +24,7 @@ const EmployeeDesignation = () => {
       setEditingId(null); // Ensure create mode
     }
   }, [location.state]);
+
   // Fetch baseUrl
   useEffect(() => {
     const fetchConfig = async () => {
@@ -39,6 +43,7 @@ const EmployeeDesignation = () => {
     };
     fetchConfig();
   }, []);
+
   // Fetch designations
   const fetchDesignations = async () => {
     if (!baseUrl) return;
@@ -54,22 +59,38 @@ const EmployeeDesignation = () => {
       setLoading(false);
     }
   };
+
+  // New: Fetch departments for Report To dropdown
+  const fetchDepartments = async () => {
+    if (!baseUrl) return;
+    try {
+      const response = await axios.get(`${baseUrl}/api/departments`);
+      setDepartmentsList(response.data);
+    } catch (err) {
+      console.error('Failed to fetch departments:', err);
+    }
+  };
+
   useEffect(() => {
     if (baseUrl) {
       fetchDesignations();
+      fetchDepartments(); // Fetch departments when baseUrl is ready
     }
   }, [baseUrl]);
+
   // Handle search - shows all when empty, filters on name/description (case-insensitive)
   const filteredDesignations = designations.filter(designation =>
     searchQuery === '' ||
     designation.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     designation.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
   // Handle form change
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
+
   // Validate form
   const validateForm = () => {
     if (!formData.name.trim()) {
@@ -83,6 +104,7 @@ const EmployeeDesignation = () => {
     setError(null);
     return true;
   };
+
   // Handle submit
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -112,6 +134,7 @@ const EmployeeDesignation = () => {
       setLoading(false);
     }
   };
+
   // Handle edit
   const handleEdit = (designation) => {
     setFormData({ name: designation.name, description: designation.description, reportTo: designation.reportTo || '' });
@@ -120,6 +143,7 @@ const EmployeeDesignation = () => {
     setError(null);
     setMessage('');
   };
+
   // Handle delete - No confirmation popup; direct action with warning via error message on failure
   const handleDelete = async (id) => {
     try {
@@ -130,6 +154,7 @@ const EmployeeDesignation = () => {
       setError(err.response?.data?.error || `Failed to delete designation: ${err.message}`);
     }
   };
+
   // Handle cancel
   const handleCancel = () => {
     setShowForm(false);
@@ -142,6 +167,7 @@ const EmployeeDesignation = () => {
       navigate('/add-employee', { state: { formData: location.state.formData } });
     }
   };
+
   if (loading && designations.length === 0) {
     return (
       <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #ffffff 0%, #3498db 100%)', padding: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -149,6 +175,7 @@ const EmployeeDesignation = () => {
       </div>
     );
   }
+
   return (
     <div style={{
       minHeight: '100vh',
@@ -368,7 +395,7 @@ const EmployeeDesignation = () => {
                 />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px' }}>Report To</label>
+                <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px' }}>Report To Department</label>
                 <select
                   name="reportTo"
                   value={formData.reportTo}
@@ -377,11 +404,11 @@ const EmployeeDesignation = () => {
                   onFocus={(e) => e.target.style.borderColor = '#3498db'}
                   onBlur={(e) => e.target.style.borderColor = '#bdc3c7'}
                 >
-                  <option value="">Select Manager/Supervisor</option>
-                  {designations
-                    .filter(d => !editingId || d.id !== editingId) // Exclude self
+                  <option value="">Select Department</option>
+                  {departmentsList
+                    .filter(d => d.is_active) // Only show active departments
                     .map(d => (
-                      <option key={d.id} value={d.name}>{d.name}</option>
+                      <option key={d._id || d.id} value={d.name}>{d.name}</option>
                     ))}
                 </select>
               </div>
@@ -450,7 +477,7 @@ const EmployeeDesignation = () => {
                   <tr style={{ backgroundColor: '#f8f9fa' }}>
                     <th style={{ padding: '15px 10px', border: '1px solid #dee2e6', textAlign: 'left', fontWeight: '600', color: '#2c3e50' }}>Name</th>
                     <th style={{ padding: '15px 10px', border: '1px solid #dee2e6', textAlign: 'left', fontWeight: '600', color: '#2c3e50' }}>Description</th>
-                    <th style={{ padding: '15px 10px', border: '1px solid #dee2e6', textAlign: 'left', fontWeight: '600', color: '#2c3e50' }}>Report To</th>
+                    <th style={{ padding: '15px 10px', border: '1px solid #dee2e6', textAlign: 'left', fontWeight: '600', color: '#2c3e50' }}>Report To Department</th>
                     <th style={{ padding: '15px 10px', border: '1px solid #dee2e6', textAlign: 'center', fontWeight: '600', color: '#2c3e50' }}>Actions</th>
                   </tr>
                 </thead>
@@ -526,4 +553,5 @@ const EmployeeDesignation = () => {
     </div>
   );
 };
+
 export default EmployeeDesignation;

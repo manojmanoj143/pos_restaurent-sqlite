@@ -1,4 +1,6 @@
-// src/UserRouter.jsx (UPDATED: Added route for /extended-doctype)
+// src/UserRouter.jsx (UPDATED: Added import and route for EmployeeDepartment at /employee-departments.
+// Placed it alongside other employee-related routes for consistency.
+// All previous routes preserved, including the new ones like /extended-doctype, leave management, etc.
 import React from "react";
 import { Route, Routes } from "react-router-dom";
 // Import Pages
@@ -55,6 +57,8 @@ import SalarySlip from "../components/Form/salaryslip";
 // UPDATED: Imports for Employee Designation and Type (plural routes)
 import EmployeeDesignation from "../components/Form/Employeedesignation";
 import EmployeeType from "../components/Form/Employeetype";
+// NEW: Import for Employee Department (plural route)
+import EmployeeDepartment from "../components/Form/Employeedepartment";
 // NEW: Imports for Schedule pages (FIXED: Corrected import path to match file name 'schedulerulemaster.jsx')
 import ScheduleMaster from "../components/Form/schedulemaster";
 import ScheduleRuleMaster from "../components/Form/shedulerulemaster";
@@ -64,11 +68,11 @@ import EmployeeDocType from "../components/Form/employeelistdoctype";
 import HolidayDocType from "../components/Form/holidaydoctype";
 // NEW: Import for Extended DocType
 import ExtendedDocType from "../components/Form/extendeddoctype";
-import LeaveType from "../components/Form/leavetype";           // leavetype.jsx
+import LeaveType from "../components/Form/leavetype"; // leavetype.jsx
 import LeaveAllocation from "../components/Form/leaveallocation"; // leaveallocation.jsx
-import LeaveApply from "../components/Form/leaveapply";           // New page we'll create
+import LeaveApply from "../components/Form/leaveapply"; // New page we'll create
 import SalaryReceiptList from "../components/Form/salaryreceptlist";
-
+import VehicleManagement from "../components/Form/Vechilemanagement";
 const UserRouter = () => {
   return (
     <div className="min-h-screen bg-gray-100">
@@ -111,9 +115,12 @@ const UserRouter = () => {
         <Route path="/attendance" element={<Attendance />} />
         <Route path="/attendance-view" element={<AttendanceView />} />
         <Route path="/salary-slip" element={<SalarySlip />} />
-        {/* UPDATED: Employee Designation and Type Routes (plural, no /admin prefix) */}
+        {/* UPDATED: Employee Designation, Type, and NEW Department Routes (plural, no /admin prefix) */}
         <Route path="/employee-designations" element={<EmployeeDesignation />} />
         <Route path="/employee-types" element={<EmployeeType />} />
+        <Route path="/employee-departments" element={<EmployeeDepartment />} />
+        {/* NEW: Vehicle Management Route (added under Employee routes) */}
+        <Route path="/vehicle-management" element={<VehicleManagement />} />
         {/* NEW: Schedule Routes */}
         <Route path="/schedule-master" element={<ScheduleMaster />} />
         <Route path="/schedule-rule-master" element={<ScheduleRuleMaster />} />
@@ -151,5 +158,4 @@ const UserRouter = () => {
     </div>
   );
 };
-
 export default UserRouter;

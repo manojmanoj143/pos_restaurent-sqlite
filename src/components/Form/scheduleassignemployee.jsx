@@ -284,6 +284,7 @@ const ScheduleAssignEmployee = () => {
   const [employees, setEmployees] = useState([]);
   const [schedules, setSchedules] = useState([]);
   const [shifts, setShifts] = useState([]);
+  const [leaves, setLeaves] = useState([]); // NEW: Leaves state
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [message, setMessage] = useState('');
@@ -302,8 +303,15 @@ const ScheduleAssignEmployee = () => {
     end_time: '',
     extended_start: '',
     extended_end: '',
-    shift_id: ''
+    extended_start: '',
+    extended_end: '',
+    shift_id: '',
+    // NEW: Substitute Fields
+    substitute_employee_id: '',
   });
+
+  // NEW: State for available substitutes
+  const [availableSubstitutes, setAvailableSubstitutes] = useState([]);
 
   const [selectedScheduleDetails, setSelectedScheduleDetails] = useState(null);
   const [formData, setFormData] = useState({
@@ -336,17 +344,19 @@ const ScheduleAssignEmployee = () => {
     if (baseUrl === null) return;
     setLoading(true);
     try {
-      const [assignRes, empRes, schedRes, shiftsRes] = await Promise.all([
+      const [assignRes, empRes, schedRes, shiftsRes, leavesRes] = await Promise.all([
         axios.get(`${baseUrl}/api/schedule-assignments`),
         axios.get(`${baseUrl}/api/add-employee`),
         axios.get(`${baseUrl}/api/schedule-rules`),
-        axios.get(`${baseUrl}/api/schedules`)
+        axios.get(`${baseUrl}/api/schedules`),
+        axios.get(`${baseUrl}/api/leave-applications`) // NEW: Fetch leaves
       ]);
       setAssignments(assignRes.data || []);
       const empData = Array.isArray(empRes.data) ? empRes.data : (empRes.data?.data || []);
       setEmployees(empData);
       setSchedules(schedRes.data || []);
       setShifts(shiftsRes.data || []);
+      setLeaves(leavesRes.data || []); // Store leaves
       setError(null);
     } catch (err) {
       console.error("Fetch error:", err);
@@ -437,6 +447,37 @@ const ScheduleAssignEmployee = () => {
     }
     return Array.from(combined.values()).sort((a, b) => new Date(a.date) - new Date(b.date));
   }, [selectedScheduleDetails, formData.special_day_assignments]);
+
+  // NEW: Filter Logic
+  const filteredEmployees = useMemo(() => {
+    // If a schedule is selected, filter employees by that schedule's shift department
+    if (formData.schedule_id) {
+      const rule = schedules.find(s => String(s._id) === String(formData.schedule_id));
+      if (rule) {
+        const shift = shifts.find(s => String(s._id) === String(rule.shift_id));
+        if (shift && shift.department) {
+          return employees.filter(e => e.department === shift.department);
+        }
+      }
+    }
+    return employees;
+  }, [employees, formData.schedule_id, schedules, shifts]);
+
+  const filteredSchedules = useMemo(() => {
+    // If an employee is selected, filter schedules by that employee's department
+    if (formData.employee_id) {
+      const empId = String(formData.employee_id).trim();
+      const emp = employees.find(e => String(e.id || e._id || '').trim() === empId);
+      if (emp && emp.department) {
+        return schedules.filter(s => {
+          const shift = shifts.find(sh => String(sh._id) === String(s.shift_id));
+          // Show if shift has NO department (Global) or MATCHES employee department
+          return !shift || !shift.department || shift.department === emp.department;
+        });
+      }
+    }
+    return schedules;
+  }, [schedules, formData.employee_id, employees, shifts]);
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -536,7 +577,8 @@ const ScheduleAssignEmployee = () => {
     const shift = shifts.find(s => String(s._id).trim() === idStr);
     if (!shift) return 'Unknown Shift';
     const slotsStr = shift.time_slots ? shift.time_slots.map(t => `${t.start_time}-${t.end_time}${t.is_overnight ? ' (O)' : ''}`).join(', ') : '';
-    return `${shift.schedule_name} (${slotsStr})`;
+    const deptStr = shift.department ? ` [${shift.department}]` : '';
+    return `${shift.schedule_name} (${slotsStr})${deptStr}`;
   };
 
   const getRuleName = (ruleId) => {
@@ -575,6 +617,20 @@ const ScheduleAssignEmployee = () => {
     const dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dateObj.getDay()];
 
     const special = displayedSpecialDays.find(sd => sd.date === dateStr);
+
+    // Check for Approved Leave
+    if (formData.employee_id) {
+      const approvedLeave = leaves.find(l =>
+        l.employee_id === formData.employee_id &&
+        l.status === 'APPROVED' &&
+        l.from_date <= dateStr && // Assuming single date or range logic
+        l.to_date >= dateStr
+      );
+      if (approvedLeave) {
+        return { type: 'Leave', color: '#f39c12', tooltip: `On Leave: ${approvedLeave.leave_name || 'Approved Leave'}` };
+      }
+    }
+
     if (special) {
       if (special.type === 'Holiday') {
         return { type: 'Holiday', color: '#e74c3c', tooltip: `Holiday: ${special.description}` };
@@ -597,12 +653,67 @@ const ScheduleAssignEmployee = () => {
     return { type: 'Working', color: '#2ecc71', tooltip: 'Regular Shift' };
   };
 
+  const getAvailableSubstitutes = (dateStr, department) => {
+    return employees.filter(e => {
+      // 1. Same Department
+      if (e.department !== department) return false;
+      // 2. Exclude Current Employee
+      if (String(e.id || e._id) === String(formData.employee_id)) return false;
+      // 3. Exclude On Leave
+      const onLeave = leaves.some(l =>
+        l.employee_id === (e.id || e._id) &&
+        l.status === 'APPROVED' &&
+        l.from_date <= dateStr &&
+        l.to_date >= dateStr
+      );
+      if (onLeave) return false;
+      // 4. Exclude Already Assigned (Basic Check: Has any active assignment covering this date?)
+      // Note: This is strict. It excludes anyone with an active assignment, even if it's their Off day.
+      // User requested: "Exclude employees already assigned"
+      const isAssigned = assignments.some(a =>
+        String(a.employee_id) === String(e.id || e._id) &&
+        a.is_active &&
+        a.assigned_date <= dateStr
+      );
+      if (isAssigned) return false;
+
+      return true;
+    });
+  };
+
   const handleDayClick = (day) => {
     const year = calendarMonth.getFullYear();
     const month = String(calendarMonth.getMonth() + 1).padStart(2, '0');
     const dayStr = String(day).padStart(2, '0');
+    const fullDate = `${year}-${month}-${dayStr}`;
+
+    const status = getDayStatus(day);
+
+    if (status && status.type === 'Leave') {
+      // Substitute Mode
+      const currentEmp = employees.find(e => String(e.id || e._id) === String(formData.employee_id));
+      const dept = currentEmp ? currentEmp.department : '';
+      const subs = getAvailableSubstitutes(fullDate, dept);
+
+      setAvailableSubstitutes(subs);
+      setModalData({
+        date: fullDate,
+        type: 'Substitute',
+        description: `Substitution for ${currentEmp ? currentEmp.name : 'Employee'}`,
+        scope: 'employee',
+        start_time: '',
+        end_time: '',
+        extended_start: '',
+        extended_end: '',
+        shift_id: '',
+        substitute_employee_id: ''
+      });
+      setShowModal(true);
+      return;
+    }
+
     setModalData({
-      date: `${year}-${month}-${dayStr}`,
+      date: fullDate,
       type: 'Holiday',
       description: '',
       scope: 'employee',
@@ -610,7 +721,8 @@ const ScheduleAssignEmployee = () => {
       end_time: '',
       extended_start: '',
       extended_end: '',
-      shift_id: ''
+      shift_id: '',
+      substitute_employee_id: ''
     });
     setShowModal(true);
   };
@@ -636,6 +748,28 @@ const ScheduleAssignEmployee = () => {
       newSpecialDay.end_time = modalData.end_time;
     } else if (modalData.type === 'Special-Shift') {
       newSpecialDay.shift_id = modalData.shift_id;
+    } else if (modalData.type === 'Substitute') {
+      // Handle Substitute Assignment
+      if (!modalData.substitute_employee_id) {
+        alert("Please select a substitute employee.");
+        return;
+      }
+      try {
+        // Create NEW Assignment for Substitute
+        await axios.post(`${baseUrl}/api/schedule-assignments`, {
+          employee_id: modalData.substitute_employee_id,
+          schedule_id: formData.schedule_id, // Assign same schedule
+          assigned_date: modalData.date, // Start from this date
+          is_active: true,
+          notes: `Substitute for ${getEmpName(formData.employee_id)} on ${modalData.date}`
+        });
+        setMessage(`Substitute Assigned Successfully!`);
+        fetchData();
+      } catch (err) {
+        setError("Failed to assign substitute: " + err.message);
+      }
+      setShowModal(false);
+      return;
     }
 
     if (modalData.scope === 'master') {
@@ -719,6 +853,7 @@ const ScheduleAssignEmployee = () => {
           {grid}
         </div>
         <div style={{ marginTop: '10px', display: 'flex', gap: '15px', fontSize: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '10px', height: '10px', background: '#f39c12', borderRadius: '50%' }}></div> On Leave</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '10px', height: '10px', background: '#e74c3c', borderRadius: '50%' }}></div> Off/Holiday</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '10px', height: '10px', background: '#e67e22', borderRadius: '50%' }}></div> Extended</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '10px', height: '10px', background: '#9b59b6', borderRadius: '50%' }}></div> Half-Day</div>
@@ -770,9 +905,9 @@ const ScheduleAssignEmployee = () => {
                   <label style={labelStyle}>Select Employee</label>
                   <select required name="employee_id" value={formData.employee_id} onChange={handleInputChange} style={inputStyle}>
                     <option value="">-- Choose Employee --</option>
-                    {employees.map(e => {
+                    {filteredEmployees.map(e => {
                       const empId = String(e.id || e._id || '').trim();
-                      return <option key={empId} value={empId}>{e.name || e.employeeName || 'Unnamed'} ({e.employeeDesignation || 'N/A'})</option>;
+                      return <option key={empId} value={empId}>{e.name || e.employeeName || 'Unnamed'} ({e.employeeDesignation || 'N/A'}) {e.department ? `- ${e.department}` : ''}</option>;
                     })}
                   </select>
                 </div>
@@ -780,7 +915,7 @@ const ScheduleAssignEmployee = () => {
                   <label style={labelStyle}>Select Schedule Rule</label>
                   <select required name="schedule_id" value={formData.schedule_id} onChange={handleInputChange} style={inputStyle}>
                     <option value="">-- Choose Schedule --</option>
-                    {schedules.map(s => (
+                    {filteredSchedules.map(s => (
                       <option key={s._id} value={s._id}>{getRuleName(s._id)}</option>
                     ))}
                   </select>
@@ -926,15 +1061,48 @@ const ScheduleAssignEmployee = () => {
                 </div>
               </div>
 
-              <div>
-                <label style={labelStyle}>Type</label>
-                <select value={modalData.type} onChange={(e) => setModalData({ ...modalData, type: e.target.value })} style={inputStyle}>
-                  <option value="Holiday">Holiday</option>
-                  <option value="Extended">Extended Hours</option>
-                  <option value="Half-Day">Half Day</option>
-                  <option value="Special-Shift">Special Shift</option>
-                </select>
-              </div>
+              {modalData.type === 'Substitute' && (
+                <>
+                  <div style={{ marginBottom: '15px' }}>
+                    <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Original Employee</label>
+                    <input type="text" readOnly value={modalData.description.replace('Substitution for ', '')} style={{ ...inputStyle, background: '#e9ecef' }} />
+                  </div>
+                  <div style={{ marginBottom: '15px' }}>
+                    <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Department</label>
+                    <input type="text" readOnly value={employees.find(e => String(e.id || e._id) === String(formData.employee_id))?.department || 'N/A'} style={{ ...inputStyle, background: '#e9ecef' }} />
+                  </div>
+                  <div style={{ marginBottom: '15px' }}>
+                    <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Assign Substitute</label>
+                    <select
+                      style={inputStyle}
+                      value={modalData.substitute_employee_id}
+                      onChange={(e) => setModalData({ ...modalData, substitute_employee_id: e.target.value })}
+                    >
+                      <option value="">-- Select Substitute --</option>
+                      {availableSubstitutes.map(emp => (
+                        <option key={emp.id || emp._id} value={emp.id || emp._id}>
+                          {emp.name || emp.employeeName}
+                        </option>
+                      ))}
+                    </select>
+                    {availableSubstitutes.length === 0 && (
+                      <p style={{ color: '#e74c3c', fontSize: '0.85rem', marginTop: '5px' }}>No available employees found in this department.</p>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {modalData.type !== 'Substitute' && (
+                <div>
+                  <label style={labelStyle}>Type</label>
+                  <select value={modalData.type} onChange={(e) => setModalData({ ...modalData, type: e.target.value })} style={inputStyle}>
+                    <option value="Holiday">Holiday</option>
+                    <option value="Extended">Extended Hours</option>
+                    <option value="Half-Day">Half Day</option>
+                    <option value="Special-Shift">Special Shift</option>
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label style={labelStyle}>Description / Reason</label>

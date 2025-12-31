@@ -4,10 +4,12 @@
 // Also ensures special days display from assignments in modal. Table columns for shiftTiming and specialDays are optional via column management.
 // UPDATED: Removed salutation and dateOfBirth from default columns; they are available in possibleColumns for optional addition.
 // UPDATED: Handle multiple time_slots in shifts for shiftTiming display in table and modal (split shifts).
+// NEW: Added Delivery Profile section in details modal to display linked delivery employee details (secretKey, vehicleNumber, role, etc.) if deliveryProfile exists in employee data.
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { FaUserTie, FaArrowLeft, FaEdit, FaTrash, FaPlus, FaTimes, FaClock, FaSearch, FaFilter, FaEye, FaCalendarCheck, FaGift } from 'react-icons/fa';
+import { FaUserTie, FaArrowLeft, FaEdit, FaTrash, FaPlus, FaTimes, FaClock, FaSearch, FaFilter, FaEye, FaCalendarCheck, FaGift, FaTruck, FaKey } from 'react-icons/fa';
+
 const EmployeeList = () => {
   const navigate = useNavigate();
   const [employeesList, setEmployeesList] = useState([]);
@@ -245,8 +247,17 @@ const EmployeeList = () => {
   const handleEditEmployee = (emp) => {
     navigate('/add-employee', { state: { editingEmployee: emp } });
   };
-  const handleViewDetails = (emp) => {
-    setDetailsEmployee(emp);
+  const handleViewDetails = async (emp) => {
+    // Fetch full details to ensure deliveryProfile is included (backend provides it in GET /api/add-employee/<id>)
+    try {
+      const url = baseUrl ? `${baseUrl}/api/add-employee/${emp._id}` : `/api/add-employee/${emp._id}`;
+      const response = await axios.get(url);
+      const fullEmp = response.data;
+      setDetailsEmployee(fullEmp);
+    } catch (err) {
+      console.error('Error fetching employee details:', err);
+      setDetailsEmployee(emp); // Fallback to cached data
+    }
     setShowDetailsModal(true);
   };
   const handleDeleteEmployee = (id) => {
@@ -357,7 +368,7 @@ const EmployeeList = () => {
     if (!shift) return 'N/A';
     if (shift.time_slots && shift.time_slots.length > 0) {
       // Multiple slots (split shift)
-      const slotStr = shift.time_slots.map(s => 
+      const slotStr = shift.time_slots.map(s =>
         `${s.start_time}-${s.end_time}${s.is_overnight ? ' (O)' : ''}`
       ).join(', ');
       return `${shift.schedule_name} (${slotStr})`;
@@ -1096,6 +1107,7 @@ const EmployeeList = () => {
         )}
       </div>
       {/* Employee Details Modal - UPDATED: Added Special Days section and Shift Timing from active assignment - Handle time_slots */}
+      {/* NEW: Added Delivery Profile section to display linked delivery details if deliveryProfile exists */}
       {showDetailsModal && detailsEmployee && (
         <div
           style={{
@@ -1226,6 +1238,26 @@ const EmployeeList = () => {
                     </div>
                   </div>
                 </div>
+                {/* NEW: Delivery Profile Section - Displays if deliveryProfile exists */}
+                {detailsEmployee.deliveryProfile && (
+                  <div style={{ background: 'white', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
+                    <h4 style={{ color: '#e67e22', borderBottom: '2px solid #ecf0f1', paddingBottom: '10px', marginBottom: '15px', marginTop: 0 }}>
+                      <FaTruck style={{ marginRight: '8px' }} /> Delivery Profile
+                    </h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                      <div><strong>Delivery ID:</strong> <p style={{ margin: '5px 0' }}>{detailsEmployee.deliveryProfile.employeeId || 'N/A'}</p></div>
+                      <div><strong>Role:</strong> <p style={{ margin: '5px 0' }}>{detailsEmployee.deliveryProfile.role || 'N/A'}</p></div>
+                      <div><strong>Phone:</strong> <p style={{ margin: '5px 0' }}>{detailsEmployee.deliveryProfile.phoneNumber || 'N/A'}</p></div>
+                      <div><strong>Email:</strong> <p style={{ margin: '5px 0' }}>{detailsEmployee.deliveryProfile.email || 'N/A'}</p></div>
+                      <div><strong>Vehicle Number:</strong> <p style={{ margin: '5px 0', fontWeight: 'bold', color: '#27ae60' }}>{detailsEmployee.deliveryProfile.vehicleNumber || 'N/A'}</p></div>
+                      <div><strong>Secret Key:</strong> <p style={{ margin: '5px 0', fontWeight: 'bold', color: '#e74c3c' }}>{detailsEmployee.deliveryProfile.secretKey || 'N/A'}</p></div>
+                    </div>
+                    <div style={{ marginTop: '15px' }}>
+                      <strong>Created At:</strong>
+                      <p style={{ margin: '5px 0' }}>{detailsEmployee.deliveryProfile.created_at ? new Date(detailsEmployee.deliveryProfile.created_at).toLocaleString() : 'N/A'}</p>
+                    </div>
+                  </div>
+                )}
                 {/* Schedule & Others - UPDATED: Fetch Shift Timing from active assignment, Special Days from assignments - Handle time_slots */}
                 <div style={{ background: 'white', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
                   <h4 style={{ color: '#e67e22', borderBottom: '2px solid #ecf0f1', paddingBottom: '10px', marginBottom: '15px', marginTop: 0 }}>
@@ -1633,4 +1665,5 @@ const EmployeeList = () => {
     </div>
   );
 };
+
 export default EmployeeList;

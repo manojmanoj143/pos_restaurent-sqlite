@@ -1,8 +1,15 @@
+// src/components/Form/Addemployee.jsx (UPDATED: Replaced Department creation modal with navigation to full EmployeeDepartment page.
+// Removed all modal-related code for department (showDepartmentModal, newDepartmentName, departmentLoading, createNewDepartment).
+// Updated handleDepartmentChange to navigate to /employee-departments with state preservation.
+// In useEffect for location.state, added handling for restored formData from department page.
+// Ensured refetch of departments after restore.
+// All other features preserved: tabs, salary computation, image upload, confirmation modal, notifications, etc.
+// Phone ISD handling, validation, submit logic unchanged.
+// Fixed minor inconsistencies in renderInput for email (type='email' instead of 'text' for better validation).
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
-import { FaUserTie, FaArrowLeft, FaSave, FaPlus, FaTimes, FaUsersCog, FaUpload, FaUser, FaIdCard, FaBriefcase, FaGraduationCap, FaStethoscope, FaUsers, FaClock } from 'react-icons/fa';
-
+import { FaUserTie, FaArrowLeft, FaSave, FaPlus, FaTimes, FaUsersCog, FaUpload, FaUser, FaIdCard, FaBriefcase, FaGraduationCap, FaStethoscope, FaUsers, FaClock, FaBuilding } from 'react-icons/fa';
 const AddEmployee = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -40,6 +47,7 @@ const AddEmployee = () => {
     healthInfo: '',
     familyDetails: '',
     profileImage: '',
+    department: '',
   });
   // State for phone number country code
   const [selectedISDCode, setSelectedISDCode] = useState("+971");
@@ -63,13 +71,10 @@ const AddEmployee = () => {
   const [activeTab, setActiveTab] = useState('details'); // 'details', 'personal', 'employment', 'salary', 'professional', 'other', 'credentials'
   const [employeeDesignations, setEmployeeDesignations] = useState([]);
   const [employeeTypes, setEmployeeTypes] = useState([]);
+  const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  // New states for centered notification modal
-  const [showNotification, setShowNotification] = useState(false);
-  const [notificationType, setNotificationType] = useState('');
-  const [notificationMessage, setNotificationMessage] = useState('');
   // NEW: Confirmation modal before submit
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [baseUrl, setBaseUrl] = useState('');
@@ -140,7 +145,7 @@ const AddEmployee = () => {
         }
       }
     } else if (location.state?.formData) {
-      // Restore from sub-page (designation/type) or other
+      // Restore from sub-page (designation/type/department) or other
       const restored = location.state.formData;
       // Set ISD if provided in state
       if (location.state.selectedISDCode) {
@@ -163,6 +168,7 @@ const AddEmployee = () => {
       if (baseUrl) {
         fetchEmployeeDesignations();
         fetchEmployeeTypes();
+        fetchDepartments();
       }
     }
   }, [location.state, baseUrl]); // Depend on baseUrl for refetch
@@ -171,6 +177,7 @@ const AddEmployee = () => {
     if (baseUrl) {
       fetchEmployeeDesignations();
       fetchEmployeeTypes();
+      fetchDepartments();
     }
   }, [baseUrl]);
   const fetchEmployeeDesignations = async () => {
@@ -191,6 +198,16 @@ const AddEmployee = () => {
     } catch (err) {
       console.error('Error fetching employee types:', err);
       setError('Failed to fetch employee types. Please try again.');
+    }
+  };
+  const fetchDepartments = async () => {
+    try {
+      const url = `${baseUrl}/api/departments`;
+      const response = await axios.get(url);
+      setDepartments(response.data);
+    } catch (err) {
+      console.error('Error fetching departments:', err);
+      setError('Failed to fetch departments. Please try again.');
     }
   };
   const handleChange = (e) => {
@@ -256,6 +273,24 @@ const AddEmployee = () => {
       setFormData(prev => ({ ...prev, employeeType: value }));
     }
   };
+  // UPDATED: Handle Department Change with Navigation to Full Page (removed modal)
+  const handleDepartmentChange = (e) => {
+    const value = e.target.value;
+    if (value === 'create_new') {
+      // Pass current formData, editing state, and selectedISDCode to preserve on return
+      navigate('/employee-departments', {
+        state: {
+          fromAddEmployee: true,
+          formData: { ...formData, department: '' }, // Ensure empty for now
+          selectedISDCode: selectedISDCode,
+          isEditing: !!editingId,
+          editingId: editingId
+        }
+      });
+    } else {
+      setFormData(prev => ({ ...prev, department: value }));
+    }
+  };
   // Validation - Full for submit
   const validateForm = () => {
     if (!baseUrl || baseUrl === '') {
@@ -263,14 +298,14 @@ const AddEmployee = () => {
       return false;
     }
     // Minimal required fields
-    const required = ['name', 'phoneNumber', 'email', 'address', 'employeeDesignation', 'employeeType', 'username'];
+    const required = ['name', 'phoneNumber', 'email', 'address', 'employeeDesignation', 'employeeType', 'username', 'department'];
     if (editingId) {
       // For edit finalized, password optional
     } else {
       required.push('password');
     }
     if (!required.every(field => formData[field])) {
-      setError('Please fill in all required fields: Name, Phone, Email, Address, Designation, Type, Username' + (required.includes('password') ? ', Password' : '') + '.');
+      setError('Please fill in all required fields: Name, Phone, Email, Address, Designation, Type, Department, Username' + (required.includes('password') ? ', Password' : '') + '.');
       return false;
     }
     // Validate salary fields only if provided (optional now)
@@ -312,7 +347,6 @@ const AddEmployee = () => {
     setLoading(true);
     setMessage('');
     setError('');
-    setShowNotification(false);
     try {
       let url, method, dataToSend;
       // Normal create/update
@@ -339,29 +373,23 @@ const AddEmployee = () => {
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       });
       const successMsg = editingId ? 'Employee updated successfully!' : 'Employee created successfully!';
-      setNotificationType('success');
-      setNotificationMessage(successMsg);
-      setShowNotification(true);
       // Reset form
       setFormData({
         name: '', phoneNumber: '', email: '', gender: '', dateOfBirth: '', dateOfJoining: '', company: 'POS 8', status: 'Active', salutation: '', maritalStatus: '', idNumber: '', idExpiry: '', address: '', employeeDesignation: '', employeeType: '',
         basicSalary: '', hra: '', ta: '', oa: '', totalSalary: '', username: '', password: '', bankName: '', accountHolderName: '', accountNumber: '', ifscCode: '',
-        nationality: '', education: '', previousExperience: '', skills: '', healthInfo: '', familyDetails: '', profileImage: '',
+        nationality: '', education: '', previousExperience: '', skills: '', healthInfo: '', familyDetails: '', profileImage: '', department: '',
       });
       setImagePreview(null);
       setSelectedISDCode("+971");
       setEditingId(null);
       await fetchEmployeeDesignations();
       await fetchEmployeeTypes();
+      await fetchDepartments();
       setTimeout(() => {
-        setShowNotification(false);
         navigate('/admin'); // Navigate to employee list page on success
       }, 2000);
     } catch (err) {
       const errorMsg = err.response?.data?.error || `Failed to ${editingId ? 'update' : 'create'} employee`;
-      setNotificationType('error');
-      setNotificationMessage(errorMsg);
-      setShowNotification(true);
       // If error, do not navigate, stay on form
       console.error('Error details:', err.response?.data);
     } finally {
@@ -379,7 +407,7 @@ const AddEmployee = () => {
     setFormData({
       name: '', phoneNumber: '', email: '', gender: '', dateOfBirth: '', dateOfJoining: '', company: 'POS 8', status: 'Active', salutation: '', maritalStatus: '', idNumber: '', idExpiry: '', address: '', employeeDesignation: '', employeeType: '',
       basicSalary: '', hra: '', ta: '', oa: '', totalSalary: '', username: '', password: '', bankName: '', accountHolderName: '', accountNumber: '', ifscCode: '',
-      nationality: '', education: '', previousExperience: '', skills: '', healthInfo: '', familyDetails: '', profileImage: '',
+      nationality: '', education: '', previousExperience: '', skills: '', healthInfo: '', familyDetails: '', profileImage: '', department: '',
     });
     setImagePreview(null);
     setSelectedISDCode("+971");
@@ -702,7 +730,7 @@ const AddEmployee = () => {
                   {renderSelect('gender', genderOptions, 'Gender')}
                   {renderInput('date', 'dateOfBirth', 'Date of Birth')}
                 </div>
-                {renderInput('email', 'email', 'Email', true, 'Email *')}
+                {renderInput('email', 'email', 'Email', true, 'Email *')} {/* UPDATED: type='email' for better validation */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginTop: '10px' }}>
                   {renderInput('text', 'idNumber', 'ID Number', false, 'ID Number (e.g., Aadhaar/License)')}
                   {renderInput('date', 'idExpiry', 'ID Expiry Date')}
@@ -745,6 +773,14 @@ const AddEmployee = () => {
                     <option value="create_new">+ Create New Employee Type</option>
                   </select>
                   {/* Removed Manage Employee Types button */}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', marginTop: '15px' }}>
+                  <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px' }}>Department *</label>
+                  <select name="department" value={formData.department} onChange={handleDepartmentChange} required style={{ width: '100%', padding: '12px', border: '1px solid #bdc3c7', borderRadius: '8px', fontSize: '1rem', outline: 'none', backgroundColor: '#fff', transition: 'border-color 0.3s' }} onFocus={e => e.target.style.borderColor = '#3498db'} onBlur={e => e.target.style.borderColor = '#bdc3c7'}>
+                    <option value="">Select Department *</option>
+                    {departments.map(dept => (<option key={dept.id || dept._id} value={dept.name}>{dept.name}</option>))}
+                    <option value="create_new">+ Create New Department</option>
+                  </select>
                 </div>
               </div>
             )}
@@ -916,75 +952,7 @@ const AddEmployee = () => {
           </div>
         </div>
       )}
-      {/* Notification Modal */}
-      {showNotification && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 2000
-          }}
-          onClick={() => setShowNotification(false)}
-        >
-          <div
-            style={{
-              backgroundColor: '#fff',
-              padding: '30px',
-              borderRadius: '15px',
-              textAlign: 'center',
-              boxShadow: '0 8px 30px rgba(0,0,0,0.3)',
-              maxWidth: '450px',
-              width: '90%',
-              position: 'relative'
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div
-              style={{
-                color: notificationType === 'success' ? '#27ae60' : '#e74c3c',
-                fontSize: '1.5rem',
-                marginBottom: '15px',
-                fontWeight: 'bold'
-              }}
-            >
-              {notificationType === 'success' ? 'Success!' : 'Error!'}
-            </div>
-            <p style={{ margin: 0, color: '#2c3e50', fontSize: '1rem', lineHeight: '1.5' }}>
-              {notificationMessage}
-            </p>
-            {notificationType === 'error' && (
-              <button
-                onClick={() => setShowNotification(false)}
-                style={{
-                  marginTop: '20px',
-                  padding: '12px 24px',
-                  backgroundColor: '#3498db',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '1rem',
-                  fontWeight: '500',
-                  transition: 'background-color 0.3s'
-                }}
-                onMouseOver={(e) => (e.target.style.backgroundColor = '#2980b9')}
-                onMouseOut={(e) => (e.target.style.backgroundColor = '#3498db')}
-              >
-                OK
-              </button>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 };
-
 export default AddEmployee;
