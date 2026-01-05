@@ -1,7 +1,7 @@
 // src/components/Form/schedulemaster.jsx
 // FULLY DETAILED: Shift Master page
 // Manages "shift_master" table via /api/schedules endpoint
-// UPDATED: Table Display respects 12/24h toggle.
+// UPDATED: Removed Department Logic (Global Shifts). 
 // Data is ALWAYS stored as "HH:MM AM/PM" (12h format) for backend consistency.
 // The UI (both Inputs and Table) handles conversions dynamically based on toggle state.
 import React, { useState, useEffect, useRef } from 'react';
@@ -65,7 +65,7 @@ const CustomTimePicker = ({ value, onChange, format24 }) => {
     }
   }, [value, format24]);
 
-  // Scroll to selection
+  // Scroll to election
   useEffect(() => {
     if (isOpen) {
       setTimeout(() => {
@@ -318,7 +318,7 @@ const ScheduleMaster = () => {
   const [error, setError] = useState(null);
   const [message, setMessage] = useState('');
   const [editingId, setEditingId] = useState(null);
-  const [departments, setDepartments] = useState([]); // NEW: Departments state
+  // REMOVED: departments state
 
   // Format Toggle State
   const [use24Hour, setUse24Hour] = useState(false); // Default to 12h
@@ -327,7 +327,7 @@ const ScheduleMaster = () => {
     schedule_name: '',
     time_slots: [{ start_time: '', end_time: '', is_overnight: false }],
     description: '',
-    department: '', // NEW: Department field
+    // REMOVED: department field
   });
   const [baseUrl, setBaseUrl] = useState(null);
 
@@ -335,7 +335,7 @@ const ScheduleMaster = () => {
 
   const [columnOrder, setColumnOrder] = useState([
     { key: "scheduleName", label: "Shift Name", align: "left" },
-    { key: "department", label: "Department", align: "left" }, // NEW: Default column
+    // REMOVED: department column
     { key: "timeSlots", label: "Time Slots", align: "left" },
     { key: "description", label: "Description", align: "left" },
     { key: "actions", label: "Actions", align: "center" },
@@ -346,7 +346,7 @@ const ScheduleMaster = () => {
   const possibleColumns = [
     { key: "id", label: "ID", align: "left" },
     { key: "scheduleName", label: "Shift Name", align: "left" },
-    { key: "department", label: "Department", align: "left" },
+    // REMOVED: department column
     { key: "timeSlots", label: "Time Slots", align: "left" },
     { key: "description", label: "Description", align: "left" },
     { key: "created_at", label: "Created At", align: "left" },
@@ -388,8 +388,7 @@ const ScheduleMaster = () => {
   useEffect(() => {
     if (baseUrl !== null) {
       fetchShifts();
-      // Fetch departments
-      axios.get(`${baseUrl}/api/departments`).then(res => setDepartments(res.data)).catch(err => console.error(err));
+      // REMOVED: Fetch departments
     }
   }, [baseUrl]);
 
@@ -466,7 +465,7 @@ const ScheduleMaster = () => {
         schedule_name: '',
         time_slots: [{ start_time: '', end_time: '', is_overnight: false }],
         description: '',
-        department: '',
+        // REMOVED: department
       });
       fetchShifts();
       setTimeout(() => setMessage(''), 3000);
@@ -481,7 +480,7 @@ const ScheduleMaster = () => {
       schedule_name: shift.schedule_name || '',
       time_slots: shift.time_slots || [{ start_time: '', end_time: '', is_overnight: false }],
       description: shift.description || '',
-      department: shift.department || '',
+      // REMOVED: department
     });
     setEditingId(shift.id || shift._id);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -532,7 +531,7 @@ const ScheduleMaster = () => {
         schedule_name: '',
         time_slots: [{ start_time: '', end_time: '', is_overnight: false }],
         description: '',
-        department: '',
+        // REMOVED: department
       });
       fetchShifts();
       setTimeout(() => setMessage(''), 3000);
@@ -644,8 +643,7 @@ const ScheduleMaster = () => {
     switch (col.key) {
       case 'scheduleName':
         return shift.schedule_name;
-      case 'department':
-        return shift.department || '-';
+      // REMOVED: department case
       case 'timeSlots':
         if (!shift.time_slots || shift.time_slots.length === 0) return 'N/A';
         return (
@@ -763,13 +761,8 @@ const ScheduleMaster = () => {
               <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#2c3e50' }}>Shift Name</label>
               <input type="text" name="schedule_name" placeholder="e.g. Morning Shift" value={formData.schedule_name} onChange={handleInputChange} style={{ width: '100%', padding: '12px', border: '1px solid #3498db', borderRadius: '10px', background: '#f8f9fa' }} required />
             </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#2c3e50' }}>Department</label>
-              <select name="department" value={formData.department} onChange={handleInputChange} style={{ width: '100%', padding: '12px', border: '1px solid #3498db', borderRadius: '10px', background: '#f8f9fa' }}>
-                <option value="">All Departments (Global)</option>
-                {departments.map(d => <option key={d.id || d._id} value={d.name}>{d.name}</option>)}
-              </select>
-            </div>
+            {/* REMOVED: Department selection */}
+
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#2c3e50' }}>Time Slots (Add multiple for multi-shift days)</label>
 
@@ -798,106 +791,85 @@ const ScheduleMaster = () => {
                     />
                   </div>
 
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '5px', margin: 0, fontSize: '0.9rem', height: '40px', marginTop: '18px' }}>
-                    <input
-                      type="checkbox"
-                      checked={slot.is_overnight}
-                      onChange={(e) => updateSlot(index, 'is_overnight', e.target.checked)}
-                      style={{ width: '18px', height: '18px' }}
-                    />
-                    Overnight
-                    {slot.is_overnight ? <FaMoon style={{ color: '#8e44ad', fontSize: '1rem' }} /> : <FaSun style={{ color: '#f39c12', fontSize: '1rem' }} />}
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '5px', alignSelf: 'center', cursor: 'pointer', fontSize: '0.9rem' }}>
+                    <input type="checkbox" checked={slot.is_overnight} onChange={(e) => updateSlot(index, 'is_overnight', e.target.checked)} />
+                    Overnight?
                   </label>
+
                   {formData.time_slots.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeSlot(index)}
-                      style={{ padding: '8px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', height: '40px', marginTop: '18px' }}
-                    >
-                      <FaTrash />
+                    <button type="button" onClick={() => removeSlot(index)} style={{ background: '#e74c3c', color: 'white', border: 'none', borderRadius: '50%', width: '25px', height: '25px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', alignSelf: 'center' }}>
+                      <FaTimes />
                     </button>
                   )}
                 </div>
               ))}
-              <button
-                type="button"
-                onClick={addSlot}
-                style={{ background: 'linear-gradient(135deg, #27ae60, #2ecc71)', color: 'white', border: 'none', cursor: 'pointer', padding: '10px 20px', borderRadius: '25px', fontSize: '0.95rem', fontWeight: '600' }}
-              >
-                <FaPlus /> Add Time Slot
+              <button type="button" onClick={addSlot} style={{ background: 'transparent', border: '1px dashed #3498db', color: '#3498db', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <FaPlus /> Add Another Slot
               </button>
             </div>
+
             <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#2c3e50' }}>Description</label>
-              <textarea name="description" placeholder="Optional description" value={formData.description} onChange={handleInputChange} style={{ width: '100%', padding: '12px', border: '1px solid #3498db', borderRadius: '10px', background: '#f8f9fa', minHeight: '80px' }} />
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#2c3e50' }}>Description (Optional)</label>
+              <textarea name="description" value={formData.description} onChange={handleInputChange} style={{ width: '100%', padding: '12px', border: '1px solid #3498db', borderRadius: '10px', background: '#f8f9fa', minHeight: '80px' }} placeholder="Notes about this shift..." />
             </div>
 
-            <button type="submit" style={{ background: 'linear-gradient(135deg, #3498db, #2980b9)', color: 'white', border: 'none', cursor: 'pointer', padding: '12px 24px', borderRadius: '50px', fontSize: '1rem', fontWeight: '600', gridColumn: '1 / -1', boxShadow: '0 4px 8px rgba(52, 152, 219, 0.3)' }}>
-              <FaSave /> {editingId ? 'Update Shift' : 'Add Shift'}
+            <button type="submit" style={{ gridColumn: '1 / -1', padding: '15px', background: 'linear-gradient(135deg, #27ae60 0%, #2ecc71 100%)', color: 'white', border: 'none', borderRadius: '50px', fontSize: '1.1rem', fontWeight: 'bold', cursor: 'pointer', transition: 'transform 0.2s', boxShadow: '0 4px 15px rgba(46, 204, 113, 0.4)' }}>
+              {editingId ? <><FaSave style={{ marginRight: '8px' }} /> Update Shift</> : <><FaPlus style={{ marginRight: '8px' }} /> Add Shift</>}
             </button>
             {editingId && (
-              <button type="button" onClick={() => { setEditingId(null); setFormData({ schedule_name: '', time_slots: [{ start_time: '', end_time: '', is_overnight: false }], description: '' }); }} style={{ background: '#95a5a6', color: 'white', border: 'none', cursor: 'pointer', padding: '12px 24px', borderRadius: '50px', fontSize: '1rem', fontWeight: '600', gridColumn: '1 / -1' }}>
+              <button type="button" onClick={() => { setEditingId(null); setFormData({ schedule_name: '', time_slots: [{ start_time: '', end_time: '', is_overnight: false }], description: '' }); }} style={{ gridColumn: '1 / -1', padding: '12px', background: '#95a5a6', color: 'white', border: 'none', borderRadius: '50px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '-10px' }}>
                 Cancel Edit
               </button>
             )}
           </form>
         </div>
 
-        {shifts.length > 0 ? (
-          <div style={{ overflowX: 'auto', borderRadius: '10px', boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
+        {/* --- Shift Table --- */}
+        <div style={{ background: '#ffffff', borderRadius: '15px', overflow: 'hidden', border: '1px solid #e9ecef', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)' }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ background: 'linear-gradient(135deg, #3498db, #2980b9)', color: '#ffffff' }}>
+                <tr style={{ background: '#f8f9fa', color: '#2c3e50', borderBottom: '2px solid #e9ecef' }}>
                   {columnOrder.map((col, index) => (
-                    <th key={col.key} style={{ ...thStyle, textAlign: col.align }} draggable={col.key !== "actions"} onDragStart={(e) => col.key !== "actions" && handleDragStart(e, index)} onDragOver={(e) => col.key !== "actions" && handleDragOver(e)} onDrop={(e) => col.key !== "actions" && handleDrop(e, index)} onDoubleClick={(e) => { e.stopPropagation(); if (col.key !== "actions") removeColumn(index); }}>
+                    <th
+                      key={col.key}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, index)}
+                      onDragOver={handleDragOver}
+                      onDrop={(e) => handleDrop(e, index)}
+                      style={{ ...thStyle, cursor: 'move' }}
+                    >
                       {col.label}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {shifts.map((shift, index) => (
-                  <tr key={shift.id || shift._id} style={{ borderBottom: '1px solid #e9ecef', backgroundColor: index % 2 === 0 ? '#f8f9fa' : '#ffffff' }}>
-                    {columnOrder.map((col) => (
-                      <td key={col.key} style={{ ...tdStyle, textAlign: col.align }}>{getCellContent(shift, col)}</td>
-                    ))}
+                {shifts.length > 0 ? (
+                  shifts.map((shift, index) => (
+                    <tr key={shift.id || shift._id} style={{ borderBottom: '1px solid #e9ecef', backgroundColor: index % 2 === 0 ? '#ffffff' : '#fcfcfc', transition: 'background-color 0.2s' }}>
+                      {columnOrder.map(col => (
+                        <td key={col.key} style={{ ...tdStyle, textAlign: col.align || 'left' }}>
+                          {getCellContent(shift, col)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={columnOrder.length} style={{ padding: '40px', textAlign: 'center', color: '#7f8c8d' }}>
+                      No shifts found. Create one above!
+                    </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
-        ) : (
-          <div style={{ textAlign: 'center', color: '#7f8c8d', fontSize: '1.2rem', marginTop: '50px', padding: '40px', background: '#f8f9fa', borderRadius: '10px', border: '2px dashed #bdc3c7' }}>
-            <FaClock style={{ fontSize: '4rem', marginBottom: '20px', color: '#3498db' }} /> No shifts found. Add one above!
-          </div>
-        )}
+        </div>
+
       </div>
 
-      {/* Column Management Modal */}
-      {showColumnModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1050 }}>
-          <div style={{ backgroundColor: '#ffffff', borderRadius: '15px', width: '90%', maxWidth: '600px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ padding: '20px', background: '#95a5a6', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h4 style={{ margin: 0 }}>Manage Table Columns</h4>
-              <button onClick={() => setShowColumnModal(false)} style={{ background: 'transparent', border: 'none', color: 'white', fontSize: '1.5rem', cursor: 'pointer' }}><FaTimes /></button>
-            </div>
-            <div style={{ padding: '25px', overflowY: 'auto', flex: 1 }}>
-              <select value={selectedFieldToAdd} onChange={(e) => setSelectedFieldToAdd(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '15px', borderRadius: '10px', border: '1px solid #3498db' }}>
-                <option value="">Choose a field...</option>
-                {possibleColumns.filter(p => !columnOrder.some(c => c.key === p.key)).map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
-              </select>
-              <select value={selectedPosition} onChange={(e) => setSelectedPosition(Number(e.target.value))} style={{ width: '100%', padding: '10px', marginBottom: '15px', borderRadius: '10px', border: '1px solid #3498db' }}>
-                {Array.from({ length: columnOrder.length + 1 }, (_, i) => (
-                  <option key={i} value={i}>{i === columnOrder.length ? 'At the end' : `Before "${columnOrder[i].label}"`}</option>
-                ))}
-              </select>
-              <button onClick={addColumn} disabled={!selectedFieldToAdd} style={{ width: '100%', padding: '10px', background: '#3498db', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer' }}>Add Column</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Warning Modal */}
+      {/* Delete Confirmation Modal */}
       {deleteId && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1100 }}>
           <div style={{ backgroundColor: '#fff', padding: '30px', borderRadius: '15px', width: '90%', maxWidth: '400px', textAlign: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
@@ -905,22 +877,101 @@ const ScheduleMaster = () => {
             <h3 style={{ color: '#2c3e50', margin: '0 0 15px 0' }}>Confirm Deletion</h3>
             <p style={{ color: '#7f8c8d', marginBottom: '25px' }}>Are you sure you want to delete this shift? This action cannot be undone.</p>
             <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
-              <button
-                onClick={handleExecuteDelete}
-                style={{ padding: '10px 25px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer' }}
-              >
+              <button onClick={handleExecuteDelete} style={{ padding: '10px 25px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer' }}>
                 Yes, Delete
               </button>
-              <button
-                onClick={() => setDeleteId(null)}
-                style={{ padding: '10px 25px', background: '#95a5a6', color: 'white', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer' }}
-              >
+              <button onClick={() => setDeleteId(null)} style={{ padding: '10px 25px', background: '#95a5a6', color: 'white', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer' }}>
                 Cancel
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Column Manager Modal */}
+      {showColumnModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1200 }}>
+          <div style={{ backgroundColor: '#fff', padding: '30px', borderRadius: '15px', width: '90%', maxWidth: '500px', boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>
+              <h3 style={{ margin: 0, color: '#2c3e50' }}>Manage Table Columns</h3>
+              <FaTimes style={{ cursor: 'pointer', color: '#7f8c8d' }} onClick={() => setShowColumnModal(false)} />
+            </div>
+
+            <div style={{ background: '#f8f9fa', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
+              <h4 style={{ marginTop: 0, marginBottom: '10px', color: '#34495e', fontSize: '0.9rem' }}>Add New Column</h4>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <select
+                  value={selectedFieldToAdd}
+                  onChange={(e) => setSelectedFieldToAdd(e.target.value)}
+                  style={{ flex: 1, padding: '8px', borderRadius: '5px', border: '1px solid #bdc3c7' }}
+                >
+                  <option value="">Select Field...</option>
+                  {possibleColumns.filter(p => !columnOrder.some(c => c.key === p.key)).map(p => (
+                    <option key={p.key} value={p.key}>{p.label}</option>
+                  ))}
+                </select>
+                <select
+                  value={selectedPosition}
+                  onChange={(e) => setSelectedPosition(e.target.value)}
+                  style={{ width: '80px', padding: '8px', borderRadius: '5px', border: '1px solid #bdc3c7' }}
+                >
+                  {columnOrder.map((_, i) => (
+                    <option key={i} value={i}>Pos {i + 1}</option>
+                  ))}
+                  <option value={columnOrder.length}>Last</option>
+                </select>
+                <button
+                  onClick={addColumn}
+                  disabled={!selectedFieldToAdd}
+                  style={{ padding: '8px 15px', background: '#3498db', color: 'white', border: 'none', borderRadius: '5px', cursor: selectedFieldToAdd ? 'pointer' : 'not-allowed' }}
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <h4 style={{ marginTop: 0, marginBottom: '10px', color: '#34495e', fontSize: '0.9rem' }}>Current Columns (Drag to Reorder)</h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {columnOrder.map((col, index) => (
+                  <div
+                    key={col.key}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, index)}
+                    onDragOver={handleDragOver}
+                    onDrop={(e) => handleDrop(e, index)}
+                    style={{
+                      padding: '10px',
+                      background: 'white',
+                      border: '1px solid #e0e0e0',
+                      borderRadius: '5px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      cursor: 'move',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                    }}
+                  >
+                    <span>{index + 1}. {col.label}</span>
+                    <FaTimes
+                      style={{ color: '#e74c3c', cursor: 'pointer' }}
+                      title="Remove"
+                      onClick={() => removeColumn(index)}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ marginTop: '20px', textAlign: 'right' }}>
+              <button onClick={() => setShowColumnModal(false)} style={{ padding: '10px 20px', background: '#34495e', color: 'white', border: 'none', borderRadius: '50px', cursor: 'pointer' }}>
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

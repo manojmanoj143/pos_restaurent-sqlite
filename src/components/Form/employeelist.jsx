@@ -75,7 +75,7 @@ const EmployeeList = () => {
     { key: "bankName", label: "Bank Name", align: "left" },
     { key: "accountHolderName", label: "Acc Holder", align: "left" },
     { key: "accountNumber", label: "Acc Number", align: "left" },
-    { key: "ifscCode", label: "IFSC", align: "left" },
+    { key: "branchCode", label: "Branch Code", align: "left" },
     { key: "basicSalary", label: "Basic Salary", align: "right" },
     { key: "hra", label: "HRA", align: "right" },
     { key: "ta", label: "TA", align: "right" },
@@ -1232,7 +1232,7 @@ const EmployeeList = () => {
                   <div style={{ marginTop: '15px' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                       <div><strong>Bank Name:</strong> <p style={{ margin: '5px 0' }}>{detailsEmployee.bankName || 'N/A'}</p></div>
-                      <div><strong>IFSC Code:</strong> <p style={{ margin: '5px 0' }}>{detailsEmployee.ifscCode || 'N/A'}</p></div>
+                      <div><strong>Branch Code:</strong> <p style={{ margin: '5px 0' }}>{detailsEmployee.branchCode || 'N/A'}</p></div>
                       <div style={{ gridColumn: 'span 2' }}><strong>Account Number:</strong> <p style={{ margin: '5px 0' }}>{detailsEmployee.accountNumber || 'N/A'}</p></div>
                       <div style={{ gridColumn: 'span 2' }}><strong>Account Holder:</strong> <p style={{ margin: '5px 0' }}>{detailsEmployee.accountHolderName || 'N/A'}</p></div>
                     </div>

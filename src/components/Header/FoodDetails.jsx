@@ -36,10 +36,50 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
 
   const getCurrencySymbol = (currencyCode) => {
     switch (currencyCode) {
-      case 'INR': return '₹';
-      case 'USD': return '$';
-      case 'EUR': return '€';
-      case 'GBP': return '£';
+      case 'INR': return '₹';        // India
+      case 'USD': return '$';        // USA
+      case 'EUR': return '€';        // Euro
+      case 'GBP': return '£';        // UK
+      case 'AED': return 'د.إ';      // UAE
+
+      // Asia
+      case 'JPY': return '¥';        // Japan
+      case 'CNY': return '¥';        // China
+      case 'SGD': return '$';        // Singapore
+      case 'MYR': return 'RM';       // Malaysia
+      case 'THB': return '฿';        // Thailand
+      case 'IDR': return 'Rp';       // Indonesia
+      case 'KRW': return '₩';        // South Korea
+      case 'PHP': return '₱';        // Philippines
+      case 'PKR': return '₨';        // Pakistan
+      case 'LKR': return 'Rs';       // Sri Lanka
+
+      // Middle East
+      case 'SAR': return '﷼';        // Saudi Arabia
+      case 'QAR': return '﷼';        // Qatar
+      case 'KWD': return 'د.ك';      // Kuwait
+      case 'OMR': return '﷼';        // Oman
+      case 'BHD': return '.د.ب';     // Bahrain
+
+      // Europe (others)
+      case 'CHF': return 'CHF';      // Switzerland
+      case 'SEK': return 'kr';       // Sweden
+      case 'NOK': return 'kr';       // Norway
+      case 'DKK': return 'kr';       // Denmark
+      case 'PLN': return 'zł';       // Poland
+
+      // Americas
+      case 'CAD': return '$';        // Canada
+      case 'AUD': return '$';        // Australia
+      case 'NZD': return '$';        // New Zealand
+      case 'MXN': return '$';        // Mexico
+      case 'BRL': return 'R$';       // Brazil
+
+      // Africa
+      case 'ZAR': return 'R';        // South Africa
+      case 'EGP': return '£';        // Egypt
+      case 'NGN': return '₦';        // Nigeria
+      case 'KES': return 'KSh';
       default: return currencyCode; // Fallback to code if no symbol
     }
   };
@@ -47,7 +87,11 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
   useEffect(() => {
     const storedSettings = JSON.parse(localStorage.getItem('systemSettings'));
     if (storedSettings && storedSettings.currency) {
-      setCurrencySymbol(getCurrencySymbol(storedSettings.currency));
+      if (storedSettings.useCurrencySymbol) {
+        setCurrencySymbol(getCurrencySymbol(storedSettings.currency));
+      } else {
+        setCurrencySymbol(storedSettings.currency);
+      }
     }
   }, []);
 
@@ -119,9 +163,9 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
     if (fetchedItem.variants?.size?.enabled && selectedVariants.size) {
       return (
         selectedVariants.size === 'S' ? fetchedItem.variants.size.small_price :
-        selectedVariants.size === 'M' ? fetchedItem.variants.size.medium_price :
-        selectedVariants.size === 'L' ? fetchedItem.variants.size.large_price :
-        fetchedItem.price_list_rate || 100
+          selectedVariants.size === 'M' ? fetchedItem.variants.size.medium_price :
+            selectedVariants.size === 'L' ? fetchedItem.variants.size.large_price :
+              fetchedItem.price_list_rate || 100
       );
     }
     return fetchedItem.price_list_rate || 100;
@@ -370,9 +414,9 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
       if (addon.size?.enabled && variants.size) {
         price =
           variants.size === 'S' ? addon.size.small_price :
-          variants.size === 'M' ? addon.size.medium_price :
-          variants.size === 'L' ? addon.size.large_price :
-          price;
+            variants.size === 'M' ? addon.size.medium_price :
+              variants.size === 'L' ? addon.size.large_price :
+                price;
       }
       if (addon.cold?.enabled && variants.cold === 'with_ice') {
         price += addon.cold.ice_price || 0;
@@ -382,14 +426,14 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
       }
       const customVariantsPrice = addon.custom_variants?.length > 0
         ? addon.custom_variants.reduce((variantSum, variant) => {
-            if (!variant.enabled) return variantSum;
-            return variantSum + variant.subheadings.reduce((subSum, sub) => {
-              if (selectedAddonCustomVariants[addonName]?.[sub.name]) {
-                return subSum + (sub.price || 0);
-              }
-              return subSum;
-            }, 0);
-          }, 0)
+          if (!variant.enabled) return variantSum;
+          return variantSum + variant.subheadings.reduce((subSum, sub) => {
+            if (selectedAddonCustomVariants[addonName]?.[sub.name]) {
+              return subSum + (sub.price || 0);
+            }
+            return subSum;
+          }, 0);
+        }, 0)
         : 0;
       return sum + (price + customVariantsPrice) * qty;
     }, 0);
@@ -402,9 +446,9 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
       if (combo.size?.enabled && variants.size) {
         price =
           variants.size === 'S' ? combo.size.small_price :
-          variants.size === 'M' ? combo.size.medium_price :
-          variants.size === 'L' ? combo.size.large_price :
-          price;
+            variants.size === 'M' ? combo.size.medium_price :
+              variants.size === 'L' ? combo.size.large_price :
+                price;
       }
       if (combo.cold?.enabled && variants.cold === 'with_ice') {
         price += combo.cold.ice_price || 0;
@@ -414,27 +458,27 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
       }
       const customVariantsPrice = combo.custom_variants?.length > 0
         ? combo.custom_variants.reduce((variantSum, variant) => {
-            if (!variant.enabled) return variantSum;
-            return variantSum + variant.subheadings.reduce((subSum, sub) => {
-              if (selectedComboCustomVariants[comboName]?.[sub.name]) {
-                return subSum + (sub.price || 0);
-              }
-              return subSum;
-            }, 0);
-          }, 0)
+          if (!variant.enabled) return variantSum;
+          return variantSum + variant.subheadings.reduce((subSum, sub) => {
+            if (selectedComboCustomVariants[comboName]?.[sub.name]) {
+              return subSum + (sub.price || 0);
+            }
+            return subSum;
+          }, 0);
+        }, 0)
         : 0;
       return sum + (price + customVariantsPrice) * qty;
     }, 0);
     const customVariantsPrice = fetchedItem.custom_variants?.length > 0
       ? fetchedItem.custom_variants.reduce((sum, variant) => {
-          if (!variant.enabled) return sum;
-          return sum + variant.subheadings.reduce((variantSum, sub) => {
-            if (selectedCustomVariants[sub.name]) {
-              return variantSum + (sub.price || 0);
-            }
-            return variantSum;
-          }, 0);
-        }, 0) * quantity
+        if (!variant.enabled) return sum;
+        return sum + variant.subheadings.reduce((variantSum, sub) => {
+          if (selectedCustomVariants[sub.name]) {
+            return variantSum + (sub.price || 0);
+          }
+          return variantSum;
+        }, 0);
+      }, 0) * quantity
       : 0;
     setTotalPrice(itemPrice + addonsPrice + combosPrice + customVariantsPrice);
   }, [
@@ -647,9 +691,9 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
         if (addon.size?.enabled && variants.size) {
           price =
             variants.size === 'S' ? addon.size.small_price :
-            variants.size === 'M' ? addon.size.medium_price :
-            variants.size === 'L' ? addon.size.large_price :
-            price;
+              variants.size === 'M' ? addon.size.medium_price :
+                variants.size === 'L' ? addon.size.large_price :
+                  price;
         }
         if (addon.cold?.enabled && variants.cold === 'with_ice') {
           price += addon.cold.ice_price || 0;
@@ -659,14 +703,14 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
         }
         const customVariantsPrice = addon.custom_variants?.length > 0
           ? addon.custom_variants.reduce((variantSum, variant) => {
-              if (!variant.enabled) return variantSum;
-              return variantSum + variant.subheadings.reduce((subSum, sub) => {
-                if (selectedAddonCustomVariants[addonName]?.[sub.name]) {
-                  return subSum + (sub.price || 0);
-                }
-                return subSum;
-              }, 0);
-            }, 0)
+            if (!variant.enabled) return variantSum;
+            return variantSum + variant.subheadings.reduce((subSum, sub) => {
+              if (selectedAddonCustomVariants[addonName]?.[sub.name]) {
+                return subSum + (sub.price || 0);
+              }
+              return subSum;
+            }, 0);
+          }, 0)
           : 0;
         filteredAddonVariants[addonName] = variants;
         filteredAddonCustomVariants[addonName] = selectedAddonCustomVariants[addonName] || {};
@@ -705,9 +749,9 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
         if (combo.size?.enabled && variants.size) {
           price =
             variants.size === 'S' ? combo.size.small_price :
-            variants.size === 'M' ? combo.size.medium_price :
-            variants.size === 'L' ? combo.size.large_price :
-            price;
+              variants.size === 'M' ? combo.size.medium_price :
+                variants.size === 'L' ? combo.size.large_price :
+                  price;
         }
         if (combo.cold?.enabled && variants.cold === 'with_ice') {
           price += combo.cold.ice_price || 0;
@@ -717,14 +761,14 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
         }
         const customVariantsPrice = combo.custom_variants?.length > 0
           ? combo.custom_variants.reduce((variantSum, variant) => {
-              if (!variant.enabled) return variantSum;
-              return variantSum + variant.subheadings.reduce((subSum, sub) => {
-                if (selectedComboCustomVariants[comboName]?.[sub.name]) {
-                  return subSum + (sub.price || 0);
-                }
-                return subSum;
-              }, 0);
-            }, 0)
+            if (!variant.enabled) return variantSum;
+            return variantSum + variant.subheadings.reduce((subSum, sub) => {
+              if (selectedComboCustomVariants[comboName]?.[sub.name]) {
+                return subSum + (sub.price || 0);
+              }
+              return subSum;
+            }, 0);
+          }, 0)
           : 0;
         filteredComboVariants[comboName] = variants;
         filteredComboCustomVariants[comboName] = selectedComboCustomVariants[comboName] || {};
@@ -814,9 +858,9 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
     if (addon.size?.enabled && variants.size) {
       price =
         variants.size === 'S' ? addon.size.small_price :
-        variants.size === 'M' ? addon.size.medium_price :
-        variants.size === 'L' ? addon.size.large_price :
-        price;
+          variants.size === 'M' ? addon.size.medium_price :
+            variants.size === 'L' ? addon.size.large_price :
+              price;
     }
     if (addon.cold?.enabled && variants.cold === 'with_ice') {
       price += addon.cold.ice_price || 0;
@@ -826,14 +870,14 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
     }
     const customVariantsPrice = addon.custom_variants?.length > 0
       ? addon.custom_variants.reduce((variantSum, variant) => {
-          if (!variant.enabled) return variantSum;
-          return variantSum + variant.subheadings.reduce((subSum, sub) => {
-            if (selectedAddonCustomVariants[addon.name1]?.[sub.name]) {
-              return subSum + (sub.price || 0);
-            }
-            return subSum;
-          }, 0);
-        }, 0)
+        if (!variant.enabled) return variantSum;
+        return variantSum + variant.subheadings.reduce((subSum, sub) => {
+          if (selectedAddonCustomVariants[addon.name1]?.[sub.name]) {
+            return subSum + (sub.price || 0);
+          }
+          return subSum;
+        }, 0);
+      }, 0)
       : 0;
     return price + customVariantsPrice;
   };
@@ -845,9 +889,9 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
     if (combo.size?.enabled && variants.size) {
       price =
         variants.size === 'S' ? combo.size.small_price :
-        variants.size === 'M' ? combo.size.medium_price :
-        variants.size === 'L' ? combo.size.large_price :
-        price;
+          variants.size === 'M' ? combo.size.medium_price :
+            variants.size === 'L' ? combo.size.large_price :
+              price;
     }
     if (combo.cold?.enabled && variants.cold === 'with_ice') {
       price += combo.cold.ice_price || 0;
@@ -857,14 +901,14 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
     }
     const customVariantsPrice = combo.custom_variants?.length > 0
       ? combo.custom_variants.reduce((variantSum, variant) => {
-          if (!variant.enabled) return variantSum;
-          return variantSum + variant.subheadings.reduce((subSum, sub) => {
-            if (selectedComboCustomVariants[combo.name1]?.[sub.name]) {
-              return subSum + (sub.price || 0);
-            }
-            return subSum;
-          }, 0);
-        }, 0)
+        if (!variant.enabled) return variantSum;
+        return variantSum + variant.subheadings.reduce((subSum, sub) => {
+          if (selectedComboCustomVariants[combo.name1]?.[sub.name]) {
+            return subSum + (sub.price || 0);
+          }
+          return subSum;
+        }, 0);
+      }, 0)
       : 0;
     return price + customVariantsPrice;
   };
@@ -1113,162 +1157,162 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
                   {(fetchedItem.variants?.size?.enabled || fetchedItem.variants?.cold?.enabled ||
                     fetchedItem.variants?.spicy?.enabled || fetchedItem.variants?.sugar?.enabled ||
                     fetchedItem.custom_variants?.some(v => v.enabled)) && (
-                    <div className="mt-3 text-center">
-                      <strong>Selected Variants:</strong>
-                      <div>
-                        {fetchedItem.variants?.size?.enabled && selectedVariants.size && (
-                          <span>
-                            Size: {selectedVariants.size === 'S' ? 'Small' : selectedVariants.size === 'M' ? 'Medium' : 'Large'}{' '}
-                          </span>
-                        )}
-                        {fetchedItem.variants?.cold?.enabled && selectedVariants.cold && (
-                          <span>Ice: {selectedVariants.cold === 'with_ice' ? 'With Ice' : 'Without Ice'} </span>
-                        )}
-                        {fetchedItem.variants?.spicy?.enabled && selectedVariants.spicy !== null && (
-                          <span>Spicy: {selectedVariants.spicy ? 'Yes' : 'No'} </span>
-                        )}
-                        {fetchedItem.variants?.sugar?.enabled && selectedVariants.sugar && (
-                          <span>Sugar: {selectedVariants.sugar.charAt(0).toUpperCase() + selectedVariants.sugar.slice(1)} </span>
-                        )}
+                      <div className="mt-3 text-center">
+                        <strong>Selected Variants:</strong>
+                        <div>
+                          {fetchedItem.variants?.size?.enabled && selectedVariants.size && (
+                            <span>
+                              Size: {selectedVariants.size === 'S' ? 'Small' : selectedVariants.size === 'M' ? 'Medium' : 'Large'}{' '}
+                            </span>
+                          )}
+                          {fetchedItem.variants?.cold?.enabled && selectedVariants.cold && (
+                            <span>Ice: {selectedVariants.cold === 'with_ice' ? 'With Ice' : 'Without Ice'} </span>
+                          )}
+                          {fetchedItem.variants?.spicy?.enabled && selectedVariants.spicy !== null && (
+                            <span>Spicy: {selectedVariants.spicy ? 'Yes' : 'No'} </span>
+                          )}
+                          {fetchedItem.variants?.sugar?.enabled && selectedVariants.sugar && (
+                            <span>Sugar: {selectedVariants.sugar.charAt(0).toUpperCase() + selectedVariants.sugar.slice(1)} </span>
+                          )}
+                          {fetchedItem.custom_variants?.some(v => v.enabled) && (
+                            <span>Custom: {getSelectedCustomVariantsDisplay(fetchedItem.custom_variants, selectedCustomVariants)}</span>
+                          )}
+                        </div>
+                        <button className="btn btn-outline-secondary mt-2" onClick={() => setShowVariantPopup(true)}>
+                          Select Predefined Variants
+                        </button>
                         {fetchedItem.custom_variants?.some(v => v.enabled) && (
-                          <span>Custom: {getSelectedCustomVariantsDisplay(fetchedItem.custom_variants, selectedCustomVariants)}</span>
+                          <button className="btn btn-outline-secondary mt-2 ms-2" onClick={() => setShowCustomVariantPopup(true)}>
+                            Select Custom Variants
+                          </button>
+                        )}
+                        {showVariantPopup && (
+                          <div className="modal-overlay">
+                            <div className="modal-content p-3" style={{ maxWidth: '300px', textAlign: 'center' }}>
+                              <h5>Select Predefined Variants</h5>
+                              {fetchedItem.variants?.size?.enabled && (
+                                <div className="mt-3">
+                                  <h6>Size</h6>
+                                  <div className="d-flex justify-content-around">
+                                    <div
+                                      className={`variant-option ${selectedVariants.size === 'S' ? 'selected' : ''}`}
+                                      onClick={() => handleVariantChange('size', 'S')}
+                                    >
+                                      <h6>S ({currencySymbol}{fetchedItem.variants.size.small_price || 0})</h6>
+                                    </div>
+                                    <div
+                                      className={`variant-option ${selectedVariants.size === 'M' ? 'selected' : ''}`}
+                                      onClick={() => handleVariantChange('size', 'M')}
+                                    >
+                                      <h6>M ({currencySymbol}{fetchedItem.variants.size.medium_price || 0})</h6>
+                                    </div>
+                                    <div
+                                      className={`variant-option ${selectedVariants.size === 'L' ? 'selected' : ''}`}
+                                      onClick={() => handleVariantChange('size', 'L')}
+                                    >
+                                      <h6>L ({currencySymbol}{fetchedItem.variants.size.large_price || 0})</h6>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                              {fetchedItem.variants?.cold?.enabled && (
+                                <div className="mt-3">
+                                  <h6>Ice Preference</h6>
+                                  <div className="d-flex justify-content-around">
+                                    <div
+                                      className={`variant-option ${selectedVariants.cold === 'without_ice' ? 'selected' : ''}`}
+                                      onClick={() => handleVariantChange('cold', 'without_ice')}
+                                    >
+                                      <h6>Without Ice</h6>
+                                    </div>
+                                    <div
+                                      className={`variant-option ${selectedVariants.cold === 'with_ice' ? 'selected' : ''}`}
+                                      onClick={() => handleVariantChange('cold', 'with_ice')}
+                                    >
+                                      <h6>With Ice (+{currencySymbol}{fetchedItem.variants.cold.ice_price || 0})</h6>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                              {fetchedItem.variants?.spicy?.enabled && (
+                                <div className="mt-3">
+                                  <h6>Spicy Preference</h6>
+                                  <div className="d-flex justify-content-around">
+                                    <div
+                                      className={`variant-option ${!selectedVariants.spicy ? 'selected' : ''}`}
+                                      onClick={() => handleVariantChange('spicy', false)}
+                                    >
+                                      <h6>Non-Spicy ({currencySymbol}{fetchedItem.variants.spicy.non_spicy_price || 0})</h6>
+                                    </div>
+                                    <div
+                                      className={`variant-option ${selectedVariants.spicy ? 'selected' : ''}`}
+                                      onClick={() => handleVariantChange('spicy', true)}
+                                    >
+                                      <h6>Spicy (+{currencySymbol}{fetchedItem.variants.spicy.spicy_price || 30})</h6>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                              {fetchedItem.variants?.sugar?.enabled && (
+                                <div className="mt-3">
+                                  <h6>Sugar Level</h6>
+                                  <select
+                                    value={selectedVariants.sugar || 'medium'}
+                                    onChange={e => handleVariantChange('sugar', e.target.value)}
+                                    className="form-select"
+                                  >
+                                    <option value="less">Less Sugar</option>
+                                    <option value="medium">Medium Sugar</option>
+                                    <option value="extra">Extra Sugar</option>
+                                  </select>
+                                </div>
+                              )}
+                              <button className="btn btn-secondary mt-3" onClick={() => setShowVariantPopup(false)}>
+                                Close
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        {showCustomVariantPopup && (
+                          <div className="modal-overlay">
+                            <div className="modal-content p-3" style={{ maxWidth: '400px', textAlign: 'center' }}>
+                              <h5>Select Custom Variants</h5>
+                              {fetchedItem.custom_variants?.map(variant => (
+                                variant.enabled && (
+                                  <div key={variant._id} className="mt-3">
+                                    <h6>{variant.heading}</h6>
+                                    <div className="d-flex justify-content-around flex-wrap">
+                                      {variant.subheadings.map(sub => (
+                                        <div
+                                          key={sub.name}
+                                          className={`variant-option ${selectedCustomVariants[sub.name] ? 'selected' : ''}`}
+                                          onClick={() => handleCustomVariantChange(sub.name)}
+                                        >
+                                          <h6>{sub.name} (+{currencySymbol}{sub.price || 0})</h6>
+                                          {sub.image && (
+                                            <img
+                                              src={sub.image}
+                                              alt={sub.name}
+                                              width={50}
+                                              height={50}
+                                              className="mt-1 rounded"
+                                              onError={e => (e.target.src = 'https://placehold.co/100x100/EFEFEF/AAAAAA?text=No+Image')}
+                                            />
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )
+                              ))}
+                              <button className="btn btn-secondary mt-3" onClick={() => setShowCustomVariantPopup(false)}>
+                                Close
+                              </button>
+                            </div>
+                          </div>
                         )}
                       </div>
-                      <button className="btn btn-outline-secondary mt-2" onClick={() => setShowVariantPopup(true)}>
-                        Select Predefined Variants
-                      </button>
-                      {fetchedItem.custom_variants?.some(v => v.enabled) && (
-                        <button className="btn btn-outline-secondary mt-2 ms-2" onClick={() => setShowCustomVariantPopup(true)}>
-                          Select Custom Variants
-                        </button>
-                      )}
-                      {showVariantPopup && (
-                        <div className="modal-overlay">
-                          <div className="modal-content p-3" style={{ maxWidth: '300px', textAlign: 'center' }}>
-                            <h5>Select Predefined Variants</h5>
-                            {fetchedItem.variants?.size?.enabled && (
-                              <div className="mt-3">
-                                <h6>Size</h6>
-                                <div className="d-flex justify-content-around">
-                                  <div
-                                    className={`variant-option ${selectedVariants.size === 'S' ? 'selected' : ''}`}
-                                    onClick={() => handleVariantChange('size', 'S')}
-                                  >
-                                    <h6>S ({currencySymbol}{fetchedItem.variants.size.small_price || 0})</h6>
-                                  </div>
-                                  <div
-                                    className={`variant-option ${selectedVariants.size === 'M' ? 'selected' : ''}`}
-                                    onClick={() => handleVariantChange('size', 'M')}
-                                  >
-                                    <h6>M ({currencySymbol}{fetchedItem.variants.size.medium_price || 0})</h6>
-                                  </div>
-                                  <div
-                                    className={`variant-option ${selectedVariants.size === 'L' ? 'selected' : ''}`}
-                                    onClick={() => handleVariantChange('size', 'L')}
-                                  >
-                                    <h6>L ({currencySymbol}{fetchedItem.variants.size.large_price || 0})</h6>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                            {fetchedItem.variants?.cold?.enabled && (
-                              <div className="mt-3">
-                                <h6>Ice Preference</h6>
-                                <div className="d-flex justify-content-around">
-                                  <div
-                                    className={`variant-option ${selectedVariants.cold === 'without_ice' ? 'selected' : ''}`}
-                                    onClick={() => handleVariantChange('cold', 'without_ice')}
-                                  >
-                                    <h6>Without Ice</h6>
-                                  </div>
-                                  <div
-                                    className={`variant-option ${selectedVariants.cold === 'with_ice' ? 'selected' : ''}`}
-                                    onClick={() => handleVariantChange('cold', 'with_ice')}
-                                  >
-                                    <h6>With Ice (+{currencySymbol}{fetchedItem.variants.cold.ice_price || 0})</h6>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                            {fetchedItem.variants?.spicy?.enabled && (
-                              <div className="mt-3">
-                                <h6>Spicy Preference</h6>
-                                <div className="d-flex justify-content-around">
-                                  <div
-                                    className={`variant-option ${!selectedVariants.spicy ? 'selected' : ''}`}
-                                    onClick={() => handleVariantChange('spicy', false)}
-                                  >
-                                    <h6>Non-Spicy ({currencySymbol}{fetchedItem.variants.spicy.non_spicy_price || 0})</h6>
-                                  </div>
-                                  <div
-                                    className={`variant-option ${selectedVariants.spicy ? 'selected' : ''}`}
-                                    onClick={() => handleVariantChange('spicy', true)}
-                                  >
-                                    <h6>Spicy (+{currencySymbol}{fetchedItem.variants.spicy.spicy_price || 30})</h6>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                            {fetchedItem.variants?.sugar?.enabled && (
-                              <div className="mt-3">
-                                <h6>Sugar Level</h6>
-                                <select
-                                  value={selectedVariants.sugar || 'medium'}
-                                  onChange={e => handleVariantChange('sugar', e.target.value)}
-                                  className="form-select"
-                                >
-                                  <option value="less">Less Sugar</option>
-                                  <option value="medium">Medium Sugar</option>
-                                  <option value="extra">Extra Sugar</option>
-                                </select>
-                              </div>
-                            )}
-                            <button className="btn btn-secondary mt-3" onClick={() => setShowVariantPopup(false)}>
-                              Close
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                      {showCustomVariantPopup && (
-                        <div className="modal-overlay">
-                          <div className="modal-content p-3" style={{ maxWidth: '400px', textAlign: 'center' }}>
-                            <h5>Select Custom Variants</h5>
-                            {fetchedItem.custom_variants?.map(variant => (
-                              variant.enabled && (
-                                <div key={variant._id} className="mt-3">
-                                  <h6>{variant.heading}</h6>
-                                  <div className="d-flex justify-content-around flex-wrap">
-                                    {variant.subheadings.map(sub => (
-                                      <div
-                                        key={sub.name}
-                                        className={`variant-option ${selectedCustomVariants[sub.name] ? 'selected' : ''}`}
-                                        onClick={() => handleCustomVariantChange(sub.name)}
-                                      >
-                                        <h6>{sub.name} (+{currencySymbol}{sub.price || 0})</h6>
-                                        {sub.image && (
-                                          <img
-                                            src={sub.image}
-                                            alt={sub.name}
-                                            width={50}
-                                            height={50}
-                                            className="mt-1 rounded"
-                                            onError={e => (e.target.src = 'https://placehold.co/100x100/EFEFEF/AAAAAA?text=No+Image')}
-                                          />
-                                        )}
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )
-                            ))}
-                            <button className="btn btn-secondary mt-3" onClick={() => setShowCustomVariantPopup(false)}>
-                              Close
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                    )}
                   {fetchedItem.addons?.length > 0 && (
                     <div className="mt-3">
                       <strong>Add-ons:</strong>
@@ -1780,8 +1824,8 @@ const FoodDetails = ({ item, cartItem, onClose, onUpdate }) => {
                   )}
                 </div>
                 {fetchedItem.ingredients.length === 0 &&
-                Object.values(addonIngredients).every(ings => ings.length === 0) &&
-                Object.values(comboIngredients).every(ings => ings.length === 0) ? (
+                  Object.values(addonIngredients).every(ings => ings.length === 0) &&
+                  Object.values(comboIngredients).every(ings => ings.length === 0) ? (
                   <p>No ingredients available.</p>
                 ) : selectedSizeFilter ? (
                   <table className="nutrition-table">

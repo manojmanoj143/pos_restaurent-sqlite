@@ -95,6 +95,7 @@ function FrontPage() {
   const [showCustomerSection, setShowCustomerSection] = useState(false)
   const [baseUrl, setBaseUrl] = useState(""); // Dynamic base URL for client/server mode
   const [currency, setCurrency] = useState("INR"); // NEW: Currency from settings, default INR
+  const [useCurrencySymbol, setUseCurrencySymbol] = useState(false); // NEW: Toggle between Symbol and Code
   // NEW: Company tax details for fallback when item tax_rate is 0 but tax_applicable is true
   const [companyTaxType, setCompanyTaxType] = useState('GST'); // Default to GST
   const [companyTaxRate, setCompanyTaxRate] = useState(18); // Default fallback rate (e.g., 18% for GST)
@@ -163,6 +164,8 @@ function FrontPage() {
   };
   const [addressStructure, setAddressStructure] = useState(defaultStructure);
   const [linkedValues, setLinkedValues] = useState({});
+  // NEW: POS Grid View Toggle State
+  const [showPOSGrid, setShowPOSGrid] = useState(false);
   // FIXED: Define generate_order_number function to resolve ReferenceError
   const generate_order_number = (orderType) => {
     const timestamp = Date.now().toString().slice(-6); // Last 6 digits of timestamp
@@ -173,17 +176,39 @@ function FrontPage() {
   // Maps currency codes to symbols; defaults to INR symbol if no currency or invalid
   const getCurrencySymbol = (currCode) => {
     const symbols = {
-      'INR': '₹',
-      'USD': '$',
-      'EUR': '€',
-      'GBP': '£',
-      'AED': 'د.إ',
+      INR: "₹",
+      USD: "$",
+      EUR: "€",
+      GBP: "£",
+      AED: "د.إ",
+      JPY: "¥",
+      CNY: "¥",
+      SGD: "$",
+      MYR: "RM",
+      THB: "฿",
+      IDR: "Rp",
+      KRW: "₩",
+      PHP: "₱",
+      SAR: "﷼",
+      QAR: "﷼",
+      KWD: "د.ك",
+      OMR: "﷼",
+      BHD: ".د.ب",
+      CAD: "$",
+      AUD: "$",
+      NZD: "$",
+      CHF: "CHF",
+      ZAR: "R",
+      BRL: "R$",
+      PKR: "₨",
+      LKR: "Rs",
+      NGN: "₦"
       // Add more as needed
     };
     return symbols[currCode?.toUpperCase()] || '₹'; // Default to ₹ (INR) if not found
   };
   const formatPrice = (price) => {
-    const symbol = getCurrencySymbol(currency); // Get symbol based on current currency
+    const symbol = useCurrencySymbol ? getCurrencySymbol(currency) : `${currency} `; // Get symbol or code based on setting
     if (isNaN(price) || price === 0) return `${symbol}0.00`;
     return `${symbol}${price.toFixed(2)}`;
   };
@@ -261,9 +286,10 @@ function FrontPage() {
       try {
         const apiPath = baseUrl ? `${baseUrl}/api/settings` : '/api/settings';
         const response = await axios.get(apiPath);
-        const { currency: fetchedCurrency = "INR" } = response.data;
+        const { currency: fetchedCurrency = "INR", useCurrencySymbol: fetchedUseSymbol = false } = response.data;
         setCurrency(fetchedCurrency.toUpperCase()); // Ensure uppercase like INR, AED
-        console.log("Fetched currency:", fetchedCurrency); // Debug
+        setUseCurrencySymbol(fetchedUseSymbol);
+        console.log("Fetched currency:", fetchedCurrency, "Use Symbol:", fetchedUseSymbol); // Debug
       } catch (error) {
         console.error("Failed to fetch currency settings:", error);
         setCurrency("INR"); // Fallback to INR
@@ -580,10 +606,26 @@ function FrontPage() {
     }
     setSelectedCategory(cleanCategory)
   }
-  const handleItemClick = (item) => {
-    const existingCartItem = cartItems.find((cartItem) => cartItem.item_name === item.name)
+  const handleItemClick = (item, preSelectedSize = null) => {
+    // Check if we are clicking a specific size variant card (so we pass preSelectedSize)
+    // OR if the item object itself has a preSelectedSize property attached during mapping
+    const size = preSelectedSize || item.preSelectedSize || null;
+
+    const existingCartItem = cartItems.find((cartItem) =>
+      cartItem.item_name === item.name &&
+      (!size || cartItem.selectedSize === size)
+    );
+
     setSelectedItem(item)
-    setSelectedCartItem(existingCartItem || null)
+
+    if (existingCartItem) {
+      setSelectedCartItem(existingCartItem)
+    } else if (size) {
+      // Pass a mock cart item to FoodDetails to force the selected size
+      setSelectedCartItem({ selectedSize: size })
+    } else {
+      setSelectedCartItem(null)
+    }
   }
   const handleCartItemClick = (cartItem) => {
     const menuItem = menuItems.find((item) => item.name === cartItem.item_name);
@@ -612,6 +654,81 @@ function FrontPage() {
         return offerPrice
     }
   }
+  const createStandaloneAddonItem = (addon, size = "M", isSplitVariant = false, mainItemSize = null) => {
+    const effectiveSize = isSplitVariant ? size : (mainItemSize || size);
+    const addonSizePrice = addon?.size?.enabled
+      ? effectiveSize === "S" ? addon.size.small_price || addon.price - 10 || 0
+        : effectiveSize === "L" ? addon.size.large_price || addon.price + 10 || 0
+          : addon.size.medium_price || addon.price || 0
+      : addon.price || 0;
+
+    const effectiveTaxRate = getEffectiveTaxRate(addon.tax_applicable, addon.tax_rate, true);
+    const exclTotal = addonSizePrice * 1; // Quantity 1
+    const taxTotal = effectiveTaxRate > 0 ? exclTotal * (effectiveTaxRate / 100) : 0;
+    const taxBreakdown = taxTotal > 0 ? { [effectiveTaxRate]: taxTotal } : {};
+
+    return {
+      id: uuidv4(),
+      item_name: addon.name1, // Standalone: Use addon name as item
+      name: addon.name1,
+      quantity: 1,
+      basePrice: addonSizePrice, // Use size-adjusted price
+      totalPrice: exclTotal + taxTotal,
+      exclTotal,
+      taxTotal,
+      taxBreakdown,
+      mainTaxTotal: taxTotal,
+      mainTaxRate: effectiveTaxRate,
+      mainExclPerUnit: addonSizePrice, // Needed for main item quantity updates
+      selectedSize: effectiveSize,
+      kitchen: addon.kitchen || "Main Kitchen",
+      image: addon.addon_image || "/static/images/default-addon-image.jpg",
+      isStandaloneAddon: true, // Flag to identify in cart/billing
+      status: "Pending",
+      served: false,
+      // Variants for addon itself (if needed later)
+      addonVariants: { [addon.name1]: { size: effectiveSize } }, // Self-reference if needed
+    };
+  };
+
+  // NEW: Helper to create standalone combo as cart item
+  const createStandaloneComboItem = (combo, size = "M", isSplitVariant = false, mainItemSize = null) => {
+    const effectiveSize = isSplitVariant ? size : (mainItemSize || size);
+    const comboSizePrice = combo?.size?.enabled
+      ? effectiveSize === "S" ? combo.size.small_price || combo.price - 10 || 0
+        : effectiveSize === "L" ? combo.size.large_price || combo.price + 10 || 0
+          : combo.size.medium_price || combo.price || 0
+      : combo.price || 0;
+
+    const effectiveTaxRate = getEffectiveTaxRate(combo.tax_applicable, combo.tax_rate, false, true);
+    const exclTotal = comboSizePrice * 1; // Quantity 1
+    const taxTotal = effectiveTaxRate > 0 ? exclTotal * (effectiveTaxRate / 100) : 0;
+    const taxBreakdown = taxTotal > 0 ? { [effectiveTaxRate]: taxTotal } : {};
+
+    return {
+      id: uuidv4(),
+      item_name: combo.name1, // Standalone: Use combo name as item
+      name: combo.name1,
+      quantity: 1,
+      basePrice: comboSizePrice,
+      totalPrice: exclTotal + taxTotal,
+      exclTotal,
+      taxTotal,
+      taxBreakdown,
+      mainTaxTotal: taxTotal,
+      mainTaxRate: effectiveTaxRate,
+      mainExclPerUnit: comboSizePrice, // Needed for main item quantity updates
+      selectedSize: effectiveSize,
+      kitchen: combo.kitchen || "Main Kitchen",
+      image: combo.combo_image || "/static/images/default-combo-image.jpg",
+      isStandaloneCombo: true, // Flag to identify
+      status: "Pending",
+      served: false,
+      // Combo details if sub-items
+      comboItems: combo.comboItems || [], // If it's a sub-combo
+    };
+  };
+
   const handleItemUpdate = (updatedItem) => {
     // FIXED: Preserve ID for updates to prevent duplication (e.g., when size changes)
     if (selectedCartItem && !updatedItem.id) {
@@ -619,25 +736,31 @@ function FrontPage() {
     }
     // FIXED: Prioritize updating by ID if provided (for edits, preserves status)
     let existingItemIndex = -1;
-    if (updatedItem.id) {
+    if (updatedItem.id && selectedCartItem) {
       existingItemIndex = cartItems.findIndex((cartItem) => cartItem.id === updatedItem.id);
     }
     if (existingItemIndex === -1 && !updatedItem.isCombo) {
-      // Fallback to name + size match for new items
+      // STRICT MATCHING: Compare Name, Size, Addons, and Sub-Combos
       const menuItem = menuItems.find((item) => item.name === updatedItem.item_name)
       const hasSizeVariant = menuItem?.size?.enabled || false
       const updatedSelectedSize = hasSizeVariant ? updatedItem.variants?.size?.selected : null
+
       existingItemIndex = cartItems.findIndex(
         (cartItem) =>
           cartItem.item_name === updatedItem.item_name &&
-          (hasSizeVariant ? cartItem.selectedSize === updatedSelectedSize : cartItem.selectedSize === null),
+          // Strict Size Match
+          (hasSizeVariant ? cartItem.selectedSize === updatedSelectedSize : cartItem.selectedSize === null) &&
+          // Strict Addon Match (Keys)
+          Object.keys(cartItem.addonQuantities || {}).sort().join(',') === Object.keys(updatedItem.addonQuantities || {}).sort().join(',') &&
+          // Strict Combo Match (Keys)
+          Object.keys(cartItem.comboQuantities || {}).sort().join(',') === Object.keys(updatedItem.comboQuantities || {}).sort().join(',')
       )
     }
     if (updatedItem.isCombo) {
       const menuItem = comboList.find(c => c.id === updatedItem.id) || updatedItem; // Use combo as menuItem
       const hasOffer = hasActiveOffer(menuItem);
       const finalPrice = hasOffer ? menuItem.offer_price || 0 : menuItem.basePrice || 0; // excl per unit
-      const quantity = Number(updatedItem.quantity) || 1;
+      const quantity = (updatedItem.isPOSGrid && existingItemIndex !== -1) ? cartItems[existingItemIndex].quantity + (Number(updatedItem.quantity) || 1) : (Number(updatedItem.quantity) || 1);
       // UPDATED: Use effective tax rate for combo
       const effectiveTaxRate = getEffectiveTaxRate(menuItem.tax_applicable, menuItem.tax_rate);
       const exclTotal = finalPrice * quantity;
@@ -755,7 +878,7 @@ function FrontPage() {
         kitchen: addon?.kitchen || "Main Kitchen",
         sugar: variants.sugar || "medium",
       }
-      addonImages[addonName] = addon?.addon_image || "/static/images/default-addon-image.jpg"
+      addonImages[addonName] = addon?.addon_image || addon?.image || "/static/images/default-addon-image.jpg"
       addonPrices[addonName] = exclPerUnit // per unit excl
       addonSizePrices[addonName] = addonSizePrice
       addonIcePrices[addonName] = addonIcePrice
@@ -816,7 +939,7 @@ function FrontPage() {
         kitchen: combo?.kitchen || "Main Kitchen",
         sugar: variants.sugar || "medium",
       }
-      comboImages[comboName] = combo?.combo_image || "/static/images/default-combo-image.jpg"
+      comboImages[comboName] = combo?.combo_image || combo?.image || "/static/images/default-combo-image.jpg"
       comboPrices[comboName] = exclPerUnit // per unit excl
       comboSizePrices[comboName] = comboSizePrice
       comboIcePrices[comboName] = comboIcePrice
@@ -841,7 +964,7 @@ function FrontPage() {
         }
       })
     }
-    const quantity = Number(updatedItem.quantity) || 1
+    const quantity = (updatedItem.isPOSGrid && existingItemIndex !== -1) ? cartItems[existingItemIndex].quantity + (Number(updatedItem.quantity) || 1) : (Number(updatedItem.quantity) || 1);
     const mainExclPerUnit = finalBasePrice + (Number(updatedItem.icePrice) || 0) + (Number(updatedItem.spicyPrice) || 0) + customVariantsTotalPrice
     const mainExclTotal = mainExclPerUnit * quantity
     const mainTaxTotal = effectiveMainTaxRate > 0 ? mainExclTotal * (effectiveMainTaxRate / 100) : 0
@@ -2195,7 +2318,7 @@ function FrontPage() {
     // FIXED: Always return excl price for cart rows (VAT shown only at bottom summary)
     return formatPrice(excl)
   }
- 
+
   return (
     <div className="frontpage-container">
       <div className={`frontpage-sidebar ${isSidebarOpen ? "open" : ""}`}>
@@ -2275,6 +2398,19 @@ function FrontPage() {
               title="Theme"
             >
               <div className="theme-icon">🎨</div>
+            </a>
+          </li>
+          <li className="nav-item">
+            <a
+              className={`nav-link ${showPOSGrid ? "active text-primary" : "text-black"} cursor-pointer`}
+              onClick={() => setShowPOSGrid(!showPOSGrid)}
+              title={showPOSGrid ? "Switch to Normal View" : "Switch to POS Grid View"}
+            >
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                {/* Simple grid icon representation */}
+                <i className={`bi ${showPOSGrid ? "bi-grid-3x3-gap-fill" : "bi-grid-3x3-gap"}`} style={{ fontSize: "20px" }}></i>
+                <span style={{ fontSize: "10px" }}>{showPOSGrid ? "POS" : "Normal"}</span>
+              </div>
             </a>
           </li>
           <li className="nav-item mt-auto">
@@ -2359,117 +2495,397 @@ function FrontPage() {
           </div>
         </div>
         <div className="frontpage-menu-section">
-          <div className={`frontpage-menu-grid ${selectedCategory === "Combos Offer" ? "combo-grid" : ""}`}>
-            {filteredItems.map((item) => (
-              item.isCombo ? (
-                // UPDATED: EXACT combo rendering from ItemListPage, with Add to Cart button
-                <div key={item.id} className="col-md-6 mb-4"> {/* CHANGED: Increased width from col-md-3 to col-md-6 for wider combo cards */}
-                  <Card
-                    style={posterStyle}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = "translateY(-5px) scale(1.01)";
-                      e.currentTarget.style.boxShadow = "0 8px 15px rgba(0, 0, 0, 0.25)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = "translateY(0) scale(1)";
-                      e.currentTarget.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.2)";
-                    }}
-                  >
-                    <div style={logoStyle}>K</div>
-                    {/* Top: Offer name center */}
-                    <h4 style={offerNameStyle}>{item.name}</h4>
-                    {/* Offer period in one line if active */}
-                    {hasActiveOffer(item) && (
-                      <p style={offerPeriodStyle}>
-                        <strong>Offer Period:</strong> {new Date(item.offer_start_time).toLocaleDateString()} {new Date(item.offer_start_time).toLocaleTimeString()} to {new Date(item.offer_end_time).toLocaleDateString()} {new Date(item.offer_end_time).toLocaleTimeString()}
-                      </p>
-                    )}
-                    {/* NEW: Centered uploaded multiple images section */}
-                    {(() => {
-                      const uploadedImages = getUploadedImages(item);
-                      if (uploadedImages.length > 0) {
-                        return (
-                          <div style={uploadedImagesStyle}>
-                            {uploadedImages.map((imgPath, idx) => {
-                              const src = `${baseUrl}${imgPath}`;
-                              return (
-                                <img
-                                  key={idx}
-                                  src={src}
-                                  alt={`Uploaded combo image ${idx + 1}`}
-                                  style={uploadedImageThumbStyle}
-                                  onError={(e) => {
-                                    e.target.src = "https://via.placeholder.com/60?text=No+Img";
-                                  }}
-                                />
-                              );
-                            })}
+          {showPOSGrid ? (
+            /* ── POS GRID VIEW ── */
+            <div className="frontpage-pos-layout" style={{ display: 'flex', gap: '15px', height: '100%' }}>
+              {/* Left Side: Items Grid */}
+              <div className="frontpage-pos-items" style={{ flex: 1, overflowY: 'auto' }}>
+                <div className="row">
+                  {filteredItems.flatMap((item) => {
+                    // Split logic for POS Grid:
+                    // If item has sizes enabled, create 3 separate grid items (S, M, L).
+                    // Otherwise, keep as 1 grid item.
+                    if (item.size && item.size.enabled) {
+                      return ['S', 'M', 'L'].map(size => ({
+                        ...item,
+                        isSplitVariant: true,
+                        splitSize: size,
+                        // Determine price for this specific size card
+                        displayPrice: size === 'S' ? item.size.small_price : size === 'L' ? item.size.large_price : item.size.medium_price
+                      }));
+                    }
+                    return [item];
+                  }).map((item, index) => {
+                    // Unique key generation relying on index to avoid duplicates with same ID
+                    const uniqueKey = item.isSplitVariant ? `${item.id}-${item.splitSize}` : item.id;
+
+                    return (
+                      <div key={uniqueKey} className="col-md-3 mb-3">
+                        <div
+                          className="pos-item-card"
+                          // If it's a split variant, clicking the main card body adds THAT size.
+                          // If normal item, clicking adds default.
+                          onClick={(e) => {
+                            if (item.isSplitVariant) {
+                              handleItemUpdate({
+                                ...item,
+                                item_name: item.name,
+                                quantity: 1,
+                                isPOSGrid: true, // Flag for increment logic
+                                variants: { size: { selected: item.splitSize } }
+                              });
+                            } else {
+                              handleItemUpdate({
+                                ...item,
+                                item_name: item.name,
+                                quantity: 1,
+                                isPOSGrid: true // Flag for increment logic
+                              });
+                            }
+                          }}
+                          style={{
+                            border: '1px solid #ddd',
+                            padding: '8px',
+                            borderRadius: '8px',
+                            background: '#fff',
+                            height: 'auto',
+                            cursor: 'pointer',
+                            transition: 'transform 0.1s',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+                          onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                        >
+                          {/* Item Name & Base Info */}
+                          <div style={{ display: 'flex', gap: '10px', marginBottom: '5px' }}>
+                            <img src={item.image} alt={item.name} style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px' }} />
+                            <div>
+                              <h6 style={{ margin: 0, fontSize: '14px', fontWeight: 'bold' }}>
+                                {item.name} {item.isSplitVariant ? `(${item.splitSize})` : ''}
+                              </h6>
+                              <small className="text-success" style={{ fontWeight: 'bold' }}>
+                                {formatPrice(item.isSplitVariant ? item.displayPrice : item.basePrice)}
+                              </small>
+                            </div>
                           </div>
-                        );
-                      }
-                      return null;
-                    })()}
-                    {/* UPDATED: Full width items list with images next to names */}
-                    <ul style={itemsListStyle}>
-                      {getComboItemsWithImages(item).map((itemWithImage, idx) => (
-                        <li key={idx} style={itemsListItemStyle}>
-                          {itemWithImage.image && (
-                            <img
-                              src={itemWithImage.image}
-                              alt={itemWithImage.name}
-                              style={itemImageStyle}
-                              onError={(e) => {
-                                e.target.style.display = "none"; // Hide if error
-                              }}
-                            />
-                          )}
-                          {itemWithImage.name}
-                        </li>
-                      ))}
-                    </ul>
-                    {/* Bottom center: Total price with strikeout if offer - UPDATED: Use formatPrice */}
-                    <p style={totalPriceStyle}>
-                      Total Price: {hasActiveOffer(item) ? (
-                        <>
-                          <span style={{ ...strikethroughStyle, color: "#aaa", fontSize: "16px" }}>{formatPrice(item.basePrice)}</span>
-                          <span style={{ color: "#fdd835", fontSize: "18px" }}>{formatPrice(item.offer_price)}</span>
-                        </>
-                      ) : (
-                        <span style={{ color: "#ffffff", fontSize: "18px" }}>{formatPrice(item.basePrice)}</span>
-                      )}
-                    </p>
-                    {/* Limited offer center if active */}
-                    {hasActiveOffer(item) && <p style={limitedOfferStyle}>LIMITED OFFERS! Place Your Order</p>}
-                    {/* View button center - CHANGED to Add to Cart for FrontPage */}
-                    <Button
-                      variant="success"
-                      onClick={() => handleItemUpdate({ ...item, quantity: 1 })}
-                      style={viewButtonStyle}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = "#f0f0f0";
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = "#ffffff";
-                      }}
+
+                        </div>
+
+                        {/* Addons Section - Separate Box */}
+                        {item.addons && item.addons.length > 0 && (
+                          <div className="pos-addons-container" style={{
+                            marginTop: '5px',
+                            background: '#fff',
+                            border: '1px solid #ddd',
+                            borderRadius: '8px',
+                            padding: '8px',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                          }}>
+                            <small style={{ fontWeight: 'bold', color: '#666', display: 'block', marginBottom: '5px', borderBottom: '1px solid #eee', paddingBottom: '2px' }}>Addons</small>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                              {item.addons.map((addon, idx) => (
+                                <div key={idx} style={{ width: '100%' }}>
+                                  {addon.size && addon.size.enabled ? (
+                                    /* Sized Addon: Filter sizes based on main item context */
+                                    <div style={{ display: 'flex', gap: '5px' }}>
+                                      {((item.isSplitVariant && item.splitSize) ? [item.splitSize] : ['S', 'M', 'L']).map((size) => {
+                                        const price = size === 'S' ? (addon.size.small_price || 0) : size === 'L' ? (addon.size.large_price || 0) : (addon.size.medium_price || 0);
+                                        return (
+                                          <div
+                                            key={size}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              const standaloneAddon = createStandaloneAddonItem(addon, size, item.isSplitVariant, item.splitSize || item.selectedSize);
+                                              setCartItems(prev => [...prev, standaloneAddon]);
+                                              setBillCartItems(prev => [...prev, standaloneAddon]);
+                                              setWarningMessage(`${addon.name1} added to cart!`);
+                                              setWarningType("success");
+                                            }}
+                                            style={{
+                                              border: '1px solid #17a2b8',
+                                              borderRadius: '4px',
+                                              padding: '6px 2px',
+                                              fontSize: '11px',
+                                              cursor: 'pointer',
+                                              background: '#e0f7fa',
+                                              flex: 1,
+                                              textAlign: 'center',
+                                              display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
+                                              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                                              minHeight: '50px'
+                                            }}
+                                            title={`${addon.name1} (${size})`}
+                                          >
+                                            <div style={{ fontWeight: 'bold', fontSize: '10px', lineHeight: '1.2', marginBottom: '2px' }}>{addon.name1}</div>
+                                            <div style={{ fontSize: '10px', fontWeight: 'bold' }}>({size})</div>
+                                            <div style={{ color: '#007bff', fontSize: '10px', fontWeight: 'bold' }}>+{formatPrice(price)}</div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : (
+                                    /* Regular Addon: Single Box - Styled to Match Variants Height */
+                                    <div
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        // Default to "M" or item size if not explicit
+                                        const size = item.isSplitVariant ? item.splitSize : "M";
+                                        const standaloneAddon = createStandaloneAddonItem(addon, size, item.isSplitVariant, item.splitSize || item.selectedSize);
+                                        setCartItems(prev => [...prev, standaloneAddon]);
+                                        setBillCartItems(prev => [...prev, standaloneAddon]);
+                                        setWarningMessage(`${addon.name1} added to cart!`);
+                                        setWarningType("success");
+                                      }}
+                                      style={{
+                                        border: '1px solid #17a2b8',
+                                        borderRadius: '4px',
+                                        padding: '6px 8px',
+                                        fontSize: '11px',
+                                        cursor: 'pointer',
+                                        background: '#e0f7fa',
+                                        textAlign: 'center',
+                                        width: '100%',
+                                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                                        minHeight: '50px',
+                                        display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center'
+                                      }}
+                                    >
+                                      <div style={{ fontWeight: 'bold', fontSize: '10px', lineHeight: '1.2' }}>{addon.name1}</div>
+                                      <div style={{ color: '#007bff', fontWeight: 'bold', marginTop: '2px' }}>+{formatPrice(addon.price)}</div>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Combos Section - Separate Box */}
+                        {item.combos && item.combos.length > 0 && (
+                          <div className="pos-combos-container" style={{
+                            marginTop: '5px',
+                            background: '#fff',
+                            border: '1px solid #ddd',
+                            borderRadius: '8px',
+                            padding: '8px',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                          }}>
+                            <small style={{ fontWeight: 'bold', color: '#666', display: 'block', marginBottom: '5px', borderBottom: '1px solid #eee', paddingBottom: '2px' }}>Combos</small>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                              {item.combos.map((combo, idx) => (
+                                <div key={idx} style={{ width: '100%' }}>
+                                  {combo.size && combo.size.enabled ? (
+                                    /* Sized Combo: Filter sizes based on main item context */
+                                    <div style={{ display: 'flex', gap: '5px' }}>
+                                      {((item.isSplitVariant && item.splitSize) ? [item.splitSize] : ['S', 'M', 'L']).map((size) => {
+                                        const price = size === 'S' ? (combo.size.small_price || 0) : size === 'L' ? (combo.size.large_price || 0) : (combo.size.medium_price || 0);
+                                        return (
+                                          <div
+                                            key={size}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              const standaloneCombo = createStandaloneComboItem(combo, size, item.isSplitVariant, item.splitSize || item.selectedSize);
+                                              setCartItems(prev => [...prev, standaloneCombo]);
+                                              setBillCartItems(prev => [...prev, standaloneCombo]);
+                                              setWarningMessage(`${combo.name1} added to cart!`);
+                                              setWarningType("success");
+                                            }}
+                                            style={{
+                                              border: '1px solid #ffc107',
+                                              borderRadius: '4px',
+                                              padding: '6px 2px',
+                                              fontSize: '11px',
+                                              cursor: 'pointer',
+                                              background: '#ffefc1',
+                                              flex: 1,
+                                              textAlign: 'center',
+                                              display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
+                                              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                                              minHeight: '50px'
+                                            }}
+                                            title={`${combo.name1} (${size})`}
+                                          >
+                                            <div style={{ fontWeight: 'bold', fontSize: '10px', lineHeight: '1.2', marginBottom: '2px' }}>{combo.name1}</div>
+                                            <div style={{ fontSize: '10px', fontWeight: 'bold' }}>({size})</div>
+                                            <div style={{ color: '#d39e00', fontSize: '10px', fontWeight: 'bold' }}>+{formatPrice(price)}</div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : (
+                                    /* Regular Combo: Single Box - Styled to Match Variants Height */
+                                    <div
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        const size = item.isSplitVariant ? item.splitSize : "M";
+                                        const standaloneCombo = createStandaloneComboItem(combo, size, item.isSplitVariant, item.splitSize || item.selectedSize);
+                                        setCartItems(prev => [...prev, standaloneCombo]);
+                                        setBillCartItems(prev => [...prev, standaloneCombo]);
+                                        setWarningMessage(`${combo.name1} added to cart!`);
+                                        setWarningType("success");
+                                      }}
+                                      style={{
+                                        border: '1px solid #ffc107',
+                                        borderRadius: '4px',
+                                        padding: '6px 8px',
+                                        fontSize: '11px',
+                                        cursor: 'pointer',
+                                        background: '#ffefc1',
+                                        textAlign: 'center',
+                                        width: '100%',
+                                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                                        minHeight: '50px',
+                                        display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center'
+                                      }}
+                                    >
+                                      <div style={{ fontWeight: 'bold', fontSize: '10px', lineHeight: '1.2' }}>{combo.name1}</div>
+                                      <div style={{ color: '#d39e00', fontWeight: 'bold', marginTop: '2px' }}>+{formatPrice(combo.price)}</div>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Right Side: Category Sidebar */}
+              <div className="frontpage-pos-categories" style={{ width: '150px', overflowY: 'auto', borderLeft: '1px solid #eee', paddingLeft: '10px' }}>
+                <h6 style={{ fontWeight: 'bold', marginBottom: '10px', textAlign: 'center' }}>Categories</h6>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {categories.map((cat) => (
+                    <button
+                      key={cat}
+                      className={`btn btn-sm ${selectedCategory === cat ? 'btn-primary' : 'btn-outline-secondary'}`}
+                      style={{ textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                      onClick={() => handleFilter(cat)}
                     >
-                      Add to Cart
-                    </Button>
-                  </Card>
+                      {cat}
+                    </button>
+                  ))}
                 </div>
-              ) : (
-                <div key={item.id} className="frontpage-menu-card" onClick={() => handleItemClick(item)}>
-                  <img src={item.image || "/placeholder.svg"} alt={item.name} className="frontpage-menu-card-image" />
-                  <div className="frontpage-menu-card-content">
-                    <h5 className="frontpage-menu-card-name">{item.name}</h5>
-                    <p className="frontpage-menu-card-price">
-                      {formatPrice(hasActiveOffer(item) ? item.offer_price : item.basePrice)} {/* UPDATED: Use formatPrice */}
-                    </p>
-                    {hasActiveOffer(item) && <span className="frontpage-offer-badge">Offer</span>}
+              </div>
+            </div>
+          ) : (
+            /* ── NORMAL CARD VIEW (Simplified) ── */
+            <div className={`frontpage-menu-grid ${selectedCategory === "Combos Offer" ? "combo-grid" : ""}`}>
+              {/* Logic: 
+                  1. Flatten main items: if enabled size, S/M/L cards. Else 1 card.
+                  2. Combos Offer: Poster style.
+                  3. Hide generic addon/combo items if they appear in standard list (filteredItems usually contains them if they were fetched as items? 
+                     Actually menuItems comes from /api/items. Addons usually attached to items. 
+                     But the user says "DO NOT generate separate cards for addons". 
+                     Assuming filteredItems ONLY contains Main Items and Combo Offers based on API. 
+              */}
+              {filteredItems.flatMap((item) => {
+                // CASE 1: Poster / Combo Offer
+                if (item.isCombo) {
+                  return [{ ...item, isPoster: true }];
+                }
+
+                // CASE 2: Main Item - Single Card (User Request: "Normal view item only")
+                // We do NOT split into sizes (S/M/L) here anymore.
+                return [{
+                  ...item,
+                  displayPrice: item.basePrice,
+                  displayName: item.name,
+                  preSelectedSize: null
+                }];
+              }).map((item, index) => { // Use index for unique key with UUID fallback
+                if (item.isPoster) {
+                  // Render Poster Card (Combo Offer)
+                  return (
+                    <div key={item.id} className="col-md-6 mb-4">
+                      <Card
+                        style={posterStyle}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = "translateY(-5px) scale(1.01)";
+                          e.currentTarget.style.boxShadow = "0 8px 15px rgba(0, 0, 0, 0.25)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = "translateY(0) scale(1)";
+                          e.currentTarget.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.2)";
+                        }}
+                      >
+                        <div style={logoStyle}>K</div>
+                        <h4 style={offerNameStyle}>{item.name}</h4>
+                        {hasActiveOffer(item) && (
+                          <p style={offerPeriodStyle}>
+                            <strong>Offer Period:</strong> {new Date(item.offer_start_time).toLocaleDateString()} {new Date(item.offer_start_time).toLocaleTimeString()} to {new Date(item.offer_end_time).toLocaleDateString()} {new Date(item.offer_end_time).toLocaleTimeString()}
+                          </p>
+                        )}
+                        {(() => {
+                          const uploadedImages = getUploadedImages(item);
+                          if (uploadedImages.length > 0) {
+                            return (
+                              <div style={uploadedImagesStyle}>
+                                {uploadedImages.map((imgPath, idx) => (
+                                  <img key={idx} src={`${baseUrl}${imgPath}`} alt="" style={uploadedImageThumbStyle} onError={(e) => { e.target.src = "https://via.placeholder.com/60?text=No+Img"; }} />
+                                ))}
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
+                        <ul style={itemsListStyle}>
+                          {getComboItemsWithImages(item).map((itemWithImage, idx) => (
+                            <li key={idx} style={itemsListItemStyle}>
+                              {itemWithImage.image && <img src={itemWithImage.image} alt="" style={itemImageStyle} onError={(e) => { e.target.style.display = "none"; }} />}
+                              {itemWithImage.name}
+                            </li>
+                          ))}
+                        </ul>
+                        <p style={totalPriceStyle}>
+                          Total Price: {hasActiveOffer(item) ? (
+                            <>
+                              <span style={{ ...strikethroughStyle, color: "#aaa", fontSize: "16px" }}>{formatPrice(item.basePrice)}</span>
+                              <span style={{ color: "#fdd835", fontSize: "18px" }}>{formatPrice(item.offer_price)}</span>
+                            </>
+                          ) : (
+                            <span style={{ color: "#ffffff", fontSize: "18px" }}>{formatPrice(item.basePrice)}</span>
+                          )}
+                        </p>
+                        {hasActiveOffer(item) && <p style={limitedOfferStyle}>LIMITED OFFERS! Place Your Order</p>}
+                        <Button
+                          variant="success"
+                          onClick={() => handleItemUpdate({ ...item, quantity: 1 })}
+                          style={viewButtonStyle}
+                          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#f0f0f0"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#ffffff"; }}
+                        >
+                          Add to Cart
+                        </Button>
+                      </Card>
+                    </div>
+                  );
+                }
+
+                // Render Normal Card (Main Item / Variant)
+                return (
+                  <div key={item.id + (item.preSelectedSize || "")} className="frontpage-menu-card" onClick={() => handleItemClick(item, item.preSelectedSize)}>
+                    {/* Size Badge */}
+                    {item.preSelectedSize && (
+                      <span className="badge bg-primary" style={{ position: 'absolute', top: '10px', right: '10px', zIndex: 2 }}>
+                        {item.preSelectedSize}
+                      </span>
+                    )}
+                    <img src={item.image || "/placeholder.svg"} alt={item.displayName} className="frontpage-menu-card-image" />
+                    <div className="frontpage-menu-card-content">
+                      <h5 className="frontpage-menu-card-name" style={{ fontSize: '1rem', fontWeight: 600 }}>{item.displayName}</h5>
+                      <p className="frontpage-menu-card-price">
+                        {formatPrice(hasActiveOffer(item) && !item.isVariantCard ? item.offer_price : item.displayPrice)}
+                      </p>
+                      {hasActiveOffer(item) && !item.isVariantCard && <span className="frontpage-offer-badge">Offer</span>}
+                    </div>
                   </div>
-                </div>
-              )
-            ))}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
       <div className="frontpage-billing-section">
@@ -2785,242 +3201,133 @@ function FrontPage() {
                         </button>
                       </td>
                     </tr>
-                    {item.isCombo && item.comboItems && item.comboItems.map((comboItem, cIndex) => (
-                      <tr key={`${item.id}-comboitem-${cIndex}`}>
-                        <td></td>
-                        <td>
-                          <div className="frontpage-cart-item-details">
-                            <img
-                              src={comboItem.image || "/placeholder.svg"}
-                              alt={comboItem.name}
-                              className="frontpage-cart-item-image"
-                              onError={(e) => (e.target.src = "/static/images/default-item.jpg")}
-                            />
-                            <span className="frontpage-cart-item-addon">{comboItem.name}</span>
-                          </div>
-                        </td>
-                        <td>{item.quantity}</td>
-                        <td>{getPriceDisplay(item, false, null, null, true)}</td>
-                        {showKitchenColumn && <td>{comboItem.kitchen || "Main Kitchen"}</td>}
-                        <td></td>
-                      </tr>
-                    ))}
-                    {item.icePreference === "with_ice" && (
-                      <tr>
-                        <td></td>
-                        <td>
-                          <div className="frontpage-cart-item-option">Ice</div>
-                        </td>
-                        <td>
-                          <input
-                            type="number"
-                            className="frontpage-cart-quantity-input"
-                            value={item.quantity || 1}
-                            onChange={(e) => handleQuantityChange(item.id, e.target.value, "item")}
-                            min="1"
-                          />
-                        </td>
-                        <td>{formatPrice((item.icePrice || 0) * (item.quantity || 1))}</td>
-                        {showKitchenColumn && <td></td>}
-                        <td>
-                          <button
-                            className="frontpage-remove-btn"
-                            onClick={() => handleItemUpdate({ ...item, icePreference: "without_ice", icePrice: 0 })}
-                          >
-                            <i className="bi bi-x"></i>
-                          </button>
-                        </td>
-                      </tr>
-                    )}
-                    {item.isSpicy && (
-                      <tr>
-                        <td></td>
-                        <td>
-                          <div className="frontpage-cart-item-option">Spicy</div>
-                        </td>
-                        <td>
-                          <input
-                            type="number"
-                            className="frontpage-cart-quantity-input"
-                            value={item.quantity || 1}
-                            onChange={(e) => handleQuantityChange(item.id, e.target.value, "item")}
-                            min="1"
-                          />
-                        </td>
-                        <td>{formatPrice((item.spicyPrice || 0) * (item.quantity || 1))}</td>
-                        {showKitchenColumn && <td></td>}
-                        <td>
-                          <button
-                            className="frontpage-remove-btn"
-                            onClick={() => handleItemUpdate({ ...item, isSpicy: false, spicyPrice: 0 })}
-                          >
-                            <i className="bi bi-x"></i>
-                          </button>
-                        </td>
-                      </tr>
-                    )}
-                    {item.customVariantsDetails &&
-                      Object.entries(item.customVariantsDetails).map(([variantName, variant]) => (
-                        <tr key={`${item.id}-custom-${variantName}`}>
-                          <td></td>
-                          <td>
-                            <div className="frontpage-cart-item-option">
-                              {variant.heading}: {variant.name}
-                            </div>
-                          </td>
-                          <td>
-                            <input
-                              type="number"
-                              className="frontpage-cart-quantity-input"
-                              value={item.customVariantsQuantities?.[variantName] || 1}
-                              onChange={(e) =>
-                                handleQuantityChange(item.id, e.target.value, "customVariant", variantName)
-                              }
-                              min="1"
-                            />
-                          </td>
-                          <td>{formatPrice((variant.price || 0) * (Number(item.customVariantsQuantities?.[variantName] || 1)) * (Number(item.quantity || 1)))}</td>
-                          {showKitchenColumn && <td></td>}
-                          <td>
-                            <button
-                              className="frontpage-remove-btn"
-                              onClick={() => removeCustomVariant(item.id, variantName)}
-                            >
-                              <i className="bi bi-x"></i>
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    {item.addonQuantities &&
-                      Object.entries(item.addonQuantities).map(
-                        ([addonName, qty]) =>
-                          Number(qty) > 0 && (
-                            <React.Fragment key={`${item.id}-addon-${addonName}`}>
-                              <tr>
-                                <td></td>
-                                <td>
-                                  <div className="frontpage-cart-item-details">
-                                    <img
-                                      src={item.addonImages ? item.addonImages[addonName] || "/static/images/default-addon-image.jpg" : "/static/images/default-addon-image.jpg"}
-                                      alt={addonName}
-                                      className="frontpage-cart-item-image"
-                                      onError={(e) => (e.target.src = "/static/images/default-addon-image.jpg")}
-                                    />
-                                    <span className="frontpage-cart-item-addon">
-                                      {addonName} ({item.addonVariants ? item.addonVariants[addonName]?.size || "M" : "M"})
-                                    </span>
-                                  </div>
-                                </td>
-                                <td>
-                                  <input
-                                    type="number"
-                                    className="frontpage-cart-quantity-input"
-                                    value={qty}
-                                    onChange={(e) => handleQuantityChange(item.id, e.target.value, "addon", addonName)}
-                                    min="1"
-                                  />
-                                </td>
-                                <td>{getPriceDisplay(item, false, addonName)}</td>
-                                {showKitchenColumn && (
-                                  <td>{item.addonVariants ? item.addonVariants[addonName]?.kitchen || "Main Kitchen" : "Main Kitchen"}</td>
-                                )}
-                                <td>
-                                  <button
-                                    className="frontpage-remove-btn"
-                                    onClick={() => removeAddonOrCombo(item.id, "addon", addonName)}
-                                  >
-                                    <i className="bi bi-x"></i>
-                                  </button>
-                                </td>
-                              </tr>
-                              {item.addonVariants?.[addonName]?.cold === 'with_ice' && (
-                                <tr>
-                                  <td></td>
-                                  <td>
-                                    <div className="frontpage-cart-item-option">{addonName} (Ice)</div>
-                                  </td>
-                                  <td>
-                                    <input
-                                      type="number"
-                                      className="frontpage-cart-quantity-input"
-                                      value={qty}
-                                      onChange={(e) =>
-                                        handleQuantityChange(item.id, e.target.value, "addon", addonName)
-                                      }
-                                      min="1"
-                                    />
-                                  </td>
-                                  <td>{formatPrice((item.addonIcePrices?.[addonName] || 0) * Number(qty || 1))}</td>
-                                  {showKitchenColumn && <td></td>}
-                                  <td>
-                                    <button
-                                      className="frontpage-remove-btn"
-                                      onClick={() => {
-                                        const updatedVariants = {
-                                          ...item.addonVariants,
-                                          [addonName]: { ...item.addonVariants[addonName], cold: 'without_ice' },
-                                        }
-                                        handleItemUpdate({
-                                          ...item,
-                                          addonVariants: updatedVariants,
-                                          addonIcePrices: { ...item.addonIcePrices, [addonName]: 0 },
-                                        })
-                                      }}
-                                    >
-                                      <i className="bi bi-x"></i>
-                                    </button>
-                                  </td>
-                                </tr>
-                              )}
-                              {item.addonVariants?.[addonName]?.spicy && (
-                                <tr>
-                                  <td></td>
-                                  <td>
-                                    <div className="frontpage-cart-item-option">{addonName} (Spicy)</div>
-                                  </td>
-                                  <td>
-                                    <input
-                                      type="number"
-                                      className="frontpage-cart-quantity-input"
-                                      value={qty}
-                                      onChange={(e) =>
-                                        handleQuantityChange(item.id, e.target.value, "addon", addonName)
-                                      }
-                                      min="1"
-                                    />
-                                  </td>
-                                  <td>{formatPrice((item.addonSpicyPrices?.[addonName] || 0) * Number(qty || 1))}</td>
-                                  {showKitchenColumn && <td></td>}
-                                  <td>
-                                    <button
-                                      className="frontpage-remove-btn"
-                                      onClick={() => {
-                                        const updatedVariants = {
-                                          ...item.addonVariants,
-                                          [addonName]: { ...item.addonVariants[addonName], spicy: false },
-                                        }
-                                        handleItemUpdate({
-                                          ...item,
-                                          addonVariants: updatedVariants,
-                                          addonSpicyPrices: { ...item.addonSpicyPrices, [addonName]: 0 },
-                                        })
-                                      }}
-                                    >
-                                      <i className="bi bi-x"></i>
-                                    </button>
-                                  </td>
-                                </tr>
-                              )}
-                              {item.addonVariants?.[addonName]?.sugar &&
-                                item.addonVariants[addonName].sugar !== "medium" && (
+                    {/* Render sub-rows ONLY if NOT standalone addon/combo */}
+                    {!item.isStandaloneAddon && !item.isStandaloneCombo && (
+                      <>
+                        {item.isCombo && item.comboItems && item.comboItems.map((comboItem, cIndex) => (
+                          <tr key={`${item.id}-comboitem-${cIndex}`}>
+                            <td></td>
+                            <td>
+                              <div className="frontpage-cart-item-details">
+                                <img
+                                  src={comboItem.image || "/placeholder.svg"}
+                                  alt={comboItem.name}
+                                  className="frontpage-cart-item-image"
+                                  onError={(e) => (e.target.src = "/static/images/default-item.jpg")}
+                                />
+                                <span className="frontpage-cart-item-addon">{comboItem.name}</span>
+                              </div>
+                            </td>
+                            <td>{item.quantity}</td>
+                            <td>{getPriceDisplay(item, false, null, null, true)}</td>
+                            {showKitchenColumn && <td>{comboItem.kitchen || "Main Kitchen"}</td>}
+                            <td></td>
+                          </tr>
+                        ))}
+                        {item.icePreference === "with_ice" && (
+                          <tr>
+                            <td></td>
+                            <td>
+                              <div className="frontpage-cart-item-option">Ice</div>
+                            </td>
+                            <td>
+                              <input
+                                type="number"
+                                className="frontpage-cart-quantity-input"
+                                value={item.quantity || 1}
+                                onChange={(e) => handleQuantityChange(item.id, e.target.value, "item")}
+                                min="1"
+                              />
+                            </td>
+                            <td>{formatPrice((item.icePrice || 0) * (item.quantity || 1))}</td>
+                            {showKitchenColumn && <td></td>}
+                            <td>
+                              <button
+                                className="frontpage-remove-btn"
+                                onClick={() => handleItemUpdate({ ...item, icePreference: "without_ice", icePrice: 0 })}
+                              >
+                                <i className="bi bi-x"></i>
+                              </button>
+                            </td>
+                          </tr>
+                        )}
+                        {item.isSpicy && (
+                          <tr>
+                            <td></td>
+                            <td>
+                              <div className="frontpage-cart-item-option">Spicy</div>
+                            </td>
+                            <td>
+                              <input
+                                type="number"
+                                className="frontpage-cart-quantity-input"
+                                value={item.quantity || 1}
+                                onChange={(e) => handleQuantityChange(item.id, e.target.value, "item")}
+                                min="1"
+                              />
+                            </td>
+                            <td>{formatPrice((item.spicyPrice || 0) * (item.quantity || 1))}</td>
+                            {showKitchenColumn && <td></td>}
+                            <td>
+                              <button
+                                className="frontpage-remove-btn"
+                                onClick={() => handleItemUpdate({ ...item, isSpicy: false, spicyPrice: 0 })}
+                              >
+                                <i className="bi bi-x"></i>
+                              </button>
+                            </td>
+                          </tr>
+                        )}
+                        {item.customVariantsDetails &&
+                          Object.entries(item.customVariantsDetails).map(([variantName, variant]) => (
+                            <tr key={`${item.id}-custom-${variantName}`}>
+                              <td></td>
+                              <td>
+                                <div className="frontpage-cart-item-option">
+                                  {variant.heading}: {variant.name}
+                                </div>
+                              </td>
+                              <td>
+                                <input
+                                  type="number"
+                                  className="frontpage-cart-quantity-input"
+                                  value={item.customVariantsQuantities?.[variantName] || 1}
+                                  onChange={(e) =>
+                                    handleQuantityChange(item.id, e.target.value, "customVariant", variantName)
+                                  }
+                                  min="1"
+                                />
+                              </td>
+                              <td>{formatPrice((variant.price || 0) * (Number(item.customVariantsQuantities?.[variantName] || 1)) * (Number(item.quantity || 1)))}</td>
+                              {showKitchenColumn && <td></td>}
+                              <td>
+                                <button
+                                  className="frontpage-remove-btn"
+                                  onClick={() => removeCustomVariant(item.id, variantName)}
+                                >
+                                  <i className="bi bi-x"></i>
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        {item.addonQuantities &&
+                          Object.entries(item.addonQuantities).map(
+                            ([addonName, qty]) =>
+                              Number(qty) > 0 && (
+                                <React.Fragment key={`${item.id}-addon-${addonName}`}>
                                   <tr>
                                     <td></td>
                                     <td>
-                                      <div className="frontpage-cart-item-option">
-                                        {addonName} (Sugar:{" "}
-                                        {item.addonVariants[addonName].sugar.charAt(0).toUpperCase() +
-                                          item.addonVariants[addonName].sugar.slice(1)}
-                                        )
+                                      <div className="frontpage-cart-item-details">
+                                        <img
+                                          src={item.addonImages ? item.addonImages[addonName] || "/static/images/default-addon-image.jpg" : "/static/images/default-addon-image.jpg"}
+                                          alt={addonName}
+                                          className="frontpage-cart-item-image"
+                                          onError={(e) => (e.target.src = "/static/images/default-addon-image.jpg")}
+                                        />
+                                        <span className="frontpage-cart-item-addon">
+                                          {addonName} ({item.addonVariants ? item.addonVariants[addonName]?.size || "M" : "M"})
+                                        </span>
                                       </div>
                                     </td>
                                     <td>
@@ -3028,42 +3335,28 @@ function FrontPage() {
                                         type="number"
                                         className="frontpage-cart-quantity-input"
                                         value={qty}
-                                        onChange={(e) =>
-                                          handleQuantityChange(item.id, e.target.value, "addon", addonName)
-                                        }
+                                        onChange={(e) => handleQuantityChange(item.id, e.target.value, "addon", addonName)}
                                         min="1"
                                       />
                                     </td>
-                                    <td>{formatPrice(0)}</td> {/* UPDATED: Use formatPrice */}
-                                    {showKitchenColumn && <td></td>}
+                                    <td>{getPriceDisplay(item, false, addonName)}</td>
+                                    {showKitchenColumn && (
+                                      <td>{item.addonVariants ? item.addonVariants[addonName]?.kitchen || "Main Kitchen" : "Main Kitchen"}</td>
+                                    )}
                                     <td>
                                       <button
                                         className="frontpage-remove-btn"
-                                        onClick={() => {
-                                          const updatedVariants = {
-                                            ...item.addonVariants,
-                                            [addonName]: { ...item.addonVariants[addonName], sugar: "medium" },
-                                          }
-                                          handleItemUpdate({
-                                            ...item,
-                                            addonVariants: updatedVariants,
-                                          })
-                                        }}
+                                        onClick={() => removeAddonOrCombo(item.id, "addon", addonName)}
                                       >
                                         <i className="bi bi-x"></i>
                                       </button>
                                     </td>
                                   </tr>
-                                )}
-                              {item.addonCustomVariantsDetails?.[addonName] &&
-                                Object.entries(item.addonCustomVariantsDetails[addonName]).map(
-                                  ([variantName, variant]) => (
-                                    <tr key={`${item.id}-addon-${addonName}-custom-${variantName}`}>
+                                  {item.addonVariants?.[addonName]?.cold === 'with_ice' && (
+                                    <tr>
                                       <td></td>
                                       <td>
-                                        <div className="frontpage-cart-item-option">
-                                          {addonName} - {variant.heading}: {variant.name}
-                                        </div>
+                                        <div className="frontpage-cart-item-option">{addonName} (Ice)</div>
                                       </td>
                                       <td>
                                         <input
@@ -3076,159 +3369,173 @@ function FrontPage() {
                                           min="1"
                                         />
                                       </td>
-                                      <td>{formatPrice((variant.price || 0) * Number(qty || 1))}</td>
+                                      <td>{formatPrice((item.addonIcePrices?.[addonName] || 0) * Number(qty || 1))}</td>
                                       {showKitchenColumn && <td></td>}
                                       <td>
                                         <button
                                           className="frontpage-remove-btn"
                                           onClick={() => {
-                                            const updatedDetails = { ...item.addonCustomVariantsDetails }
-                                            delete updatedDetails[addonName][variantName]
-                                            if (Object.keys(updatedDetails[addonName]).length === 0) {
-                                              delete updatedDetails[addonName]
+                                            const updatedVariants = {
+                                              ...item.addonVariants,
+                                              [addonName]: { ...item.addonVariants[addonName], cold: 'without_ice' },
                                             }
-                                            handleItemUpdate({ ...item, addonCustomVariantsDetails: updatedDetails })
+                                            handleItemUpdate({
+                                              ...item,
+                                              addonVariants: updatedVariants,
+                                              addonIcePrices: { ...item.addonIcePrices, [addonName]: 0 },
+                                            })
                                           }}
                                         >
                                           <i className="bi bi-x"></i>
                                         </button>
                                       </td>
                                     </tr>
-                                  ),
-                                )}
-                            </React.Fragment>
-                          ),
-                      )}
-                    {item.comboQuantities &&
-                      Object.entries(item.comboQuantities).map(
-                        ([comboName, qty]) =>
-                          Number(qty) > 0 && (
-                            <React.Fragment key={`${item.id}-combo-${comboName}`}>
-                              <tr>
-                                <td></td>
-                                <td>
-                                  <div className="frontpage-cart-item-details">
-                                    <img
-                                      src={item.comboImages ? item.comboImages[comboName] || "/static/images/default-combo-image.jpg" : "/static/images/default-combo-image.jpg"}
-                                      alt={comboName}
-                                      className="frontpage-cart-item-image"
-                                      onError={(e) => (e.target.src = "/static/images/default-combo-image.jpg")}
-                                    />
-                                    <span className="frontpage-cart-item-addon">
-                                      {comboName} ({item.comboVariants ? item.comboVariants[comboName]?.size || "M" : "M"})
-                                    </span>
-                                  </div>
-                                </td>
-                                <td>
-                                  <input
-                                    type="number"
-                                    className="frontpage-cart-quantity-input"
-                                    value={qty}
-                                    onChange={(e) => handleQuantityChange(item.id, e.target.value, "combo", comboName)}
-                                    min="1"
-                                  />
-                                </td>
-                                <td>{getPriceDisplay(item, false, null, comboName)}</td>
-                                {showKitchenColumn && (
-                                  <td>{item.comboVariants ? item.comboVariants[comboName]?.kitchen || "Main Kitchen" : "Main Kitchen"}</td>
-                                )}
-                                <td>
-                                  <button
-                                    className="frontpage-remove-btn"
-                                    onClick={() => removeAddonOrCombo(item.id, "combo", comboName)}
-                                  >
-                                    <i className="bi bi-x"></i>
-                                  </button>
-                                </td>
-                              </tr>
-                              {item.comboVariants?.[comboName]?.cold === 'with_ice' && (
-                                <tr>
-                                  <td></td>
-                                  <td>
-                                    <div className="frontpage-cart-item-option">{comboName} (Ice)</div>
-                                  </td>
-                                  <td>
-                                    <input
-                                      type="number"
-                                      className="frontpage-cart-quantity-input"
-                                      value={qty}
-                                      onChange={(e) =>
-                                        handleQuantityChange(item.id, e.target.value, "combo", comboName)
-                                      }
-                                      min="1"
-                                    />
-                                  </td>
-                                  <td>{formatPrice((item.comboIcePrices?.[comboName] || 0) * Number(qty || 1))}</td>
-                                  {showKitchenColumn && <td></td>}
-                                  <td>
-                                    <button
-                                      className="frontpage-remove-btn"
-                                      onClick={() => {
-                                        const updatedVariants = {
-                                          ...item.comboVariants,
-                                          [comboName]: { ...item.comboVariants[comboName], cold: 'without_ice' },
-                                        }
-                                        handleItemUpdate({
-                                          ...item,
-                                          comboVariants: updatedVariants,
-                                          comboIcePrices: { ...item.comboIcePrices, [comboName]: 0 },
-                                        })
-                                      }}
-                                    >
-                                      <i className="bi bi-x"></i>
-                                    </button>
-                                  </td>
-                                </tr>
-                              )}
-                              {item.comboVariants?.[comboName]?.spicy && (
-                                <tr>
-                                  <td></td>
-                                  <td>
-                                    <div className="frontpage-cart-item-option">{comboName} (Spicy)</div>
-                                  </td>
-                                  <td>
-                                    <input
-                                      type="number"
-                                      className="frontpage-cart-quantity-input"
-                                      value={qty}
-                                      onChange={(e) =>
-                                        handleQuantityChange(item.id, e.target.value, "combo", comboName)
-                                      }
-                                      min="1"
-                                    />
-                                  </td>
-                                  <td>{formatPrice((item.comboSpicyPrices?.[comboName] || 0) * Number(qty || 1))}</td>
-                                  {showKitchenColumn && <td></td>}
-                                  <td>
-                                    <button
-                                      className="frontpage-remove-btn"
-                                      onClick={() => {
-                                        const updatedVariants = {
-                                          ...item.comboVariants,
-                                          [comboName]: { ...item.comboVariants[comboName], spicy: false },
-                                        }
-                                        handleItemUpdate({
-                                          ...item,
-                                          comboVariants: updatedVariants,
-                                          comboSpicyPrices: { ...item.comboSpicyPrices, [comboName]: 0 },
-                                        })
-                                      }}
-                                    >
-                                      <i className="bi bi-x"></i>
-                                    </button>
-                                  </td>
-                                </tr>
-                              )}
-                              {item.comboVariants?.[comboName]?.sugar &&
-                                item.comboVariants[comboName].sugar !== "medium" && (
+                                  )}
+                                  {item.addonVariants?.[addonName]?.spicy && (
+                                    <tr>
+                                      <td></td>
+                                      <td>
+                                        <div className="frontpage-cart-item-option">{addonName} (Spicy)</div>
+                                      </td>
+                                      <td>
+                                        <input
+                                          type="number"
+                                          className="frontpage-cart-quantity-input"
+                                          value={qty}
+                                          onChange={(e) =>
+                                            handleQuantityChange(item.id, e.target.value, "addon", addonName)
+                                          }
+                                          min="1"
+                                        />
+                                      </td>
+                                      <td>{formatPrice((item.addonSpicyPrices?.[addonName] || 0) * Number(qty || 1))}</td>
+                                      {showKitchenColumn && <td></td>}
+                                      <td>
+                                        <button
+                                          className="frontpage-remove-btn"
+                                          onClick={() => {
+                                            const updatedVariants = {
+                                              ...item.addonVariants,
+                                              [addonName]: { ...item.addonVariants[addonName], spicy: false },
+                                            }
+                                            handleItemUpdate({
+                                              ...item,
+                                              addonVariants: updatedVariants,
+                                              addonSpicyPrices: { ...item.addonSpicyPrices, [addonName]: 0 },
+                                            })
+                                          }}
+                                        >
+                                          <i className="bi bi-x"></i>
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  )}
+                                  {item.addonVariants?.[addonName]?.sugar &&
+                                    item.addonVariants[addonName].sugar !== "medium" && (
+                                      <tr>
+                                        <td></td>
+                                        <td>
+                                          <div className="frontpage-cart-item-option">
+                                            {addonName} (Sugar:{" "}
+                                            {item.addonVariants[addonName].sugar.charAt(0).toUpperCase() +
+                                              item.addonVariants[addonName].sugar.slice(1)}
+                                            )
+                                          </div>
+                                        </td>
+                                        <td>
+                                          <input
+                                            type="number"
+                                            className="frontpage-cart-quantity-input"
+                                            value={qty}
+                                            onChange={(e) =>
+                                              handleQuantityChange(item.id, e.target.value, "addon", addonName)
+                                            }
+                                            min="1"
+                                          />
+                                        </td>
+                                        <td>{formatPrice(0)}</td> {/* UPDATED: Use formatPrice */}
+                                        {showKitchenColumn && <td></td>}
+                                        <td>
+                                          <button
+                                            className="frontpage-remove-btn"
+                                            onClick={() => {
+                                              const updatedVariants = {
+                                                ...item.addonVariants,
+                                                [addonName]: { ...item.addonVariants[addonName], sugar: "medium" },
+                                              }
+                                              handleItemUpdate({
+                                                ...item,
+                                                addonVariants: updatedVariants,
+                                              })
+                                            }}
+                                          >
+                                            <i className="bi bi-x"></i>
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    )}
+                                  {item.addonCustomVariantsDetails?.[addonName] &&
+                                    Object.entries(item.addonCustomVariantsDetails[addonName]).map(
+                                      ([variantName, variant]) => (
+                                        <tr key={`${item.id}-addon-${addonName}-custom-${variantName}`}>
+                                          <td></td>
+                                          <td>
+                                            <div className="frontpage-cart-item-option">
+                                              {addonName} - {variant.heading}: {variant.name}
+                                            </div>
+                                          </td>
+                                          <td>
+                                            <input
+                                              type="number"
+                                              className="frontpage-cart-quantity-input"
+                                              value={qty}
+                                              onChange={(e) =>
+                                                handleQuantityChange(item.id, e.target.value, "addon", addonName)
+                                              }
+                                              min="1"
+                                            />
+                                          </td>
+                                          <td>{formatPrice((variant.price || 0) * Number(qty || 1))}</td>
+                                          {showKitchenColumn && <td></td>}
+                                          <td>
+                                            <button
+                                              className="frontpage-remove-btn"
+                                              onClick={() => {
+                                                const updatedDetails = { ...item.addonCustomVariantsDetails }
+                                                delete updatedDetails[addonName][variantName]
+                                                if (Object.keys(updatedDetails[addonName]).length === 0) {
+                                                  delete updatedDetails[addonName]
+                                                }
+                                                handleItemUpdate({ ...item, addonCustomVariantsDetails: updatedDetails })
+                                              }}
+                                            >
+                                              <i className="bi bi-x"></i>
+                                            </button>
+                                          </td>
+                                        </tr>
+                                      ),
+                                    )}
+                                </React.Fragment>
+                              ),
+                          )}
+                        {item.comboQuantities &&
+                          Object.entries(item.comboQuantities).map(
+                            ([comboName, qty]) =>
+                              Number(qty) > 0 && (
+                                <React.Fragment key={`${item.id}-combo-${comboName}`}>
                                   <tr>
                                     <td></td>
                                     <td>
-                                      <div className="frontpage-cart-item-option">
-                                        {comboName} (Sugar:{" "}
-                                        {item.comboVariants[comboName].sugar.charAt(0).toUpperCase() +
-                                          item.comboVariants[comboName].sugar.slice(1)}
-                                        )
+                                      <div className="frontpage-cart-item-details">
+                                        <img
+                                          src={item.comboImages ? item.comboImages[comboName] || "/static/images/default-combo-image.jpg" : "/static/images/default-combo-image.jpg"}
+                                          alt={comboName}
+                                          className="frontpage-cart-item-image"
+                                          onError={(e) => (e.target.src = "/static/images/default-combo-image.jpg")}
+                                        />
+                                        <span className="frontpage-cart-item-addon">
+                                          {comboName} ({item.comboVariants ? item.comboVariants[comboName]?.size || "M" : "M"})
+                                        </span>
                                       </div>
                                     </td>
                                     <td>
@@ -3236,42 +3543,28 @@ function FrontPage() {
                                         type="number"
                                         className="frontpage-cart-quantity-input"
                                         value={qty}
-                                        onChange={(e) =>
-                                          handleQuantityChange(item.id, e.target.value, "combo", comboName)
-                                        }
+                                        onChange={(e) => handleQuantityChange(item.id, e.target.value, "combo", comboName)}
                                         min="1"
                                       />
                                     </td>
-                                    <td>{formatPrice(0)}</td> {/* UPDATED: Use formatPrice */}
-                                    {showKitchenColumn && <td></td>}
+                                    <td>{getPriceDisplay(item, false, null, comboName)}</td>
+                                    {showKitchenColumn && (
+                                      <td>{item.comboVariants ? item.comboVariants[comboName]?.kitchen || "Main Kitchen" : "Main Kitchen"}</td>
+                                    )}
                                     <td>
                                       <button
                                         className="frontpage-remove-btn"
-                                        onClick={() => {
-                                          const updatedVariants = {
-                                            ...item.comboVariants,
-                                            [comboName]: { ...item.comboVariants[comboName], sugar: "medium" },
-                                          }
-                                          handleItemUpdate({
-                                            ...item,
-                                            comboVariants: updatedVariants,
-                                          })
-                                        }}
+                                        onClick={() => removeAddonOrCombo(item.id, "combo", comboName)}
                                       >
                                         <i className="bi bi-x"></i>
                                       </button>
                                     </td>
                                   </tr>
-                                )}
-                              {item.comboCustomVariantsDetails?.[comboName] &&
-                                Object.entries(item.comboCustomVariantsDetails[comboName]).map(
-                                  ([variantName, variant]) => (
-                                    <tr key={`${item.id}-combo-${comboName}-custom-${variantName}`}>
+                                  {item.comboVariants?.[comboName]?.cold === 'with_ice' && (
+                                    <tr>
                                       <td></td>
                                       <td>
-                                        <div className="frontpage-cart-item-option">
-                                          {comboName} - {variant.heading}: {variant.name}
-                                        </div>
+                                        <div className="frontpage-cart-item-option">{comboName} (Ice)</div>
                                       </td>
                                       <td>
                                         <input
@@ -3284,29 +3577,157 @@ function FrontPage() {
                                           min="1"
                                         />
                                       </td>
-                                      <td>{formatPrice((variant.price || 0) * Number(qty || 1))}</td>
+                                      <td>{formatPrice((item.comboIcePrices?.[comboName] || 0) * Number(qty || 1))}</td>
                                       {showKitchenColumn && <td></td>}
                                       <td>
                                         <button
                                           className="frontpage-remove-btn"
                                           onClick={() => {
-                                            const updatedDetails = { ...item.comboCustomVariantsDetails }
-                                            delete updatedDetails[comboName][variantName]
-                                            if (Object.keys(updatedDetails[comboName]).length === 0) {
-                                              delete updatedDetails[comboName]
+                                            const updatedVariants = {
+                                              ...item.comboVariants,
+                                              [comboName]: { ...item.comboVariants[comboName], cold: 'without_ice' },
                                             }
-                                            handleItemUpdate({ ...item, comboCustomVariantsDetails: updatedDetails })
+                                            handleItemUpdate({
+                                              ...item,
+                                              comboVariants: updatedVariants,
+                                              comboIcePrices: { ...item.comboIcePrices, [comboName]: 0 },
+                                            })
                                           }}
                                         >
                                           <i className="bi bi-x"></i>
                                         </button>
                                       </td>
                                     </tr>
-                                  ),
-                                )}
-                            </React.Fragment>
-                          ),
-                      )}
+                                  )}
+                                  {item.comboVariants?.[comboName]?.spicy && (
+                                    <tr>
+                                      <td></td>
+                                      <td>
+                                        <div className="frontpage-cart-item-option">{comboName} (Spicy)</div>
+                                      </td>
+                                      <td>
+                                        <input
+                                          type="number"
+                                          className="frontpage-cart-quantity-input"
+                                          value={qty}
+                                          onChange={(e) =>
+                                            handleQuantityChange(item.id, e.target.value, "combo", comboName)
+                                          }
+                                          min="1"
+                                        />
+                                      </td>
+                                      <td>{formatPrice((item.comboSpicyPrices?.[comboName] || 0) * Number(qty || 1))}</td>
+                                      {showKitchenColumn && <td></td>}
+                                      <td>
+                                        <button
+                                          className="frontpage-remove-btn"
+                                          onClick={() => {
+                                            const updatedVariants = {
+                                              ...item.comboVariants,
+                                              [comboName]: { ...item.comboVariants[comboName], spicy: false },
+                                            }
+                                            handleItemUpdate({
+                                              ...item,
+                                              comboVariants: updatedVariants,
+                                              comboSpicyPrices: { ...item.comboSpicyPrices, [comboName]: 0 },
+                                            })
+                                          }}
+                                        >
+                                          <i className="bi bi-x"></i>
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  )}
+                                  {item.comboVariants?.[comboName]?.sugar &&
+                                    item.comboVariants[comboName].sugar !== "medium" && (
+                                      <tr>
+                                        <td></td>
+                                        <td>
+                                          <div className="frontpage-cart-item-option">
+                                            {comboName} (Sugar:{" "}
+                                            {item.comboVariants[comboName].sugar.charAt(0).toUpperCase() +
+                                              item.comboVariants[comboName].sugar.slice(1)}
+                                            )
+                                          </div>
+                                        </td>
+                                        <td>
+                                          <input
+                                            type="number"
+                                            className="frontpage-cart-quantity-input"
+                                            value={qty}
+                                            onChange={(e) =>
+                                              handleQuantityChange(item.id, e.target.value, "combo", comboName)
+                                            }
+                                            min="1"
+                                          />
+                                        </td>
+                                        <td>{formatPrice(0)}</td> {/* UPDATED: Use formatPrice */}
+                                        {showKitchenColumn && <td></td>}
+                                        <td>
+                                          <button
+                                            className="frontpage-remove-btn"
+                                            onClick={() => {
+                                              const updatedVariants = {
+                                                ...item.comboVariants,
+                                                [comboName]: { ...item.comboVariants[comboName], sugar: "medium" },
+                                              }
+                                              handleItemUpdate({
+                                                ...item,
+                                                comboVariants: updatedVariants,
+                                              })
+                                            }}
+                                          >
+                                            <i className="bi bi-x"></i>
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    )}
+                                  {item.comboCustomVariantsDetails?.[comboName] &&
+                                    Object.entries(item.comboCustomVariantsDetails[comboName]).map(
+                                      ([variantName, variant]) => (
+                                        <tr key={`${item.id}-combo-${comboName}-custom-${variantName}`}>
+                                          <td></td>
+                                          <td>
+                                            <div className="frontpage-cart-item-option">
+                                              {comboName} - {variant.heading}: {variant.name}
+                                            </div>
+                                          </td>
+                                          <td>
+                                            <input
+                                              type="number"
+                                              className="frontpage-cart-quantity-input"
+                                              value={qty}
+                                              onChange={(e) =>
+                                                handleQuantityChange(item.id, e.target.value, "combo", comboName)
+                                              }
+                                              min="1"
+                                            />
+                                          </td>
+                                          <td>{formatPrice((variant.price || 0) * Number(qty || 1))}</td>
+                                          {showKitchenColumn && <td></td>}
+                                          <td>
+                                            <button
+                                              className="frontpage-remove-btn"
+                                              onClick={() => {
+                                                const updatedDetails = { ...item.comboCustomVariantsDetails }
+                                                delete updatedDetails[comboName][variantName]
+                                                if (Object.keys(updatedDetails[comboName]).length === 0) {
+                                                  delete updatedDetails[comboName]
+                                                }
+                                                handleItemUpdate({ ...item, comboCustomVariantsDetails: updatedDetails })
+                                              }}
+                                            >
+                                              <i className="bi bi-x"></i>
+                                            </button>
+                                          </td>
+                                        </tr>
+                                      ),
+                                    )}
+                                </React.Fragment>
+                              ),
+                          )}
+                      </>
+                    )}
                   </React.Fragment>
                 ))
               )}

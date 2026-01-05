@@ -31,6 +31,7 @@ const SystemSettings = () => {
     firstDayOfWeek: 'Monday',
     floatPrecision: 3,
     currencyPrecision: 4,
+    useCurrencySymbol: false, // NEW: Toggle between Symbol and Code
     sessionExpiry: '',
     documentShareKeyExpiry: '',
     denyMultipleSessions: false,
@@ -389,7 +390,41 @@ const SystemSettings = () => {
             </div>
             <div>
               <label htmlFor="currency">Currency</label>
-              <input type="text" id="currency" name="currency" value={settings.currency} onChange={handleInputChange} />
+              <select id="currency" name="currency" value={settings.currency} onChange={handleInputChange}>
+                <option value="INR">INR (₹) - India</option>
+                <option value="USD">USD ($) - USA</option>
+                <option value="EUR">EUR (€) - Eurozone</option>
+                <option value="GBP">GBP (£) - UK</option>
+                <option value="AED">AED (د.إ) - UAE</option>
+                <option value="JPY">JPY (¥) - Japan</option>
+                <option value="CNY">CNY (¥) - China</option>
+                <option value="SGD">SGD ($) - Singapore</option>
+                <option value="MYR">MYR (RM) - Malaysia</option>
+                <option value="THB">THB (฿) - Thailand</option>
+                <option value="IDR">IDR (Rp) - Indonesia</option>
+                <option value="KRW">KRW (₩) - South Korea</option>
+                <option value="PHP">PHP (₱) - Philippines</option>
+                <option value="SAR">SAR (﷼) - Saudi Arabia</option>
+                <option value="QAR">QAR (﷼) - Qatar</option>
+                <option value="KWD">KWD (د.ك) - Kuwait</option>
+                <option value="OMR">OMR (﷼) - Oman</option>
+                <option value="BHD">BHD (.د.ب) - Bahrain</option>
+                <option value="CAD">CAD ($) - Canada</option>
+                <option value="AUD">AUD ($) - Australia</option>
+                <option value="NZD">NZD ($) - New Zealand</option>
+                <option value="CHF">CHF (CHF) - Switzerland</option>
+                <option value="ZAR">ZAR (R) - South Africa</option>
+                <option value="BRL">BRL (R$) - Brazil</option>
+                <option value="PKR">PKR (₨) - Pakistan</option>
+                <option value="LKR">LKR (Rs) - Sri Lanka</option>
+                <option value="NGN">NGN (₦) - Nigeria</option>
+              </select>
+            </div>
+            <div>
+              <label>
+                <input type="checkbox" name="useCurrencySymbol" checked={settings.useCurrencySymbol} onChange={handleInputChange} />
+                Display Currency directly as Symbol (e.g. ₹ instead of INR)
+              </label>
             </div>
             <div>
               <label htmlFor="dateFormat">Date Format</label>

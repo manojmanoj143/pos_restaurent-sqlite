@@ -1,15 +1,13 @@
-// src/components/Form/Addemployee.jsx (UPDATED: Replaced Department creation modal with navigation to full EmployeeDepartment page.
-// Removed all modal-related code for department (showDepartmentModal, newDepartmentName, departmentLoading, createNewDepartment).
-// Updated handleDepartmentChange to navigate to /employee-departments with state preservation.
-// In useEffect for location.state, added handling for restored formData from department page.
-// Ensured refetch of departments after restore.
-// All other features preserved: tabs, salary computation, image upload, confirmation modal, notifications, etc.
-// Phone ISD handling, validation, submit logic unchanged.
-// Fixed minor inconsistencies in renderInput for email (type='email' instead of 'text' for better validation).
+// src/components/Form/Addemployee.jsx (UPDATED: Added "Required Fields" button in header.
+// Clicking it opens a modal listing only required fields names.
+// Modal is simple, non-editable list.
+// All previous features preserved: navigation to sub-pages, salary computation, etc.
+// Required fields dynamically include/exclude password based on editing state.
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
-import { FaUserTie, FaArrowLeft, FaSave, FaPlus, FaTimes, FaUsersCog, FaUpload, FaUser, FaIdCard, FaBriefcase, FaGraduationCap, FaStethoscope, FaUsers, FaClock, FaBuilding } from 'react-icons/fa';
+import { FaUserTie, FaArrowLeft, FaSave, FaPlus, FaTimes, FaUsersCog, FaUpload, FaUser, FaIdCard, FaBriefcase, FaGraduationCap, FaStethoscope, FaUsers, FaClock, FaBuilding, FaExclamationTriangle } from 'react-icons/fa';
+
 const AddEmployee = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -39,7 +37,7 @@ const AddEmployee = () => {
     bankName: '',
     accountHolderName: '',
     accountNumber: '',
-    ifscCode: '',
+    branchCode: '',
     nationality: '',
     education: '',
     previousExperience: '',
@@ -77,13 +75,15 @@ const AddEmployee = () => {
   const [error, setError] = useState('');
   // NEW: Confirmation modal before submit
   const [showConfirmation, setShowConfirmation] = useState(false);
+  // NEW: Required Fields Modal
+  const [showRequiredFields, setShowRequiredFields] = useState(false);
   const [baseUrl, setBaseUrl] = useState('');
   const [editingId, setEditingId] = useState(null);
   // NEW: For image upload
   const [imagePreview, setImagePreview] = useState(null);
   const [isEditingDraft, setIsEditingDraft] = useState(false); // Fix for ReferenceError
-  // Company options (for multi-company; can fetch from API if needed)
-  const companyOptions = ['POS 8', 'POS 9', 'Company A', 'Company B']; // Example
+  // UPDATED: Company options state
+  const [companyOptions, setCompanyOptions] = useState([]); // Dynamic options
   // Status options
   const statusOptions = ['Active', 'Inactive'];
   // Salutation options
@@ -109,11 +109,15 @@ const AddEmployee = () => {
       try {
         const response = await axios.get("http://localhost:8000/api/network_info");
         const { config: appConfig } = response.data;
+        let currentBaseUrl = '';
         if (appConfig.mode === "client") {
-          setBaseUrl(`http://${appConfig.server_ip}:8000`);
+          currentBaseUrl = `http://${appConfig.server_ip}:8000`;
         } else {
-          setBaseUrl(`http://localhost:8000`);
+          currentBaseUrl = `http://localhost:8000`;
         }
+        setBaseUrl(currentBaseUrl);
+        // Fetch initial data once baseUrl is set
+        fetchCompanies(currentBaseUrl);
       } catch (error) {
         console.error("Failed to fetch config:", error);
         setBaseUrl(`http://localhost:8000`);
@@ -121,7 +125,28 @@ const AddEmployee = () => {
     };
     fetchConfig();
   }, []);
-  // Unified restore logic for formData (handles initial edit, restore from sub-pages, preserves editing state)
+  // NEW: Fetch Companies from CompanyDetails API
+  const fetchCompanies = async (currentBaseUrl) => {
+    try {
+      const url = `${currentBaseUrl}/api/company-details`;
+      const response = await axios.get(url);
+      const details = response.data.companyDetails || [];
+      // Extract restaurant names
+      const names = details.map(d => d.restaurantName).filter(n => n);
+      // Remove duplicates
+      const uniqueNames = [...new Set(names)];
+      // If empty, we might want to default to 'POS 8' or just empty
+      if (uniqueNames.length === 0) {
+        setCompanyOptions(['POS 8']); // Default fallback
+      } else {
+        setCompanyOptions(uniqueNames);
+      }
+    } catch (err) {
+      console.error('Error fetching companies:', err);
+      setCompanyOptions(['POS 8']); // Fallback
+    }
+  };
+  // Unified restore logic for formData (handles initial edit, restore from sub-pages like Designation/Department/Company, preserves editing state)
   useEffect(() => {
     if (location.state?.editingEmployee) {
       // Initial edit load
@@ -145,8 +170,9 @@ const AddEmployee = () => {
         }
       }
     } else if (location.state?.formData) {
-      // Restore from sub-page (designation/type/department) or other
+      // Restore from sub-page (designation/type/department/company)
       const restored = location.state.formData;
+      const savedCompany = location.state.newCompanyName; // Check if we returned with a new company name
       // Set ISD if provided in state
       if (location.state.selectedISDCode) {
         setSelectedISDCode(location.state.selectedISDCode);
@@ -163,12 +189,17 @@ const AddEmployee = () => {
       } else {
         setEditingId(null);
       }
+      // If we got a new company (or just returned), update it
+      if (savedCompany) {
+        restored.company = savedCompany;
+      }
       setFormData(restored);
       // Refetch lists to include new items
       if (baseUrl) {
         fetchEmployeeDesignations();
         fetchEmployeeTypes();
         fetchDepartments();
+        fetchCompanies(baseUrl); // Refresh companies
       }
     }
   }, [location.state, baseUrl]); // Depend on baseUrl for refetch
@@ -291,6 +322,25 @@ const AddEmployee = () => {
       setFormData(prev => ({ ...prev, department: value }));
     }
   };
+  // NEW: Handle Company Change with Navigation to Company Details
+  const handleCompanyChange = (e) => {
+    const value = e.target.value;
+    if (value === 'create_new') {
+      navigate('/company-details', {
+        state: {
+          returnTo: '/add-employee', // Flag to return
+          preservedState: {
+            formData: { ...formData, company: '' },
+            selectedISDCode: selectedISDCode,
+            isEditing: !!editingId,
+            editingId: editingId
+          }
+        }
+      });
+    } else {
+      setFormData(prev => ({ ...prev, company: value }));
+    }
+  };
   // Validation - Full for submit
   const validateForm = () => {
     if (!baseUrl || baseUrl === '') {
@@ -376,7 +426,7 @@ const AddEmployee = () => {
       // Reset form
       setFormData({
         name: '', phoneNumber: '', email: '', gender: '', dateOfBirth: '', dateOfJoining: '', company: 'POS 8', status: 'Active', salutation: '', maritalStatus: '', idNumber: '', idExpiry: '', address: '', employeeDesignation: '', employeeType: '',
-        basicSalary: '', hra: '', ta: '', oa: '', totalSalary: '', username: '', password: '', bankName: '', accountHolderName: '', accountNumber: '', ifscCode: '',
+        basicSalary: '', hra: '', ta: '', oa: '', totalSalary: '', username: '', password: '', bankName: '', accountHolderName: '', accountNumber: '', branchCode: '',
         nationality: '', education: '', previousExperience: '', skills: '', healthInfo: '', familyDetails: '', profileImage: '', department: '',
       });
       setImagePreview(null);
@@ -385,8 +435,20 @@ const AddEmployee = () => {
       await fetchEmployeeDesignations();
       await fetchEmployeeTypes();
       await fetchDepartments();
+
       setTimeout(() => {
-        navigate('/admin'); // Navigate to employee list page on success
+        // NEW: Check for returnTo state
+        if (location.state && location.state.returnTo) {
+          const newId = response.data._id || response.data.employee?._id || response.data.id;
+          navigate(location.state.returnTo, {
+            state: {
+              newGeneralEmployeeId: newId,
+              preservedState: location.state.preservedState
+            }
+          });
+        } else {
+          navigate('/admin'); // Navigate to employee list page on success
+        }
       }, 2000);
     } catch (err) {
       const errorMsg = err.response?.data?.error || `Failed to ${editingId ? 'update' : 'create'} employee`;
@@ -406,12 +468,29 @@ const AddEmployee = () => {
     // Reset form (as above)
     setFormData({
       name: '', phoneNumber: '', email: '', gender: '', dateOfBirth: '', dateOfJoining: '', company: 'POS 8', status: 'Active', salutation: '', maritalStatus: '', idNumber: '', idExpiry: '', address: '', employeeDesignation: '', employeeType: '',
-      basicSalary: '', hra: '', ta: '', oa: '', totalSalary: '', username: '', password: '', bankName: '', accountHolderName: '', accountNumber: '', ifscCode: '',
+      basicSalary: '', hra: '', ta: '', oa: '', totalSalary: '', username: '', password: '', bankName: '', accountHolderName: '', accountNumber: '', branchCode: '',
       nationality: '', education: '', previousExperience: '', skills: '', healthInfo: '', familyDetails: '', profileImage: '', department: '',
     });
     setImagePreview(null);
     setSelectedISDCode("+971");
     setActiveTab('details');
+  };
+  // NEW: Get required fields list dynamically
+  const getRequiredFields = () => {
+    const required = [
+      'Full Name',
+      'Phone Number',
+      'Email',
+      'Address',
+      'Employee Designation',
+      'Employee Type',
+      'Department',
+      'Username'
+    ];
+    if (!editingId) {
+      required.push('Password');
+    }
+    return required;
   };
   const TabButton = ({ tabKey, label, icon }) => (
     <button
@@ -469,7 +548,13 @@ const AddEmployee = () => {
     }}>
       {/* Fixed Back Button */}
       <button
-        onClick={() => navigate('/admin')}
+        onClick={() => {
+          if (location.state && location.state.returnTo) {
+            navigate(location.state.returnTo, { state: { preservedState: location.state.preservedState } });
+          } else {
+            navigate('/admin');
+          }
+        }}
         style={{
           position: 'fixed',
           top: '20px',
@@ -538,6 +623,29 @@ const AddEmployee = () => {
             {editingId ? 'Edit Employee' : 'Add New Employee'}
           </h2>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            {/* NEW: Required Fields Button */}
+            <button
+              type="button"
+              onClick={() => setShowRequiredFields(true)}
+              style={{
+                padding: '10px 15px',
+                backgroundColor: '#f39c12',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '0.9rem',
+                cursor: 'pointer',
+                transition: 'background-color 0.3s',
+                fontWeight: '500',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+              onMouseOver={(e) => (e.target.style.backgroundColor = '#e67e22')}
+              disabled={loading}
+            >
+              <FaExclamationTriangle /> Required Fields
+            </button>
             {editingId && (
               <button
                 type="button"
@@ -750,7 +858,26 @@ const AddEmployee = () => {
                   {renderInput('date', 'dateOfJoining', 'Date of Joining')}
                 </div>
                 {renderSelect('status', statusOptions, 'Status')}
-                {renderSelect('company', companyOptions, 'Company (Multi-Company Setup)')}
+                {/* Custom Company Select with Create New */}
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px' }}>
+                    Company (Multi-Company Setup)
+                  </label>
+                  <select
+                    name="company"
+                    value={formData.company}
+                    onChange={handleCompanyChange}
+                    style={{ padding: '12px', border: '1px solid #bdc3c7', borderRadius: '8px', fontSize: '1rem', outline: 'none', backgroundColor: '#fff', transition: 'border-color 0.3s' }}
+                    onFocus={e => e.target.style.borderColor = '#3498db'}
+                    onBlur={e => e.target.style.borderColor = '#bdc3c7'}
+                  >
+                    <option value="">Select Company</option>
+                    {companyOptions.map((opt, idx) => (
+                      <option key={idx} value={opt}>{opt}</option>
+                    ))}
+                    <option value="create_new" style={{ color: '#3498db', fontWeight: 'bold' }}>+ Create New Company</option>
+                  </select>
+                </div>
               </div>
             )}
             {activeTab === 'employment' && (
@@ -809,7 +936,7 @@ const AddEmployee = () => {
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
                     {renderInput('text', 'accountNumber', 'Account Number', false, 'Account Number (Optional)')}
-                    {renderInput('text', 'ifscCode', 'IFSC Code', false, 'IFSC Code (Optional)')}
+                    {renderInput('text', 'branchCode', 'Branch Code', false, 'Branch Code (Optional)')}
                   </div>
                 </div>
               </>
@@ -868,6 +995,89 @@ const AddEmployee = () => {
           </div>
         </form>
       </div>
+      {/* NEW: Required Fields Modal */}
+      {showRequiredFields && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 2000
+          }}
+          onClick={() => setShowRequiredFields(false)}
+        >
+          <div
+            style={{
+              backgroundColor: '#fff',
+              padding: '30px',
+              borderRadius: '15px',
+              textAlign: 'left',
+              boxShadow: '0 8px 30px rgba(0,0,0,0.3)',
+              maxWidth: '400px',
+              width: '90%',
+              position: 'relative',
+              maxHeight: '80vh',
+              overflowY: 'auto'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                color: '#f39c12',
+                fontSize: '1.5rem',
+                marginBottom: '15px',
+                fontWeight: 'bold',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px'
+              }}
+            >
+              <FaExclamationTriangle /> Required Fields
+            </div>
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+              {getRequiredFields().map((field, index) => (
+                <li
+                  key={index}
+                  style={{
+                    padding: '10px',
+                    borderBottom: '1px solid #ecf0f1',
+                    color: '#2c3e50',
+                    fontSize: '1rem'
+                  }}
+                >
+                  • {field}
+                </li>
+              ))}
+            </ul>
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '20px' }}>
+              <button
+                onClick={() => setShowRequiredFields(false)}
+                style={{
+                  padding: '12px 24px',
+                  backgroundColor: '#95a5a6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '1rem',
+                  fontWeight: '500',
+                  transition: 'background-color 0.3s'
+                }}
+                onMouseOver={(e) => (e.target.style.backgroundColor = '#7f8c8d')}
+                onMouseOut={(e) => (e.target.style.backgroundColor = '#95a5a6')}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Confirmation Modal - Warning before submit */}
       {showConfirmation && (
         <div
@@ -955,4 +1165,5 @@ const AddEmployee = () => {
     </div>
   );
 };
+
 export default AddEmployee;

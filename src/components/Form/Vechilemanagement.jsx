@@ -10,7 +10,7 @@
 // IMAGE UPDATE: Displaying uploaded documents as images in the table (Thumbnail preview).
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import {
   FaCar,
@@ -35,7 +35,15 @@ import {
 
 const VehicleManagement = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [vehicles, setVehicles] = useState([]);
+
+  // NEW: specific effect to handle auto-open add modal from navigation state
+  useEffect(() => {
+    if (location.state && (location.state.action === 'create' || location.state.openAddModal)) {
+      setShowAddModal(true);
+    }
+  }, [location.state]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [message, setMessage] = useState('');
@@ -142,6 +150,18 @@ const VehicleManagement = () => {
         }
       });
       setMessage('Vehicle added successfully!');
+
+      // NEW: Check for returnTo state
+      if (location.state && location.state.returnTo) {
+        navigate(location.state.returnTo, {
+          state: {
+            newVehicleNumber: formData.vehicle_number,
+            preservedState: location.state.preservedState
+          }
+        });
+        return; // Skip the rest as we are navigating away
+      }
+
       setShowAddModal(false);
       resetForm();
       fetchVehicles();
@@ -622,7 +642,13 @@ const VehicleManagement = () => {
     }}>
       {/* Fixed Back Button in Top-Left Corner - Styled like EmployeeList */}
       <button
-        onClick={() => navigate('/admin')}
+        onClick={() => {
+          if (location.state && location.state.returnTo) {
+            navigate(location.state.returnTo, { state: { preservedState: location.state.preservedState } });
+          } else {
+            navigate('/admin');
+          }
+        }}
         style={{
           position: 'fixed',
           top: '20px',

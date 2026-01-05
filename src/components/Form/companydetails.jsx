@@ -2,7 +2,16 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { FaArrowLeft, FaBuilding, FaPlus, FaClock, FaGlobe, FaLink, FaTrash, FaCalendarAlt, FaEdit, FaSave, FaTimes } from 'react-icons/fa';
+import { FaArrowLeft, FaBuilding, FaPlus, FaClock, FaGlobe, FaLink, FaTrash, FaCalendarAlt, FaEdit, FaSave, FaTimes, FaCopy } from 'react-icons/fa';
+
+// NEW: Country Rules for Validation
+const countryRules = [
+  { code: "+91", country: "India", length: 10 },
+  { code: "+971", country: "UAE", length: 9 },
+  { code: "+1", country: "USA", length: 10 },
+  { code: "+44", country: "UK", length: 10 },
+  { code: "+61", country: "Australia", length: 9 },
+];
 
 // Helper to ensure 24-hour HH:mm format
 const formatTo24Hour = (timeStr) => {
@@ -14,20 +23,15 @@ const formatTo24Hour = (timeStr) => {
   // Convert 12-hour format to 24-hour
   const [time, modifier] = timeStr.split(' ');
   if (!time || !modifier) return timeStr;
-
   let [hours, minutes] = time.split(':');
-
   if (hours === '12') {
     hours = '00';
   }
-
   if (modifier === 'PM') {
     hours = parseInt(hours, 10) + 12;
   }
-
   return `${hours}:${minutes}`;
 };
-
 const SearchableSelect = ({ options = [], value = '', onChange, placeholder }) => {
   const [search, setSearch] = useState(value || '');
   const [showList, setShowList] = useState(false);
@@ -94,13 +98,6 @@ const SearchableSelect = ({ options = [], value = '', onChange, placeholder }) =
 // NEW: Country Code Selector Component (similar to AddEmployee)
 const CountryCodeSelector = ({ selectedCode = '+91', onCodeChange }) => {
   const [showDropdown, setShowDropdown] = useState(false);
-  const isdCodes = [
-    { code: "+91", country: "India" },
-    { code: "+1", country: "USA" },
-    { code: "+44", country: "UK" },
-    { code: "+971", country: "UAE" },
-    { code: "+61", country: "Australia" },
-  ];
   const handleCodeSelect = (code) => {
     onCodeChange(code);
     setShowDropdown(false);
@@ -138,7 +135,7 @@ const CountryCodeSelector = ({ selectedCode = '+91', onCodeChange }) => {
           minWidth: '120px',
           boxShadow: '0 4px 12px rgba(0,0,0,.15)',
         }}>
-          {isdCodes.map((c, i) => (
+          {countryRules.map((c, i) => (
             <li key={i}>
               <button
                 type="button"
@@ -313,6 +310,13 @@ function CompanyDetails() {
   useEffect(() => {
     fetchConfig(); // UPDATED: Call fetchConfig instead of individual fetches
   }, []);
+
+  // NEW: Always Sync currency from system settings since it is read-only and should match system
+  useEffect(() => {
+    if (systemSettings.currency && formData.currencyType !== systemSettings.currency) {
+      setFormData(prev => ({ ...prev, currencyType: systemSettings.currency }));
+    }
+  }, [systemSettings.currency, formData.currencyType]);
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -490,6 +494,15 @@ function CompanyDetails() {
       setFormData((prev) => ({ ...prev, addresses: newAddresses }));
     }
   };
+
+  // NEW: Copy phone to whatsapp
+  const copyPhoneToWhatsapp = (index) => {
+    const newContacts = [...formData.contacts];
+    newContacts[index].whatsappCountryCode = newContacts[index].phoneCountryCode;
+    newContacts[index].whatsappNumber = newContacts[index].phoneNumber;
+    setFormData((prev) => ({ ...prev, contacts: newContacts }));
+  };
+
   const addAddress = () => {
     setFormData((prev) => ({
       ...prev,
@@ -534,6 +547,28 @@ function CompanyDetails() {
       setError(null);
       setMessage('');
       setWarning('');
+
+      // VALIDATION: Check phone numbers
+      for (let i = 0; i < formData.contacts.length; i++) {
+        const contact = formData.contacts[i];
+
+        // Validate Phone Number
+        if (contact.phoneNumber) {
+          const rule = countryRules.find(r => r.code === contact.phoneCountryCode);
+          if (rule && contact.phoneNumber.length !== rule.length) {
+            throw new Error(`Contact ${i + 1}: Phone number for ${rule.country} (${contact.phoneCountryCode}) must be ${rule.length} digits.`);
+          }
+        }
+
+        // Validate WhatsApp Number
+        if (contact.whatsappNumber) {
+          const rule = countryRules.find(r => r.code === contact.whatsappCountryCode);
+          if (rule && contact.whatsappNumber.length !== rule.length) {
+            throw new Error(`Contact ${i + 1}: WhatsApp number for ${rule.country} (${contact.whatsappCountryCode}) must be ${rule.length} digits.`);
+          }
+        }
+      }
+
       console.log('Submitting form data:', formData); // Debug log
       const response = await axios.post(`${baseUrl}/api/company-details`, formData);
       setMessage('Company details saved successfully!');
@@ -713,7 +748,7 @@ function CompanyDetails() {
                 </div>
                 <div class="column">
                   <div class="field"><span class="label">Account Holder Name:</span><span class="value">${savedDetails.accountHolderName || 'N/A'}</span></div>
-                  <div class="field"><span class="label">IFSC Code:</span><span class="value">${savedDetails.ifscCode || 'N/A'}</span></div>
+                  <div class="field"><span class="label">Branch Code:</span><span class="value">${savedDetails.ifscCode || 'N/A'}</span></div>
                   <div class="field"><span class="label">Currency Type:</span><span class="value">${savedDetails.currencyType || 'N/A'}</span></div>
                 </div>
               </div>
@@ -773,7 +808,7 @@ function CompanyDetails() {
       >
         <FaArrowLeft /> Back to Admin
       </button>
-      {/* Main Container - Like EmployeeList Card - UPDATED: Increased maxWidth to 1200px */}
+      {/* Main Container - Like EmployeeList Card - UPDATED: Increased maxWidth to 1200px, Added overflow-y: auto for scrollable content */}
       <div style={{
         maxWidth: '1200px',
         margin: '80px auto 20px',
@@ -781,7 +816,9 @@ function CompanyDetails() {
         padding: '30px',
         borderRadius: '15px',
         boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-        overflow: 'hidden'
+        overflowY: 'auto',
+        maxHeight: 'calc(100vh - 120px)',
+        overflowX: 'hidden'
       }}>
         {/* Header with Title and Working Hours Button - Styled like EmployeeList Header */}
         <div style={{
@@ -807,35 +844,6 @@ function CompanyDetails() {
             <FaBuilding style={{ color: '#3498db', fontSize: '2rem' }} />
             Company Details
           </h2>
-          <button
-            onClick={() => navigate('/working')}
-            style={{
-              background: 'linear-gradient(135deg, #27ae60 0%, #229954 100%)',
-              color: '#ffffff',
-              border: 'none',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '10px 20px',
-              borderRadius: '50px',
-              fontSize: '1rem',
-              fontWeight: '600',
-              boxShadow: '0 4px 8px rgba(39, 174, 96, 0.3)',
-              transition: 'all 0.3s ease'
-            }}
-            onMouseOver={(e) => {
-              e.target.style.transform = 'translateY(-2px)';
-              e.target.style.boxShadow = '0 6px 12px rgba(39, 174, 96, 0.4)';
-            }}
-            onMouseOut={(e) => {
-              e.target.style.transform = 'translateY(0)';
-              e.target.style.boxShadow = '0 4px 8px rgba(39, 174, 96, 0.3)';
-            }}
-            disabled={loading}
-          >
-            <FaClock /> Working Hours
-          </button>
         </div>
         {/* Error and Message - Styled like EmployeeList Alerts */}
         {error && (
@@ -1047,7 +1055,6 @@ function CompanyDetails() {
                       No Logo Uploaded
                     </div>
                   )}
-
                   {/* Title */}
                   <h3 style={{ color: '#2c3e50', fontSize: '1.8rem', margin: 0, textAlign: 'right', fontWeight: '600' }}>
                     Company Details<br />Application
@@ -1224,7 +1231,7 @@ function CompanyDetails() {
                           <span style={{ flex: 1, textAlign: 'left', color: '#000' }}>{savedDetails.accountNumber || 'N/A'}</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: '8px' }}>
-                          <strong style={{ minWidth: '200px', textAlign: 'left', paddingRight: '10px', color: '#555', fontWeight: 'bold' }}>IFSC Code :</strong>
+                          <strong style={{ minWidth: '200px', textAlign: 'left', paddingRight: '10px', color: '#555', fontWeight: 'bold' }}>Branch Code :</strong>
                           <span style={{ flex: 1, textAlign: 'left', color: '#000' }}>{savedDetails.ifscCode || 'N/A'}</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: '8px' }}>
@@ -1417,79 +1424,7 @@ function CompanyDetails() {
                 </div>
               </div>
               {/* NEW: Special Timings Sub-Section */}
-              <div style={{ marginTop: '30px', paddingTop: '20px', borderTop: '2px solid #eee' }}>
-                <h4 style={{ color: '#2c3e50', fontSize: '1.3rem', marginBottom: '15px', textAlign: 'center' }}>
-                  Special Timings (Overrides for Specific Dates)
-                </h4>
-                <div style={{ textAlign: 'center', color: '#555', fontSize: '0.9rem', marginBottom: '15px' }}>
-                  Add special timings for specific dates (e.g., holidays, events). These override regular hours.
-                </div>
-                {/* Add Form */}
-                <div style={{ display: 'grid', gap: '10px', maxWidth: '400px', margin: '0 auto 20px', padding: '15px', border: '1px solid #ddd', borderRadius: '10px' }}>
-                  <input
-                    type="text"
-                    value={tempSpecialTiming.reason}
-                    onChange={(e) => handleSpecialChange('reason', e.target.value)}
-                    placeholder="Reason (e.g., Holiday, Event)"
-                    style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
-                  />
-                  <input
-                    type="date"
-                    value={tempSpecialTiming.date}
-                    onChange={(e) => handleSpecialChange('date', e.target.value)}
-                    style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
-                  />
-                  <input
-                    type="time"
-                    value={formatTo24Hour(tempSpecialTiming.startTime)}
-                    onChange={(e) => handleSpecialChange('startTime', e.target.value)}
-                    placeholder="Start Time"
-                    style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
-                  />
-                  <input
-                    type="time"
-                    value={formatTo24Hour(tempSpecialTiming.endTime)}
-                    onChange={(e) => handleSpecialChange('endTime', e.target.value)}
-                    placeholder="End Time"
-                    style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
-                  />
-                  <input
-                    type="text"
-                    value={tempSpecialTiming.duration}
-                    readOnly
-                    placeholder="Duration (auto-calculated)"
-                    style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem', backgroundColor: '#f8f9fa', fontWeight: 'bold' }}
-                  />
-                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-                    <button
-                      onClick={saveSpecialTiming}
-                      style={{ padding: '10px 15px', backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer' }}
-                    >
-                      <FaPlus /> Add
-                    </button>
-                  </div>
-                </div>
-                {/* List of Special Timings */}
-                {formData.specialTimings.length > 0 && (
-                  <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #ddd', borderRadius: '10px' }}>
-                    {formData.specialTimings.map((special, index) => (
-                      <div key={index} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px', padding: '10px', borderBottom: '1px solid #eee', alignItems: 'center' }}>
-                        <div style={{ fontSize: '0.9rem' }}>
-                          <strong>{special.reason}</strong> - {special.date} ({formatTo24Hour(special.startTime)} - {formatTo24Hour(special.endTime)}, {special.duration})
-                        </div>
-                        <div style={{ display: 'flex', gap: '5px' }}>
-                          <button onClick={() => editSpecialTiming(index)} style={{ padding: '5px', backgroundColor: '#f39c12', color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>
-                            <FaEdit />
-                          </button>
-                          <button onClick={() => deleteSpecialTiming(index)} style={{ padding: '5px', backgroundColor: '#e74c3c', color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>
-                            <FaTrash />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              
             </div>
           )}
           {/* UPDATED: Address section with dynamic fields and remove button */}
@@ -1622,7 +1557,7 @@ function CompanyDetails() {
               {formData.contacts.map((contact, index) => (
                 <div key={index} style={{ display: 'grid', gap: '15px', marginBottom: '15px', border: '1px solid #ddd', padding: '10px', borderRadius: '10px' }}>
                   <h4 style={{ textAlign: 'center', margin: '5px 0' }}>Contact {index + 1}</h4>
-                  {/* Phone Number with Country Code - UPDATED: No label */}
+                  {/* Phone Number with Country Code */}
                   <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
                     <CountryCodeSelector
                       selectedCode={contact.phoneCountryCode}
@@ -1630,14 +1565,15 @@ function CompanyDetails() {
                     />
                     <input
                       type="text"
-                      name={`phoneNumber_${index}`}
+                      name="phoneNumber"
                       value={contact.phoneNumber}
                       onChange={(e) => handleContactChange(index, e)}
-                      placeholder="Phone Number"
+                      placeholder={`Phone Number (${countryRules.find(r => r.code === contact.phoneCountryCode)?.length || '10'} digits)`}
+                      maxLength={countryRules.find(r => r.code === contact.phoneCountryCode)?.length || 15}
                       style={{ flex: 1, padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
                     />
                   </div>
-                  {/* WhatsApp Number with Country Code - UPDATED: No label */}
+                  {/* WhatsApp Number with Country Code */}
                   <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
                     <CountryCodeSelector
                       selectedCode={contact.whatsappCountryCode}
@@ -1645,12 +1581,31 @@ function CompanyDetails() {
                     />
                     <input
                       type="text"
-                      name={`whatsappNumber_${index}`}
+                      name="whatsappNumber"
                       value={contact.whatsappNumber}
                       onChange={(e) => handleContactChange(index, e)}
-                      placeholder="WhatsApp Number (optional)"
+                      placeholder={`WhatsApp Number (${countryRules.find(r => r.code === contact.whatsappCountryCode)?.length || '10'} digits)`}
+                      maxLength={countryRules.find(r => r.code === contact.whatsappCountryCode)?.length || 15}
                       style={{ flex: 1, padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
                     />
+                    <button
+                      type="button"
+                      onClick={() => copyPhoneToWhatsapp(index)}
+                      title="Copy Phone to WhatsApp"
+                      style={{
+                        padding: '10px',
+                        backgroundColor: '#3498db',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '10px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      <FaCopy />
+                    </button>
                   </div>
                   <input
                     type="email"
@@ -1769,7 +1724,7 @@ function CompanyDetails() {
                   name="ifscCode"
                   value={formData.ifscCode}
                   onChange={handleChange}
-                  placeholder="IFSC Code"
+                  placeholder="Branch Code"
                   style={{ padding: '10px', border: '1px solid #bdc3c7', borderRadius: '10px', fontSize: '1rem' }}
                 />
                 <input

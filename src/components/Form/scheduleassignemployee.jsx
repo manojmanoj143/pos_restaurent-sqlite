@@ -303,8 +303,6 @@ const ScheduleAssignEmployee = () => {
     end_time: '',
     extended_start: '',
     extended_end: '',
-    extended_start: '',
-    extended_end: '',
     shift_id: '',
     // NEW: Substitute Fields
     substitute_employee_id: '',
@@ -655,8 +653,8 @@ const ScheduleAssignEmployee = () => {
 
   const getAvailableSubstitutes = (dateStr, department) => {
     return employees.filter(e => {
-      // 1. Same Department
-      if (e.department !== department) return false;
+      // 1. Same Department CHECK REMOVED: (Old: if (e.department !== department) return false;)
+
       // 2. Exclude Current Employee
       if (String(e.id || e._id) === String(formData.employee_id)) return false;
       // 3. Exclude On Leave
@@ -667,9 +665,7 @@ const ScheduleAssignEmployee = () => {
         l.to_date >= dateStr
       );
       if (onLeave) return false;
-      // 4. Exclude Already Assigned (Basic Check: Has any active assignment covering this date?)
-      // Note: This is strict. It excludes anyone with an active assignment, even if it's their Off day.
-      // User requested: "Exclude employees already assigned"
+      // 4. Exclude Already Assigned
       const isAssigned = assignments.some(a =>
         String(a.employee_id) === String(e.id || e._id) &&
         a.is_active &&
@@ -1072,7 +1068,7 @@ const ScheduleAssignEmployee = () => {
                     <input type="text" readOnly value={employees.find(e => String(e.id || e._id) === String(formData.employee_id))?.department || 'N/A'} style={{ ...inputStyle, background: '#e9ecef' }} />
                   </div>
                   <div style={{ marginBottom: '15px' }}>
-                    <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Assign Substitute</label>
+                    <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Assign Substitute (All Deparments)</label>
                     <select
                       style={inputStyle}
                       value={modalData.substitute_employee_id}
@@ -1081,12 +1077,12 @@ const ScheduleAssignEmployee = () => {
                       <option value="">-- Select Substitute --</option>
                       {availableSubstitutes.map(emp => (
                         <option key={emp.id || emp._id} value={emp.id || emp._id}>
-                          {emp.name || emp.employeeName}
+                          {emp.name || emp.employeeName} ({emp.department || 'No Dept'})
                         </option>
                       ))}
                     </select>
                     {availableSubstitutes.length === 0 && (
-                      <p style={{ color: '#e74c3c', fontSize: '0.85rem', marginTop: '5px' }}>No available employees found in this department.</p>
+                      <p style={{ color: '#e74c3c', fontSize: '0.85rem', marginTop: '5px' }}>No available employees found.</p>
                     )}
                   </div>
                 </>

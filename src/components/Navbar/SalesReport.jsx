@@ -98,6 +98,7 @@ const SalesReport = () => {
     dateFormat: 'yyyy-long-mm-dd', // Default to match cash.jsx
     timeFormat: 'HH:mm:ss', // Default to match cash.jsx
     timeZone: 'Asia/Dubai', // Default
+    useCurrencySymbol: false, // NEW: Toggle between Symbol and Code
   });
   const navigate = useNavigate();
   // NEW: useEffect to fetch network config and set baseUrl
@@ -143,6 +144,7 @@ const SalesReport = () => {
             dateFormat: response.data.dateFormat || 'yyyy-long-mm-dd',
             timeFormat: response.data.timeFormat || 'HH:mm:ss',
             timeZone: response.data.timeZone || 'Asia/Dubai',
+            useCurrencySymbol: response.data.useCurrencySymbol || false,
           }));
           // Also store in localStorage for persistence across refreshes
           localStorage.setItem('systemSettings', JSON.stringify(response.data));
@@ -161,7 +163,8 @@ const SalesReport = () => {
             language: parsed.language || 'en-IN',
             dateFormat: parsed.dateFormat || 'yyyy-long-mm-dd',
             timeFormat: parsed.timeFormat || 'HH:mm:ss',
-            timeZone: parsed.dateFormat || 'Asia/Dubai',
+            timeZone: parsed.timeZone || 'Asia/Dubai',
+            useCurrencySymbol: parsed.useCurrencySymbol || false,
           }));
         }
         // Keep default otherwise
@@ -249,6 +252,7 @@ const SalesReport = () => {
               dateFormat: response.data.dateFormat || 'yyyy-long-mm-dd',
               timeFormat: response.data.timeFormat || 'HH:mm:ss',
               timeZone: response.data.timeZone || 'Asia/Dubai',
+              useCurrencySymbol: response.data.useCurrencySymbol || false,
             }));
             // Also store in localStorage for persistence across refreshes
             localStorage.setItem('systemSettings', JSON.stringify(response.data));
@@ -289,6 +293,7 @@ const SalesReport = () => {
             dateFormat: parsed.dateFormat || 'yyyy-long-mm-dd',
             timeFormat: parsed.timeFormat || 'HH:mm:ss',
             timeZone: parsed.timeZone || 'Asia/Dubai',
+            useCurrencySymbol: parsed.useCurrencySymbol || false,
           }));
         }
       }
@@ -297,18 +302,58 @@ const SalesReport = () => {
     const interval = setInterval(handleSettingsUpdate, 5000); // Poll every 5s for changes
     return () => clearInterval(interval);
   }, [baseUrl]);
-  // NEW: Currency formatter (same as cash.jsx) - Memoized for performance, now accepts optional params
+  // UPDATED: Currency formatter - Uses manual symbol concatenation for consistency with Front.jsx
   const getCurrencyFormatter = React.useCallback((invoiceCurrency = null, invoicePrecision = null) => {
-    const locale = settings.language || 'en-IN'; // Use en-IN for INR defaults
-    const currency = invoiceCurrency || settings.currency || 'INR'; // Default to INR as per request
+    const currency = invoiceCurrency || settings.currency || 'INR';
     const precision = invoicePrecision !== null ? parseInt(invoicePrecision) : parseInt(settings.currencyPrecision) || 2;
-    return new Intl.NumberFormat(locale, {
-      style: 'currency',
-      currency: currency,
-      minimumFractionDigits: precision,
-      maximumFractionDigits: precision,
-    });
-  }, [settings.language, settings.currency, settings.currencyPrecision]);
+    const useSymbol = settings.useCurrencySymbol;
+
+    return {
+      format: (value) => {
+        if (value === null || value === undefined) return '';
+        const numValue = typeof value === 'string' ? parseFloat(value) : value;
+        if (isNaN(numValue)) return '';
+
+        const fixedValue = numValue.toFixed(precision);
+
+        if (useSymbol) {
+          const symbols = {
+            INR: "₹",
+            USD: "$",
+            EUR: "€",
+            GBP: "£",
+            AED: "د.إ",
+            JPY: "¥",
+            CNY: "¥",
+            SGD: "$",
+            MYR: "RM",
+            THB: "฿",
+            IDR: "Rp",
+            KRW: "₩",
+            PHP: "₱",
+            SAR: "﷼",
+            QAR: "﷼",
+            KWD: "د.ك",
+            OMR: "﷼",
+            BHD: ".د.ب",
+            CAD: "$",
+            AUD: "$",
+            NZD: "$",
+            CHF: "CHF",
+            ZAR: "R",
+            BRL: "R$",
+            PKR: "₨",
+            LKR: "Rs",
+            NGN: "₦"
+          };
+          const symbol = symbols[currency?.toUpperCase()] || currency;
+          return `${symbol} ${fixedValue}`;
+        } else {
+          return `${currency} ${fixedValue}`;
+        }
+      }
+    };
+  }, [settings.currency, settings.currencyPrecision, settings.useCurrencySymbol]);
   // UPDATED: Date formatter (matching cash.jsx) - Now handles both Date objects and strings
   const getFormattedDate = (dateInput, dateFormat = settings.dateFormat, timeZone = settings.timeZone) => {
     if (!dateInput) return '';
@@ -424,20 +469,20 @@ const SalesReport = () => {
     const addonTotal =
       item.addons && item.addons.length > 0
         ? item.addons.reduce(
-            (sum, addon) =>
-              sum +
-              (parseFloat(addon.addon_price) || 0) * (addon.addon_quantity || 1),
-            0
-          )
+          (sum, addon) =>
+            sum +
+            (parseFloat(addon.addon_price) || 0) * (addon.addon_quantity || 1),
+          0
+        )
         : 0;
     const comboTotal =
       item.selectedCombos && item.selectedCombos.length > 0
         ? item.selectedCombos.reduce(
-            (sum, combo) =>
-              sum +
-              (parseFloat(combo.combo_price) || 0) * (combo.combo_quantity || 1),
-            0
-          )
+          (sum, combo) =>
+            sum +
+            (parseFloat(combo.combo_price) || 0) * (combo.combo_quantity || 1),
+          0
+        )
         : 0;
     const unitTotal = baseAmount + addonTotal + comboTotal;
     const totalAmount = unitTotal * (item.quantity || 1);
@@ -726,8 +771,8 @@ const SalesReport = () => {
     const monthMatch =
       filterMonth && filterYear && validateYear(filterYear)
         ? saleDate &&
-          saleDate.getMonth() === months.indexOf(filterMonth) &&
-          saleDate.getFullYear() === parseInt(filterYear)
+        saleDate.getMonth() === months.indexOf(filterMonth) &&
+        saleDate.getFullYear() === parseInt(filterYear)
         : true;
     const yearMatch =
       filterYear && validateYear(filterYear)
@@ -738,14 +783,14 @@ const SalesReport = () => {
       : true;
     const itemMatch = filterItem
       ? sale.items.some((item) =>
-          item.item_name.toLowerCase() === filterItem.toLowerCase() ||
-          (item.addons || []).some((addon) =>
-            addon.addon_name?.toLowerCase() === filterItem.toLowerCase()
-          ) ||
-          (item.selectedCombos || []).some((combo) =>
-            combo.name1?.toLowerCase() === filterItem.toLowerCase()
-          )
+        item.item_name.toLowerCase() === filterItem.toLowerCase() ||
+        (item.addons || []).some((addon) =>
+          addon.addon_name?.toLowerCase() === filterItem.toLowerCase()
+        ) ||
+        (item.selectedCombos || []).some((combo) =>
+          combo.name1?.toLowerCase() === filterItem.toLowerCase()
         )
+      )
       : true;
     const timeMatch = isTimeInRange(sale.time, filterStartTime, filterEndTime);
     const invoiceMatch = filterInvoiceNo
@@ -812,13 +857,11 @@ const SalesReport = () => {
     } else if (filterType === "date") {
       const from = fromDate ? fromDate.toLocaleDateString('en-GB') : "Any";
       const to = toDate ? toDate.toLocaleDateString('en-GB') : "Any";
-      filterDescription = `Date Range: ${from} to ${to}${
-        filterStartTime || filterEndTime
-          ? `, Time: ${filterStartTime || "Start"} to ${
-              filterEndTime || "End"
-            }`
-          : ""
-      }`;
+      filterDescription = `Date Range: ${from} to ${to}${filterStartTime || filterEndTime
+        ? `, Time: ${filterStartTime || "Start"} to ${filterEndTime || "End"
+        }`
+        : ""
+        }`;
     } else if (filterType === "month") {
       filterDescription = `Month: ${filterMonth} ${filterYear}`;
     } else if (filterType === "year") {
@@ -1000,8 +1043,8 @@ const SalesReport = () => {
   };
   // Handle Excel export using SheetJS - This functionality is removed
   const handleExportExcel = () => {
-     setWarningMessage("Excel export is currently unavailable.");
-     setWarningType("warning");
+    setWarningMessage("Excel export is currently unavailable.");
+    setWarningType("warning");
   };
   // Helper function to format Date object to "YYYY-MM-DD" for input
   const formatDateForInput = (date) => {
@@ -1577,14 +1620,14 @@ const SalesReport = () => {
                   {selectedFilterType === "customer" && filterCustomer
                     ? `Customer-wise Sales Report: ${filterCustomer}`
                     : selectedFilterType === "item" && filterItem
-                    ? `Item-wise Sales Report: ${filterItem}`
-                    : selectedFilterType === "date"
-                    ? `Date-wise Sales Report`
-                    : selectedFilterType === "month" && filterMonth && filterYear
-                    ? `Month-wise Sales Report: ${filterMonth} ${filterYear}`
-                    : selectedFilterType === "year" && filterYear
-                    ? `Year-wise Sales Report: ${filterYear}`
-                    : "All Sales Report"}
+                      ? `Item-wise Sales Report: ${filterItem}`
+                      : selectedFilterType === "date"
+                        ? `Date-wise Sales Report`
+                        : selectedFilterType === "month" && filterMonth && filterYear
+                          ? `Month-wise Sales Report: ${filterMonth} ${filterYear}`
+                          : selectedFilterType === "year" && filterYear
+                            ? `Year-wise Sales Report: ${filterYear}`
+                            : "All Sales Report"}
                 </Card.Title>
                 {renderMainContent()}
               </Card.Body>

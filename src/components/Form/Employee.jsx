@@ -8,7 +8,7 @@
 // NEW: Added dropdown for vehicleNumber fetched from /api/vechile/management. Pre-populates on edit.
 //      Vehicle selection populates vehicleNumber in formData. Sends vehicleNumber as string in payload.
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { FaArrowLeft, FaPlusCircle, FaUsers, FaEdit, FaTrash, FaKey, FaCheck, FaTimes, FaUserTie, FaSearch, FaCar } from 'react-icons/fa';
 
@@ -145,6 +145,18 @@ function EmployeePage() {
   // NEW: Handle dropdown selection - Populate form with selected employee's details
   const handleGeneralEmployeeSelect = (e) => {
     const selectedId = e.target.value;
+
+    // Check for "Create New" selection
+    if (selectedId === 'create_new') {
+      navigate('/add-employee', {
+        state: {
+          returnTo: '/employees',
+          preservedState: formData // Optional: preserve current form state if needed
+        }
+      });
+      return;
+    }
+
     setFormData(prev => ({ ...prev, selectedGeneralEmployeeId: selectedId }));
     if (selectedId) {
       const selectedEmp = generalEmployees.find(emp => String(emp._id) === String(selectedId));
@@ -153,19 +165,74 @@ function EmployeePage() {
         setFormData(prev => ({
           ...prev,
           selectedGeneralEmployeeId: selectedId,
-          name: selectedEmp.name || '', // FIXED: Include name for payload
+          name: selectedEmp.name || '',
           email: selectedEmp.email || '',
-          phoneNumber: selectedEmp.phoneNumber?.replace(/\D/g, '') || '', // Extract digits for phone input
+          phoneNumber: selectedEmp.phoneNumber?.replace(/\D/g, '') || '',
           // Note: Vehicle and secret key remain manual as they are delivery-specific
         }));
       }
     }
   };
+
   // NEW: Handle vehicle dropdown selection
   const handleVehicleSelect = (e) => {
     const selectedVehicleNumber = e.target.value;
+
+    // Check for "Create New" selection
+    if (selectedVehicleNumber === 'create_new') {
+      navigate('/vehicle-management', {
+        state: {
+          returnTo: '/employees',
+          action: 'create',
+          preservedState: formData
+        }
+      });
+      return;
+    }
+
     setFormData(prev => ({ ...prev, vehicleNumber: selectedVehicleNumber }));
   };
+
+  // NEW: Handle return from creation pages (AddEmployee or VehicleManagement)
+  const location = useLocation();
+  useEffect(() => {
+    if (location.state) {
+      // Handle return from Add Employee
+      // Handle return from Add Employee
+      if (location.state.newGeneralEmployeeId && generalEmployees.length > 0) {
+        const newId = location.state.newGeneralEmployeeId;
+        const selectedEmp = generalEmployees.find(emp => String(emp._id) === String(newId));
+
+        if (selectedEmp) {
+          setFormData(prev => ({
+            ...prev,
+            selectedGeneralEmployeeId: newId,
+            name: selectedEmp.name || '',
+            email: selectedEmp.email || '',
+            phoneNumber: selectedEmp.phoneNumber?.replace(/\D/g, '') || ''
+          }));
+        } else {
+          setFormData(prev => ({ ...prev, selectedGeneralEmployeeId: newId }));
+        }
+      }
+
+      // Handle return from Vehicle Management
+      if (location.state.newVehicleNumber) {
+        setFormData(prev => ({ ...prev, vehicleNumber: location.state.newVehicleNumber }));
+      }
+
+      // Restore other form data if preserved
+      if (location.state.preservedState) {
+        setFormData(prev => ({
+          ...prev,
+          ...location.state.preservedState,
+          // Ensure the new values override preserved ones
+          selectedGeneralEmployeeId: location.state.newGeneralEmployeeId || location.state.preservedState.selectedGeneralEmployeeId,
+          vehicleNumber: location.state.newVehicleNumber || location.state.preservedState.vehicleNumber
+        }));
+      }
+    }
+  }, [location.state, generalEmployees, vehicles]);
   // Handle employee creation/assignment (updated: uses selected general employee)
   const handleCreateEmployee = async (e) => {
     e.preventDefault();
@@ -521,6 +588,7 @@ function EmployeePage() {
                     }}
                   >
                     <option value="">Search and Select Employee...</option>
+                    <option value="create_new" style={{ fontWeight: 'bold', color: '#3498db' }}>+ Create New Employee</option>
                     {generalEmployees.map((emp) => (
                       <option key={emp._id} value={emp._id}>
                         {emp.name} ({emp.employeeId} - {emp.employeeDesignation})
@@ -624,6 +692,7 @@ function EmployeePage() {
                     }}
                   >
                     <option value="">Search and Select Vehicle...</option>
+                    <option value="create_new" style={{ fontWeight: 'bold', color: '#27ae60' }}>+ Create New Vehicle</option>
                     {vehicles.map((vehicle) => (
                       <option key={vehicle._id} value={vehicle.vehicle_number}>
                         {vehicle.vehicle_number} ({vehicle.brand} {vehicle.model} - {vehicle.vehicle_type})

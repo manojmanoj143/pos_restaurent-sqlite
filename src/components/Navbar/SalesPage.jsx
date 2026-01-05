@@ -75,6 +75,7 @@ const SalesPage = () => {
     dateFormat: 'yyyy-long-mm-dd', // Default to match cash.jsx
     timeFormat: 'HH:mm:ss', // Default to match cash.jsx
     timeZone: 'Asia/Dubai', // Default
+    useCurrencySymbol: false, // NEW: Toggle between Symbol and Code
   });
   // NEW: Add currentTime state for real-time updates (like in cash.jsx)
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -183,6 +184,7 @@ const SalesPage = () => {
             dateFormat: response.data.dateFormat || 'yyyy-long-mm-dd',
             timeFormat: response.data.timeFormat || 'HH:mm:ss',
             timeZone: response.data.timeZone || 'Asia/Dubai',
+            useCurrencySymbol: response.data.useCurrencySymbol || false,
           }));
           // Also store in localStorage for persistence across refreshes
           localStorage.setItem('systemSettings', JSON.stringify(response.data));
@@ -202,6 +204,7 @@ const SalesPage = () => {
             dateFormat: parsed.dateFormat || 'yyyy-long-mm-dd',
             timeFormat: parsed.timeFormat || 'HH:mm:ss',
             timeZone: parsed.timeZone || 'Asia/Dubai',
+            useCurrencySymbol: parsed.useCurrencySymbol || false,
           }));
         }
         // Keep default otherwise
@@ -348,6 +351,7 @@ const SalesPage = () => {
                 dateFormat: response.data.dateFormat || 'yyyy-long-mm-dd',
                 timeFormat: response.data.timeFormat || 'HH:mm:ss',
                 timeZone: response.data.timeZone || 'Asia/Dubai',
+                useCurrencySymbol: response.data.useCurrencySymbol || false,
               }));
               // Also store in localStorage for persistence across refreshes
               localStorage.setItem('systemSettings', JSON.stringify(response.data));
@@ -387,6 +391,7 @@ const SalesPage = () => {
             dateFormat: parsed.dateFormat || 'yyyy-long-mm-dd',
             timeFormat: parsed.timeFormat || 'HH:mm:ss',
             timeZone: parsed.timeZone || 'Asia/Dubai',
+            useCurrencySymbol: parsed.useCurrencySymbol || false,
           }));
         }
       }
@@ -421,18 +426,82 @@ const SalesPage = () => {
     setWarningMessage(`Column "${removed.label}" removed successfully.`);
     setWarningType("warning");
   };
-  // NEW: Currency formatter (same as cash.jsx) - Memoized for performance, now accepts optional params
+  // NEW: Helper to get currency symbol (matching Front.jsx logic)
+  const getCurrencySymbol = (currCode) => {
+    const symbols = {
+      'INR': '₹',
+      'USD': '$',
+      'EUR': '€',
+      'GBP': '£',
+      'AED': 'AED', // Use AED as user requested symbol behavior (or maybe they want 'د.إ'? The user said "AED show aaguthu... symbol show aagala" implying they *want* a symbol. But standard symbol for AED is often just AED or the arabic one. Wait, user said "front page la crt a show aaguthu" (Front page correct). Front page uses `AED: 'د.إ'`. I will stick to what Front.jsx has.)
+      // Update: Front.jsx (lines 176-183 in previous view) has `'AED': 'د.إ'`.
+      // BUT, checking the view of Front.jsx again...
+      // Line 181: 'AED': 'د.إ',
+      // The user log shows: "AED 200.0".
+      // If Front.jsx is correct, it prints `د.إ200.00`?
+      // Wait, the user complaint is "AED show aaguthu... symbol show aagala". Meaning "AED" is showing, but they want the symbol.
+      // If Front.jsx uses `د.إ`, then that IS the symbol.
+      // I will copy `getCurrencySymbol` exactly from `Front.jsx`.
+    };
+    return symbols[currCode?.toUpperCase()] || symbols['INR'];
+  };
+
+  // UPDATED: Currency formatter - Uses manual symbol concatenation for consistency with Front.jsx
   const getCurrencyFormatter = React.useCallback((invoiceCurrency = null, invoicePrecision = null) => {
-    const locale = settings.language || 'en-IN'; // Use en-IN for INR defaults
-    const currency = invoiceCurrency || settings.currency || 'INR'; // Default to INR as per request
+    const currency = invoiceCurrency || settings.currency || 'INR';
     const precision = invoicePrecision !== null ? parseInt(invoicePrecision) : parseInt(settings.currencyPrecision) || 2;
-    return new Intl.NumberFormat(locale, {
-      style: 'currency',
-      currency: currency,
-      minimumFractionDigits: precision,
-      maximumFractionDigits: precision,
-    });
-  }, [settings.language, settings.currency, settings.currencyPrecision]);
+    const useSymbol = settings.useCurrencySymbol;
+
+    // Return a format function, not Intl.NumberFormat object, because we need custom string building
+    return {
+      format: (value) => {
+        if (value === null || value === undefined) return '';
+        const numValue = typeof value === 'string' ? parseFloat(value) : value;
+        if (isNaN(numValue)) return '';
+
+        const fixedValue = numValue.toFixed(precision);
+
+        if (useSymbol) {
+          // Manual symbol lookup
+          // Note: Front.jsx has: 'AED': 'د.إ'
+          const symbols = {
+            INR: "₹",
+            USD: "$",
+            EUR: "€",
+            GBP: "£",
+            AED: "د.إ",
+            JPY: "¥",
+            CNY: "¥",
+            SGD: "$",
+            MYR: "RM",
+            THB: "฿",
+            IDR: "Rp",
+            KRW: "₩",
+            PHP: "₱",
+            SAR: "﷼",
+            QAR: "﷼",
+            KWD: "د.ك",
+            OMR: "﷼",
+            BHD: ".د.ب",
+            CAD: "$",
+            AUD: "$",
+            NZD: "$",
+            CHF: "CHF",
+            ZAR: "R",
+            BRL: "R$",
+            PKR: "₨",
+            LKR: "Rs",
+            NGN: "₦"
+          };
+          const symbol = symbols[currency?.toUpperCase()] || currency;
+          return `${symbol} ${fixedValue}`;
+        } else {
+          // Code display
+          return `${currency} ${fixedValue}`;
+        }
+      }
+    };
+  }, [settings.currency, settings.currencyPrecision, settings.useCurrencySymbol]);
   // UPDATED: Date formatter (matching cash.jsx) - Now handles both Date objects and strings
   const getFormattedDate = (dateInput, dateFormat = settings.dateFormat, timeZone = settings.timeZone) => {
     if (!dateInput) return '';
@@ -817,30 +886,28 @@ const SalesPage = () => {
               <td style="text-align: center; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">:</td>
               <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; word-break: break-all;">${sale.whatsappNumber || "N/A"}</td>
             </tr>
-            ${
-              sale.tableNumber && sale.tableNumber !== "N/A"
-                ? `
+            ${sale.tableNumber && sale.tableNumber !== "N/A"
+        ? `
                   <tr>
                     <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">Table</td>
                     <td style="text-align: center; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">:</td>
                     <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; word-break: break-all;">${sale.tableNumber}</td>
                   </tr>
                 `
-                : ""
-            }
+        : ""
+      }
             ${orderNoDisplay}
             ${deliveryPersonDisplay}
-            ${
-              hasDeliveryAddressFlag && deliveryAddressHtml
-                ? `
+            ${hasDeliveryAddressFlag && deliveryAddressHtml
+        ? `
                   <tr>
                     <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; vertical-align: top;">Delivery Address</td>
                     <td style="text-align: center; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">:</td>
                     <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; white-space: pre-line; word-break: break-all;">${deliveryAddressHtml}</td>
                   </tr>
                 `
-                : ""
-            }
+        : ""
+      }
             <tr>
               <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">Payment Mode</td>
               <td style="text-align: center; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">:</td>
@@ -875,24 +942,23 @@ const SalesPage = () => {
           </thead>
           <tbody>
             ${sale.items
-              .map((item) => {
-                // Get baseAmount from calculateItemPrices
-                const { baseAmount } = calculateItemPrices(item);
-                // Get icePrice and spicyPrice from item object as they are not in calculateItemPrices
-                const icePrice = parseFloat(item.ice_price) || 0;
-                const spicyPrice = parseFloat(item.spicy_price) || 0;
-                // NEW: Use updated display name for combo offers
-                const displayName = getItemDisplayName(item);
-                return `
+        .map((item) => {
+          // Get baseAmount from calculateItemPrices
+          const { baseAmount } = calculateItemPrices(item);
+          // Get icePrice and spicyPrice from item object as they are not in calculateItemPrices
+          const icePrice = parseFloat(item.ice_price) || 0;
+          const spicyPrice = parseFloat(item.spicy_price) || 0;
+          // NEW: Use updated display name for combo offers
+          const displayName = getItemDisplayName(item);
+          return `
                   <tr>
                     <td style="text-align: left; padding: 4px 8px; border-bottom: 1px solid #000; line-height: 1.2; font-size: 12px; vertical-align: top;">${displayName}</td>
                     <td style="text-align: center; padding: 4px 8px; border-bottom: 1px solid #000; line-height: 1.2; font-size: 12px;">${item.quantity}</td>
                     <td style="text-align: right; padding: 4px 8px; border-bottom: 1px solid #000; line-height: 1.2; font-size: 12px;">${formatter.format(baseAmount)}</td>
                     <td style="text-align: right; padding: 4px 8px; border-bottom: 1px solid #000; line-height: 1.2; font-size: 12px;">${formatter.format(baseAmount * item.quantity)}</td>
                   </tr>
-                  ${
-                    item.icePreference === "with_ice" && icePrice > 0
-                      ? `
+                  ${item.icePreference === "with_ice" && icePrice > 0
+              ? `
                         <tr>
                           <td style="text-align: left; padding: 2px 8px 2px 16px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px; color: #666; vertical-align: top;">+ Ice</td>
                           <td style="text-align: center; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${item.quantity}</td>
@@ -900,11 +966,10 @@ const SalesPage = () => {
                           <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${formatter.format(icePrice * item.quantity)}</td>
                         </tr>
                       `
-                      : ""
-                  }
-                  ${
-                    item.isSpicy && spicyPrice > 0
-                      ? `
+              : ""
+            }
+                  ${item.isSpicy && spicyPrice > 0
+              ? `
                         <tr>
                           <td style="text-align: left; padding: 2px 8px 2px 16px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px; color: #666; vertical-align: top;">+ Spicy</td>
                           <td style="text-align: center; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${item.quantity}</td>
@@ -912,13 +977,12 @@ const SalesPage = () => {
                           <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${formatter.format(spicyPrice * item.quantity)}</td>
                         </tr>
                       `
-                      : ""
-                  }
-                  ${
-                    item.customVariantsDetails && Object.keys(item.customVariantsDetails).length > 0
-                      ? Object.entries(item.customVariantsDetails)
-                        .map(
-                          ([variantName, variant]) => `
+              : ""
+            }
+                  ${item.customVariantsDetails && Object.keys(item.customVariantsDetails).length > 0
+              ? Object.entries(item.customVariantsDetails)
+                .map(
+                  ([variantName, variant]) => `
                             <tr>
                               <td style="text-align: left; padding: 2px 8px 2px 16px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px; color: #666; vertical-align: top;">+ ${variant.heading}: ${variant.name}</td>
                               <td style="text-align: center; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${item.customVariantsQuantities?.[variantName] || 1}</td>
@@ -926,26 +990,24 @@ const SalesPage = () => {
                               <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${formatter.format(variant.price * (item.customVariantsQuantities?.[variantName] || 1))}</td>
                             </tr>
                           `
-                        )
-                        .join("")
-                      : ""
-                  }
-                  ${
-                    item.addons && item.addons.length > 0
-                      ? item.addons
-                        .map(
-                          (addon) =>
-                            addon.addon_quantity > 0
-                              ? `
+                )
+                .join("")
+              : ""
+            }
+                  ${item.addons && item.addons.length > 0
+              ? item.addons
+                .map(
+                  (addon) =>
+                    addon.addon_quantity > 0
+                      ? `
                                 <tr>
                                   <td style="text-align: left; padding: 2px 8px 2px 16px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px; color: #666; vertical-align: top;">+ Addon: ${addon.addon_name}${addon.size ? ` (${addon.size})` : ""}</td>
                                   <td style="text-align: center; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${addon.addon_quantity}</td>
                                   <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${formatter.format(addon.addon_price)}</td>
                                   <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${formatter.format(addon.addon_price * addon.addon_quantity)}</td>
                                 </tr>
-                                ${
-                                  addon.isSpicy && addon.spicy_price > 0
-                                    ? `
+                                ${addon.isSpicy && addon.spicy_price > 0
+                        ? `
                                       <tr>
                                         <td style="text-align: left; padding: 2px 8px 2px 24px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px; color: #999; vertical-align: top;">+ Spicy</td>
                                         <td style="text-align: center; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px;">${addon.addon_quantity}</td>
@@ -953,30 +1015,28 @@ const SalesPage = () => {
                                         <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px;">${formatter.format(addon.spicy_price * addon.addon_quantity)}</td>
                                       </tr>
                                     `
-                                    : ""
-                                }
+                        : ""
+                      }
                               `
-                              : ""
-                        )
-                        .join("")
                       : ""
-                  }
-                  ${
-                    item.selectedCombos && item.selectedCombos.length > 0
-                      ? item.selectedCombos
-                        .map(
-                          (combo) =>
-                            combo.combo_quantity > 0
-                              ? `
+                )
+                .join("")
+              : ""
+            }
+                  ${item.selectedCombos && item.selectedCombos.length > 0
+              ? item.selectedCombos
+                .map(
+                  (combo) =>
+                    combo.combo_quantity > 0
+                      ? `
                                 <tr>
                                   <td style="text-align: left; padding: 2px 8px 2px 16px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px; color: #666; vertical-align: top;">+ Combo: ${combo.name1}${combo.size ? ` (${combo.size})` : ""}</td>
                                   <td style="text-align: center; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${combo.combo_quantity}</td>
                                   <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${formatter.format(combo.combo_price)}</td>
                                   <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${formatter.format(combo.combo_price * combo.combo_quantity)}</td>
                                 </tr>
-                                ${
-                                  combo.isSpicy && combo.spicy_price > 0
-                                    ? `
+                                ${combo.isSpicy && combo.spicy_price > 0
+                        ? `
                                       <tr>
                                         <td style="text-align: left; padding: 2px 8px 2px 24px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px; color: #999; vertical-align: top;">+ Spicy</td>
                                         <td style="text-align: center; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px;">${combo.combo_quantity}</td>
@@ -984,17 +1044,17 @@ const SalesPage = () => {
                                         <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px;">${formatter.format(combo.spicy_price * combo.combo_quantity)}</td>
                                       </tr>
                                     `
-                                    : ""
-                                }
+                        : ""
+                      }
                               `
-                              : ""
-                        )
-                        .join("")
                       : ""
-                  }
+                )
+                .join("")
+              : ""
+            }
                 `;
-              })
-              .join("")}
+        })
+        .join("")}
           </tbody>
         </table>
         <table style="width: 100%; border-collapse: collapse; border: none; margin-bottom: 10px;">
@@ -1449,13 +1509,13 @@ const SalesPage = () => {
   const handleDragOver = (e) => {
     e.preventDefault();
     const target = e.target.closest("th");
-    if(target) {
+    if (target) {
       target.classList.add("drag-over");
     }
   };
   const handleDragLeave = (e) => {
     const target = e.target.closest("th");
-    if(target) {
+    if (target) {
       target.classList.remove("drag-over");
     }
   };

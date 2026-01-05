@@ -60,12 +60,17 @@ function Card() {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const response = await fetch('/api/settings');
-        if (!response.ok) throw new Error('Failed to fetch settings');
-        const data = await response.json();
-        setSettings(data);
+        const response = await axios.get(`${API_URL}/api/settings`);
+        if (response.data) {
+          setSettings(response.data);
+          localStorage.setItem('systemSettings', JSON.stringify(response.data));
+        }
       } catch (err) {
         console.error('Error fetching settings:', err);
+        const stored = localStorage.getItem('systemSettings');
+        if (stored) {
+          setSettings(JSON.parse(stored));
+        }
       }
     };
     fetchSettings();
@@ -137,16 +142,56 @@ function Card() {
     return date.toLocaleTimeString('en-US', options);
   };
   // Currency formatter for totals - Ensures symbol placement based on currency (e.g., INR before number)
-  const getCurrencyFormatter = () => {
-    const locale = settings.language || 'en-IN'; // Use en-IN for INR defaults
-    const currency = settings.currency || 'INR'; // Default to INR as per request
-    const precision = parseInt(settings.currencyPrecision) || 2;
-    return new Intl.NumberFormat(locale, {
-      style: 'currency',
-      currency: currency,
-      minimumFractionDigits: precision,
-      maximumFractionDigits: precision,
-    });
+  const getCurrencyFormatter = (currencyOverride = null, precisionOverride = null) => {
+    const currency = currencyOverride || settings.currency || 'INR'; // Default to INR as per request
+    const precision = precisionOverride !== null ? parseInt(precisionOverride) : (parseInt(settings.currencyPrecision) || 2);
+    const useSymbol = settings.useCurrencySymbol;
+
+    return {
+      format: (value) => {
+        if (value === null || value === undefined) return '';
+        const numValue = typeof value === 'string' ? parseFloat(value) : value;
+        if (isNaN(numValue)) return '';
+
+        const fixedValue = numValue.toFixed(precision);
+
+        if (useSymbol) {
+          const symbols = {
+            INR: "₹",
+            USD: "$",
+            EUR: "€",
+            GBP: "£",
+            AED: "د.إ",
+            JPY: "¥",
+            CNY: "¥",
+            SGD: "$",
+            MYR: "RM",
+            THB: "฿",
+            IDR: "Rp",
+            KRW: "₩",
+            PHP: "₱",
+            SAR: "﷼",
+            QAR: "﷼",
+            KWD: "د.ك",
+            OMR: "﷼",
+            BHD: ".د.ب",
+            CAD: "$",
+            AUD: "$",
+            NZD: "$",
+            CHF: "CHF",
+            ZAR: "R",
+            BRL: "R$",
+            PKR: "₨",
+            LKR: "Rs",
+            NGN: "₦"
+          };
+          const symbol = symbols[currency?.toUpperCase()] || currency;
+          return `${symbol} ${fixedValue}`;
+        } else {
+          return `${currency} ${fixedValue}`;
+        }
+      }
+    };
   };
   // Fetch active print settings
   useEffect(() => {
@@ -301,14 +346,14 @@ function Card() {
             originalBasePrice: null,
             kitchen: "Main Kitchen",
             addons: [
-              { 
-                name1: "ice", 
-                addon_quantity: 1, 
-                addon_price: 10.00, 
+              {
+                name1: "ice",
+                addon_quantity: 1,
+                addon_price: 10.00,
                 addon_total_price: 10.00,
-                size: "M", 
-                isSpicy: false, 
-                spicyPrice: 0, 
+                size: "M",
+                isSpicy: false,
+                spicyPrice: 0,
                 kitchen: "Main Kitchen",
                 tax_amount: 1.50,
               },
@@ -361,22 +406,22 @@ function Card() {
     const addonTotal =
       item.addons && item.addons.length > 0
         ? item.addons.reduce(
-            (sum, addon) => sum + Number(addon.addon_total_price) * addon.addon_quantity,
-            0
-          )
+          (sum, addon) => sum + Number(addon.addon_total_price) * addon.addon_quantity,
+          0
+        )
         : 0;
     const comboTotal =
       item.combos && item.combos.length > 0
         ? item.combos.reduce(
-            (sum, combo) => sum + Number(combo.combo_total_price) * combo.combo_quantity,
-            0
-          )
+          (sum, combo) => sum + Number(combo.combo_total_price) * combo.combo_quantity,
+          0
+        )
         : 0;
     const customVariantsTotal = item.customVariantsDetails
       ? Object.values(item.customVariantsDetails).reduce(
-          (sum, variant) => sum + (Number(variant.price) || 0) * (item.customVariantsQuantities?.[Object.keys(item.customVariantsDetails).find(key => item.customVariantsDetails[key] === variant)] || 1),
-          0
-        ) * item.quantity
+        (sum, variant) => sum + (Number(variant.price) || 0) * (item.customVariantsQuantities?.[Object.keys(item.customVariantsDetails).find(key => item.customVariantsDetails[key] === variant)] || 1),
+        0
+      ) * item.quantity
       : 0;
     const totalAmount = (basePrice + icePrice + spicyPrice + customVariantsTotal) * item.quantity + addonTotal + comboTotal;
     return { basePrice, icePrice, spicyPrice, addonTotal, comboTotal, customVariantsTotal, totalAmount };
@@ -667,28 +712,26 @@ function Card() {
               <td style="text-align: center; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">:</td>
               <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; word-break: break-all;">${billDetails.whatsappNumber || "N/A"}</td>
             </tr>
-            ${
-              billDetails.tableNumber && billDetails.tableNumber !== "N/A"
-                ? `
+            ${billDetails.tableNumber && billDetails.tableNumber !== "N/A"
+        ? `
                   <tr>
                     <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">Table</td>
                     <td style="text-align: center; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">:</td>
                     <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; word-break: break-all;">${billDetails.tableNumber}</td>
                   </tr>
                 `
-                : ""
-            }
-            ${
-              hasDeliveryAddress && deliveryAddressHtml
-                ? `
+        : ""
+      }
+            ${hasDeliveryAddress && deliveryAddressHtml
+        ? `
                   <tr>
                     <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; vertical-align: top;">Delivery Address</td>
                     <td style="text-align: center; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">:</td>
                     <td style="text-align: right; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px; white-space: pre-line; word-break: break-all;">${deliveryAddressHtml}</td>
                   </tr>
                 `
-                : ""
-            }
+        : ""
+      }
             <tr>
               <td style="text-align: left; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">Payment Mode</td>
               <td style="text-align: center; padding: 4px 0; border: none; line-height: 1.2; font-size: 12px;">:</td>
@@ -718,20 +761,19 @@ function Card() {
           </thead>
           <tbody>
             ${billDetails.items
-              .map((item) => {
-                const { basePrice, icePrice, spicyPrice, addonTotal, comboTotal } = calculateItemPrices(item);
-                return `
+        .map((item) => {
+          const { basePrice, icePrice, spicyPrice, addonTotal, comboTotal } = calculateItemPrices(item);
+          return `
                   <tr>
                     <td style="text-align: left; padding: 4px 8px; border-bottom: 1px solid #000; line-height: 1.2; font-size: 12px; vertical-align: top;">${getItemDisplayName(item)}</td>
                     <td style="text-align: center; padding: 4px 8px; border-bottom: 1px solid #000; line-height: 1.2; font-size: 12px;">${item.quantity}</td>
                     <td style="text-align: right; padding: 4px 8px; border-bottom: 1px solid #000; line-height: 1.2; font-size: 12px;">${formatter.format(basePrice)}</td>
                     <td style="text-align: right; padding: 4px 8px; border-bottom: 1px solid #000; line-height: 1.2; font-size: 12px;">${formatter.format(basePrice * item.quantity)}</td>
                   </tr>
-                  ${
-                    item.isCombo && item.comboItems && item.comboItems.length > 0
-                      ? item.comboItems
-                          .map(
-                            (comboItem) => `
+                  ${item.isCombo && item.comboItems && item.comboItems.length > 0
+              ? item.comboItems
+                .map(
+                  (comboItem) => `
                               <tr>
                                 <td style="text-align: left; padding: 2px 8px 2px 16px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px; color: #666; vertical-align: top;">+ ${comboItem.name}</td>
                                 <td style="text-align: center; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${item.quantity}</td>
@@ -739,13 +781,12 @@ function Card() {
                                 <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${formatter.format(comboItem.price * item.quantity)}</td>
                               </tr>
                             `
-                          )
-                          .join("")
-                      : ""
-                  }
-                  ${
-                    item.icePreference === "with_ice" && icePrice > 0
-                      ? `
+                )
+                .join("")
+              : ""
+            }
+                  ${item.icePreference === "with_ice" && icePrice > 0
+              ? `
                         <tr>
                           <td style="text-align: left; padding: 2px 8px 2px 16px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px; color: #666; vertical-align: top;">+ Ice</td>
                           <td style="text-align: center; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${item.quantity}</td>
@@ -753,11 +794,10 @@ function Card() {
                           <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${formatter.format(icePrice * item.quantity)}</td>
                         </tr>
                       `
-                      : ""
-                  }
-                  ${
-                    item.isSpicy && spicyPrice > 0
-                      ? `
+              : ""
+            }
+                  ${item.isSpicy && spicyPrice > 0
+              ? `
                         <tr>
                           <td style="text-align: left; padding: 2px 8px 2px 16px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px; color: #666; vertical-align: top;">+ Spicy</td>
                           <td style="text-align: center; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${item.quantity}</td>
@@ -765,13 +805,12 @@ function Card() {
                           <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${formatter.format(spicyPrice * item.quantity)}</td>
                         </tr>
                       `
-                      : ""
-                  }
-                  ${
-                    item.customVariantsDetails && Object.keys(item.customVariantsDetails).length > 0
-                      ? Object.entries(item.customVariantsDetails)
-                          .map(
-                            ([variantName, variant]) => `
+              : ""
+            }
+                  ${item.customVariantsDetails && Object.keys(item.customVariantsDetails).length > 0
+              ? Object.entries(item.customVariantsDetails)
+                .map(
+                  ([variantName, variant]) => `
                             <tr>
                               <td style="text-align: left; padding: 2px 8px 2px 16px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px; color: #666; vertical-align: top;">+ ${variant.heading}: ${variant.name}</td>
                               <td style="text-align: center; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${item.customVariantsQuantities?.[variantName] || 1}</td>
@@ -779,26 +818,24 @@ function Card() {
                               <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${formatter.format(variant.price * (item.customVariantsQuantities?.[variantName] || 1))}</td>
                             </tr>
                           `
-                          )
-                          .join("")
-                      : ""
-                  }
-                  ${
-                    item.addons && item.addons.length > 0
-                      ? item.addons
-                          .map(
-                            (addon) =>
-                              addon.addon_quantity > 0
-                                ? `
+                )
+                .join("")
+              : ""
+            }
+                  ${item.addons && item.addons.length > 0
+              ? item.addons
+                .map(
+                  (addon) =>
+                    addon.addon_quantity > 0
+                      ? `
                                   <tr>
                                     <td style="text-align: left; padding: 2px 8px 2px 16px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px; color: #666; vertical-align: top;">+ Addon: ${addon.addon_name}${addon.size ? ` (${addon.size})` : ""}</td>
                                     <td style="text-align: center; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${addon.addon_quantity}</td>
                                     <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${formatter.format(addon.addon_price)}</td>
                                     <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${formatter.format(addon.addon_price * addon.addon_quantity)}</td>
                                   </tr>
-                                  ${
-                                    addon.isSpicy && addon.spicyPrice > 0
-                                      ? `
+                                  ${addon.isSpicy && addon.spicyPrice > 0
+                        ? `
                                         <tr>
                                           <td style="text-align: left; padding: 2px 8px 2px 24px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px; color: #999; vertical-align: top;">+ Spicy</td>
                                           <td style="text-align: center; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px;">${addon.addon_quantity}</td>
@@ -806,30 +843,28 @@ function Card() {
                                           <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px;">${formatter.format(addon.spicyPrice * addon.addon_quantity)}</td>
                                         </tr>
                                       `
-                                      : ""
-                                  }
+                        : ""
+                      }
                                 `
-                                : ""
-                          )
-                          .join("")
                       : ""
-                  }
-                  ${
-                    item.combos && item.combos.length > 0
-                      ? item.combos
-                          .map(
-                            (combo) =>
-                              combo.combo_quantity > 0
-                                ? `
+                )
+                .join("")
+              : ""
+            }
+                  ${item.combos && item.combos.length > 0
+              ? item.combos
+                .map(
+                  (combo) =>
+                    combo.combo_quantity > 0
+                      ? `
                                   <tr>
                                     <td style="text-align: left; padding: 2px 8px 2px 16px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px; color: #666; vertical-align: top;">+ Combo: ${combo.name1}${combo.size ? ` (${combo.size})` : ""}</td>
                                     <td style="text-align: center; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${combo.combo_quantity}</td>
                                     <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${formatter.format(combo.combo_price)}</td>
                                     <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 11px;">${formatter.format(combo.combo_price * combo.combo_quantity)}</td>
                                   </tr>
-                                  ${
-                                    combo.isSpicy && combo.spicyPrice > 0
-                                      ? `
+                                  ${combo.isSpicy && combo.spicyPrice > 0
+                        ? `
                                         <tr>
                                           <td style="text-align: left; padding: 2px 8px 2px 24px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px; color: #999; vertical-align: top;">+ Spicy</td>
                                           <td style="text-align: center; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px;">${combo.combo_quantity}</td>
@@ -837,17 +872,17 @@ function Card() {
                                           <td style="text-align: right; padding: 2px 8px; border-bottom: 1px solid #eee; line-height: 1.2; font-size: 10px;">${formatter.format(combo.spicyPrice * combo.combo_quantity)}</td>
                                         </tr>
                                       `
-                                      : ""
-                                  }
+                        : ""
+                      }
                                 `
-                                : ""
-                          )
-                          .join("")
                       : ""
-                  }
+                )
+                .join("")
+              : ""
+            }
                 `;
-              })
-              .join("")}
+        })
+        .join("")}
           </tbody>
         </table>
         <table style="width: 100%; border-collapse: collapse; border: none; margin-bottom: 10px;">

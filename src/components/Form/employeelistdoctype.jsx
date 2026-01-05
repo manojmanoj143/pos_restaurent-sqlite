@@ -117,7 +117,7 @@ const EmployeeDocType = () => {
         totalSalary: '719497',
         profileImage: '', // Empty for initials fallback
         bankName: 'State Bank of India',
-        ifscCode: 'SBIN0005379',
+        branchCode: 'SBIN0005379',
         accountNumber: '34989881059',
         // Sample assigned_schedule based on SQLite data - UPDATED: Split shift example
         assigned_schedule: {
@@ -475,8 +475,8 @@ const EmployeeDocType = () => {
             <input type="text" value={employee.bankName || 'N/A'} readOnly style={{ width: '100%', padding: '8px', border: '1px solid #e9ecef', borderRadius: '4px', background: '#f8f9fa' }} />
           </div>
           <div>
-            <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px', display: 'block' }}>IFSC Code</label>
-            <input type="text" value={employee.ifscCode || 'N/A'} readOnly style={{ width: '100%', padding: '8px', border: '1px solid #e9ecef', borderRadius: '4px', background: '#f8f9fa' }} />
+            <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px', display: 'block' }}>Branch Code</label>
+            <input type="text" value={employee.branchCode || 'N/A'} readOnly style={{ width: '100%', padding: '8px', border: '1px solid #e9ecef', borderRadius: '4px', background: '#f8f9fa' }} />
           </div>
           <div style={{ gridColumn: '1 / -1' }}>
             <label style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px', display: 'block' }}>Account Number</label>

@@ -565,6 +565,7 @@ def get_system_settings():
             "timeFormat": 'HH:mm:ss',
             "numberFormat": '#,##,###.##',
             "useNumberFormatFromCurrency": False,
+            "useCurrencySymbol": False,  # NEW: Toggle between Symbol (e.g. ₹) and Code (e.g. INR)
             "firstDayOfWeek": 'Monday',
             "floatPrecision": 3,
             "currencyPrecision": '',
@@ -588,6 +589,7 @@ def get_system_settings():
             "timeFormat": 'HH:mm:ss',
             "numberFormat": '#,##,###.##',
             "useNumberFormatFromCurrency": False,
+            "useCurrencySymbol": False,  # NEW: Toggle between Symbol (e.g. ₹) and Code (e.g. INR)
             "firstDayOfWeek": 'Monday',
             "floatPrecision": 3,
             "currencyPrecision": '',
@@ -2369,8 +2371,13 @@ if config.get('mode') == 'server':
             net_total = float(sales_data['total']) if sales_data['total'] and str(sales_data['total']).strip() != '' else 0.0
             vat_settings = vat_collection.find_one({"_id": "vat_settings"})
             vat_rate = vat_settings.get("vat", 10) / 100 if vat_settings else 0
-            vat_amount_raw = sales_data.get('vat_amount', net_total * vat_rate)
-            vat_amount = float(vat_amount_raw) if vat_amount_raw and str(vat_amount_raw).strip() != '' else (net_total * vat_rate)
+            
+            # FIXED: Explicitly handle 0 or 0.0 as valid values for vat_amount to prevent recalculation
+            if 'vat_amount' in sales_data and sales_data['vat_amount'] is not None and str(sales_data['vat_amount']).strip() != '':
+                vat_amount = float(sales_data['vat_amount'])
+            else:
+                vat_amount = net_total * vat_rate
+
             grand_total_raw = sales_data.get('grand_total', net_total + vat_amount)
             grand_total = float(grand_total_raw) if grand_total_raw and str(grand_total_raw).strip() != '' else (net_total + vat_amount)
             sales_data['vat_amount'] = round(vat_amount, 2)
@@ -4405,254 +4412,264 @@ def delete_employee(employee_id):
         except Exception as e:
             logger.error(f"Error setting active print settings: {str(e)}")
             return jsonify({"error": "Internal server error"}), 500
-    @app.route('/api/upload-combo-image', methods=['POST'])
-    @db_required
-    def upload_combo_image():
-        try:
-            if 'file' not in request.files:
-                logger.error("No file provided for combo image upload")
-                return jsonify({"error": "No file provided"}), 400
-            
-            file = request.files['file']
-            if file.filename == '':
-                logger.error("No file selected for combo image upload")
-                return jsonify({"error": "No file selected"}), 400
-            
-            if file:
-                filename = secure_filename(file.filename)
-                if not filename:
-                    logger.error("Invalid filename for combo image upload")
-                    return jsonify({"error": "Invalid filename"}), 400
-                
-                # UPDATED: Use dynamic COMBO_IMAGES_DIR (writable via UPLOAD_FOLDER in EXE)
-                upload_dir = COMBO_IMAGES_DIR
-                os.makedirs(upload_dir, exist_ok=True)  # Safe create if not exists
-                
-                filepath = os.path.join(upload_dir, filename)
-                
-                # Check if file already exists, append timestamp if needed to avoid overwrite
-                if os.path.exists(filepath):
-                    name, ext = os.path.splitext(filename)
-                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    filename = f"{name}_{timestamp}{ext}"
-                    filepath = os.path.join(upload_dir, filename)
-                    logger.info(f"Filename collision detected, renamed to: {filename}")
-                
-                file.save(filepath)
-                logger.info(f"Combo image uploaded successfully: {filename} to {upload_dir}")
-                return jsonify({"filename": filename}), 200
-            
-            return jsonify({"error": "Upload failed - no file processed"}), 500
+   # --- Combo Offer Routes ---
+
+@app.route('/api/upload-combo-image', methods=['POST', 'OPTIONS'])
+@db_required
+def upload_combo_image():
+    if request.method == 'OPTIONS':
+        return jsonify({"success": True}), 200
+    try:
+        if 'file' not in request.files:
+            logger.error("No file provided for combo image upload")
+            return jsonify({"error": "No file provided"}), 400
         
-        except Exception as e:
-            error_msg = f"Error uploading combo image: {str(e)}\n{traceback.format_exc()}"
-            logger.error(error_msg)
-            return jsonify({"error": str(e)}), 500
-
-    # UPDATED: Serve combo images from dynamic directory
-    @app.route('/api/combo-images/<filename>')
-    def serve_combo_image(filename):
-        try:
-            # UPDATED: Use dynamic COMBO_IMAGES_DIR parent for send_from_directory
-            # send_from_directory expects the directory containing the files
+        file = request.files['file']
+        if file.filename == '':
+            logger.error("No file selected for combo image upload")
+            return jsonify({"error": "No file selected"}), 400
+        
+        if file:
+            filename = secure_filename(file.filename)
+            if not filename:
+                logger.error("Invalid filename for combo image upload")
+                return jsonify({"error": "Invalid filename"}), 400
+            
+            # UPDATED: Use dynamic COMBO_IMAGES_DIR (writable via UPLOAD_FOLDER in EXE)
             upload_dir = COMBO_IMAGES_DIR
-            return send_from_directory(upload_dir, filename)
-        except FileNotFoundError:
-            logger.warning(f"Combo image not found: {filename}")
-            return "Image not found", 404
-        except Exception as e:
-            logger.error(f"Error serving combo image {filename}: {str(e)}\n{traceback.format_exc()}")
-            return "Server error", 500
+            os.makedirs(upload_dir, exist_ok=True)  # Safe create if not exists
+            
+            filepath = os.path.join(upload_dir, filename)
+            
+            # Check if file already exists, append timestamp if needed to avoid overwrite
+            if os.path.exists(filepath):
+                name, ext = os.path.splitext(filename)
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"{name}_{timestamp}{ext}"
+                filepath = os.path.join(upload_dir, filename)
+                logger.info(f"Filename collision detected, renamed to: {filename}")
+            
+            file.save(filepath)
+            logger.info(f"Combo image uploaded successfully: {filename} to {upload_dir}")
+            return jsonify({"filename": filename}), 200
+        
+        return jsonify({"error": "Upload failed - no file processed"}), 500
+    
+    except Exception as e:
+        error_msg = f"Error uploading combo image: {str(e)}\n{traceback.format_exc()}"
+        logger.error(error_msg)
+        return jsonify({"error": str(e)}), 500
 
-    @app.route('/api/combo-offer', methods=['GET'])
-    @db_required
-    def get_combo_offers():
-        try:
-            # NEW: Run cleanup before fetching (in addition to scheduler)
-            clean_expired_combo_offers()
-            offers = combo_offers_collection.find()
-            current_time = datetime.now(timezone.utc)  # FIXED: Use timezone.utc for awareness
-            offers_list = []
-            for offer in offers:
-                if 'offer_end_time' in offer and offer['offer_end_time']:
-                    try:
-                        end_time_str = str(offer['offer_end_time'])
-                        if end_time_str.endswith('Z'):
-                            end_time_str = end_time_str.replace('Z', '+00:00')
-                        end_time = datetime.fromisoformat(end_time_str)
-                        # FIXED: Ensure end_time is timezone-aware (UTC)
-                        if end_time.tzinfo is None:
-                            end_time = end_time.replace(tzinfo=timezone.utc)
-                        if current_time > end_time:
-                            combo_offers_collection.delete_one({'_id': offer['_id']})
-                            logger.info(f"Deleted expired combo offer on fetch: {offer['_id']} (ended {end_time})")
-                            continue
-                    except (ValueError, TypeError) as e:
-                        logger.error(f"Invalid offer_end_time for combo offer {offer['_id']}: {str(e)}")
-                offer_str = convert_objectid_to_str(offer)
-                offers_list.append(offer_str)
-            logger.info(f"Fetched {len(offers_list)} active combo offers")
-            return jsonify(offers_list), 200
-        except Exception as e:
-            logger.error(f"Error fetching combo offers: {str(e)}\n{traceback.format_exc()}")
-            return jsonify({"error": str(e)}), 500
+# UPDATED: Serve combo images from dynamic directory
+@app.route('/api/combo-images/<filename>')
+def serve_combo_image(filename):
+    try:
+        # UPDATED: Use dynamic COMBO_IMAGES_DIR parent for send_from_directory
+        # send_from_directory expects the directory containing the files
+        upload_dir = COMBO_IMAGES_DIR
+        return send_from_directory(upload_dir, filename)
+    except FileNotFoundError:
+        logger.warning(f"Combo image not found: {filename}")
+        return "Image not found", 404
+    except Exception as e:
+        logger.error(f"Error serving combo image {filename}: {str(e)}\n{traceback.format_exc()}")
+        return "Server error", 500
 
-    @app.route('/api/combo-offer/<offer_id>', methods=['GET'])
-    @db_required
-    def get_combo_offer(offer_id):
-        try:
-            offer = combo_offers_collection.find_one({'_id': offer_id})
-            if not offer:
-                logger.warning(f"Combo offer not found: {offer_id}")
-                return jsonify({"error": "Combo offer not found"}), 404
-            current_time = datetime.now(timezone.utc)  # FIXED: Use timezone.utc
+@app.route('/api/combo-offer', methods=['GET'])
+@db_required
+def get_combo_offers():
+    try:
+        # NEW: Run cleanup before fetching (in addition to scheduler)
+        clean_expired_combo_offers()
+        offers = combo_offers_collection.find()
+        current_time = datetime.now(timezone.utc)  # FIXED: Use timezone.utc for awareness
+        offers_list = []
+        for offer in offers:
             if 'offer_end_time' in offer and offer['offer_end_time']:
                 try:
                     end_time_str = str(offer['offer_end_time'])
                     if end_time_str.endswith('Z'):
                         end_time_str = end_time_str.replace('Z', '+00:00')
                     end_time = datetime.fromisoformat(end_time_str)
-                    # FIXED: Ensure awareness
+                    # FIXED: Ensure end_time is timezone-aware (UTC)
                     if end_time.tzinfo is None:
                         end_time = end_time.replace(tzinfo=timezone.utc)
                     if current_time > end_time:
                         combo_offers_collection.delete_one({'_id': offer['_id']})
-                        logger.info(f"Deleted expired combo offer on single fetch: {offer_id} (ended {end_time})")
-                        return jsonify({"error": "Combo offer not found (expired)"}), 404
+                        logger.info(f"Deleted expired combo offer on fetch: {offer['_id']} (ended {end_time})")
+                        continue
                 except (ValueError, TypeError) as e:
-                    logger.error(f"Invalid offer_end_time for combo offer {offer_id}: {str(e)}")
+                    logger.error(f"Invalid offer_end_time for combo offer {offer['_id']}: {str(e)}")
             offer = convert_objectid_to_str(offer)
-            logger.info(f"Fetched combo offer: {offer_id}")
-            return jsonify(offer), 200
-        except Exception as e:
-            logger.error(f"Error fetching combo offer {offer_id}: {str(e)}\n{traceback.format_exc()}")
-            return jsonify({"error": str(e)}), 500
+            offers_list.append(offer)
+        logger.info(f"Fetched {len(offers_list)} active combo offers")
+        return jsonify(offers_list), 200
+    except Exception as e:
+        logger.error(f"Error fetching combo offers: {str(e)}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
 
-    @app.route('/api/combo-offer', methods=['POST'])
-    @db_required
-    def create_combo_offer():
-        try:
-            data = request.json
-            if not data:
-                logger.error("No data provided for combo offer creation")
-                return jsonify({"error": "No data provided"}), 400
-            required_fields = ['description', 'total_price', 'items']
-            for field in required_fields:
-                if field not in data:
-                    logger.error(f"Missing required field: {field}")
-                    return jsonify({"error": f"Missing required field: {field}"}), 400
-                value = data[field]
-                if field == 'description':
-                    if not isinstance(value, str) or not value.strip():
-                        logger.error(f"Empty or invalid string field: {field}")
-                        return jsonify({"error": f"Field '{field}' must be a non-empty string"}), 400
-                elif field == 'total_price':
-                    if not isinstance(value, (int, float)) or value < 0:
-                        logger.error(f"Invalid total_price: {value}")
-                        return jsonify({"error": "Field 'total_price' must be a non-negative number"}), 400
-                elif field == 'items':
-                    if not isinstance(value, list) or not value:
-                        logger.error(f"Empty or invalid items list")
-                        return jsonify({"error": "Field 'items' must be a non-empty list"}), 400
-            if 'offer_price' in data:
-                value = data['offer_price']
+@app.route('/api/combo-offer/<offer_id>', methods=['GET'])
+@db_required
+def get_combo_offer(offer_id):
+    try:
+        offer = combo_offers_collection.find_one({'_id': offer_id})
+        if not offer:
+            logger.warning(f"Combo offer not found: {offer_id}")
+            return jsonify({"error": "Combo offer not found"}), 404
+        current_time = datetime.now(timezone.utc)  # FIXED: Use timezone.utc
+        if 'offer_end_time' in offer and offer['offer_end_time']:
+            try:
+                end_time_str = str(offer['offer_end_time'])
+                if end_time_str.endswith('Z'):
+                    end_time_str = end_time_str.replace('Z', '+00:00')
+                end_time = datetime.fromisoformat(end_time_str)
+                # FIXED: Ensure awareness
+                if end_time.tzinfo is None:
+                    end_time = end_time.replace(tzinfo=timezone.utc)
+                if current_time > end_time:
+                    combo_offers_collection.delete_one({'_id': offer['_id']})
+                    logger.info(f"Deleted expired combo offer on single fetch: {offer_id} (ended {end_time})")
+                    return jsonify({"error": "Combo offer not found (expired)"}), 404
+            except (ValueError, TypeError) as e:
+                logger.error(f"Invalid offer_end_time for combo offer {offer_id}: {str(e)}")
+        offer = convert_objectid_to_str(offer)
+        logger.info(f"Fetched combo offer: {offer_id}")
+        return jsonify(offer), 200
+    except Exception as e:
+        logger.error(f"Error fetching combo offer {offer_id}: {str(e)}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/combo-offer', methods=['POST', 'OPTIONS'])
+@db_required
+def create_combo_offer():
+    if request.method == 'OPTIONS':
+        return jsonify({"success": True}), 200
+    try:
+        data = request.json
+        if not data:
+            logger.error("No data provided for combo offer creation")
+            return jsonify({"error": "No data provided"}), 400
+        required_fields = ['description', 'total_price', 'items']
+        for field in required_fields:
+            if field not in data:
+                logger.error(f"Missing required field: {field}")
+                return jsonify({"error": f"Missing required field: {field}"}), 400
+            value = data[field]
+            if field == 'description':
+                if not isinstance(value, str) or not value.strip():
+                    logger.error(f"Empty or invalid string field: {field}")
+                    return jsonify({"error": f"Field '{field}' must be a non-empty string"}), 400
+            elif field == 'total_price':
                 if not isinstance(value, (int, float)) or value < 0:
-                    logger.error(f"Invalid offer_price: {value}")
-                    return jsonify({"error": "Field 'offer_price' must be a non-negative number"}), 400
-            # NEW: Validate images field
-            if 'images' in data:
-                if not isinstance(data['images'], list):
-                    logger.error("Invalid images field: must be a list")
-                    return jsonify({"error": "Field 'images' must be a list of strings"}), 400
-                for img in data['images']:
-                    if not isinstance(img, str):
-                        logger.error("Invalid image filename in images list")
-                        return jsonify({"error": "Images must be a list of string filenames"}), 400
-            if 'offer_start_time' in data and data['offer_start_time'] and 'offer_end_time' in data and data['offer_end_time']:
-                try:
-                    offer_start_time = datetime.fromisoformat(str(data['offer_start_time']).replace('Z', '+00:00'))
-                    offer_end_time = datetime.fromisoformat(str(data['offer_end_time']).replace('Z', '+00:00'))
-                    if offer_start_time >= offer_end_time:
-                        logger.error("offer_start_time must be before offer_end_time")
-                        return jsonify({"error": "Offer start time must be before offer end time"}), 400
-                except (ValueError, TypeError) as e:
-                    logger.error(f"Invalid offer time format: {str(e)}")
-                    return jsonify({"error": f"Invalid offer time format: {str(e)}"}), 400
-            data['created_at'] = datetime.now(timezone.utc).isoformat()  # FIXED: Use timezone.utc
-            offer_id = combo_offers_collection.insert_one(data).inserted_id
-            logger.info(f"Combo offer created with ID: {offer_id}")
-            return jsonify({'message': 'Combo offer created successfully!', 'id': offer_id}), 201
-        except Exception as e:
-            logger.error(f"Error creating combo offer: {str(e)}\n{traceback.format_exc()}")
-            return jsonify({'error': str(e)}), 500
+                    logger.error(f"Invalid total_price: {value}")
+                    return jsonify({"error": "Field 'total_price' must be a non-negative number"}), 400
+            elif field == 'items':
+                if not isinstance(value, list) or not value:
+                    logger.error(f"Empty or invalid items list")
+                    return jsonify({"error": "Field 'items' must be a non-empty list"}), 400
+        if 'offer_price' in data:
+            value = data['offer_price']
+            if not isinstance(value, (int, float)) or value < 0:
+                logger.error(f"Invalid offer_price: {value}")
+                return jsonify({"error": "Field 'offer_price' must be a non-negative number"}), 400
+        # NEW: Validate images field
+        if 'images' in data:
+            if not isinstance(data['images'], list):
+                logger.error("Invalid images field: must be a list")
+                return jsonify({"error": "Field 'images' must be a list of strings"}), 400
+            for img in data['images']:
+                if not isinstance(img, str):
+                    logger.error("Invalid image filename in images list")
+                    return jsonify({"error": "Images must be a list of string filenames"}), 400
+        if 'offer_start_time' in data and data['offer_start_time'] and 'offer_end_time' in data and data['offer_end_time']:
+            try:
+                offer_start_time = datetime.fromisoformat(str(data['offer_start_time']).replace('Z', '+00:00'))
+                offer_end_time = datetime.fromisoformat(str(data['offer_end_time']).replace('Z', '+00:00'))
+                if offer_start_time >= offer_end_time:
+                    logger.error("offer_start_time must be before offer_end_time")
+                    return jsonify({"error": "Offer start time must be before offer end time"}), 400
+            except (ValueError, TypeError) as e:
+                logger.error(f"Invalid offer time format: {str(e)}")
+                return jsonify({"error": f"Invalid offer time format: {str(e)}"}), 400
+        data['created_at'] = datetime.now(timezone.utc).isoformat()  # FIXED: Use timezone.utc
+        offer_id = combo_offers_collection.insert_one(data).inserted_id
+        logger.info(f"Combo offer created with ID: {offer_id}")
+        return jsonify({'message': 'Combo offer created successfully!', 'id': offer_id}), 201
+    except Exception as e:
+        logger.error(f"Error creating combo offer: {str(e)}\n{traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
 
-    @app.route('/api/combo-offer/<offer_id>', methods=['PUT'])
-    @db_required
-    def update_combo_offer(offer_id):
-        try:
-            data = request.json
-            if not data:
-                logger.error("No data provided for combo offer update")
-                return jsonify({"error": "No data provided"}), 400
-            if '_id' in data:
-                del data['_id']
-            for field in data:
-                value = data[field]
-                if field in ['total_price', 'offer_price']:
-                    if not isinstance(value, (int, float)) or value < 0:
-                        logger.error(f"Invalid {field}: {value}")
-                        return jsonify({"error": f"Field '{field}' must be a non-negative number"}), 400
-                if field == 'description':
-                    if not isinstance(value, str) or not value.strip():
-                        logger.error(f"Empty or invalid string field: {field}")
-                        return jsonify({"error": f"Field '{field}' must be a non-empty string"}), 400
-                if field == 'items':
-                    if not isinstance(value, list) or not value:
-                        logger.error(f"Empty or invalid items list")
-                        return jsonify({"error": "Field 'items' must be a non-empty list"}), 400
-                # NEW: Validate images if present
-                if field == 'images':
-                    if not isinstance(value, list):
-                        logger.error("Invalid images field: must be a list")
-                        return jsonify({"error": "Field 'images' must be a list of strings"}), 400
-                    for img in value:
-                        if not isinstance(img, str):
-                            logger.error("Invalid image filename in images list")
-                            return jsonify({"error": "Images must be a list of string filenames"}), 400
-            if 'offer_start_time' in data and data['offer_start_time'] and 'offer_end_time' in data and data['offer_end_time']:
-                try:
-                    offer_start_time = datetime.fromisoformat(str(data['offer_start_time']).replace('Z', '+00:00'))
-                    offer_end_time = datetime.fromisoformat(str(data['offer_end_time']).replace('Z', '+00:00'))
-                    if offer_start_time >= offer_end_time:
-                        logger.error("offer_start_time must be before offer_end_time")
-                        return jsonify({"error": "Offer start time must be before offer end time"}), 400
-                except (ValueError, TypeError) as e:
-                    logger.error(f"Invalid offer time format: {str(e)}")
-                    return jsonify({"error": f"Invalid offer time format: {str(e)}"}), 400
-            data['modified_at'] = datetime.now(timezone.utc).isoformat()  # FIXED: Use timezone.utc
-            result = combo_offers_collection.update_one({'_id': offer_id}, {'$set': data})
-            if result.matched_count == 0:
-                logger.warning(f"Combo offer not found for update: {offer_id}")
-                return jsonify({"error": "Combo offer not found"}), 404
-            logger.info(f"Combo offer updated: {offer_id}")
-            return jsonify({"message": "Combo offer updated successfully"}), 200
-        except Exception as e:
-            logger.error(f"Error updating combo offer {offer_id}: {str(e)}\n{traceback.format_exc()}")
-            return jsonify({"error": str(e)}), 500
+@app.route('/api/combo-offer/<offer_id>', methods=['PUT', 'OPTIONS'])
+@db_required
+def update_combo_offer(offer_id):
+    if request.method == 'OPTIONS':
+        return jsonify({"success": True}), 200
+    try:
+        data = request.json
+        if not data:
+            logger.error("No data provided for combo offer update")
+            return jsonify({"error": "No data provided"}), 400
+        if '_id' in data:
+            del data['_id']
+        for field in data:
+            value = data[field]
+            if field in ['total_price', 'offer_price']:
+                if not isinstance(value, (int, float)) or value < 0:
+                    logger.error(f"Invalid {field}: {value}")
+                    return jsonify({"error": f"Field '{field}' must be a non-negative number"}), 400
+        if field == 'description':
+            if not isinstance(value, str) or not value.strip():
+                logger.error(f"Empty or invalid string field: {field}")
+                return jsonify({"error": f"Field '{field}' must be a non-empty string"}), 400
+        if field == 'items':
+            if not isinstance(value, list) or not value:
+                logger.error(f"Empty or invalid items list")
+                return jsonify({"error": "Field 'items' must be a non-empty list"}), 400
+        # NEW: Validate images if present
+        if field == 'images':
+            if not isinstance(value, list):
+                logger.error("Invalid images field: must be a list")
+                return jsonify({"error": "Field 'images' must be a list of strings"}), 400
+            for img in value:
+                if not isinstance(img, str):
+                    logger.error("Invalid image filename in images list")
+                    return jsonify({"error": "Images must be a list of string filenames"}), 400
+        if 'offer_start_time' in data and data['offer_start_time'] and 'offer_end_time' in data and data['offer_end_time']:
+            try:
+                offer_start_time = datetime.fromisoformat(str(data['offer_start_time']).replace('Z', '+00:00'))
+                offer_end_time = datetime.fromisoformat(str(data['offer_end_time']).replace('Z', '+00:00'))
+                if offer_start_time >= offer_end_time:
+                    logger.error("offer_start_time must be before offer_end_time")
+                    return jsonify({"error": "Offer start time must be before offer end time"}), 400
+            except (ValueError, TypeError) as e:
+                logger.error(f"Invalid offer time format: {str(e)}")
+                return jsonify({"error": f"Invalid offer time format: {str(e)}"}), 400
+        data['modified_at'] = datetime.now(timezone.utc).isoformat()  # FIXED: Use timezone.utc
+        result = combo_offers_collection.update_one({'_id': offer_id}, {'$set': data})
+        if result.matched_count == 0:
+            logger.warning(f"Combo offer not found for update: {offer_id}")
+            return jsonify({"error": "Combo offer not found"}), 404
+        logger.info(f"Combo offer updated: {offer_id}")
+        return jsonify({"message": "Combo offer updated successfully"}), 200
+    except Exception as e:
+        logger.error(f"Error updating combo offer {offer_id}: {str(e)}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
 
-    @app.route('/api/combo-offer/<offer_id>', methods=['DELETE'])
-    @db_required
-    def delete_combo_offer(offer_id):
-        try:
-            result = combo_offers_collection.delete_one({'_id': offer_id})
-            if result.deleted_count == 0:
-                logger.warning(f"Combo offer not found for deletion: {offer_id}")
-                return jsonify({"error": "Combo offer not found"}), 404
-            logger.info(f"Combo offer deleted: {offer_id}")
-            return jsonify({"message": "Combo offer deleted successfully"}), 200
-        except Exception as e:
-            logger.error(f"Error deleting combo offer {offer_id}: {str(e)}\n{traceback.format_exc()}")
-            return jsonify({"error": str(e)}), 500
+@app.route('/api/combo-offer/<offer_id>', methods=['DELETE', 'OPTIONS'])
+@db_required
+def delete_combo_offer(offer_id):
+    if request.method == 'OPTIONS':
+        return jsonify({"success": True}), 200
+    try:
+        result = combo_offers_collection.delete_one({'_id': offer_id})
+        if result.deleted_count == 0:
+            logger.warning(f"Combo offer not found for deletion: {offer_id}")
+            return jsonify({"error": "Combo offer not found"}), 404
+        logger.info(f"Combo offer deleted: {offer_id}")
+        return jsonify({"message": "Combo offer deleted successfully"}), 200
+    except Exception as e:
+        logger.error(f"Error deleting combo offer {offer_id}: {str(e)}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
     @app.route('/api/save-vat', methods=['POST'])
     @db_required
     def save_vat():
@@ -5542,6 +5559,9 @@ def add_employee():
             for emp in employees:
                 if '_id' in emp:
                     emp['_id'] = str(emp['_id'])
+                # Backward compatibility: Map ifscCode to branchCode if branchCode missing
+                if 'branchCode' not in emp and 'ifscCode' in emp:
+                    emp['branchCode'] = emp['ifscCode']
                 converted_employees.append(emp)
             return jsonify(converted_employees), 200
         except Exception as e:
@@ -5622,7 +5642,7 @@ def add_employee():
                 "bankName": data.get('bankName', ''),
                 "accountHolderName": data.get('accountHolderName', ''),
                 "accountNumber": data.get('accountNumber', ''),
-                "ifscCode": data.get('ifscCode', ''),
+                "branchCode": data.get('branchCode', ''),
                 "basicSalary": basic,
                 "hra": hra,
                 "ta": ta,
@@ -5759,6 +5779,11 @@ def manage_employee(emp_id):
                 if '_id' in delivery_profile:
                     delivery_profile['_id'] = str(delivery_profile['_id'])
                 emp['deliveryProfile'] = delivery_profile # Add as a nested object for frontend to display in details modal
+            
+            # Backward compatibility for single fetch
+            if 'branchCode' not in emp and 'ifscCode' in emp:
+                emp['branchCode'] = emp['ifscCode']
+
             return jsonify(emp), 200
         except Exception as e:
             logger.error(f"Error fetching employee: {str(e)}")
@@ -5806,7 +5831,7 @@ def manage_employee(emp_id):
                 "bankName": data.get('bankName', existing_emp.get('bankName', '')),
                 "accountHolderName": data.get('accountHolderName', existing_emp.get('accountHolderName', '')),
                 "accountNumber": data.get('accountNumber', existing_emp.get('accountNumber', '')),
-                "ifscCode": data.get('ifscCode', existing_emp.get('ifscCode', '')),
+                "branchCode": data.get('branchCode', existing_emp.get('branchCode', existing_emp.get('ifscCode', ''))),
                 # Salary
                 "basicSalary": safe_float(data.get('basicSalary')),
                 "hra": safe_float(data.get('hra')),

@@ -1,11 +1,3 @@
-// src/components/Form/Employeedepartment.jsx (NEW: Full detailed page for managing Employee Departments.
-// Modeled after EmployeeDesignation/EmployeeType: List view with add/edit/delete.
-// Handles navigation back to AddEmployee with state restoration after create/edit.
-// Fetches from /api/departments, POST/PUT/DELETE to same.
-// Includes search, pagination (simple), confirmation modals for delete.
-// UI consistent with AddEmployee: tabs not needed, just list + form.
-// Added icon FaBuilding for department.
-// Handles fromAddEmployee state to auto-navigate back after save.
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
@@ -26,6 +18,7 @@ const EmployeeDepartment = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
   const [fromAddEmployee, setFromAddEmployee] = useState(false);
+  const [fromDesignation, setFromDesignation] = useState(false);
 
   // Fetch baseUrl
   useEffect(() => {
@@ -46,13 +39,23 @@ const EmployeeDepartment = () => {
     fetchConfig();
   }, []);
 
-  // Handle state from AddEmployee
+  // Handle incoming state (from AddEmployee or EmployeeDesignation)
   useEffect(() => {
-    if (location.state?.fromAddEmployee) {
+    // Check if coming from EmployeeDesignation (nested flow: AddEmployee -> Designation -> Department)
+    if (location.state?.fromDesignation) {
+      setFromDesignation(true);
+      setShowForm(true); // Auto-open form
+      if (location.state?.fromAddEmployee) {
+        setFromAddEmployee(true); // Keep track of ultimate origin
+      }
+    }
+    // Check if coming directly from AddEmployee
+    else if (location.state?.fromAddEmployee) {
       setFromAddEmployee(true);
-      // Restore formData if provided (for consistency, though not editing here)
-      if (location.state.formData) {
-        setFormData(location.state.formData);
+      setShowForm(true);
+      // Pre-fill if name was typed (though usually logic is to create new)
+      if (location.state.formData?.department && location.state.formData.department !== 'create_new') {
+        setFormData(prev => ({ ...prev, name: location.state.formData.department }));
       }
     }
   }, [location.state]);
@@ -98,22 +101,47 @@ const EmployeeDepartment = () => {
         response = await axios.post(`${baseUrl}/api/departments`, formData);
         setMessage('Department created successfully!');
       }
+
+      const savedDepartmentName = formData.name;
+
       setError('');
       setFormData({ name: '', is_active: true });
       setEditingId(null);
       setShowForm(false);
       await fetchDepartments();
-      // If from AddEmployee, navigate back with restored state
+
+      // Navigation Logic after successful save
+
+      // 1. If from EmployeeDesignation, return there
+      if (fromDesignation) {
+        navigate('/employee-designations', {
+          state: {
+            ...location.state, // Pass back all original state
+            departmentCreated: true,
+            newDepartmentName: savedDepartmentName, // Pass the new name
+            // Ensure designation form state is preserved
+            savedDesignationForm: location.state?.savedDesignationForm,
+            // Ensure AddEmployee chain is preserved
+            fromAddEmployee: location.state?.fromAddEmployee,
+            originalAddEmployeeState: location.state?.originalAddEmployeeState
+          }
+        });
+        return;
+      }
+
+      // 2. If directly from AddEmployee, return there
       if (fromAddEmployee) {
         navigate('/add-employee', {
           state: {
-            formData: location.state?.formData || { department: formData.name }, // Set the new department if needed
+            formData: { ...location.state?.formData, department: savedDepartmentName },
             selectedISDCode: location.state?.selectedISDCode || '+971',
             isEditing: !!location.state?.editingId,
             editingId: location.state?.editingId
           }
         });
+        return;
       }
+
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to save department.');
       console.error(err);
@@ -152,6 +180,21 @@ const EmployeeDepartment = () => {
   );
 
   const handleBack = () => {
+    // 1. Back to EmployeeDesignation
+    if (fromDesignation) {
+      navigate('/employee-designations', {
+        state: {
+          // We didn't create anything, but we need to restore state
+          savedDesignationForm: location.state?.savedDesignationForm,
+          fromAddEmployee: location.state?.fromAddEmployee,
+          originalAddEmployeeState: location.state?.originalAddEmployeeState,
+          fromDesignation: false // Reset
+        }
+      });
+      return;
+    }
+
+    // 2. Back to AddEmployee
     if (fromAddEmployee) {
       navigate('/add-employee', {
         state: {
@@ -161,9 +204,11 @@ const EmployeeDepartment = () => {
           editingId: location.state?.editingId
         }
       });
-    } else {
-      navigate('/admin');
+      return;
     }
+
+    // 3. Default back
+    navigate('/admin');
   };
 
   if (loading && !departments.length) {
@@ -221,7 +266,7 @@ const EmployeeDepartment = () => {
           </div>
         )}
 
-        {/* Add Button */}
+        {/* Add Button - Hidden if forcing add form via navigation, but helpful generally */}
         {!showForm && (
           <button
             onClick={() => setShowForm(true)}
@@ -347,18 +392,20 @@ const EmployeeDepartment = () => {
                         </span>
                       </td>
                       <td style={{ padding: '12px', textAlign: 'center' }}>
-                        <button
-                          onClick={() => handleEdit(dept)}
-                          style={{ marginRight: '10px', color: '#3498db', background: 'none', border: 'none', cursor: 'pointer' }}
-                        >
-                          <FaEdit />
-                        </button>
-                        <button
-                          onClick={() => confirmDelete(dept._id || dept.id)}
-                          style={{ color: '#e74c3c', background: 'none', border: 'none', cursor: 'pointer' }}
-                        >
-                          <FaTrash />
-                        </button>
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
+                          <button
+                            onClick={() => handleEdit(dept)}
+                            style={{ color: '#3498db', background: 'none', border: 'none', cursor: 'pointer' }}
+                          >
+                            <FaEdit />
+                          </button>
+                          <button
+                            onClick={() => confirmDelete(dept._id || dept.id)}
+                            style={{ color: '#e74c3c', background: 'none', border: 'none', cursor: 'pointer' }}
+                          >
+                            <FaTrash />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))

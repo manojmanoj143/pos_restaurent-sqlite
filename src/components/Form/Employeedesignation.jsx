@@ -7,7 +7,7 @@ const EmployeeDesignation = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [designations, setDesignations] = useState([]);
-  const [departmentsList, setDepartmentsList] = useState([]); // New state for departments
+  const [departmentsList, setDepartmentsList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [message, setMessage] = useState('');
@@ -17,11 +17,29 @@ const EmployeeDesignation = () => {
   const [formData, setFormData] = useState({ name: '', description: '', reportTo: '' });
   const [baseUrl, setBaseUrl] = useState('');
 
-  // Check if coming from AddEmployee to show form by default
+  // Handle incoming state (from AddEmployee or returning from EmployeeDepartment)
   useEffect(() => {
-    if (location.state?.fromAddEmployee) {
+    // Case 1: Returning from EmployeeDepartment after creating a new department
+    if (location.state?.departmentCreated && location.state?.savedDesignationForm) {
       setShowForm(true);
-      setEditingId(null); // Ensure create mode
+      setFormData({
+        ...location.state.savedDesignationForm,
+        reportTo: location.state.newDepartmentName // Auto-select the new department
+      });
+      // Restore editing session if we were editing a designation
+      if (location.state.isEditing) {
+        setEditingId(location.state.editingId);
+      }
+      setMessage(`Department '${location.state.newDepartmentName}' created and selected.`);
+    }
+    // Case 2: Coming from AddEmployee to create a new designation
+    else if (location.state?.fromAddEmployee) {
+      setShowForm(true);
+      setEditingId(null);
+      // Restore formData if we navigated away and came back (e.g. accidentally) without finishing
+      if (location.state.savedDesignationForm) {
+        setFormData(location.state.savedDesignationForm);
+      }
     }
   }, [location.state]);
 
@@ -44,9 +62,15 @@ const EmployeeDesignation = () => {
     fetchConfig();
   }, []);
 
-  // Fetch designations
+  // Fetch data
+  useEffect(() => {
+    if (baseUrl) {
+      fetchDesignations();
+      fetchDepartments();
+    }
+  }, [baseUrl]);
+
   const fetchDesignations = async () => {
-    if (!baseUrl) return;
     try {
       setLoading(true);
       const response = await axios.get(`${baseUrl}/api/employee-designations`);
@@ -54,15 +78,12 @@ const EmployeeDesignation = () => {
       setError(null);
     } catch (err) {
       setError(`Failed to fetch designations: ${err.response?.data?.error || err.message}`);
-      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-  // New: Fetch departments for Report To dropdown
   const fetchDepartments = async () => {
-    if (!baseUrl) return;
     try {
       const response = await axios.get(`${baseUrl}/api/departments`);
       setDepartmentsList(response.data);
@@ -71,27 +92,35 @@ const EmployeeDesignation = () => {
     }
   };
 
-  useEffect(() => {
-    if (baseUrl) {
-      fetchDesignations();
-      fetchDepartments(); // Fetch departments when baseUrl is ready
-    }
-  }, [baseUrl]);
-
-  // Handle search - shows all when empty, filters on name/description (case-insensitive)
+  // Search filter
   const filteredDesignations = designations.filter(designation =>
     searchQuery === '' ||
     designation.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     designation.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Handle form change
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+
+    // Special handling for Department 'Create New'
+    if (name === 'reportTo' && value === 'create_new') {
+      navigate('/employee-departments', {
+        state: {
+          fromDesignation: true,
+          savedDesignationForm: formData, // Save current progress
+          // Pass through the AddEmployee state so we can return there eventually
+          fromAddEmployee: location.state?.fromAddEmployee,
+          originalAddEmployeeState: location.state?.fromAddEmployee ? location.state : null,
+          isEditing: !!editingId,
+          editingId: editingId
+        }
+      });
+      return;
+    }
+
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // Validate form
   const validateForm = () => {
     if (!formData.name.trim()) {
       setError('Designation name is required');
@@ -101,41 +130,53 @@ const EmployeeDesignation = () => {
       setError('Description is required');
       return false;
     }
-    setError(null);
     return true;
   };
 
-  // Handle submit
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) return;
+
     try {
       setLoading(true);
-      let response;
+      // Clean up formData before sending (remove temporary states if any)
+      const dataToSend = { ...formData };
+
       if (editingId) {
-        response = await axios.put(`${baseUrl}/api/employee-designations/${editingId}`, formData);
+        await axios.put(`${baseUrl}/api/employee-designations/${editingId}`, dataToSend);
         setMessage('Designation updated successfully');
       } else {
-        response = await axios.post(`${baseUrl}/api/employee-designations`, formData);
+        await axios.post(`${baseUrl}/api/employee-designations`, dataToSend);
         setMessage('Designation added successfully');
       }
-      // If from AddEmployee, navigate back with preserved formData
-      if (location.state?.fromAddEmployee) {
-        navigate('/add-employee', { state: { formData: location.state.formData } });
+
+      // If we came from AddEmployee, return there
+      if (location.state?.fromAddEmployee || location.state?.originalAddEmployeeState?.fromAddEmployee) {
+        // Determine which state object to use (direct or passed through department)
+        const addEmployeeState = location.state?.originalAddEmployeeState || location.state;
+
+        navigate('/add-employee', {
+          state: {
+            formData: addEmployeeState?.formData,
+            selectedISDCode: addEmployeeState?.selectedISDCode,
+            editingId: addEmployeeState?.editingId // If AddEmployee was editing
+          }
+        });
         return;
       }
+
+      // Normal flow
       setShowForm(false);
       setEditingId(null);
       setFormData({ name: '', description: '', reportTo: '' });
       fetchDesignations();
     } catch (err) {
-      setError(err.response?.data?.error || `Failed to ${editingId ? 'update' : 'add'} designation: ${err.message}`);
+      setError(err.response?.data?.error || `Failed to ${editingId ? 'update' : 'add'} designation`);
     } finally {
       setLoading(false);
     }
   };
 
-  // Handle edit
   const handleEdit = (designation) => {
     setFormData({ name: designation.name, description: designation.description, reportTo: designation.reportTo || '' });
     setEditingId(designation.id);
@@ -144,27 +185,50 @@ const EmployeeDesignation = () => {
     setMessage('');
   };
 
-  // Handle delete - No confirmation popup; direct action with warning via error message on failure
   const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this designation?")) return;
     try {
       await axios.delete(`${baseUrl}/api/employee-designations/${id}`);
       setMessage('Designation deleted successfully');
       fetchDesignations();
     } catch (err) {
-      setError(err.response?.data?.error || `Failed to delete designation: ${err.message}`);
+      setError(err.response?.data?.error || `Failed to delete designation`);
     }
   };
 
-  // Handle cancel
   const handleCancel = () => {
+    // If from AddEmployee, navigate back without saving
+    if (location.state?.fromAddEmployee || location.state?.originalAddEmployeeState?.fromAddEmployee) {
+      const addEmployeeState = location.state?.originalAddEmployeeState || location.state;
+      navigate('/add-employee', {
+        state: {
+          formData: addEmployeeState?.formData,
+          selectedISDCode: addEmployeeState?.selectedISDCode,
+          editingId: addEmployeeState?.editingId
+        }
+      });
+      return;
+    }
+
     setShowForm(false);
     setEditingId(null);
     setFormData({ name: '', description: '', reportTo: '' });
     setError(null);
     setMessage('');
-    // If from AddEmployee, navigate back with preserved formData
-    if (location.state?.fromAddEmployee) {
-      navigate('/add-employee', { state: { formData: location.state.formData } });
+  };
+
+  const handleBack = () => {
+    if (location.state?.fromAddEmployee || location.state?.originalAddEmployeeState?.fromAddEmployee) {
+      const addEmployeeState = location.state?.originalAddEmployeeState || location.state;
+      navigate('/add-employee', {
+        state: {
+          formData: addEmployeeState?.formData,
+          selectedISDCode: addEmployeeState?.selectedISDCode,
+          editingId: addEmployeeState?.editingId
+        }
+      });
+    } else {
+      navigate('/admin');
     }
   };
 
@@ -183,15 +247,9 @@ const EmployeeDesignation = () => {
       padding: '20px',
       position: 'relative'
     }}>
-      {/* Fixed Back Button - Matched from AddEmployee */}
+      {/* Fixed Back Button */}
       <button
-        onClick={() => {
-          if (location.state?.fromAddEmployee) {
-            navigate('/add-employee', { state: { formData: location.state.formData } });
-          } else {
-            navigate('/admin');
-          }
-        }}
+        onClick={handleBack}
         style={{
           position: 'fixed',
           top: '20px',
@@ -222,9 +280,9 @@ const EmployeeDesignation = () => {
           e.target.style.transform = 'scale(1)';
         }}
       >
-        <FaArrowLeft /> {location.state?.fromAddEmployee ? 'Back to Add Employee' : 'Back to Admin'}
+        <FaArrowLeft /> {location.state?.fromAddEmployee || location.state?.originalAddEmployeeState?.fromAddEmployee ? 'Back to Add Employee' : 'Back to Admin'}
       </button>
-      {/* Main Container - Adjusted maxWidth to 1000px for table */}
+
       <div style={{
         maxWidth: '1000px',
         margin: '80px auto 20px',
@@ -234,7 +292,6 @@ const EmployeeDesignation = () => {
         boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
         overflow: 'hidden'
       }}>
-        {/* Header - Matched structure from AddEmployee */}
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
@@ -243,7 +300,7 @@ const EmployeeDesignation = () => {
           paddingBottom: '20px',
           borderBottom: '2px solid #3498db'
         }}>
-          <div></div> {/* Empty left for balance */}
+          <div></div>
           <h2 style={{
             textAlign: 'center',
             color: '#2c3e50',
@@ -259,7 +316,7 @@ const EmployeeDesignation = () => {
             Employee Designations
           </h2>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            {!showForm && !location.state?.fromAddEmployee && (
+            {!showForm && (
               <button
                 type="button"
                 onClick={() => setShowForm(true)}
@@ -291,7 +348,7 @@ const EmployeeDesignation = () => {
             )}
           </div>
         </div>
-        {/* Error and Message - Matched from AddEmployee; Warning messages only via these */}
+
         {error && (
           <div style={{
             background: 'linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%)',
@@ -330,7 +387,7 @@ const EmployeeDesignation = () => {
             {message}
           </div>
         )}
-        {/* Search - Enhanced styling; shows all on empty input */}
+
         <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'center' }}>
           <div style={{ position: 'relative', display: 'inline-block', width: '300px' }}>
             <FaSearch style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#bdc3c7', fontSize: '1rem' }} />
@@ -353,7 +410,7 @@ const EmployeeDesignation = () => {
             />
           </div>
         </div>
-        {/* Form for Add/Edit - Enhanced styling */}
+
         {showForm && (
           <div style={{
             backgroundColor: '#f8f9fa',
@@ -406,10 +463,11 @@ const EmployeeDesignation = () => {
                 >
                   <option value="">Select Department</option>
                   {departmentsList
-                    .filter(d => d.is_active) // Only show active departments
+                    .filter(d => d.is_active)
                     .map(d => (
                       <option key={d._id || d.id} value={d.name}>{d.name}</option>
                     ))}
+                  <option value="create_new" style={{ fontWeight: 'bold', color: '#3498db' }}>+ Create New Department</option>
                 </select>
               </div>
               <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
@@ -455,7 +513,7 @@ const EmployeeDesignation = () => {
             </form>
           </div>
         )}
-        {/* Table - Enhanced styling; small table okay, shows all filtered results */}
+
         <div style={{
           backgroundColor: '#fff',
           padding: '0',
@@ -477,7 +535,7 @@ const EmployeeDesignation = () => {
                   <tr style={{ backgroundColor: '#f8f9fa' }}>
                     <th style={{ padding: '15px 10px', border: '1px solid #dee2e6', textAlign: 'left', fontWeight: '600', color: '#2c3e50' }}>Name</th>
                     <th style={{ padding: '15px 10px', border: '1px solid #dee2e6', textAlign: 'left', fontWeight: '600', color: '#2c3e50' }}>Description</th>
-                    <th style={{ padding: '15px 10px', border: '1px solid #dee2e6', textAlign: 'left', fontWeight: '600', color: '#2c3e50' }}>Report To Department</th>
+                    <th style={{ padding: '15px 10px', border: '1px solid #dee2e6', textAlign: 'left', fontWeight: '600', color: '#2c3e50' }}>Report To</th>
                     <th style={{ padding: '15px 10px', border: '1px solid #dee2e6', textAlign: 'center', fontWeight: '600', color: '#2c3e50' }}>Actions</th>
                   </tr>
                 </thead>
@@ -488,59 +546,40 @@ const EmployeeDesignation = () => {
                       <td style={{ padding: '15px 10px', border: '1px solid #dee2e6' }}>{designation.description}</td>
                       <td style={{ padding: '15px 10px', border: '1px solid #dee2e6' }}>{designation.reportTo || '-'}</td>
                       <td style={{ padding: '15px 10px', border: '1px solid #dee2e6', textAlign: 'center' }}>
-                        <button
-                          onClick={() => handleEdit(designation)}
-                          style={{
-                            marginRight: '10px',
-                            padding: '8px 12px',
-                            background: 'linear-gradient(135deg, #f39c12 0%, #e67e22 100%)',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '5px',
-                            cursor: 'pointer',
-                            transition: 'all 0.3s ease',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '5px',
-                            fontSize: '0.9rem'
-                          }}
-                          onMouseOver={(e) => {
-                            e.target.style.transform = 'scale(1.05)';
-                            e.target.style.boxShadow = '0 4px 8px rgba(243, 156, 18, 0.4)';
-                          }}
-                          onMouseOut={(e) => {
-                            e.target.style.transform = 'scale(1)';
-                            e.target.style.boxShadow = 'none';
-                          }}
-                        >
-                          <FaEdit />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(designation.id)}
-                          style={{
-                            padding: '8px 12px',
-                            background: 'linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '5px',
-                            cursor: 'pointer',
-                            transition: 'all 0.3s ease',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '5px',
-                            fontSize: '0.9rem'
-                          }}
-                          onMouseOver={(e) => {
-                            e.target.style.transform = 'scale(1.05)';
-                            e.target.style.boxShadow = '0 4px 8px rgba(231, 76, 60, 0.4)';
-                          }}
-                          onMouseOut={(e) => {
-                            e.target.style.transform = 'scale(1)';
-                            e.target.style.boxShadow = 'none';
-                          }}
-                        >
-                          <FaTrash />
-                        </button>
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
+                          <button
+                            onClick={() => handleEdit(designation)}
+                            style={{
+                              padding: '8px 12px',
+                              background: 'linear-gradient(135deg, #f39c12 0%, #e67e22 100%)',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '5px',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '5px'
+                            }}
+                          >
+                            <FaEdit />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(designation.id)}
+                            style={{
+                              padding: '8px 12px',
+                              background: 'linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '5px',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '5px'
+                            }}
+                          >
+                            <FaTrash />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
