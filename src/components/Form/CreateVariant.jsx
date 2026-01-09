@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom'; // Import useNavigate for navigation
+import { useNavigate, useLocation } from 'react-router-dom'; // Import useNavigate and useLocation for navigation
 import axios from 'axios';
 import { FaArrowLeft, FaTrash } from 'react-icons/fa'; // Import FaArrowLeft for back button and FaTrash for delete
 const CreateVariant = () => {
@@ -18,6 +18,7 @@ const CreateVariant = () => {
   const [showConfirm, setShowConfirm] = useState(false); // NEW: Confirmation dialog state
   const [confirmVariant, setConfirmVariant] = useState(null); // NEW: Variant to confirm delete
   const navigate = useNavigate(); // Initialize useNavigate hook
+  const location = useLocation(); // Initialize useLocation hook
   const [baseUrl, setBaseUrl] = useState(""); // NEW: baseUrl state like in AdminPage
   // NEW: Fetch config to determine baseUrl (same logic as AdminPage)
   useEffect(() => {
@@ -170,8 +171,16 @@ const CreateVariant = () => {
         await axios.post(`${apiUrl}/api/variants`, variantData);
         setWarning({ type: 'success', message: 'Variant saved successfully' });
       }
-      resetForm();
-      fetchVariants(baseUrl); // Re-fetch after save
+      if (location.state?.returnPath) {
+        setTimeout(() => {
+          navigate(location.state.returnPath, {
+            state: { formData: location.state.formData },
+          });
+        }, 1000);
+      } else {
+        resetForm();
+        fetchVariants(baseUrl); // Re-fetch after save
+      }
     } catch (error) {
       const errorMsg = error.response?.data?.error || 'Failed to save variant';
       setWarning({ type: 'error', message: errorMsg });
@@ -337,7 +346,14 @@ const CreateVariant = () => {
   };
   // Handle back navigation
   const handleBack = () => {
-    navigate('/admin'); // Adjust the path as needed (e.g., '/dashboard')
+    if (location.state?.returnPath) {
+      navigate(location.state.returnPath, {
+        state: { formData: location.state.formData },
+        replace: true,
+      });
+    } else {
+      navigate('/admin'); // Adjust the path as needed (e.g., '/dashboard')
+    }
   };
   // UPDATED: If loading, show loader; if error, show error
   if (loading) {
@@ -526,7 +542,9 @@ const CreateVariant = () => {
   }
   return (
     <div style={{
-      minHeight: '100vh',
+      height: '100vh',
+      overflowY: 'auto',
+      boxSizing: 'border-box',
       background: 'linear-gradient(135deg, #ffffff 0%, #3498db 100%)',
       padding: '20px',
       position: 'relative'

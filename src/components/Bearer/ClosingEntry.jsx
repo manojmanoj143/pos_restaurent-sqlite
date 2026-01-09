@@ -31,6 +31,7 @@ function ClosingEntryWithNavbar() {
     language: 'English',
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, // Use local timezone
     currency: 'INR', // Updated: Default to INR (Indian Rupee)
+    useCurrencySymbol: false, // Default: false
     dateFormat: 'yyyy-mm-dd', // FIXED: Default to yyyy-mm-dd (2025-11-11) as per user request
     timeFormat: 'hh:mm a', // Default to 12-hour without seconds
     numberFormat: '#,##,###.##',
@@ -133,14 +134,45 @@ function ClosingEntryWithNavbar() {
   };
   const formattedDate = getFormattedDate(currentTime, settings.dateFormat);
   const formattedTime = getFormattedTime(currentTime, settings.timeFormat);
-  // Currency formatter for totals - Copied from OpeningEntry, updated fallback
-  const getCurrencyFormatter = () => {
-    return new Intl.NumberFormat(settings.language || 'en-US', {
-      style: 'currency',
-      currency: settings.currency || 'INR', // Updated fallback to INR
-      minimumFractionDigits: parseInt(settings.currencyPrecision) || 4,
-      maximumFractionDigits: parseInt(settings.currencyPrecision) || 4,
-    });
+  // Helper function to format price with currency symbol (Synchronized with Front.jsx)
+  const getCurrencySymbol = (currCode) => {
+    const symbols = {
+      INR: "₹",
+      USD: "$",
+      EUR: "€",
+      GBP: "£",
+      AED: "د.إ",
+      JPY: "¥",
+      CNY: "¥",
+      SGD: "$",
+      MYR: "RM",
+      THB: "฿",
+      IDR: "Rp",
+      KRW: "₩",
+      PHP: "₱",
+      SAR: "﷼",
+      QAR: "﷼",
+      KWD: "د.ك",
+      OMR: "﷼",
+      BHD: ".د.ب",
+      CAD: "$",
+      AUD: "$",
+      NZD: "$",
+      CHF: "CHF",
+      ZAR: "R",
+      BRL: "R$",
+      PKR: "₨",
+      LKR: "Rs",
+      NGN: "₦"
+    };
+    return symbols[currCode?.toUpperCase()] || '₹'; // Default to ₹ (INR) if not found
+  };
+
+  const formatCurrency = (amount) => {
+    const symbol = settings.useCurrencySymbol ? getCurrencySymbol(settings.currency) : `${settings.currency} `;
+    const val = parseFloat(amount) || 0;
+    if (isNaN(val) || val === 0) return `${symbol}0.00`;
+    return `${symbol}${val.toFixed(2)}`;
   };
   // Handle OK button click for warning messages
   const handleWarningOk = () => {
@@ -387,7 +419,7 @@ function ClosingEntryWithNavbar() {
   };
   // Format money values for display (using currency formatter)
   const formatMoney = (value) => {
-    return getCurrencyFormatter().format(parseFloat(value) || 0);
+    return formatCurrency(value);
   };
   return (
     <>

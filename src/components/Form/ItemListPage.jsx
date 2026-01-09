@@ -24,6 +24,8 @@ const ItemListPage = () => {
   const [nutritionData, setNutritionData] = useState({ ingredients: [], nutrition: {} });
   const [itemSales, setItemSales] = useState([]);
   const [baseUrl, setBaseUrl] = useState("");
+  const [currency, setCurrency] = useState("INR");
+  const [useCurrencySymbol, setUseCurrencySymbol] = useState(false);
   const navigate = useNavigate();
   useEffect(() => {
     const fetchConfig = async () => {
@@ -42,6 +44,38 @@ const ItemListPage = () => {
     };
     fetchConfig();
   }, []);
+
+  // Fetch currency settings
+  useEffect(() => {
+    const fetchCurrency = async () => {
+      try {
+        const apiPath = baseUrl ? `${baseUrl}/api/settings` : '/api/settings';
+        const response = await axios.get(apiPath);
+        const { currency: fetchedCurrency = "INR", useCurrencySymbol: fetchedUseSymbol = false } = response.data;
+        setCurrency(fetchedCurrency.toUpperCase());
+        setUseCurrencySymbol(fetchedUseSymbol);
+      } catch (error) {
+        console.error("Failed to fetch currency settings:", error);
+        setCurrency("INR");
+      }
+    };
+    if (baseUrl !== null) {
+      fetchCurrency();
+    }
+  }, [baseUrl]);
+
+  const getCurrencySymbol = (currCode) => {
+    const symbols = {
+      INR: "₹", USD: "$", EUR: "€", GBP: "£", AED: "د.إ", JPY: "¥", CNY: "¥", SGD: "$", MYR: "RM", THB: "฿", IDR: "Rp", KRW: "₩", PHP: "₱", SAR: "﷼", QAR: "﷼", KWD: "د.ك", OMR: "﷼", BHD: ".د.ب", CAD: "$", AUD: "$", NZD: "$", CHF: "CHF", ZAR: "R", BRL: "R$", PKR: "₨", LKR: "Rs", NGN: "₦"
+    };
+    return symbols[currCode?.toUpperCase()] || '₹';
+  };
+
+  const formatPrice = (price) => {
+    const symbol = useCurrencySymbol ? getCurrencySymbol(currency) : `${currency} `;
+    if (isNaN(price) || price === 0) return `${symbol}0.00`;
+    return `${symbol}${Number(price).toFixed(2)}`;
+  };
   // Fetch all items (excluding hidden)
   const handleViewItems = async () => {
     try {
@@ -773,11 +807,11 @@ const ItemListPage = () => {
                   <p style={totalPriceStyle}>
                     Total Price: {hasActiveOffer(combo) ? (
                       <>
-                        <span style={{ ...strikethroughStyle, color: "#aaa", fontSize: "16px" }}>₹{combo.total_price}</span>
-                        <span style={{ color: "#fdd835", fontSize: "18px" }}>₹{combo.offer_price}</span>
+                        <span style={{ ...strikethroughStyle, color: "#aaa", fontSize: "16px" }}>{formatPrice(combo.total_price)}</span>
+                        <span style={{ color: "#fdd835", fontSize: "18px" }}>{formatPrice(combo.offer_price)}</span>
                       </>
                     ) : (
-                      <span style={{ color: "#ffffff", fontSize: "18px" }}>₹{combo.total_price}</span>
+                      <span style={{ color: "#ffffff", fontSize: "18px" }}>{formatPrice(combo.total_price)}</span>
                     )}
                   </p>
                   {/* Limited offer center if active */}
@@ -820,11 +854,11 @@ const ItemListPage = () => {
                     <div style={priceStyle}>
                       {hasActiveOffer(item) ? (
                         <>
-                          <span style={strikethroughStyle}>₹{item.price_list_rate || item.total_price}</span>
-                          <span style={offerPriceStyle}>₹{item.offer_price}</span>
+                          <span style={strikethroughStyle}>{formatPrice(item.price_list_rate || item.total_price)}</span>
+                          <span style={offerPriceStyle}>{formatPrice(item.offer_price)}</span>
                         </>
                       ) : (
-                        <span>₹{item.price_list_rate || item.total_price}</span>
+                        <span>{formatPrice(item.price_list_rate || item.total_price)}</span>
                       )}
                     </div>
                     <Button variant="success" onClick={() => handleItemClick(item, selectedCategory === "Combos Offer")}
@@ -873,11 +907,11 @@ const ItemListPage = () => {
                     Price:{" "}
                     {hasActiveOffer(selectedItem) ? (
                       <>
-                        <span style={strikethroughStyle}>₹{selectedItem.price_list_rate || selectedItem.total_price}</span>{" "}
-                        <span style={offerPriceStyle}>₹{selectedItem.offer_price}</span>
+                        <span style={strikethroughStyle}>{formatPrice(selectedItem.price_list_rate || selectedItem.total_price)}</span>{" "}
+                        <span style={offerPriceStyle}>{formatPrice(selectedItem.offer_price)}</span>
                       </>
                     ) : (
-                      `₹${selectedItem.price_list_rate || selectedItem.total_price}`
+                      `${formatPrice(selectedItem.price_list_rate || selectedItem.total_price)}`
                     )}
                   </h5>
                   {hasActiveOffer(selectedItem) && (
@@ -927,7 +961,7 @@ const ItemListPage = () => {
                           .map((addon, idx) => (
                             <li key={idx}>
                               {addon.name1 && <p>Name: {addon.name1}</p>}
-                              {addon.addon_price > 0 && <p>Price: ₹{addon.addon_price}</p>}
+                              {addon.addon_price > 0 && <p>Price: {formatPrice(addon.addon_price)}</p>}
                               {addon.addon_image && (
                                 <img
                                   src={`${baseUrl}${addon.addon_image}`}
@@ -949,7 +983,7 @@ const ItemListPage = () => {
                           .map((combo, idx) => (
                             <li key={idx}>
                               {combo.name1 && <p>Name: {combo.name1}</p>}
-                              {combo.combo_price > 0 && <p>Price: ₹{combo.combo_price}</p>}
+                              {combo.combo_price > 0 && <p>Price: {formatPrice(combo.combo_price)}</p>}
                               {combo.combo_image && (
                                 <img
                                   src={`${baseUrl}${combo.combo_image}`}
@@ -968,7 +1002,7 @@ const ItemListPage = () => {
                       <ul>
                         {selectedItem.items.map((comboItem, idx) => (
                           <li key={idx}>
-                            {comboItem.data.item_name || comboItem.data.name1} - ₹{comboItem.price}
+                            {comboItem.data.item_name || comboItem.data.name1} - {formatPrice(comboItem.price)}
                           </li>
                         ))}
                       </ul>
@@ -1150,7 +1184,7 @@ const ItemListPage = () => {
                   >
                     <Card.Body>
                       <Card.Title>{item.item_name}</Card.Title>
-                      <Card.Text>Price: ₹{item.price_list_rate}</Card.Text>
+                      <Card.Text>Price: {formatPrice(item.price_list_rate)}</Card.Text>
                     </Card.Body>
                   </Card>
                 ))}
@@ -1159,7 +1193,7 @@ const ItemListPage = () => {
                 <>
                   <Form.Group className="mb-3">
                     <Form.Label>Selected Item: {offerItem.item_name}</Form.Label>
-                    <Form.Text className="d-block">Current Price: ₹{offerItem.price_list_rate}</Form.Text>
+                    <Form.Text className="d-block">Current Price: {formatPrice(offerItem.price_list_rate)}</Form.Text>
                   </Form.Group>
                   <Form.Group className="mb-3">
                     <Form.Label>Offer Price</Form.Label>

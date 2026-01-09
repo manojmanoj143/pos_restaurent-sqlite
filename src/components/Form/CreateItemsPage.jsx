@@ -436,6 +436,34 @@ const CreateItemPage = () => {
             combos: updatedCombos,
             ingredients: formattedIngredients,
           };
+
+          // Sync custom variants with global definitions
+          if (customVariants && customVariants.length > 0) {
+            updatedFormData.custom_variants = updatedFormData.custom_variants.map((savedVariant) => {
+              const globalVariant = customVariants.find((v) => v._id === savedVariant._id);
+              if (globalVariant) {
+                return {
+                  ...savedVariant,
+                  heading: globalVariant.heading,
+                  activeSection: globalVariant.activeSection,
+                  subheadings: globalVariant.subheadings.map((globalSub) => {
+                    const savedSub = savedVariant.subheadings.find((s) => s.name === globalSub.name);
+                    if (savedSub) {
+                      return { ...globalSub, ...savedSub, dropdown: globalSub.dropdown };
+                    }
+                    return {
+                      name: globalSub.name,
+                      price: globalSub.price,
+                      image: globalSub.image,
+                      dropdown: globalSub.dropdown,
+                    };
+                  }),
+                };
+              }
+              return savedVariant;
+            });
+          }
+
           setFormData(updatedFormData);
           setImagePreviews({
             item: itemToEdit.image ? `${baseUrl}/api/images/${extractImageName(itemToEdit.image)}` : "",
@@ -548,7 +576,7 @@ const CreateItemPage = () => {
     if (baseUrl !== null) {
       fetchItemData();
     }
-  }, [baseUrl, location, isEditing, itemToEdit]);
+  }, [baseUrl, location, isEditing, itemToEdit, customVariants]);
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
     const newValue = type === "checkbox" ? checked : value;
@@ -1030,6 +1058,16 @@ const CreateItemPage = () => {
     }));
   };
   const handleCustomVariantSelection = async (variantId) => {
+    if (variantId === "create_new") {
+      navigate("/create-variant", {
+        state: {
+          returnPath: location.pathname,
+          formData: formData,
+        },
+        replace: true,
+      });
+      return;
+    }
     if (!variantId) {
       setSelectedCustomVariantDetails(null);
       setSelectedCustomVariantId("");
@@ -1279,7 +1317,7 @@ const CreateItemPage = () => {
             variant._id === variantId ? {
               ...variant,
               subheadings: variant.subheadings.map(sub =>
-                sub.name === subheading ? { ...sub, image: filename } : sub
+                sub.name === subheading ? { ...sub, image: filename, imageTemp: null } : sub
               )
             } : variant
           )
@@ -1319,7 +1357,7 @@ const CreateItemPage = () => {
           v._id === variantId ? {
             ...v,
             subheadings: v.subheadings.map(s =>
-              s.name === subheading ? { ...s, image: "" } : s
+              s.name === subheading ? { ...s, image: "", imageTemp: null } : s
             )
           } : v
         )
@@ -2839,6 +2877,9 @@ const CreateItemPage = () => {
                   className="input"
                 >
                   <option value="">Select a variant</option>
+                  <option value="create_new" style={{ fontWeight: "bold", color: "#3498db" }}>
+                    + Create New Variant
+                  </option>
                   {customVariants.map((variant) => (
                     <option key={variant._id} value={variant._id}>
                       {variant.heading}

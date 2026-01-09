@@ -32,6 +32,7 @@ function OpeningEntryWithNavbar() {
     language: 'English',
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, // Use local timezone
     currency: 'INR', // Updated: Default to INR (Indian Rupee)
+    useCurrencySymbol: false,
     dateFormat: 'dd-MMM-yy', // Default to match image: 30-Oct-25
     timeFormat: 'hh:mm a', // Default to 12-hour without seconds
     numberFormat: '#,##,###.##',
@@ -136,14 +137,45 @@ function OpeningEntryWithNavbar() {
   };
   const formattedDate = getFormattedDate(currentTime, settings.dateFormat);
   const formattedTime = getFormattedTime(currentTime, settings.timeFormat);
-  // Currency formatter for totals
-  const getCurrencyFormatter = () => {
-    return new Intl.NumberFormat(settings.language || 'en-US', {
-      style: 'currency',
-      currency: settings.currency || 'INR', // Updated fallback to INR
-      minimumFractionDigits: parseInt(settings.currencyPrecision) || 4,
-      maximumFractionDigits: parseInt(settings.currencyPrecision) || 4,
-    });
+  // Helper function to format price with currency symbol (Synchronized with Front.jsx)
+  const getCurrencySymbol = (currCode) => {
+    const symbols = {
+      INR: "₹",
+      USD: "$",
+      EUR: "€",
+      GBP: "£",
+      AED: "د.إ",
+      JPY: "¥",
+      CNY: "¥",
+      SGD: "$",
+      MYR: "RM",
+      THB: "฿",
+      IDR: "Rp",
+      KRW: "₩",
+      PHP: "₱",
+      SAR: "﷼",
+      QAR: "﷼",
+      KWD: "د.ك",
+      OMR: "﷼",
+      BHD: ".د.ب",
+      CAD: "$",
+      AUD: "$",
+      NZD: "$",
+      CHF: "CHF",
+      ZAR: "R",
+      BRL: "R$",
+      PKR: "₨",
+      LKR: "Rs",
+      NGN: "₦"
+    };
+    return symbols[currCode?.toUpperCase()] || '₹'; // Default to ₹ (INR) if not found
+  };
+
+  const formatCurrency = (amount) => {
+    const symbol = settings.useCurrencySymbol ? getCurrencySymbol(settings.currency) : `${settings.currency} `;
+    const val = parseFloat(amount) || 0;
+    if (isNaN(val) || val === 0) return `${symbol}0.00`;
+    return `${symbol}${val.toFixed(2)}`;
   };
   // Handle OK button click for warning messages
   const handleWarningOk = () => {
@@ -294,7 +326,7 @@ function OpeningEntryWithNavbar() {
   };
   // Calculate total
   const totalAmount = balanceDetails.reduce((sum, detail) => sum + (parseFloat(detail.opening_amount) || 0), 0);
-  const currencyFormat = getCurrencyFormatter().format(totalAmount);
+  const currencyFormattedTotal = formatCurrency(totalAmount);
   return (
     <>
       {/* Warning Alert for Logout and Errors */}
@@ -541,7 +573,7 @@ function OpeningEntryWithNavbar() {
               <div className="col-md-6">
                 <div className="grand-tot-div">
                   <span>Total Opening Amount:</span>
-                  <span>{currencyFormat}</span>
+                  <span>{currencyFormattedTotal}</span>
                 </div>
               </div>
               <div className="col-md-6 text-end">

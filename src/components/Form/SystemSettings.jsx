@@ -1,9 +1,9 @@
-// Updated SystemSettings.jsx - Design changes: Added gradient background, fixed back button styled like EmployeeList, and wrapped main content in a white card for consistency. No functional changes.
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaArrowLeft } from 'react-icons/fa';
 import axios from 'axios';
 import './SystemSettings.css';
+
 const SystemSettings = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('Details');
@@ -19,6 +19,7 @@ const SystemSettings = () => {
     roleProfile: 'User',
     password: '',
   });
+
   const [settings, setSettings] = useState({
     country: 'India', // Updated: Default to India
     language: 'English',
@@ -45,12 +46,14 @@ const SystemSettings = () => {
     totalWorkingDays: 30, // NEW: Default total working days per month (kept for backend compatibility, but input removed)
     applyCompanyLeaves: false, // NEW: Checkbox to apply company leaves deduction
   });
+
   const [clickCount, setClickCount] = useState(0);
   const [warningMessage, setWarningMessage] = useState('');
   const [isSuccessMessage, setIsSuccessMessage] = useState(false); // NEW: To distinguish success vs error messages
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
   const [baseUrl, setBaseUrl] = useState("");
+
   // Fetch config to determine baseUrl
   const fetchConfig = async () => {
     let currentBaseUrl = "";
@@ -77,6 +80,7 @@ const SystemSettings = () => {
       }
     }
   };
+
   const fetchUsers = async (currentBaseUrl) => {
     try {
       const url = currentBaseUrl ? `${currentBaseUrl}/api/users` : 'http://localhost:8000/api/users';
@@ -101,6 +105,7 @@ const SystemSettings = () => {
       setIsSuccessMessage(false);
     }
   };
+
   const fetchSettings = async (currentBaseUrl) => {
     try {
       const url = currentBaseUrl ? `${currentBaseUrl}/api/settings` : 'http://localhost:8000/api/settings';
@@ -117,10 +122,12 @@ const SystemSettings = () => {
       setIsSuccessMessage(false);
     }
   };
+
   useEffect(() => {
     fetchConfig();
     const storedSettings = JSON.parse(localStorage.getItem('systemSettings'));
     if (storedSettings) setSettings((prev) => ({ ...prev, ...storedSettings }));
+
     // Set up interval for fetching users after baseUrl is set
     const interval = setInterval(() => {
       if (baseUrl) {
@@ -129,8 +136,10 @@ const SystemSettings = () => {
         fetchUsers("");
       }
     }, 30000);
+
     return () => clearInterval(interval);
   }, [baseUrl]); // Depend on baseUrl to ensure it runs after baseUrl is set
+
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
     setSettings((prev) => ({
@@ -138,7 +147,9 @@ const SystemSettings = () => {
       [name]: type === 'checkbox' ? checked : value,
     }));
   };
+
   const handleGoBack = () => navigate('/admin');
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -158,20 +169,24 @@ const SystemSettings = () => {
       setIsSuccessMessage(false); // NEW: Mark as error
     }
   };
+
   const handleSearchChange = (e) => {
     const value = e.target.value;
     setSearchQuery(value);
     setShowDropdown(value.length > 0);
   };
+
   const handleDropdownClick = () => {
     setShowUserList(true);
     setSearchQuery('');
     setShowDropdown(false);
   };
+
   const handleNewUserChange = (e) => {
     const { name, value } = e.target;
     setNewUser((prev) => ({ ...prev, [name]: value }));
   };
+
   const handleAddUser = async () => {
     if (newUser.email && newUser.firstName && newUser.phoneNumber && newUser.password) {
       const newUserData = {
@@ -184,6 +199,7 @@ const SystemSettings = () => {
         company: 'POS 8',
         pos_profile: 'POS-001',
       };
+
       try {
         const url = baseUrl ? `${baseUrl}/api/register` : 'http://localhost:8000/api/register';
         const response = await fetch(url, {
@@ -191,10 +207,12 @@ const SystemSettings = () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newUserData),
         });
+
         if (!response.ok) {
           const errorData = await response.json();
           throw new Error(errorData.message || 'Failed to add user');
         }
+
         await fetchUsers(baseUrl);
         setNewUser({ email: '', firstName: '', phoneNumber: '', roleProfile: 'User', password: '' });
         setShowAddUserForm(false);
@@ -210,10 +228,12 @@ const SystemSettings = () => {
       setIsSuccessMessage(false); // NEW: Mark as error
     }
   };
+
   const handleDeleteUser = (email) => {
     setUserToDelete(email);
     setShowDeleteConfirm(true);
   };
+
   const confirmDelete = async () => {
     try {
       const url = baseUrl ? `${baseUrl}/api/users/${userToDelete}` : `http://localhost:8000/api/users/${userToDelete}`;
@@ -221,10 +241,12 @@ const SystemSettings = () => {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
       });
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || 'Failed to delete user');
       }
+
       await fetchUsers(baseUrl);
       setWarningMessage('User deleted successfully!');
       setIsSuccessMessage(true); // NEW: Mark as success
@@ -237,6 +259,7 @@ const SystemSettings = () => {
       setUserToDelete(null);
     }
   };
+
   const dateFormatOptions = [
     'dd-mm-yyyy',
     'mm-dd-yyyy',
@@ -246,14 +269,17 @@ const SystemSettings = () => {
     'yyyy/mm/dd',
     'yyyy-long-mm-dd' // New: yyyy longmonth dd, e.g., 2025 October 29
   ];
+
   const timeFormatOptions = [
     'HH:mm:ss', // 24-hour with seconds
     'hh:mm:ss a', // 12-hour with seconds and AM/PM
     'HH:mm', // 24-hour without seconds
     'hh:mm a' // 12-hour without seconds and AM/PM
   ];
+
   const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const roleProfileOptions = ['User', 'Admin', 'Bearer'];
+
   const renderUserList = () => (
     <div className="user-list-container">
       <div className="sidebar">
@@ -303,6 +329,7 @@ const SystemSettings = () => {
           </tbody>
         </table>
         <div className="table-footer">{users.length} of {users.length}</div>
+
         {showAddUserForm && (
           <div className="add-user-form">
             <h3>Add New User</h3>
@@ -366,10 +393,12 @@ const SystemSettings = () => {
             </div>
           </div>
         )}
+
         <button className="back-btn" onClick={() => setShowUserList(false)}>Back to Settings</button>
       </div>
     </div>
   );
+
   const renderTabContent = () => {
     if (showUserList) return renderUserList();
     switch (activeTab) {
@@ -555,10 +584,13 @@ const SystemSettings = () => {
         return <div className="coming-soon">Coming soon...</div>;
     }
   };
+
   const tabs = ['Details', 'Login', 'Working Days']; // UPDATED: Added 'Working Days' tab
+
   return (
     <div style={{
-      minHeight: '100vh',
+      height: '100vh',
+      overflowY: 'auto',
       background: 'linear-gradient(135deg, #ffffff 0%, #3498db 100%)',
       padding: '20px',
       position: 'relative'
@@ -598,6 +630,7 @@ const SystemSettings = () => {
       >
         <FaArrowLeft /> Back to Admin
       </button>
+
       {/* Main Container - Styled like EmployeeList Card */}
       <div style={{
         maxWidth: '1250px',
@@ -606,7 +639,7 @@ const SystemSettings = () => {
         padding: '30px',
         borderRadius: '15px',
         boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-        overflow: 'hidden'
+        // overflow: 'hidden' - REMOVED to allow scrolling
       }}>
         {/* Header with Title - Styled like EmployeeList */}
         <div style={{
@@ -633,6 +666,7 @@ const SystemSettings = () => {
           </h2>
           <div></div> {/* Empty right for balance */}
         </div>
+
         {/* Search Container */}
         <div className="search-container">
           <input
@@ -647,6 +681,7 @@ const SystemSettings = () => {
             </div>
           )}
         </div>
+
         {warningMessage && (
           <div
             className={`message-overlay ${isSuccessMessage ? 'success-overlay' : 'error-overlay'}`}
@@ -700,6 +735,7 @@ const SystemSettings = () => {
             </div>
           </div>
         )}
+
         {!showUserList && (
           <div className="tabs">
             {tabs.map((tab) => (
@@ -713,7 +749,9 @@ const SystemSettings = () => {
             ))}
           </div>
         )}
+
         <div className="content">{renderTabContent()}</div>
+
         {showDeleteConfirm && (
           <>
             <div className="modal-overlay" onClick={() => setShowDeleteConfirm(false)} />
@@ -734,4 +772,5 @@ const SystemSettings = () => {
     </div>
   );
 };
+
 export default SystemSettings;

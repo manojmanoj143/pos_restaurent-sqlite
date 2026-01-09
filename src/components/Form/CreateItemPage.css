@@ -1,6 +1,7 @@
-/* General Container */
 .create-item-page {
-  min-height: 100vh;
+  height: 100vh;
+  overflow-y: auto;
+  box-sizing: border-box;
   background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
   padding: 40px 20px;
   display: flex;
@@ -10,8 +11,13 @@
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 /* Header */
@@ -311,12 +317,14 @@
   .create-item-page .modal.left-modal {
     left: 5%;
   }
+
   .create-item-page .modal.right-modal {
     right: 5%;
   }
 }
 
 @media (max-width: 768px) {
+
   .create-item-page .modal.left-modal,
   .create-item-page .modal.right-modal {
     left: 50%;
@@ -335,35 +343,50 @@
 }
 
 @keyframes slideIn {
-  from { transform: translateY(-60%); opacity: 0; }
-  to { transform: translateY(-50%); opacity: 1; }
+  from {
+    transform: translateY(-60%);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(-50%);
+    opacity: 1;
+  }
 }
 
 /* Modal Header (Fixed Header) */
 .create-item-page .modal-header {
-  position: sticky; /* Use sticky to keep it within the modal's scroll context */
+  position: sticky;
+  /* Use sticky to keep it within the modal's scroll context */
   top: 0;
-  background: linear-gradient(145deg, #3b82f6, #60a5fa); /* Match the modal's gradient */
-  color: white; /* Contrast text color for visibility */
+  background: linear-gradient(145deg, #3b82f6, #60a5fa);
+  /* Match the modal's gradient */
+  color: white;
+  /* Contrast text color for visibility */
   padding: 15px 20px;
-  margin: -35px -35px 15px -35px; /* Offset the modal's padding */
+  margin: -35px -35px 15px -35px;
+  /* Offset the modal's padding */
   display: flex;
   justify-content: space-between;
   align-items: center;
-  z-index: 1003; /* Ensure it stays above other content */
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); /* Subtle shadow for depth */
+  z-index: 1003;
+  /* Ensure it stays above other content */
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  /* Subtle shadow for depth */
 }
 
 /* Modal Title */
 .create-item-page .modal-title {
-  color: white; /* Changed to white for contrast against the gradient background */
+  color: white;
+  /* Changed to white for contrast against the gradient background */
   font-weight: 700;
   margin: 0;
 }
 
 /* Close Button in Modal Header */
 .create-item-page .close-button {
-  position: relative; /* Changed from absolute to relative since the header is now sticky */
+  position: relative;
+  /* Changed from absolute to relative since the header is now sticky */
   background: none;
   border: none;
   font-size: 16px;
@@ -375,7 +398,8 @@
   justify-content: center;
   border-radius: 30px;
   cursor: pointer;
-  color: white; /* Changed to white for contrast */
+  color: white;
+  /* Changed to white for contrast */
   transition: color 0.3s ease;
 }
 
@@ -385,7 +409,8 @@
 
 /* Modal Content (Add padding to prevent overlap with fixed header) */
 .create-item-page .modal-content {
-  padding-top: 20px; /* Adjust based on the height of the header */
+  padding-top: 20px;
+  /* Adjust based on the height of the header */
 }
 
 /* Nested Section */

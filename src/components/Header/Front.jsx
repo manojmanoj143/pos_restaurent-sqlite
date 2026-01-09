@@ -164,8 +164,29 @@ function FrontPage() {
   };
   const [addressStructure, setAddressStructure] = useState(defaultStructure);
   const [linkedValues, setLinkedValues] = useState({});
-  // NEW: POS Grid View Toggle State
-  const [showPOSGrid, setShowPOSGrid] = useState(false);
+  // NEW: POS Grid View Toggle State with Persistence
+  // NEW: POS Grid View Toggle State with Persistence
+  const [showPOSGrid, setShowPOSGrid] = useState(() => {
+    return localStorage.getItem("posViewMode") === "true";
+  });
+  const [posPage, setPosPage] = useState(1); // Pagination state for POS Grid
+  const itemsPerPage = 16; // 4 columns * 4 rows
+
+  // NEW: Order Type State (moved from strict prop to state for switching)
+  const { state: locState } = useLocation();
+  const [orderType, setOrderType] = useState(locState?.orderType || "Dine In");
+
+  // NEW: Handle Order Type Change from Header Buttons
+  const handleOrderTypeChange = (type) => {
+    if (type === "Dine In") {
+      navigate('/table', { state: { orderType: 'Dine In' } });
+      return;
+    }
+    setOrderType(type);
+    setOrderNo(generate_order_number(type));
+    // Optional: Clear cart or warn if needed, but for now just switch context
+    console.log("Switched order type to:", type);
+  };
   // FIXED: Define generate_order_number function to resolve ReferenceError
   const generate_order_number = (orderType) => {
     const timestamp = Date.now().toString().slice(-6); // Last 6 digits of timestamp
@@ -249,7 +270,7 @@ function FrontPage() {
     tableNumber = "N/A",
     chairsCount = 0,
     chairsBooked = [],
-    orderType = "Dine In",
+    // orderType is now handled via state initialized below
     existingOrder,
     cartItems: initialCartItems,
     phoneNumber: initialPhoneNumber,
@@ -741,7 +762,9 @@ function FrontPage() {
     }
     if (existingItemIndex === -1 && !updatedItem.isCombo) {
       // STRICT MATCHING: Compare Name, Size, Addons, and Sub-Combos
-      const menuItem = menuItems.find((item) => item.name === updatedItem.item_name)
+      // UPDATED: Use originalName if available (for custom variants with composite names)
+      const lookupName = updatedItem.originalName || updatedItem.item_name;
+      const menuItem = menuItems.find((item) => item.name === lookupName)
       const hasSizeVariant = menuItem?.size?.enabled || false
       const updatedSelectedSize = hasSizeVariant ? updatedItem.variants?.size?.selected : null
 
@@ -811,7 +834,8 @@ function FrontPage() {
       setSelectedCartItem(null)
       return;
     }
-    const menuItem = menuItems.find((item) => item.name === updatedItem.item_name)
+    const lookupName = updatedItem.originalName || updatedItem.item_name; // UPDATED: Use originalName
+    const menuItem = menuItems.find((item) => item.name === lookupName)
     const hasSizeVariant = menuItem?.size?.enabled || false
     const updatedSelectedSize = hasSizeVariant ? updatedItem.variants?.size?.selected : null
     const hasOffer = hasActiveOffer(menuItem);
@@ -2321,7 +2345,7 @@ function FrontPage() {
 
   return (
     <div className="frontpage-container">
-      <div className={`frontpage-sidebar ${isSidebarOpen ? "open" : ""}`}>
+      <div className={`frontpage-sidebar ${showPOSGrid ? "pos-hidden" : ""} ${isSidebarOpen ? "open" : ""}`}>
         {isSidebarOpen && (
           <div className="frontpage-sidebar-close" onClick={() => setIsSidebarOpen(false)}>
             <i className="bi bi-x"></i>
@@ -2403,7 +2427,11 @@ function FrontPage() {
           <li className="nav-item">
             <a
               className={`nav-link ${showPOSGrid ? "active text-primary" : "text-black"} cursor-pointer`}
-              onClick={() => setShowPOSGrid(!showPOSGrid)}
+              onClick={() => {
+                const newMode = !showPOSGrid;
+                setShowPOSGrid(newMode);
+                localStorage.setItem("posViewMode", newMode);
+              }}
               title={showPOSGrid ? "Switch to Normal View" : "Switch to POS Grid View"}
             >
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
@@ -2449,6 +2477,11 @@ function FrontPage() {
           <div className="frontpage-hamburger" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
             <i className="bi bi-list"></i>
           </div>
+
+
+          {/* Transaction Type Buttons MOVED TO BILLING SECTION */}
+
+
           <h2>Restaurant POS</h2>
           <div className="frontpage-user-info">
             <div className="frontpage-date-time">
@@ -2464,25 +2497,27 @@ function FrontPage() {
           </div>
         </div>
         <div className="frontpage-category-search-section">
-          <div className="frontpage-category-nav">
-            <button className="frontpage-nav-arrow" onClick={handlePrev} disabled={startIndex === 0}>
-              <i className="bi bi-chevron-left"></i>
-            </button>
-            <div className="frontpage-categories-container">
-              {visibleCategories.map((category) => (
-                <button
-                  key={category}
-                  className={`frontpage-category-btn ${selectedCategory === (category.includes("Combos Offer") ? "Combos Offer" : category) ? "active" : ""}`}
-                  onClick={() => handleFilter(category)}
-                >
-                  {category}
-                </button>
-              ))}
+          {!showPOSGrid && (
+            <div className="frontpage-category-nav">
+              <button className="frontpage-nav-arrow" onClick={handlePrev} disabled={startIndex === 0}>
+                <i className="bi bi-chevron-left"></i>
+              </button>
+              <div className="frontpage-categories-container">
+                {visibleCategories.map((category) => (
+                  <button
+                    key={category}
+                    className={`frontpage-category-btn ${selectedCategory === (category.includes("Combos Offer") ? "Combos Offer" : category) ? "active" : ""}`}
+                    onClick={() => handleFilter(category)}
+                  >
+                    {category}
+                  </button>
+                ))}
+              </div>
+              <button className="frontpage-nav-arrow" onClick={handleNext} disabled={startIndex + 5 >= categories.length}>
+                <i className="bi bi-chevron-right"></i>
+              </button>
             </div>
-            <button className="frontpage-nav-arrow" onClick={handleNext} disabled={startIndex + 5 >= categories.length}>
-              <i className="bi bi-chevron-right"></i>
-            </button>
-          </div>
+          )}
           <div className="frontpage-search-container">
             <i className="bi bi-search frontpage-search-icon"></i>
             <input
@@ -2499,269 +2534,395 @@ function FrontPage() {
             /* ── POS GRID VIEW ── */
             <div className="frontpage-pos-layout" style={{ display: 'flex', gap: '15px', height: '100%' }}>
               {/* Left Side: Items Grid */}
-              <div className="frontpage-pos-items" style={{ flex: 1, overflowY: 'auto' }}>
-                <div className="row">
-                  {filteredItems.flatMap((item) => {
-                    // Split logic for POS Grid:
-                    // If item has sizes enabled, create 3 separate grid items (S, M, L).
-                    // Otherwise, keep as 1 grid item.
-                    if (item.size && item.size.enabled) {
-                      return ['S', 'M', 'L'].map(size => ({
-                        ...item,
-                        isSplitVariant: true,
-                        splitSize: size,
-                        // Determine price for this specific size card
-                        displayPrice: size === 'S' ? item.size.small_price : size === 'L' ? item.size.large_price : item.size.medium_price
-                      }));
-                    }
-                    return [item];
-                  }).map((item, index) => {
-                    // Unique key generation relying on index to avoid duplicates with same ID
-                    const uniqueKey = item.isSplitVariant ? `${item.id}-${item.splitSize}` : item.id;
+              {/* POS Grid View with Pagination */}
+              <div className="frontpage-pos-items" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                <div style={{ flex: 1, overflowY: 'auto', padding: '5px' }}>
+                  <div className="row">
+                    {(() => {
+                      // 1. Flatten all items first
+                      const allGridItems = filteredItems.flatMap((item) => {
+                        const gridItems = [];
 
-                    return (
-                      <div key={uniqueKey} className="col-md-3 mb-3">
-                        <div
-                          className="pos-item-card"
-                          // If it's a split variant, clicking the main card body adds THAT size.
-                          // If normal item, clicking adds default.
-                          onClick={(e) => {
-                            if (item.isSplitVariant) {
-                              handleItemUpdate({
-                                ...item,
-                                item_name: item.name,
-                                quantity: 1,
-                                isPOSGrid: true, // Flag for increment logic
-                                variants: { size: { selected: item.splitSize } }
-                              });
-                            } else {
-                              handleItemUpdate({
-                                ...item,
-                                item_name: item.name,
-                                quantity: 1,
-                                isPOSGrid: true // Flag for increment logic
+                        // 1. Main Items (including Predefined Variants/Sizes)
+                        if (item.size && item.size.enabled) {
+                          ['S', 'M', 'L'].forEach(size => {
+                            gridItems.push({
+                              ...item,
+                              isSplitVariant: true,
+                              splitSize: size,
+                              displayPrice: size === 'S' ? item.size.small_price : size === 'L' ? item.size.large_price : item.size.medium_price,
+                              uniqueId: `${item.id}-${size}`
+                            });
+                          });
+                        } else {
+                          gridItems.push({ ...item, isSplitVariant: false, displayPrice: item.basePrice, uniqueId: item.id });
+                        }
+
+                        // 2. Custom Variants (Main Item)
+                        if (item.custom_variants && item.custom_variants.length > 0) {
+                          item.custom_variants.forEach(variant => {
+                            if (variant.enabled) {
+                              variant.subheadings.forEach(sub => {
+                                gridItems.push({
+                                  ...item,
+                                  ...sub,
+                                  name: sub.name, // Explicitly set name to ensure it overrides
+                                  isStandaloneGridCustomVariant: true,
+                                  variantHeading: variant.heading,
+                                  mainItemName: item.name, // Context: Item Name
+                                  displayPrice: sub.price || 0,
+                                  uniqueId: `${item.id}-custom-${variant.heading}-${sub.name}`,
+                                  originalSubheading: sub,
+                                  parentItem: item,
+                                  heading: variant.heading
+                                });
                               });
                             }
-                          }}
-                          style={{
-                            border: '1px solid #ddd',
-                            padding: '8px',
-                            borderRadius: '8px',
-                            background: '#fff',
-                            height: 'auto',
-                            cursor: 'pointer',
-                            transition: 'transform 0.1s',
-                            boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
-                          onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                        >
-                          {/* Item Name & Base Info */}
-                          <div style={{ display: 'flex', gap: '10px', marginBottom: '5px' }}>
-                            <img src={item.image} alt={item.name} style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px' }} />
-                            <div>
-                              <h6 style={{ margin: 0, fontSize: '14px', fontWeight: 'bold' }}>
-                                {item.name} {item.isSplitVariant ? `(${item.splitSize})` : ''}
-                              </h6>
-                              <small className="text-success" style={{ fontWeight: 'bold' }}>
-                                {formatPrice(item.isSplitVariant ? item.displayPrice : item.basePrice)}
-                              </small>
-                            </div>
-                          </div>
+                          });
+                        }
 
-                        </div>
+                        // 3. Addons
+                        if (item.addons && item.addons.length > 0) {
+                          item.addons.forEach(addon => {
+                            // A. The Addon itself
+                            if (addon.size && addon.size.enabled) {
+                              ['S', 'M', 'L'].forEach(size => {
+                                gridItems.push({
+                                  ...addon,
+                                  isStandaloneGridAddon: true,
+                                  mainItemName: item.name,
+                                  splitSize: size,
+                                  displayPrice: size === 'S' ? (addon.size.small_price || addon.price - 10) : size === 'L' ? (addon.size.large_price || addon.price + 10) : (addon.size.medium_price || addon.price),
+                                  uniqueId: `${item.id}-addon-${addon.name1}-${size}`,
+                                  originalAddon: addon,
+                                  parentItem: item
+                                });
+                              });
+                            } else {
+                              gridItems.push({
+                                ...item,
+                                ...addon,
+                                isStandaloneGridAddon: true,
+                                mainItemName: item.name,
+                                splitSize: "M",
+                                displayPrice: addon.price,
+                                uniqueId: `${item.id}-addon-${addon.name1}`,
+                                originalAddon: addon,
+                                parentItem: item
+                              });
+                            }
 
-                        {/* Addons Section - Separate Box */}
-                        {item.addons && item.addons.length > 0 && (
-                          <div className="pos-addons-container" style={{
-                            marginTop: '5px',
-                            background: '#fff',
-                            border: '1px solid #ddd',
-                            borderRadius: '8px',
-                            padding: '8px',
-                            boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
-                          }}>
-                            <small style={{ fontWeight: 'bold', color: '#666', display: 'block', marginBottom: '5px', borderBottom: '1px solid #eee', paddingBottom: '2px' }}>Addons</small>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                              {item.addons.map((addon, idx) => (
-                                <div key={idx} style={{ width: '100%' }}>
-                                  {addon.size && addon.size.enabled ? (
-                                    /* Sized Addon: Filter sizes based on main item context */
-                                    <div style={{ display: 'flex', gap: '5px' }}>
-                                      {((item.isSplitVariant && item.splitSize) ? [item.splitSize] : ['S', 'M', 'L']).map((size) => {
-                                        const price = size === 'S' ? (addon.size.small_price || 0) : size === 'L' ? (addon.size.large_price || 0) : (addon.size.medium_price || 0);
-                                        return (
-                                          <div
-                                            key={size}
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              const standaloneAddon = createStandaloneAddonItem(addon, size, item.isSplitVariant, item.splitSize || item.selectedSize);
-                                              setCartItems(prev => [...prev, standaloneAddon]);
-                                              setBillCartItems(prev => [...prev, standaloneAddon]);
-                                              setWarningMessage(`${addon.name1} added to cart!`);
-                                              setWarningType("success");
-                                            }}
-                                            style={{
-                                              border: '1px solid #17a2b8',
-                                              borderRadius: '4px',
-                                              padding: '6px 2px',
-                                              fontSize: '11px',
-                                              cursor: 'pointer',
-                                              background: '#e0f7fa',
-                                              flex: 1,
-                                              textAlign: 'center',
-                                              display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
-                                              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                                              minHeight: '50px'
-                                            }}
-                                            title={`${addon.name1} (${size})`}
-                                          >
-                                            <div style={{ fontWeight: 'bold', fontSize: '10px', lineHeight: '1.2', marginBottom: '2px' }}>{addon.name1}</div>
-                                            <div style={{ fontSize: '10px', fontWeight: 'bold' }}>({size})</div>
-                                            <div style={{ color: '#007bff', fontSize: '10px', fontWeight: 'bold' }}>+{formatPrice(price)}</div>
-                                          </div>
-                                        );
-                                      })}
+                            // B. Addon Custom Variants (NEW)
+                            if (addon.custom_variants && addon.custom_variants.length > 0) {
+                              addon.custom_variants.forEach(variant => {
+                                if (variant.enabled) {
+                                  variant.subheadings.forEach(sub => {
+                                    gridItems.push({
+                                      ...item, // Still inherit main item for tax/props
+                                      ...sub,
+                                      name: sub.name, // Explicitly set name
+                                      isStandaloneGridCustomVariant: true,
+                                      variantHeading: variant.heading,
+                                      mainItemName: `${addon.name1} (Addon)`, // Context: Addon Name
+                                      displayPrice: sub.price || 0,
+                                      uniqueId: `${item.id}-addon-${addon.name1}-custom-${variant.heading}-${sub.name}`,
+                                      originalSubheading: sub,
+                                      parentItem: item,
+                                      originalAddon: addon, // NEW: Pass addon context
+                                      heading: variant.heading,
+                                      isAddonVariant: true // context flag if needed
+                                    });
+                                  });
+                                }
+                              });
+                            }
+                          });
+                        }
+
+                        // 4. Combos
+                        if (item.combos && item.combos.length > 0) {
+                          item.combos.forEach(combo => {
+                            // A. The Combo itself
+                            if (combo.size && combo.size.enabled) {
+                              ['S', 'M', 'L'].forEach(size => {
+                                gridItems.push({
+                                  ...combo,
+                                  isStandaloneGridCombo: true,
+                                  mainItemName: item.name,
+                                  splitSize: size,
+                                  displayPrice: size === 'S' ? (combo.size.small_price || combo.price - 10) : size === 'L' ? (combo.size.large_price || combo.price + 10) : (combo.size.medium_price || combo.price),
+                                  uniqueId: `${item.id}-combo-${combo.name1}-${size}`,
+                                  originalCombo: combo,
+                                  parentItem: item
+                                });
+                              });
+                            } else {
+                              gridItems.push({
+                                ...item,
+                                ...combo,
+                                isStandaloneGridCombo: true,
+                                mainItemName: item.name,
+                                splitSize: "M",
+                                displayPrice: combo.price,
+                                uniqueId: `${item.id}-combo-${combo.name1}`,
+                                originalCombo: combo,
+                                parentItem: item
+                              });
+                            }
+
+                            // B. Combo Custom Variants (NEW)
+                            if (combo.custom_variants && combo.custom_variants.length > 0) {
+                              combo.custom_variants.forEach(variant => {
+                                if (variant.enabled) {
+                                  variant.subheadings.forEach(sub => {
+                                    gridItems.push({
+                                      ...item,
+                                      ...sub,
+                                      name: sub.name, // Explicitly set name
+                                      isStandaloneGridCustomVariant: true,
+                                      variantHeading: variant.heading,
+                                      mainItemName: `${combo.name1} (Combo)`, // Context: Combo Name
+                                      displayPrice: sub.price || 0,
+                                      uniqueId: `${item.id}-combo-${combo.name1}-custom-${variant.heading}-${sub.name}`,
+                                      originalSubheading: sub,
+                                      parentItem: item,
+                                      originalCombo: combo, // NEW: Pass combo context
+                                      heading: variant.heading,
+                                      isComboVariant: true
+                                    });
+                                  });
+                                }
+                              });
+                            }
+                          });
+                        }
+
+                        return gridItems;
+                      });
+
+                      // 2. Pagination Logic
+                      const totalPages = Math.ceil(allGridItems.length / itemsPerPage);
+                      const currentGridItems = allGridItems.slice((posPage - 1) * itemsPerPage, posPage * itemsPerPage);
+
+                      // 3. Render Items
+                      return (
+                        <>
+                          {currentGridItems.map((gridItem) => {
+                            // A. Standalone ADDON Render
+                            if (gridItem.isStandaloneGridAddon) {
+                              return (
+                                <div key={gridItem.uniqueId} className="col-md-3 mb-2">
+                                  <div
+                                    className="pos-item-card pos-addon-card"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const standaloneAddon = createStandaloneAddonItem(gridItem.originalAddon, gridItem.splitSize, false, null);
+                                      setCartItems(prev => [...prev, standaloneAddon]);
+                                      setBillCartItems(prev => [...prev, standaloneAddon]);
+                                      setWarningMessage(`${gridItem.name1} added!`);
+                                      setWarningType("success");
+                                    }}
+                                  >
+                                    <div className="pos-card-header">
+                                      <span className="badge bg-info text-dark">Addon</span>
                                     </div>
-                                  ) : (
-                                    /* Regular Addon: Single Box - Styled to Match Variants Height */
-                                    <div
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        // Default to "M" or item size if not explicit
-                                        const size = item.isSplitVariant ? item.splitSize : "M";
-                                        const standaloneAddon = createStandaloneAddonItem(addon, size, item.isSplitVariant, item.splitSize || item.selectedSize);
-                                        setCartItems(prev => [...prev, standaloneAddon]);
-                                        setBillCartItems(prev => [...prev, standaloneAddon]);
-                                        setWarningMessage(`${addon.name1} added to cart!`);
-                                        setWarningType("success");
-                                      }}
-                                      style={{
-                                        border: '1px solid #17a2b8',
-                                        borderRadius: '4px',
-                                        padding: '6px 8px',
-                                        fontSize: '11px',
-                                        cursor: 'pointer',
-                                        background: '#e0f7fa',
-                                        textAlign: 'center',
-                                        width: '100%',
-                                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                                        minHeight: '50px',
-                                        display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center'
-                                      }}
-                                    >
-                                      <div style={{ fontWeight: 'bold', fontSize: '10px', lineHeight: '1.2' }}>{addon.name1}</div>
-                                      <div style={{ color: '#007bff', fontWeight: 'bold', marginTop: '2px' }}>+{formatPrice(addon.price)}</div>
+                                    <div className="pos-card-body">
+                                      <h6 className="pos-item-name">{gridItem.name1}</h6>
+                                      {gridItem.splitSize && <span className="pos-item-size badge bg-light text-dark">{gridItem.splitSize}</span>}
+                                      <div className="pos-item-price addons-text">{formatPrice(gridItem.displayPrice)}</div>
+                                      <div className="pos-item-context">for {gridItem.mainItemName}</div>
                                     </div>
-                                  )}
+                                  </div>
                                 </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                              );
+                            }
 
-                        {/* Combos Section - Separate Box */}
-                        {item.combos && item.combos.length > 0 && (
-                          <div className="pos-combos-container" style={{
-                            marginTop: '5px',
-                            background: '#fff',
-                            border: '1px solid #ddd',
-                            borderRadius: '8px',
-                            padding: '8px',
-                            boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
-                          }}>
-                            <small style={{ fontWeight: 'bold', color: '#666', display: 'block', marginBottom: '5px', borderBottom: '1px solid #eee', paddingBottom: '2px' }}>Combos</small>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                              {item.combos.map((combo, idx) => (
-                                <div key={idx} style={{ width: '100%' }}>
-                                  {combo.size && combo.size.enabled ? (
-                                    /* Sized Combo: Filter sizes based on main item context */
-                                    <div style={{ display: 'flex', gap: '5px' }}>
-                                      {((item.isSplitVariant && item.splitSize) ? [item.splitSize] : ['S', 'M', 'L']).map((size) => {
-                                        const price = size === 'S' ? (combo.size.small_price || 0) : size === 'L' ? (combo.size.large_price || 0) : (combo.size.medium_price || 0);
-                                        return (
-                                          <div
-                                            key={size}
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              const standaloneCombo = createStandaloneComboItem(combo, size, item.isSplitVariant, item.splitSize || item.selectedSize);
-                                              setCartItems(prev => [...prev, standaloneCombo]);
-                                              setBillCartItems(prev => [...prev, standaloneCombo]);
-                                              setWarningMessage(`${combo.name1} added to cart!`);
-                                              setWarningType("success");
-                                            }}
-                                            style={{
-                                              border: '1px solid #ffc107',
-                                              borderRadius: '4px',
-                                              padding: '6px 2px',
-                                              fontSize: '11px',
-                                              cursor: 'pointer',
-                                              background: '#ffefc1',
-                                              flex: 1,
-                                              textAlign: 'center',
-                                              display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
-                                              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                                              minHeight: '50px'
-                                            }}
-                                            title={`${combo.name1} (${size})`}
-                                          >
-                                            <div style={{ fontWeight: 'bold', fontSize: '10px', lineHeight: '1.2', marginBottom: '2px' }}>{combo.name1}</div>
-                                            <div style={{ fontSize: '10px', fontWeight: 'bold' }}>({size})</div>
-                                            <div style={{ color: '#d39e00', fontSize: '10px', fontWeight: 'bold' }}>+{formatPrice(price)}</div>
-                                          </div>
-                                        );
-                                      })}
+                            // B. Standalone COMBO Render
+                            if (gridItem.isStandaloneGridCombo) {
+                              return (
+                                <div key={gridItem.uniqueId} className="col-md-3 mb-2">
+                                  <div
+                                    className="pos-item-card pos-combo-card"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const standaloneCombo = createStandaloneComboItem(gridItem.originalCombo, gridItem.splitSize, false, null);
+                                      setCartItems(prev => [...prev, standaloneCombo]);
+                                      setBillCartItems(prev => [...prev, standaloneCombo]);
+                                      setWarningMessage(`${gridItem.name1} added!`);
+                                      setWarningType("success");
+                                    }}
+                                  >
+                                    <div className="pos-card-header">
+                                      <span className="badge bg-warning text-dark">Combo</span>
                                     </div>
-                                  ) : (
-                                    /* Regular Combo: Single Box - Styled to Match Variants Height */
-                                    <div
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        const size = item.isSplitVariant ? item.splitSize : "M";
-                                        const standaloneCombo = createStandaloneComboItem(combo, size, item.isSplitVariant, item.splitSize || item.selectedSize);
-                                        setCartItems(prev => [...prev, standaloneCombo]);
-                                        setBillCartItems(prev => [...prev, standaloneCombo]);
-                                        setWarningMessage(`${combo.name1} added to cart!`);
-                                        setWarningType("success");
-                                      }}
-                                      style={{
-                                        border: '1px solid #ffc107',
-                                        borderRadius: '4px',
-                                        padding: '6px 8px',
-                                        fontSize: '11px',
-                                        cursor: 'pointer',
-                                        background: '#ffefc1',
-                                        textAlign: 'center',
-                                        width: '100%',
-                                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                                        minHeight: '50px',
-                                        display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center'
-                                      }}
-                                    >
-                                      <div style={{ fontWeight: 'bold', fontSize: '10px', lineHeight: '1.2' }}>{combo.name1}</div>
-                                      <div style={{ color: '#d39e00', fontWeight: 'bold', marginTop: '2px' }}>+{formatPrice(combo.price)}</div>
+                                    <div className="pos-card-body">
+                                      <h6 className="pos-item-name">{gridItem.name1}</h6>
+                                      {gridItem.splitSize && <span className="pos-item-size badge bg-light text-dark">{gridItem.splitSize}</span>}
+                                      <div className="pos-item-price combos-text">{formatPrice(gridItem.displayPrice)}</div>
+                                      <div className="pos-item-context">for {gridItem.mainItemName}</div>
                                     </div>
-                                  )}
+                                  </div>
                                 </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                              );
+                            }
+
+                            // C. Standalone CUSTOM VARIANT Render
+                            if (gridItem.isStandaloneGridCustomVariant) {
+                              return (
+                                <div key={gridItem.uniqueId} className="col-md-3 mb-2">
+                                  <div
+                                    className="pos-item-card pos-variant-card"
+                                    style={{ borderColor: '#6f42c1' }} // Custom purple border
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      // Create standalone custom variant item
+                                      // We treat it similar to a standalone item but with variant context
+                                      const variantRef = gridItem.originalSubheading;
+                                      const parent = gridItem.parentItem;
+
+                                      // NEW: Determine correct parent name (Item, Addon, or Combo)
+                                      let effectiveParentName = parent.name;
+                                      if (gridItem.isAddonVariant && gridItem.originalAddon) {
+                                        effectiveParentName = gridItem.originalAddon.name1;
+                                      } else if (gridItem.isComboVariant && gridItem.originalCombo) {
+                                        effectiveParentName = gridItem.originalCombo.name1;
+                                      }
+
+                                      const effectiveTaxRate = getEffectiveTaxRate(parent.tax_applicable, parent.tax_rate); // Use parent tax? Or variant tax? Usually variant is part of item. Assuming item tax structure.
+                                      // Actually, custom variants usually add to item price. As standalone, we bill them directly.
+                                      // We will set tax based on parent item.
+
+                                      const price = variantRef.price || 0;
+                                      const exclTotal = price * 1;
+                                      const taxTotal = effectiveTaxRate > 0 ? exclTotal * (effectiveTaxRate / 100) : 0;
+                                      const taxBreakdown = taxTotal > 0 ? { [effectiveTaxRate]: taxTotal } : {};
+
+                                      const standaloneVariant = {
+                                        id: uuidv4(),
+                                        // UPDATED: Use composite name with CORRECT parent context (Addon/Combo/Item)
+                                        item_name: `${effectiveParentName} - ${variantRef.name}`,
+                                        originalName: effectiveParentName, // UPDATED: Persist correct original name
+                                        name: `${effectiveParentName} - ${variantRef.name}`,
+                                        quantity: 1,
+                                        basePrice: price,
+                                        totalPrice: exclTotal + taxTotal,
+                                        exclTotal,
+                                        taxTotal,
+                                        taxBreakdown,
+                                        mainTaxTotal: taxTotal,
+                                        mainTaxRate: effectiveTaxRate,
+                                        mainExclPerUnit: price,
+                                        kitchen: parent.kitchen || "Main Kitchen",
+                                        image: variantRef.image || parent.image || "/static/images/default-item.jpg",
+                                        isStandaloneCustomVariant: true,
+                                        status: "Pending",
+                                        served: false,
+                                        context: `for ${parent.name}`
+                                      };
+
+                                      setCartItems(prev => [...prev, standaloneVariant]);
+                                      setBillCartItems(prev => [...prev, standaloneVariant]);
+                                      setWarningMessage(`${variantRef.name} added!`);
+                                      setWarningType("success");
+                                    }}
+                                  >
+                                    <div className="pos-card-header">
+                                      <span className="badge" style={{ backgroundColor: '#6f42c1', color: 'white' }}>{gridItem.variantHeading}</span>
+                                    </div>
+                                    <div className="pos-card-body">
+                                      {/* UPDATED: Display Main Item Name first, then Variant Name below */}
+                                      <h6 className="pos-item-name" style={{ marginBottom: '2px' }}>{gridItem.mainItemName}</h6>
+                                      <div style={{ fontSize: '0.9rem', color: '#555', marginBottom: '5px', fontWeight: 'bold' }}>{gridItem.name}</div>
+                                      <div className="pos-item-price" style={{ color: '#6f42c1', fontWeight: 'bold' }}>{formatPrice(gridItem.displayPrice)}</div>
+
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            // D. MAIN ITEM Render
+                            return (
+                              <div key={gridItem.uniqueId} className="col-md-3 mb-2">
+                                <div
+                                  className="pos-item-card"
+                                  onClick={() => {
+                                    if (gridItem.isSplitVariant) {
+                                      handleItemUpdate({
+                                        ...gridItem,
+                                        item_name: gridItem.name,
+                                        quantity: 1,
+                                        isPOSGrid: true,
+                                        variants: { size: { selected: gridItem.splitSize } }
+                                      });
+                                    } else {
+                                      handleItemUpdate({
+                                        ...gridItem,
+                                        item_name: gridItem.name,
+                                        quantity: 1,
+                                        isPOSGrid: true
+                                      });
+                                    }
+                                  }}
+                                >
+                                  <div className="pos-card-header">
+                                    <span className="badge bg-secondary">Item</span>
+                                  </div>
+                                  <div className="pos-card-body">
+                                    <h6 className="pos-item-name">{gridItem.name}</h6>
+                                    {gridItem.isSplitVariant && <span className="pos-item-size badge bg-secondary">{gridItem.splitSize}</span>}
+                                    <div className="pos-item-price text-success">{formatPrice(gridItem.displayPrice)}</div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+
+                          {/* 4. Pagination Controls - Rendered INSIDE the row container logic but outside the map, wait. 
+                              Better to render it after the row. 
+                              I will close the row and open pagination div. 
+                           */}
+                          {/* Close ROW handled by parent, oh wait, I am inside {}. 
+                               I should return an array or fragment. 
+                               But the parent expects "row" children. 
+                               I will put pagination AFTER the row in the main DOM structure.
+                               So here I just return items.
+                           */}
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {/* Pagination Controls Footer */}
+                <div className="pos-pagination-footer">
+                  <button
+                    className="btn btn-secondary pos-page-btn"
+                    onClick={() => setPosPage(prev => Math.max(prev - 1, 1))}
+                    disabled={posPage === 1}
+                  >
+                    Previous
+                  </button>
+                  <span className="pos-page-info">
+                    Page {posPage}
+                  </span>
+                  <button
+                    className="btn btn-primary pos-page-btn"
+                    onClick={() => setPosPage(prev => prev + 1)}
+                  >
+                    Next
+                  </button>
                 </div>
               </div>
 
               {/* Right Side: Category Sidebar */}
-              <div className="frontpage-pos-categories" style={{ width: '150px', overflowY: 'auto', borderLeft: '1px solid #eee', paddingLeft: '10px' }}>
-                <h6 style={{ fontWeight: 'bold', marginBottom: '10px', textAlign: 'center' }}>Categories</h6>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div className="frontpage-pos-categories">
+                <h6 className="pos-category-header">Categories</h6>
+                <div className="pos-category-list">
                   {categories.map((cat) => (
                     <button
                       key={cat}
-                      className={`btn btn-sm ${selectedCategory === cat ? 'btn-primary' : 'btn-outline-secondary'}`}
-                      style={{ textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                      className={`pos-category-btn ${selectedCategory === cat ? 'active' : ''}`}
                       onClick={() => handleFilter(cat)}
                     >
                       {cat}
@@ -2889,6 +3050,37 @@ function FrontPage() {
         </div>
       </div>
       <div className="frontpage-billing-section">
+        {/* NEW: Billing Order Buttons - Only Visible in POS Grid Mode */}
+        {showPOSGrid && (
+          <div className="billing-order-buttons" style={{ marginBottom: '15px' }}>
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+              <button
+                className={`billing-order-btn header-btn-dinein ${orderType === 'Dine In' ? 'active' : ''}`}
+                onClick={() => handleOrderTypeChange('Dine In')}
+                style={{ flex: 1 }}
+              >
+                <span>🍽️</span> Dine In
+              </button>
+              <button
+                className={`billing-order-btn header-btn-takeaway ${orderType === 'Takeaway' ? 'active' : ''}`}
+                onClick={() => handleOrderTypeChange('Takeaway')}
+                style={{ flex: 1 }}
+              >
+                <span>🍔</span> Takeaway
+              </button>
+            </div>
+            <button
+              className={`billing-order-btn header-btn-delivery ${orderType === 'Online Delivery' ? 'active' : ''}`}
+              onClick={() => handleOrderTypeChange('Online Delivery')}
+              style={{ width: '100%' }}
+            >
+              <span>🚚</span> Online Delivery
+            </button>
+            {/* Display Order No if available */}
+            {orderNo && <div className="mt-2 text-center"><span className="badge bg-secondary" style={{ fontSize: '0.9rem' }}>Order #: {orderNo}</span></div>}
+          </div>
+        )}
+
         <div className="frontpage-billing-tabs">
           <button
             className={`frontpage-billing-tab ${location.pathname === "/active-orders" ? "active" : ""}`}
@@ -3160,13 +3352,16 @@ function FrontPage() {
                       <td>{tableNumber !== "N/A" ? tableNumber : index + 1}</td>
                       <td>
                         <div className="frontpage-cart-item-details">
-                          <img
-                            src={item.image || "/placeholder.svg"}
-                            alt={item.name}
-                            className="frontpage-cart-item-image"
-                            onError={(e) => (e.target.src = "/static/images/default-item.jpg")}
-                            onClick={() => handleCartItemClick(item)}
-                          />
+                          {/* UPDATED: Show images for all items (including Predefined Variants/Sizes) EXCEPT Standalone Custom Variants */}
+                          {!item.isStandaloneCustomVariant && (
+                            <img
+                              src={item.image || "/placeholder.svg"}
+                              alt={item.name}
+                              className="frontpage-cart-item-image"
+                              onError={(e) => (e.target.src = "/static/images/default-item.jpg")}
+                              onClick={() => handleCartItemClick(item)}
+                            />
+                          )}
                           <span className="frontpage-cart-item-link" onClick={() => handleCartItemClick(item)}>
                             {item.item_name || item.name} {item.selectedSize && `(${item.selectedSize})`}
                           </span>
