@@ -48,6 +48,7 @@ function Purchase() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('landing'); // Start with 'landing' for initial button view
   const [globalSearch, setGlobalSearch] = useState(''); // NEW: Global search state
+  const [showDropdown, setShowDropdown] = useState(false); // NEW: Dropdown visibility state
   const [items, setItems] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [supplierGroups, setSupplierGroups] = useState([]); // NEW: Supplier Groups
@@ -2562,8 +2563,9 @@ function Purchase() {
   );
   return (
     <div style={{
-      minHeight: '100vh',
-      background: 'transparent', // Removed gradient background
+      height: '100vh',
+      overflowY: 'auto',
+      background: 'transparent',
       padding: '20px',
       position: 'relative'
     }}>
@@ -2616,9 +2618,12 @@ function Purchase() {
                   placeholder="Search modules (Items, Suppliers, etc.)..."
                   value={globalSearch}
                   onChange={(e) => setGlobalSearch(e.target.value)}
+                  onFocus={() => setShowDropdown(true)}
+                  onClick={() => setShowDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
                   className="purchase-input"
                 />
-                {globalSearch && (
+                {showDropdown && (
                   <div className="purchase-search-dropdown" style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: '1px solid #ccc', maxHeight: '200px', overflowY: 'auto', zIndex: 1000 }}>
                     {tabOptions
                       .filter(tab => tab.name.toLowerCase().includes(globalSearch.toLowerCase()))
@@ -2636,18 +2641,7 @@ function Purchase() {
                 )}
               </div>
               {/* NEW: Centered Tab Navigation */}
-              <div className="purchase-centered-tabs">
-                {centeredTabs.map(tab => (
-                  <button
-                    key={tab.key}
-                    onClick={() => setActiveTab(tab.key)}
-                    className={`purchase-tab-button ${activeTab === tab.key ? 'active' : ''}`}
-                  >
-                    {tab.icon}
-                    <span>{tab.name}</span>
-                  </button>
-                ))}
-              </div>
+              {/* Top Tabs Hidden in Details View */}
               {loading && <p className="purchase-loading">Loading...</p>}
               {(error || message) && (
                 <p className={`purchase-message ${error ? 'error' : 'success'}`}>
@@ -2873,90 +2867,109 @@ function Purchase() {
                     </div>
                   </div>
                   <div className="purchase-form">
-                    <table className="purchase-table">
-                      <thead>
-                        <tr>
-                          <th rowSpan="2">Brand</th>
-                          <th rowSpan="2">Item Name</th>
-                          <th rowSpan="2">Grams</th>
-                          <th rowSpan="2">Nos per Box</th>
-                          <th rowSpan="2">UOM</th>
-                          <th rowSpan="2">Packets per Carton</th>
-                          <th rowSpan="2">UOM</th>
-                          <th rowSpan="2">Units per Packet</th>
-                          <th rowSpan="2">UOM</th>
-                          <th rowSpan="2">Suppliers</th>
-                          <th rowSpan="2">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {itemFormRows.map((row, idx) => (
-                          <tr key={idx}>
-                            <td>
-                              <select
-                                value={row.company}
-                                onChange={(e) => handleItemFormChange(idx, 'company', e.target.value)}
-                                className="purchase-input select"
-                                required
-                              >
-                                <option value="">Select Brand</option>
-                                {brands.map(brand => (
-                                  <option key={brand._id} value={brand.name}>
-                                    {brand.name}
-                                  </option>
-                                ))}
-                                <option value="create_new">Create New Brand</option>
-                              </select>
-                            </td>
-                            <td><input type="text" value={row.name} onChange={(e) => handleItemFormChange(idx, 'name', e.target.value)} placeholder="Item name" className="purchase-input" required /></td>
-                            <td><input type="number" value={row.grams} onChange={(e) => handleItemFormChange(idx, 'grams', e.target.value)} placeholder="Grams" className="purchase-input" /></td>
-                            <td><input type="number" value={row.boxToMaster} onChange={(e) => handleItemFormChange(idx, 'boxToMaster', e.target.value)} placeholder="Nos" className="purchase-input" required /></td>
-                            <td>
-                              <select value={row.masterUnit} onChange={(e) => handleItemFormChange(idx, 'masterUnit', e.target.value)} className="purchase-input select" required>
-                                <option value="">Select UOM</option>
+                    <div className="purchase-item-list-container" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                      {itemFormRows.map((row, idx) => (
+                        <div key={idx} className="purchase-item-card" style={{
+                          background: '#fff',
+                          padding: '20px',
+                          borderRadius: '10px',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+                          border: '1px solid #eee',
+                          display: 'grid',
+                          gridTemplateColumns: '1fr 1fr',
+                          gap: '15px'
+                        }}>
+                          <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '10px', marginBottom: '5px' }}>
+                            <h4 style={{ margin: 0, color: '#2c3e50' }}>Item #{idx + 1}</h4>
+                            {!editingItem && (
+                              <button type="button" onClick={() => removeItemFormRow(idx)} className="purchase-button delete" disabled={itemFormRows.length === 1} style={{ padding: '5px 10px', fontSize: '12px' }}>
+                                <FaTrash /> Remove
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="purchase-form-field">
+                            <label className="purchase-label">Brand</label>
+                            <select
+                              value={row.company}
+                              onChange={(e) => handleItemFormChange(idx, 'company', e.target.value)}
+                              className="purchase-input select"
+                              required
+                            >
+                              <option value="">Select Brand</option>
+                              {brands.map(brand => (
+                                <option key={brand._id} value={brand.name}>
+                                  {brand.name}
+                                </option>
+                              ))}
+                              <option value="create_new">Create New Brand</option>
+                            </select>
+                          </div>
+
+                          <div className="purchase-form-field">
+                            <label className="purchase-label">Item Name</label>
+                            <input type="text" value={row.name} onChange={(e) => handleItemFormChange(idx, 'name', e.target.value)} placeholder="Item name" className="purchase-input" required />
+                          </div>
+
+                          <div className="purchase-form-field">
+                            <label className="purchase-label">Grams</label>
+                            <input type="number" value={row.grams} onChange={(e) => handleItemFormChange(idx, 'grams', e.target.value)} placeholder="Grams" className="purchase-input" />
+                          </div>
+
+                          <div className="purchase-form-field">
+                            <label className="purchase-label">Nos per Box</label>
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                              <input type="number" value={row.boxToMaster} onChange={(e) => handleItemFormChange(idx, 'boxToMaster', e.target.value)} placeholder="Nos" className="purchase-input" style={{ flex: 1 }} required />
+                              <select value={row.masterUnit} onChange={(e) => handleItemFormChange(idx, 'masterUnit', e.target.value)} className="purchase-input select" style={{ width: '120px' }} required>
+                                <option value="">Unit</option>
                                 {uomOptions.map(uom => (<option key={uom._id} value={uom.name}>{uom.name}</option>))}
-                                <option value="create_new">Create New UOM</option>
+                                <option value="create_new">Create New</option>
                               </select>
-                            </td>
-                            <td><input type="number" value={row.masterToOuter} onChange={(e) => handleItemFormChange(idx, 'masterToOuter', e.target.value)} placeholder="Nos" className="purchase-input" required /></td>
-                            <td>
-                              <select value={row.outerUnit} onChange={(e) => handleItemFormChange(idx, 'outerUnit', e.target.value)} className="purchase-input select" required>
-                                <option value="">Select UOM</option>
+                            </div>
+                          </div>
+
+                          <div className="purchase-form-field">
+                            <label className="purchase-label">Packets per Carton</label>
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                              <input type="number" value={row.masterToOuter} onChange={(e) => handleItemFormChange(idx, 'masterToOuter', e.target.value)} placeholder="Nos" className="purchase-input" style={{ flex: 1 }} required />
+                              <select value={row.outerUnit} onChange={(e) => handleItemFormChange(idx, 'outerUnit', e.target.value)} className="purchase-input select" style={{ width: '120px' }} required>
+                                <option value="">Unit</option>
                                 {uomOptions.map(uom => (<option key={uom._id} value={uom.name}>{uom.name}</option>))}
-                                <option value="create_new">Create New UOM</option>
+                                <option value="create_new">Create New</option>
                               </select>
-                            </td>
-                            <td><input type="number" value={row.outerToNos} onChange={(e) => handleItemFormChange(idx, 'outerToNos', e.target.value)} placeholder="Nos" className="purchase-input" required /></td>
-                            <td><input type="text" value={row.nosUnit} onChange={(e) => handleItemFormChange(idx, 'nosUnit', e.target.value)} placeholder="Nos UOM (e.g., Patty)" className="purchase-input" required /></td>
-                            <td>
-                              <select
-                                value={row.suppliers.length > 0 ? `${row.suppliers[0].supplierId}|${row.suppliers[0].supplierName}` : ''}
-                                onChange={(e) => {
-                                  const [supplierId, supplierName] = e.target.value.split('|');
-                                  handleItemFormChange(idx, 'suppliers', [{ supplierId, supplierName }]);
-                                }}
-                                className="purchase-input select"
-                                required
-                              >
-                                <option value="">Select Supplier</option>
-                                {suppliers.map(supplier => (
-                                  <option key={supplier._id} value={`${supplier._id}|${supplier.company}`}>
-                                    {supplier.company}
-                                  </option>
-                                ))}
-                              </select>
-                            </td>
-                            <td>
-                              {!editingItem && (
-                                <button type="button" onClick={() => removeItemFormRow(idx)} className="purchase-button delete" disabled={itemFormRows.length === 1}>
-                                  <FaTrash />
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                            </div>
+                          </div>
+
+                          <div className="purchase-form-field">
+                            <label className="purchase-label">Units per Packet</label>
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                              <input type="number" value={row.outerToNos} onChange={(e) => handleItemFormChange(idx, 'outerToNos', e.target.value)} placeholder="Nos" className="purchase-input" style={{ flex: 1 }} required />
+                              <input type="text" value={row.nosUnit} onChange={(e) => handleItemFormChange(idx, 'nosUnit', e.target.value)} placeholder="Unit (e.g. Patty)" className="purchase-input" style={{ width: '120px' }} required />
+                            </div>
+                          </div>
+
+                          <div className="purchase-form-field">
+                            <label className="purchase-label">Supplier</label>
+                            <select
+                              value={row.suppliers.length > 0 ? `${row.suppliers[0].supplierId}|${row.suppliers[0].supplierName}` : ''}
+                              onChange={(e) => {
+                                const [supplierId, supplierName] = e.target.value.split('|');
+                                handleItemFormChange(idx, 'suppliers', [{ supplierId, supplierName }]);
+                              }}
+                              className="purchase-input select"
+                              required
+                            >
+                              <option value="">Select Supplier</option>
+                              {suppliers.map(supplier => (
+                                <option key={supplier._id} value={`${supplier._id}|${supplier.company}`}>
+                                  {supplier.company}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                     <div className="purchase-form-buttons">
                       {!editingItem && (
                         <button type="button" onClick={addItemFormRow} className="purchase-button add-row">
@@ -3049,7 +3062,7 @@ function Purchase() {
                       <div className={`purchase-supplier-tab ${activeSection === 'settings' ? 'active' : ''}`} onClick={() => setActiveSection('settings')}>Settings</div>
                     </div>
                     {activeSection === 'details' && (
-                      <div className="purchase-supplier-content">
+                      <div className="purchase-supplier-content" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                         <div className="purchase-form-field"><label className="purchase-label">Company Name / Trade Name</label><input type="text" value={supplierForm.company} onChange={(e) => setSupplierForm({ ...supplierForm, company: e.target.value })} className="purchase-input" /></div>
                         <div className="purchase-form-field"><label className="purchase-label">Supplier Code / Short Name</label><input type="text" value={supplierForm.code} onChange={(e) => setSupplierForm({ ...supplierForm, code: e.target.value })} className="purchase-input" /></div>
                         <div className="purchase-form-field">
@@ -3076,16 +3089,16 @@ function Purchase() {
                       </div>
                     )}
                     {activeSection === 'tax' && (
-                      <div className="purchase-supplier-content">
+                      <div className="purchase-supplier-content" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                         <div className="purchase-form-field"><label className="purchase-label">Tax ID / VAT / TRN</label><input type="text" value={supplierForm.taxId} onChange={(e) => setSupplierForm({ ...supplierForm, taxId: e.target.value })} className="purchase-input" /></div>
                         <div className="purchase-form-field"><label className="purchase-label">Tax Category</label><input type="text" value={supplierForm.taxCategory} onChange={(e) => setSupplierForm({ ...supplierForm, taxCategory: e.target.value })} className="purchase-input" /></div>
                         <div className="purchase-form-field"><label className="purchase-label">Tax Withholding Category</label><input type="text" value={supplierForm.taxWithholdingCategory} onChange={(e) => setSupplierForm({ ...supplierForm, taxWithholdingCategory: e.target.value })} className="purchase-input" /></div>
                       </div>
                     )}
                     {activeSection === 'address_contact' && (
-                      <div className="purchase-supplier-content">
+                      <div className="purchase-supplier-content" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                         {supplierForm.contacts.map((contact, idx) => (
-                          <div key={idx} className="purchase-contact-block">
+                          <div key={idx} className="purchase-contact-block" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
                             <div className="purchase-form-field"><label className="purchase-label">Designation {idx + 1}</label><input type="text" value={contact.designation || ''} onChange={(e) => handleContactChange(idx, 'designation', e.target.value)} className="purchase-input" /></div>
                             <div className="purchase-form-field"><label className="purchase-label">Contact Person {idx + 1}</label><input type="text" value={contact.contactPerson} onChange={(e) => handleContactChange(idx, 'contactPerson', e.target.value)} className="purchase-input" /></div>
                             <div className="purchase-form-field">
@@ -3127,7 +3140,7 @@ function Purchase() {
                                 style={{ resize: 'vertical' }}
                               />
                             </div>
-                            <div className="purchase-form-field" style={{ justifyContent: 'flex-end', display: 'flex' }}>
+                            <div className="purchase-form-field" style={{ gridColumn: '1 / -1', justifyContent: 'flex-end', display: 'flex' }}>
                               <button type="button" onClick={() => removeContact(idx)} className="purchase-button delete" disabled={supplierForm.contacts.length === 1}>Remove Contact</button>
                             </div>
                           </div>
@@ -3136,7 +3149,7 @@ function Purchase() {
                       </div>
                     )}
                     {activeSection === 'accounting' && (
-                      <div className="purchase-supplier-content">
+                      <div className="purchase-supplier-content" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                         <div className="purchase-form-field">
                           <label className="purchase-label">Preferred Payment Mode</label>
                           <select value={supplierForm.paymentMode} onChange={(e) => setSupplierForm({ ...supplierForm, paymentMode: e.target.value })} className="purchase-input select">
@@ -3156,7 +3169,7 @@ function Purchase() {
                       </div>
                     )}
                     {activeSection === 'settings' && (
-                      <div className="purchase-supplier-content">
+                      <div className="purchase-supplier-content" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                         <div className="purchase-form-field"><label className="purchase-label">Bank Details (Account No., IBAN, SWIFT)</label><textarea value={supplierForm.bankDetails} onChange={(e) => setSupplierForm({ ...supplierForm, bankDetails: e.target.value })} className="purchase-input textarea" /></div>
                         <div className="purchase-form-field"><label className="purchase-label">Website</label><input type="url" value={supplierForm.website} onChange={(e) => setSupplierForm({ ...supplierForm, website: e.target.value })} className="purchase-input" /></div>
                         <div className="purchase-form-field"><label className="purchase-label">On-Time Delivery %</label><input type="number" value={supplierForm.onTimeDelivery} onChange={(e) => setSupplierForm({ ...supplierForm, onTimeDelivery: Number(e.target.value) })} className="purchase-input" min="0" max="100" /></div>

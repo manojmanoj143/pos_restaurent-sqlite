@@ -3530,802 +3530,819 @@ def delete_employee(employee_id):
             logger.error(f"Error fetching trip reports: {str(e)}")
             logger.error(traceback.format_exc())
             return jsonify({"error": str(e)}), 500
-    @app.route('/api/uoms', methods=['GET'])
-    @db_required
-    def get_uoms():
-        try:
-            uoms = uoms_collection.find()
-            return jsonify(convert_objectid_to_str(uoms)), 200
-        except Exception as e:
-            return jsonify({'error': f"Failed to fetch UOMs: {str(e)}"}), 500
-    @app.route('/api/uoms', methods=['POST'])
-    @db_required
-    def add_uom():
-        try:
-            data = request.json
-            if not data or 'name' not in data or not data['name'].strip():
-                return jsonify({'error': 'Invalid UOM name'}), 400
-            if uoms_collection.find_one({'name': data['name']}):
-                return jsonify({'error': 'UOM already exists'}), 400
-            uom = {
-                'name': data['name'].strip(),
-                'created_at': datetime.now(timezone.utc).isoformat()
-            }
-            result = uoms_collection.insert_one(uom)
-            inserted_uom = uoms_collection.find_one({'_id': result.inserted_id})
-            return jsonify(convert_objectid_to_str(inserted_uom)), 201
-        except Exception as e:
-            return jsonify({'error': f"Failed to add UOM: {str(e)}"}), 500
-    @app.route('/api/uoms/<id>', methods=['PUT'])
-    @db_required
-    def update_uom(id):
-        try:
-            data = request.json
-            if not data or 'name' not in data or not data['name'].strip():
-                return jsonify({'error': 'Invalid UOM name'}), 400
-            existing = uoms_collection.find_one({'name': data['name'], '_id': {'$ne': id}})
-            if existing:
-                return jsonify({'error': 'UOM name already exists'}), 400
-            result = uoms_collection.update_one({'_id': id}, {'$set': {'name': data['name'].strip()}})
-            if result.matched_count == 0:
-                return jsonify({'error': 'UOM not found or no changes'}), 404
-            return jsonify({'message': 'UOM updated successfully'}), 200
-        except Exception as e:
-            return jsonify({'error': f"Failed to update UOM: {str(e)}"}), 500
-    @app.route('/api/uoms/<id>', methods=['DELETE'])
-    @db_required
-    def delete_uom(id):
-        try:
-            result = uoms_collection.delete_one({'_id': id})
-            if result.deleted_count == 0:
-                return jsonify({'error': 'UOM not found'}), 404
-            return jsonify({'message': 'UOM deleted successfully'}), 200
-        except Exception as e:
-            return jsonify({'error': f"Failed to delete UOM: {str(e)}"}), 500
-    @app.route('/api/purchase_items', methods=['GET'])
-    @db_required
-    def get_purchase_items():
-        try:
-            items = purchase_items_collection.find()
-            return jsonify(convert_objectid_to_str(items)), 200
-        except Exception as e:
-            return jsonify({'error': f"Failed to fetch items: {str(e)}"}), 500
-    @app.route('/api/purchase_items', methods=['POST'])
-    @db_required
-    def add_purchase_item():
-        try:
-            data = request.json
-            required_fields = ['company', 'name', 'boxToMaster', 'masterUnit', 'masterToOuter', 'outerUnit', 'outerToNos', 'nosUnit']
-            if not all(key in data for key in required_fields):
-                return jsonify({'error': 'Missing required fields'}), 400
-            item = {
-                'company': data['company'],
-                'name': data['name'],
-                'boxToMaster': float(data['boxToMaster']),
-                'masterUnit': data['masterUnit'],
-                'masterToOuter': float(data['masterToOuter']),
-                'outerUnit': data['outerUnit'],
-                'outerToNos': float(data['outerToNos']),
-                'nosUnit': data['nosUnit'],
-                'conversionFactor': float(data['masterToOuter']) * float(data['outerToNos']),
-                'stockMaster': 0,
-                'stockOuter': 0,
-                'stockNos': 0,
-                'soldNos': 0,
-                'totalStock': 0,
-                'totalPurchased': 0,
-                'grams': float(data.get('grams', 0)),
-                'suppliers': data.get('suppliers', []),
-                'created_at': datetime.now(timezone.utc).isoformat()
-            }
-            result = purchase_items_collection.insert_one(item)
-            inserted_item = purchase_items_collection.find_one({'_id': result.inserted_id})
-            return jsonify(convert_objectid_to_str(inserted_item)), 201
-        except ValueError:
-            return jsonify({'error': 'Invalid numeric value'}), 400
-        except Exception as e:
-            return jsonify({'error': f"Failed to add item: {str(e)}"}), 500
-    @app.route('/api/purchase_items/<id>', methods=['PUT'])
-    @db_required
-    def update_purchase_item(id):
-        try:
-            data = request.json
-            if not data:
-                return jsonify({'error': 'No data provided'}), 400
-            old_item = purchase_items_collection.find_one({'_id': id})
-            if not old_item:
-                return jsonify({'error': 'Item not found'}), 404
-            update_data = {}
-            if "company" in data:
-                update_data["company"] = data["company"]
-            if "name" in data:
-                update_data["name"] = data["name"]
-            if "boxToMaster" in data:
-                update_data["boxToMaster"] = float(data["boxToMaster"])
-            if "masterUnit" in data:
-                update_data["masterUnit"] = data["masterUnit"]
-            if "masterToOuter" in data:
-                update_data["masterToOuter"] = float(data["masterToOuter"])
-            if "outerUnit" in data:
-                update_data["outerUnit"] = data["outerUnit"]
-            if "outerToNos" in data:
-                update_data["outerToNos"] = float(data["outerToNos"])
-            if "nosUnit" in data:
-                update_data["nosUnit"] = data["nosUnit"]
-            if "grams" in data:
-                update_data["grams"] = float(data["grams"])
-            if "suppliers" in data:
-                update_data["suppliers"] = data["suppliers"]
-            if any(key in update_data for key in ["masterToOuter", "outerToNos"]):
-                masterToOuter = update_data.get("masterToOuter", old_item["masterToOuter"])
-                outerToNos = update_data.get("outerToNos", old_item["outerToNos"])
-                update_data["conversionFactor"] = masterToOuter * outerToNos
-            result = purchase_items_collection.update_one({'_id': id}, {'$set': update_data})
-            if result.matched_count == 0:
-                return jsonify({'error': 'Item not found'}), 404
-            return jsonify({'message': 'Item updated successfully'}), 200
-        except ValueError:
-            return jsonify({'error': 'Invalid input data'}), 400
-        except Exception as e:
-            return jsonify({'error': f"Failed to update item: {str(e)}"}), 500
-    @app.route('/api/purchase_items/<id>', methods=['DELETE'])
-    @db_required
-    def delete_purchase_item(id):
-        try:
-            result = purchase_items_collection.delete_one({'_id': id})
-            if result.deleted_count == 0:
-                return jsonify({'error': 'Item not found'}), 404
-            return jsonify({'message': 'Item deleted successfully'}), 200
-        except Exception as e:
-            return jsonify({'error': f"Failed to delete item: {str(e)}"}), 500
-    @app.route('/api/suppliers', methods=['GET'])
-    @db_required
-    def get_suppliers():
-        try:
-            suppliers = suppliers_collection.find()
-            return jsonify(convert_objectid_to_str(suppliers)), 200
-        except Exception as e:
-            return jsonify({'error': f"Failed to fetch suppliers: {str(e)}"}), 500
-    @app.route('/api/suppliers', methods=['POST'])
-    @db_required
-    def add_supplier():
-        try:
-            data = request.json
-            supplier = {
-                'company': data.get('company', ''),
-                'code': data.get('code', ''),
-                'supplier_names': data.get('supplier_names', []),
-                'group': data.get('group', ''),
-                'country': data.get('country', ''),
-                'currency': data.get('currency', ''),
-                'taxId': data.get('taxId', ''),
-                'taxCategory': data.get('taxCategory', ''),
-                'taxWithholdingCategory': data.get('taxWithholdingCategory', ''),
-                'contacts': data.get('contacts', []),
-                'paymentMode': data.get('paymentMode', ''),
-                'paymentTerms': data.get('paymentTerms', ''),
-                'creditLimit': float(data.get('creditLimit', 0)),
-                'paymentTermsOverride': data.get('paymentTermsOverride', ''),
-                'bankDetails': data.get('bankDetails', ''),
-                'website': data.get('website', ''),
-                'onTimeDelivery': float(data.get('onTimeDelivery', 0)),
-                'defectRate': float(data.get('defectRate', 0)),
-                'lastPurchaseDate': data.get('lastPurchaseDate', None),
-                'lastPurchaseValue': float(data.get('lastPurchaseValue', 0)),
-                'created_at': datetime.now(timezone.utc).isoformat()
-            }
-            result = suppliers_collection.insert_one(supplier)
-            inserted_supplier = suppliers_collection.find_one({'_id': result.inserted_id})
-            return jsonify(convert_objectid_to_str(inserted_supplier)), 201
-        except Exception as e:
-            return jsonify({'error': f"Failed to add supplier: {str(e)}"}), 500
-    @app.route('/api/suppliers/<id>', methods=['PUT'])
-    @db_required
-    def update_supplier(id):
-        try:
-            data = request.json
-            if not data:
-                return jsonify({'error': 'No data provided'}), 400
-            update_fields = {}
-            fields = [
-                'company', 'code', 'supplier_names', 'group', 'country', 'currency',
-                'taxId', 'taxCategory', 'taxWithholdingCategory', 'contacts',
-                'paymentMode', 'paymentTerms', 'creditLimit', 'paymentTermsOverride',
-                'bankDetails', 'website', 'onTimeDelivery', 'defectRate',
-                'lastPurchaseDate', 'lastPurchaseValue'
-            ]
-            for field in fields:
-                if field in data:
-                    if field in ['creditLimit', 'onTimeDelivery', 'defectRate', 'lastPurchaseValue']:
-                        update_fields[field] = float(data[field])
-                    else:
-                        update_fields[field] = data[field]
-            result = suppliers_collection.update_one({'_id': id}, {'$set': update_fields})
-            if result.matched_count == 0:
-                return jsonify({'error': 'Supplier not found'}), 404
-            return jsonify({'message': 'Supplier updated successfully'}), 200
-        except ValueError:
-            return jsonify({'error': 'Invalid input data'}), 400
-        except Exception as e:
-            return jsonify({'error': f"Failed to update supplier: {str(e)}"}), 500
-    @app.route('/api/suppliers/<id>', methods=['DELETE'])
-    @db_required
-    def delete_supplier(id):
-        try:
-            result = suppliers_collection.delete_one({'_id': id})
-            if result.deleted_count == 0:
-                return jsonify({'error': 'Supplier not found'}), 404
-            return jsonify({'message': 'Supplier deleted successfully'}), 200
-        except Exception as e:
-            return jsonify({'error': f"Failed to delete supplier: {str(e)}"}), 500
-    @app.route('/api/purchase_orders', methods=['GET'])
-    @db_required
-    def get_purchase_orders():
-        try:
-            orders = purchase_orders_collection.find()
-            return jsonify(convert_objectid_to_str(orders)), 200
-        except Exception as e:
-            return jsonify({'error': f"Failed to fetch purchase orders: {str(e)}"}), 500
-    @app.route('/api/purchase_orders', methods=['POST'])
-    @db_required
-    def add_purchase_order():
-        try:
-            data = request.json
-            required_fields = ['series', 'date', 'company', 'supplierId', 'name', 'supplierCompany', 'supplierCode', 'supplierGroup', 'supplierCode', 'supplierGroup', 'supplierCode', 'supplierGroup', 'address', 'phone', 'email', 'currency', 'items', 'taxes', 'subtotal', 'totalQuantity', 'totalTaxes', 'grandTotal', 'status']
-            if not all(key in data for key in required_fields):
-                return jsonify({'error': 'Missing required fields'}), 400
-            if purchase_orders_collection.find_one({'series': data['series'] }):
-                return jsonify({'error': 'Series already exists'}), 400
-            supplier = suppliers_collection.find_one({'_id': data['supplierId']})
-            if not supplier:
-                return jsonify({'error': 'Supplier not found'}), 404
-            items = []
-            for item_data in data['items']:
-                item_doc = purchase_items_collection.find_one({'_id': item_data['itemId']})
-                if not item_doc:
-                    return jsonify({'error': f"Item {item_data['itemId']} not found"}), 404
-                items.append({
-                    'itemId': item_data['itemId'],
-                    'quantity': float(item_data['quantity']),
-                    'uom': item_data['uom'],
-                    'rate': float(item_data.get('rate', 0)),
-                    'amount': float(item_data.get('amount', 0))
-                })
-            order = {
-                'series': data['series'],
-                'date': datetime.fromisoformat(str(data['date']).replace('Z', '+00:00')),
-                'company': data['company'],
-                'supplierId': data['supplierId'],
-                'name': data['name'],
-                'supplierCompany': data['supplierCompany'],
-                'supplierCode': data.get('supplierCode', ''),
-                'supplierGroup': data.get('supplierGroup', ''),
-                'supplierCode': data.get('supplierCode', ''),
-                'supplierGroup': data.get('supplierGroup', ''),
-                'supplierCode': data.get('supplierCode', ''),
-                'supplierGroup': data.get('supplierGroup', ''),
-                'address': data['address'],
-                'phone': data['phone'],
-                'email': data['email'],
-                'currency': data['currency'],
-                'targetWarehouse': data.get('targetWarehouse', ''),
-                'items': items,
-                'taxes': data['taxes'],
-                'subtotal': float(data['subtotal']),
-                'totalQuantity': float(data['totalQuantity']),
-                'totalTaxes': float(data['totalTaxes']),
-                'grandTotal': float(data['grandTotal']),
-                'status': data['status'],
-                'created_at': datetime.now(timezone.utc).isoformat()
-            }
-            result = purchase_orders_collection.insert_one(order)
-            inserted_order = purchase_orders_collection.find_one({'_id': result.inserted_id})
-            return jsonify(convert_objectid_to_str(inserted_order)), 201
-        except ValueError as e:
-            return jsonify({'error': f"Invalid data format: {str(e)}"}), 400
-        except Exception as e:
-            return jsonify({'error': f"Failed to create purchase order: {str(e)}"}), 500
-    @app.route('/api/purchase_orders/<id>', methods=['PUT'])
-    @db_required
-    def update_purchase_order(id):
-        try:
-            data = request.json
-            if not data:
-                return jsonify({'error': 'No input data provided'}), 400
-            old_order = purchase_orders_collection.find_one({'_id': id})
-            if not old_order:
-                return jsonify({'error': 'Purchase Order not found'}), 404
-            update_data = {}
-            for field in ['series', 'date', 'company', 'supplierId', 'name', 'supplierCompany', 'supplierCode', 'supplierGroup', 'supplierCode', 'supplierGroup', 'supplierCode', 'supplierGroup', 'address', 'phone', 'email', 'currency', 'targetWarehouse', 'items', 'taxes', 'subtotal', 'totalQuantity', 'totalTaxes', 'grandTotal', 'status']:
-                if field in data:
-                    if field == 'date':
-                        update_data[field] = datetime.fromisoformat(str(data[field]).replace('Z', '+00:00'))
-                    elif field in ['subtotal', 'totalQuantity', 'totalTaxes', 'grandTotal']:
-                        update_data[field] = float(data[field])
-                    elif field == 'items':
-                        items = []
-                        for item_data in data[field]:
-                            items.append({
-                                'itemId': item_data['itemId'],
-                                'quantity': float(item_data['quantity']),
-                                'uom': item_data['uom'],
-                                'rate': float(item_data.get('rate', 0)),
-                                'amount': float(item_data.get('amount', 0))
-                            })
-                        update_data[field] = items
-                    else:
-                        update_data[field] = data[field]
-            if not update_data:
-                return jsonify({'error': 'No fields to update'}), 400
-            result = purchase_orders_collection.update_one({'_id': id}, {'$set': update_data})
-            if result.matched_count == 0:
-                return jsonify({'error': 'Purchase Order not found'}), 404
-            return jsonify({'message': 'Purchase Order updated successfully'}), 200
-        except ValueError as e:
-            return jsonify({'error': f"Invalid data format: {str(e)}"}), 400
-        except Exception as e:
-            return jsonify({'error': f"Failed to update purchase order: {str(e)}"}), 500
-    @app.route('/api/purchase_orders/<id>', methods=['DELETE'])
-    @db_required
-    def delete_purchase_order(id):
-        try:
-            result = purchase_orders_collection.delete_one({'_id': id})
-            if result.deleted_count == 0:
-                return jsonify({'error': 'Purchase Order not found'}), 404
-            return jsonify({'message': 'Purchase Order deleted successfully'}), 200
-        except Exception as e:
-            return jsonify({'error': f"Failed to delete purchase order: {str(e)}"}), 500
-    @app.route('/api/purchase_receipts', methods=['GET'])
-    @db_required
-    def get_purchase_receipts():
-        try:
-            receipts = purchase_receipts_collection.find()
-            return jsonify(convert_objectid_to_str(receipts)), 200
-        except Exception as e:
-            return jsonify({'error': f"Failed to fetch purchase receipts: {str(e)}"}), 500
-    @app.route('/api/purchase_receipts', methods=['POST'])
-    @db_required
-    def add_purchase_receipt():
-        try:
-            data = request.json
-            required_fields = ['series', 'date', 'poId', 'company', 'supplierId', 'name', 'supplierCompany', 'supplierCode', 'supplierGroup', 'supplierCode', 'supplierGroup', 'supplierCode', 'supplierGroup', 'address', 'phone', 'email', 'items', 'taxes', 'subtotal', 'totalTaxes', 'grandTotal', 'status']
-            if not all(key in data for key in required_fields):
-                return jsonify({'error': 'Missing required fields'}), 400
-            if purchase_receipts_collection.find_one({'series': data['series'] }):
-                return jsonify({'error': 'Series already exists'}), 400
-            po = purchase_orders_collection.find_one({'series': data['poId']})
-            if not po:
-                return jsonify({'error': 'Purchase Order not found'}), 404
-            items = []
-            for item_data in data['items']:
-                item_doc = purchase_items_collection.find_one({'_id': item_data['itemId']})
-                if not item_doc:
-                    return jsonify({'error': f"Item {item_data['itemId']} not found"}), 404
-                items.append({
-                    'itemId': item_data['itemId'],
-                    'originalQuantity': float(item_data['originalQuantity']),
-                    'acceptedQuantity': float(item_data['acceptedQuantity']),
-                    'rejectedQuantity': float(item_data['rejectedQuantity']),
-                    'rate': float(item_data.get('rate', 0)),
-                    'amount': float(item_data.get('amount', 0)),
-                    'unit': item_data['unit']
-                })
-            receipt = {
-                'series': data['series'],
-                'date': datetime.fromisoformat(str(data['date']).replace('Z', '+00:00')),
-                'poId': data['poId'],
-                'company': data['company'],
-                'supplierId': data['supplierId'],
-                'name': data['name'],
-                'supplierCompany': data['supplierCompany'],
-                'supplierCode': data.get('supplierCode', ''),
-                'supplierGroup': data.get('supplierGroup', ''),
-                'supplierCode': data.get('supplierCode', ''),
-                'supplierGroup': data.get('supplierGroup', ''),
-                'supplierCode': data.get('supplierCode', ''),
-                'supplierGroup': data.get('supplierGroup', ''),
-                'address': data['address'],
-                'phone': data['phone'],
-                'email': data['email'],
-                'currency': data['currency'],
-                'items': items,
-                'taxes': data['taxes'],
-                'subtotal': float(data['subtotal']),
-                'totalTaxes': float(data['totalTaxes']),
-                'grandTotal': float(data['grandTotal']),
-                'status': data['status'],
-                'created_at': datetime.now(timezone.utc).isoformat()
-            }
-            result = purchase_receipts_collection.insert_one(receipt)
-            inserted_receipt = purchase_receipts_collection.find_one({'_id': result.inserted_id})
-            if data['status'] == 'Submitted':
-                for item in items:
-                    item_obj = purchase_items_collection.find_one({'_id': item['itemId']})
-                    add_master = 0
-                    add_outer = 0
-                    add_nos = 0
-                    if item['unit'] == 'master':
-                        add_master = item['acceptedQuantity']
-                    elif item['unit'] == 'outer':
-                        add_outer = item['acceptedQuantity']
-                    elif item['unit'] == 'nos':
-                        add_nos = item['acceptedQuantity']
-                    total_added_in_nos = (add_master * item_obj['masterToOuter'] * item_obj['outerToNos']) + (add_outer * item_obj['outerToNos']) + add_nos
-                    purchase_items_collection.update_one(
-                        {'_id': item['itemId']},
-                        {'$inc': {
-                            'stockMaster': add_master,
-                            'stockOuter': add_outer,
-                            'stockNos': add_nos,
-                            'totalStock': total_added_in_nos,
-                            'totalPurchased': total_added_in_nos
-                        }}
-                    )
-            return jsonify(convert_objectid_to_str(inserted_receipt)), 201
-        except ValueError as e:
-            return jsonify({'error': f"Invalid data format: {str(e)}"}), 400
-        except Exception as e:
-            return jsonify({'error': f"Failed to create purchase receipt: {str(e)}"}), 500
-    @app.route('/api/purchase_receipts/<series>', methods=['PUT'])
-    @db_required
-    def update_purchase_receipt(series):
-        try:
-            data = request.json
-            if not data:
-                return jsonify({'error': 'No input data provided'}), 400
-            old_receipt = purchase_receipts_collection.find_one({'series': series})
-            if not old_receipt:
-                return jsonify({'error': 'Purchase Receipt not found'}), 404
-            was_submitted = old_receipt['status'] == 'Submitted'
-            new_status = data.get('status', old_receipt['status'])
-            if was_submitted and new_status == 'Submitted':
-                pass
-            elif was_submitted and new_status != 'Submitted':
-                for item in old_receipt['items']:
-                    item_obj = purchase_items_collection.find_one({'_id': item['itemId']})
-                    sub_master = 0
-                    sub_outer = 0
-                    sub_nos = 0
-                    if item['unit'] == 'master':
-                        sub_master = item['acceptedQuantity']
-                    elif item['unit'] == 'outer':
-                        sub_outer = item['acceptedQuantity']
-                    elif item['unit'] == 'nos':
-                        sub_nos = item['acceptedQuantity']
-                    total_sub_in_nos = (sub_master * item_obj['masterToOuter'] * item_obj['outerToNos']) + (sub_outer * item_obj['outerToNos']) + sub_nos
-                    purchase_items_collection.update_one(
-                        {'_id': item['itemId']},
-                        {'$inc': {
-                            'stockMaster': -sub_master,
-                            'stockOuter': -sub_outer,
-                            'stockNos': -sub_nos,
-                            'totalStock': -total_sub_in_nos,
-                            'totalPurchased': -total_sub_in_nos
-                        }}
-                    )
-            elif not was_submitted and new_status == 'Submitted':
-                items = data.get('items', old_receipt['items'])
-                for item in items:
-                    item_obj = purchase_items_collection.find_one({'_id': item['itemId']})
-                    add_master = 0
-                    add_outer = 0
-                    add_nos = 0
-                    if item['unit'] == 'master':
-                        add_master = item['acceptedQuantity']
-                    elif item['unit'] == 'outer':
-                        add_outer = item['acceptedQuantity']
-                    elif item['unit'] == 'nos':
-                        add_nos = item['acceptedQuantity']
-                    total_added_in_nos = (add_master * item_obj['masterToOuter'] * item_obj['outerToNos']) + (add_outer * item_obj['outerToNos']) + add_nos
-                    purchase_items_collection.update_one(
-                        {'_id': item['itemId']},
-                        {'$inc': {
-                            'stockMaster': add_master,
-                            'stockOuter': add_outer,
-                            'stockNos': add_nos,
-                            'totalStock': total_added_in_nos,
-                            'totalPurchased': total_added_in_nos
-                        }}
-                    )
-            update_fields = {}
-            for field in ['date', 'poId', 'company', 'supplierId', 'name', 'supplierCompany', 'supplierCode', 'supplierGroup', 'supplierCode', 'supplierGroup', 'supplierCode', 'supplierGroup', 'address', 'phone', 'email', 'currency', 'items', 'taxes', 'subtotal', 'totalTaxes', 'grandTotal', 'status']:
-                if field in data:
-                    if field == 'date':
-                        update_fields[field] = datetime.fromisoformat(str(data[field]).replace('Z', '+00:00'))
-                    elif field in ['subtotal', 'totalTaxes', 'grandTotal']:
-                        update_fields[field] = float(data[field])
-                    elif field == 'items':
-                        items = []
-                        for item_data in data[field]:
-                            items.append({
-                                'itemId': item_data['itemId'],
-                                'originalQuantity': float(item_data['originalQuantity']),
-                                'acceptedQuantity': float(item_data['acceptedQuantity']),
-                                'rejectedQuantity': float(item_data['rejectedQuantity']),
-                                'rate': float(item_data.get('rate', 0)),
-                                'amount': float(item_data.get('amount', 0)),
-                                'unit': item_data['unit']
-                            })
-                        update_fields[field] = items
-                    else:
-                        update_fields[field] = data[field]
-            if not update_fields:
-                return jsonify({'error': 'No fields to update'}), 400
-            result = purchase_receipts_collection.update_one({'series': series}, {'$set': update_fields})
-            if result.matched_count == 0:
-                return jsonify({'error': 'Purchase Receipt not found'}), 404
-            return jsonify({'message': 'Purchase Receipt updated successfully'}), 200
-        except ValueError as e:
-            return jsonify({'error': f"Invalid data format: {str(e)}"}), 400
-        except Exception as e:
-            return jsonify({'error': f"Failed to update purchase receipt: {str(e)}"}), 500
-    @app.route('/api/purchase_receipts/<series>', methods=['DELETE'])
-    @db_required
-    def delete_purchase_receipt(series):
-        try:
-            old_receipt = purchase_receipts_collection.find_one({'series': series})
-            if not old_receipt:
-                return jsonify({'error': 'Purchase Receipt not found'}), 404
-            if old_receipt['status'] == 'Submitted':
-                for item in old_receipt['items']:
-                    item_obj = purchase_items_collection.find_one({'_id': item['itemId']})
-                    sub_master = 0
-                    sub_outer = 0
-                    sub_nos = 0
-                    if item['unit'] == 'master':
-                        sub_master = item['acceptedQuantity']
-                    elif item['unit'] == 'outer':
-                        sub_outer = item['acceptedQuantity']
-                    elif item['unit'] == 'nos':
-                        sub_nos = item['acceptedQuantity']
-                    total_sub_in_nos = (sub_master * item_obj['masterToOuter'] * item_obj['outerToNos']) + (sub_outer * item_obj['outerToNos']) + sub_nos
-                    purchase_items_collection.update_one(
-                        {'_id': item['itemId']},
-                        {'$inc': {
-                            'stockMaster': -sub_master,
-                            'stockOuter': -sub_outer,
-                            'stockNos': -sub_nos,
-                            'totalStock': -total_sub_in_nos,
-                            'totalPurchased': -total_sub_in_nos
-                        }}
-                    )
-            result = purchase_receipts_collection.delete_one({'series': series})
-            if result.deleted_count == 0:
-                return jsonify({'error': 'Purchase Receipt not found'}), 404
-            return jsonify({'message': 'Purchase Receipt deleted successfully'}), 200
-        except Exception as e:
-            return jsonify({'error': f"Failed to delete purchase receipt: {str(e)}"}), 500
-    @app.route('/api/purchase_invoices', methods=['GET'])
-    @db_required
-    def get_purchase_invoices():
-        try:
-            invoices = purchase_invoices_collection.find()
-            return jsonify(convert_objectid_to_str(invoices)), 200
-        except Exception as e:
-            return jsonify({'error': f"Failed to fetch purchase invoices: {str(e)}"}), 500
-    @app.route('/api/purchase_invoices', methods=['POST'])
-    @db_required
-    def add_purchase_invoice():
-        try:
-            data = request.json
-            required_fields = ['series', 'date', 'company', 'supplierId', 'name', 'supplierCompany', 'supplierCode', 'supplierGroup', 'supplierCode', 'supplierGroup', 'supplierCode', 'supplierGroup', 'address', 'phone', 'email', 'poId', 'prId', 'currency', 'items', 'taxes', 'totalQuantity', 'subtotal', 'taxesAdded', 'grandTotal', 'status']
-            if not all(key in data for key in required_fields):
-                return jsonify({'error': 'Missing required fields'}), 400
-            if purchase_invoices_collection.find_one({'series': data['series'] }):
-                return jsonify({'error': 'Series already exists'}), 400
-            pr = purchase_receipts_collection.find_one({'series': data['prId']})
-            if not pr:
-                return jsonify({'error': 'Purchase Receipt not found'}), 404
-            items = []
-            for item_data in data['items']:
-                item_doc = purchase_items_collection.find_one({'_id': item_data['itemId']})
-                if not item_doc:
-                    return jsonify({'error': f"Item {item_data['itemId']} not found"}), 404
-                items.append({
-                    'itemId': item_data['itemId'],
-                    'acceptedQuantity': float(item_data['acceptedQuantity']),
-                    'rate': float(item_data.get('rate', 0)),
-                    'amount': float(item_data.get('amount', 0)),
-                    'unit': item_data['unit']
-                })
-            invoice = {
-                'series': data['series'],
-                'date': datetime.fromisoformat(str(data['date']).replace('Z', '+00:00')),
-                'company': data['company'],
-                'supplierId': data['supplierId'],
-                'name': data['name'],
-                'supplierCompany': data['supplierCompany'],
-                'supplierCode': data.get('supplierCode', ''),
-                'supplierGroup': data.get('supplierGroup', ''),
-                'supplierCode': data.get('supplierCode', ''),
-                'supplierGroup': data.get('supplierGroup', ''),
-                'supplierCode': data.get('supplierCode', ''),
-                'supplierGroup': data.get('supplierGroup', ''),
-                'address': data['address'],
-                'phone': data['phone'],
-                'email': data['email'],
-                'poId': data['poId'],
-                'prId': data['prId'],
-                'currency': data['currency'],
-                'items': items,
-                'taxes': data['taxes'],
-                'totalQuantity': float(data['totalQuantity']),
-                'subtotal': float(data['subtotal']),
-                'taxesAdded': float(data['taxesAdded']),
-                'grandTotal': float(data['grandTotal']),
-                'status': data['status'],
-                'created_at': datetime.now(timezone.utc).isoformat()
-            }
-            result = purchase_invoices_collection.insert_one(invoice)
-            inserted_invoice = purchase_invoices_collection.find_one({'_id': result.inserted_id})
-            if data['status'] == 'Submitted':
-                suppliers_collection.update_one(
-                    {'_id': data['supplierId']},
-                    {'$set': {
-                        'lastPurchaseDate': invoice['date'],
-                        'lastPurchaseValue': invoice['grandTotal']
+    # --- Purchase API Routes ---
+@app.route('/api/uoms', methods=['GET'])
+@db_required
+def get_uoms():
+    try:
+        uoms = uoms_collection.find()
+        return jsonify(convert_objectid_to_str(uoms)), 200
+    except Exception as e:
+        return jsonify({'error': f"Failed to fetch UOMs: {str(e)}"}), 500
+
+@app.route('/api/uoms', methods=['POST'])
+@db_required
+def add_uom():
+    try:
+        data = request.json
+        if not data or 'name' not in data or not data['name'].strip():
+            return jsonify({'error': 'Invalid UOM name'}), 400
+        if uoms_collection.find_one({'name': data['name']}):
+            return jsonify({'error': 'UOM already exists'}), 400
+        uom = {
+            'name': data['name'].strip(),
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }
+        result = uoms_collection.insert_one(uom)
+        inserted_uom = uoms_collection.find_one({'_id': result.inserted_id})
+        return jsonify(convert_objectid_to_str(inserted_uom)), 201
+    except Exception as e:
+        return jsonify({'error': f"Failed to add UOM: {str(e)}"}), 500
+
+@app.route('/api/uoms/<id>', methods=['PUT'])
+@db_required
+def update_uom(id):
+    try:
+        data = request.json
+        if not data or 'name' not in data or not data['name'].strip():
+            return jsonify({'error': 'Invalid UOM name'}), 400
+        existing = uoms_collection.find_one({'name': data['name'], '_id': {'$ne': id}})
+        if existing:
+            return jsonify({'error': 'UOM name already exists'}), 400
+        result = uoms_collection.update_one({'_id': id}, {'$set': {'name': data['name'].strip()}})
+        if result.matched_count == 0:
+            return jsonify({'error': 'UOM not found or no changes'}), 404
+        return jsonify({'message': 'UOM updated successfully'}), 200
+    except Exception as e:
+        return jsonify({'error': f"Failed to update UOM: {str(e)}"}), 500
+
+@app.route('/api/uoms/<id>', methods=['DELETE'])
+@db_required
+def delete_uom(id):
+    try:
+        result = uoms_collection.delete_one({'_id': id})
+        if result.deleted_count == 0:
+            return jsonify({'error': 'UOM not found'}), 404
+        return jsonify({'message': 'UOM deleted successfully'}), 200
+    except Exception as e:
+        return jsonify({'error': f"Failed to delete UOM: {str(e)}"}), 500
+
+@app.route('/api/purchase_items', methods=['GET'])
+@db_required
+def get_purchase_items():
+    try:
+        items = purchase_items_collection.find()
+        return jsonify(convert_objectid_to_str(items)), 200
+    except Exception as e:
+        return jsonify({'error': f"Failed to fetch items: {str(e)}"}), 500
+
+@app.route('/api/purchase_items', methods=['POST'])
+@db_required
+def add_purchase_item():
+    try:
+        data = request.json
+        required_fields = ['company', 'name', 'boxToMaster', 'masterUnit', 'masterToOuter', 'outerUnit', 'outerToNos', 'nosUnit']
+        if not all(key in data for key in required_fields):
+            return jsonify({'error': 'Missing required fields'}), 400
+        item = {
+            'company': data['company'],
+            'name': data['name'],
+            'boxToMaster': float(data['boxToMaster']),
+            'masterUnit': data['masterUnit'],
+            'masterToOuter': float(data['masterToOuter']),
+            'outerUnit': data['outerUnit'],
+            'outerToNos': float(data['outerToNos']),
+            'nosUnit': data['nosUnit'],
+            'conversionFactor': float(data['masterToOuter']) * float(data['outerToNos']),
+            'stockMaster': 0,
+            'stockOuter': 0,
+            'stockNos': 0,
+            'soldNos': 0,
+            'totalStock': 0,
+            'totalPurchased': 0,
+            'grams': float(data.get('grams', 0)),
+            'suppliers': data.get('suppliers', []),
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }
+        result = purchase_items_collection.insert_one(item)
+        inserted_item = purchase_items_collection.find_one({'_id': result.inserted_id})
+        return jsonify(convert_objectid_to_str(inserted_item)), 201
+    except ValueError:
+        return jsonify({'error': 'Invalid numeric value'}), 400
+    except Exception as e:
+        return jsonify({'error': f"Failed to add item: {str(e)}"}), 500
+
+@app.route('/api/purchase_items/<id>', methods=['PUT'])
+@db_required
+def update_purchase_item(id):
+    try:
+        data = request.json
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        old_item = purchase_items_collection.find_one({'_id': id})
+        if not old_item:
+            return jsonify({'error': 'Item not found'}), 404
+        update_data = {}
+        if "company" in data:
+            update_data["company"] = data["company"]
+        if "name" in data:
+            update_data["name"] = data["name"]
+        if "boxToMaster" in data:
+            update_data["boxToMaster"] = float(data["boxToMaster"])
+        if "masterUnit" in data:
+            update_data["masterUnit"] = data["masterUnit"]
+        if "masterToOuter" in data:
+            update_data["masterToOuter"] = float(data["masterToOuter"])
+        if "outerUnit" in data:
+            update_data["outerUnit"] = data["outerUnit"]
+        if "outerToNos" in data:
+            update_data["outerToNos"] = float(data["outerToNos"])
+        if "nosUnit" in data:
+            update_data["nosUnit"] = data["nosUnit"]
+        if "grams" in data:
+            update_data["grams"] = float(data["grams"])
+        if "suppliers" in data:
+            update_data["suppliers"] = data["suppliers"]
+        if any(key in update_data for key in ["masterToOuter", "outerToNos"]):
+            masterToOuter = update_data.get("masterToOuter", old_item["masterToOuter"])
+            outerToNos = update_data.get("outerToNos", old_item["outerToNos"])
+            update_data["conversionFactor"] = masterToOuter * outerToNos
+        result = purchase_items_collection.update_one({'_id': id}, {'$set': update_data})
+        if result.matched_count == 0:
+            return jsonify({'error': 'Item not found'}), 404
+        return jsonify({'message': 'Item updated successfully'}), 200
+    except ValueError:
+        return jsonify({'error': 'Invalid input data'}), 400
+    except Exception as e:
+        return jsonify({'error': f"Failed to update item: {str(e)}"}), 500
+
+@app.route('/api/purchase_items/<id>', methods=['DELETE'])
+@db_required
+def delete_purchase_item(id):
+    try:
+        result = purchase_items_collection.delete_one({'_id': id})
+        if result.deleted_count == 0:
+            return jsonify({'error': 'Item not found'}), 404
+        return jsonify({'message': 'Item deleted successfully'}), 200
+    except Exception as e:
+        return jsonify({'error': f"Failed to delete item: {str(e)}"}), 500
+
+@app.route('/api/suppliers', methods=['GET'])
+@db_required
+def get_suppliers():
+    try:
+        suppliers = suppliers_collection.find()
+        return jsonify(convert_objectid_to_str(suppliers)), 200
+    except Exception as e:
+        return jsonify({'error': f"Failed to fetch suppliers: {str(e)}"}), 500
+
+@app.route('/api/suppliers', methods=['POST'])
+@db_required
+def add_supplier():
+    try:
+        data = request.json
+        supplier = {
+            'company': data.get('company', ''),
+            'code': data.get('code', ''),
+            'supplier_names': data.get('supplier_names', []),
+            'group': data.get('group', ''),
+            'country': data.get('country', ''),
+            'currency': data.get('currency', ''),
+            'taxId': data.get('taxId', ''),
+            'taxCategory': data.get('taxCategory', ''),
+            'taxWithholdingCategory': data.get('taxWithholdingCategory', ''),
+            'contacts': data.get('contacts', []),
+            'paymentMode': data.get('paymentMode', ''),
+            'paymentTerms': data.get('paymentTerms', ''),
+            'creditLimit': float(data.get('creditLimit', 0)),
+            'paymentTermsOverride': data.get('paymentTermsOverride', ''),
+            'bankDetails': data.get('bankDetails', ''),
+            'website': data.get('website', ''),
+            'onTimeDelivery': float(data.get('onTimeDelivery', 0)),
+            'defectRate': float(data.get('defectRate', 0)),
+            'lastPurchaseDate': data.get('lastPurchaseDate', None),
+            'lastPurchaseValue': float(data.get('lastPurchaseValue', 0)),
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }
+        result = suppliers_collection.insert_one(supplier)
+        inserted_supplier = suppliers_collection.find_one({'_id': result.inserted_id})
+        return jsonify(convert_objectid_to_str(inserted_supplier)), 201
+    except Exception as e:
+        return jsonify({'error': f"Failed to add supplier: {str(e)}"}), 500
+
+@app.route('/api/suppliers/<id>', methods=['PUT'])
+@db_required
+def update_supplier(id):
+    try:
+        data = request.json
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        update_fields = {}
+        fields = [
+            'company', 'code', 'supplier_names', 'group', 'country', 'currency',
+            'taxId', 'taxCategory', 'taxWithholdingCategory', 'contacts',
+            'paymentMode', 'paymentTerms', 'creditLimit', 'paymentTermsOverride',
+            'bankDetails', 'website', 'onTimeDelivery', 'defectRate',
+            'lastPurchaseDate', 'lastPurchaseValue'
+        ]
+        for field in fields:
+            if field in data:
+                if field in ['creditLimit', 'onTimeDelivery', 'defectRate', 'lastPurchaseValue']:
+                    update_fields[field] = float(data[field])
+                else:
+                    update_fields[field] = data[field]
+        result = suppliers_collection.update_one({'_id': id}, {'$set': update_fields})
+        if result.matched_count == 0:
+            return jsonify({'error': 'Supplier not found'}), 404
+        return jsonify({'message': 'Supplier updated successfully'}), 200
+    except ValueError:
+        return jsonify({'error': 'Invalid input data'}), 400
+    except Exception as e:
+        return jsonify({'error': f"Failed to update supplier: {str(e)}"}), 500
+
+@app.route('/api/suppliers/<id>', methods=['DELETE'])
+@db_required
+def delete_supplier(id):
+    try:
+        result = suppliers_collection.delete_one({'_id': id})
+        if result.deleted_count == 0:
+            return jsonify({'error': 'Supplier not found'}), 404
+        return jsonify({'message': 'Supplier deleted successfully'}), 200
+    except Exception as e:
+        return jsonify({'error': f"Failed to delete supplier: {str(e)}"}), 500
+
+@app.route('/api/purchase_orders', methods=['GET'])
+@db_required
+def get_purchase_orders():
+    try:
+        orders = purchase_orders_collection.find()
+        return jsonify(convert_objectid_to_str(orders)), 200
+    except Exception as e:
+        return jsonify({'error': f"Failed to fetch purchase orders: {str(e)}"}), 500
+
+@app.route('/api/purchase_orders', methods=['POST'])
+@db_required
+def add_purchase_order():
+    try:
+        data = request.json
+        required_fields = ['series', 'date', 'company', 'supplierId', 'name', 'supplierCompany', 'supplierCode', 'supplierGroup', 'address', 'phone', 'email', 'currency', 'items', 'taxes', 'subtotal', 'totalQuantity', 'totalTaxes', 'grandTotal', 'status']
+        if not all(key in data for key in required_fields):
+            return jsonify({'error': 'Missing required fields'}), 400
+        if purchase_orders_collection.find_one({'series': data['series'] }):
+            return jsonify({'error': 'Series already exists'}), 400
+        supplier = suppliers_collection.find_one({'_id': data['supplierId']})
+        if not supplier:
+            return jsonify({'error': 'Supplier not found'}), 404
+        items = []
+        for item_data in data['items']:
+            item_doc = purchase_items_collection.find_one({'_id': item_data['itemId']})
+            if not item_doc:
+                return jsonify({'error': f"Item {item_data['itemId']} not found"}), 404
+            items.append({
+                'itemId': item_data['itemId'],
+                'quantity': float(item_data['quantity']),
+                'uom': item_data['uom'],
+                'rate': float(item_data.get('rate', 0)),
+                'amount': float(item_data.get('amount', 0))
+            })
+        order = {
+            'series': data['series'],
+            'date': datetime.fromisoformat(str(data['date']).replace('Z', '+00:00')),
+            'company': data['company'],
+            'supplierId': data['supplierId'],
+            'name': data['name'],
+            'supplierCompany': data['supplierCompany'],
+            'supplierCode': data.get('supplierCode', ''),
+            'supplierGroup': data.get('supplierGroup', ''),
+            'address': data['address'],
+            'phone': data['phone'],
+            'email': data['email'],
+            'currency': data['currency'],
+            'targetWarehouse': data.get('targetWarehouse', ''),
+            'items': items,
+            'taxes': data['taxes'],
+            'subtotal': float(data['subtotal']),
+            'totalQuantity': float(data['totalQuantity']),
+            'totalTaxes': float(data['totalTaxes']),
+            'grandTotal': float(data['grandTotal']),
+            'status': data['status'],
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }
+        result = purchase_orders_collection.insert_one(order)
+        inserted_order = purchase_orders_collection.find_one({'_id': result.inserted_id})
+        return jsonify(convert_objectid_to_str(inserted_order)), 201
+    except ValueError as e:
+        return jsonify({'error': f"Invalid data format: {str(e)}"}), 400
+    except Exception as e:
+        return jsonify({'error': f"Failed to create purchase order: {str(e)}"}), 500
+
+@app.route('/api/purchase_orders/<id>', methods=['PUT'])
+@db_required
+def update_purchase_order(id):
+    try:
+        data = request.json
+        if not data:
+            return jsonify({'error': 'No input data provided'}), 400
+        old_order = purchase_orders_collection.find_one({'_id': id})
+        if not old_order:
+            return jsonify({'error': 'Purchase Order not found'}), 404
+        update_data = {}
+        for field in ['series', 'date', 'company', 'supplierId', 'name', 'supplierCompany', 'supplierCode', 'supplierGroup', 'address', 'phone', 'email', 'currency', 'targetWarehouse', 'items', 'taxes', 'subtotal', 'totalQuantity', 'totalTaxes', 'grandTotal', 'status']:
+            if field in data:
+                if field == 'date':
+                    update_data[field] = datetime.fromisoformat(str(data[field]).replace('Z', '+00:00'))
+                elif field in ['subtotal', 'totalQuantity', 'totalTaxes', 'grandTotal']:
+                    update_data[field] = float(data[field])
+                elif field == 'items':
+                    items = []
+                    for item_data in data[field]:
+                        items.append({
+                            'itemId': item_data['itemId'],
+                            'quantity': float(item_data['quantity']),
+                            'uom': item_data['uom'],
+                            'rate': float(item_data.get('rate', 0)),
+                            'amount': float(item_data.get('amount', 0))
+                        })
+                    update_data[field] = items
+                else:
+                    update_data[field] = data[field]
+        if not update_data:
+            return jsonify({'error': 'No fields to update'}), 400
+        result = purchase_orders_collection.update_one({'_id': id}, {'$set': update_data})
+        if result.matched_count == 0:
+            return jsonify({'error': 'Purchase Order not found'}), 404
+        return jsonify({'message': 'Purchase Order updated successfully'}), 200
+    except ValueError as e:
+        return jsonify({'error': f"Invalid data format: {str(e)}"}), 400
+    except Exception as e:
+        return jsonify({'error': f"Failed to update purchase order: {str(e)}"}), 500
+
+@app.route('/api/purchase_orders/<id>', methods=['DELETE'])
+@db_required
+def delete_purchase_order(id):
+    try:
+        result = purchase_orders_collection.delete_one({'_id': id})
+        if result.deleted_count == 0:
+            return jsonify({'error': 'Purchase Order not found'}), 404
+        return jsonify({'message': 'Purchase Order deleted successfully'}), 200
+    except Exception as e:
+        return jsonify({'error': f"Failed to delete purchase order: {str(e)}"}), 500
+
+@app.route('/api/purchase_receipts', methods=['GET'])
+@db_required
+def get_purchase_receipts():
+    try:
+        receipts = purchase_receipts_collection.find()
+        return jsonify(convert_objectid_to_str(receipts)), 200
+    except Exception as e:
+        return jsonify({'error': f"Failed to fetch purchase receipts: {str(e)}"}), 500
+
+@app.route('/api/purchase_receipts', methods=['POST'])
+@db_required
+def add_purchase_receipt():
+    try:
+        data = request.json
+        required_fields = ['series', 'date', 'poId', 'company', 'supplierId', 'name', 'supplierCompany', 'supplierCode', 'supplierGroup', 'address', 'phone', 'email', 'items', 'taxes', 'subtotal', 'totalTaxes', 'grandTotal', 'status']
+        if not all(key in data for key in required_fields):
+            return jsonify({'error': 'Missing required fields'}), 400
+        if purchase_receipts_collection.find_one({'series': data['series'] }):
+            return jsonify({'error': 'Series already exists'}), 400
+        po = purchase_orders_collection.find_one({'series': data['poId']})
+        if not po:
+            return jsonify({'error': 'Purchase Order not found'}), 404
+        items = []
+        for item_data in data['items']:
+            item_doc = purchase_items_collection.find_one({'_id': item_data['itemId']})
+            if not item_doc:
+                return jsonify({'error': f"Item {item_data['itemId']} not found"}), 404
+            items.append({
+                'itemId': item_data['itemId'],
+                'originalQuantity': float(item_data['originalQuantity']),
+                'acceptedQuantity': float(item_data['acceptedQuantity']),
+                'rejectedQuantity': float(item_data['rejectedQuantity']),
+                'rate': float(item_data.get('rate', 0)),
+                'amount': float(item_data.get('amount', 0)),
+                'unit': item_data['unit']
+            })
+        receipt = {
+            'series': data['series'],
+            'date': datetime.fromisoformat(str(data['date']).replace('Z', '+00:00')),
+            'poId': data['poId'],
+            'company': data['company'],
+            'supplierId': data['supplierId'],
+            'name': data['name'],
+            'supplierCompany': data['supplierCompany'],
+            'supplierCode': data.get('supplierCode', ''),
+            'supplierGroup': data.get('supplierGroup', ''),
+            'address': data['address'],
+            'phone': data['phone'],
+            'email': data['email'],
+            'currency': data['currency'],
+            'items': items,
+            'taxes': data['taxes'],
+            'subtotal': float(data['subtotal']),
+            'totalTaxes': float(data['totalTaxes']),
+            'grandTotal': float(data['grandTotal']),
+            'status': data['status'],
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }
+        result = purchase_receipts_collection.insert_one(receipt)
+        inserted_receipt = purchase_receipts_collection.find_one({'_id': result.inserted_id})
+        if data['status'] == 'Submitted':
+            for item in items:
+                item_obj = purchase_items_collection.find_one({'_id': item['itemId']})
+                add_master = 0
+                add_outer = 0
+                add_nos = 0
+                if item['unit'] == 'master':
+                    add_master = item['acceptedQuantity']
+                elif item['unit'] == 'outer':
+                    add_outer = item['acceptedQuantity']
+                elif item['unit'] == 'nos':
+                    add_nos = item['acceptedQuantity']
+                total_added_in_nos = (add_master * item_obj['masterToOuter'] * item_obj['outerToNos']) + (add_outer * item_obj['outerToNos']) + add_nos
+                purchase_items_collection.update_one(
+                    {'_id': item['itemId']},
+                    {'$inc': {
+                        'stockMaster': add_master,
+                        'stockOuter': add_outer,
+                        'stockNos': add_nos,
+                        'totalStock': total_added_in_nos,
+                        'totalPurchased': total_added_in_nos
                     }}
                 )
-            return jsonify(convert_objectid_to_str(inserted_invoice)), 201
-        except ValueError as e:
-            return jsonify({'error': f"Invalid data format: {str(e)}"}), 400
-        except Exception as e:
-            return jsonify({'error': f"Failed to create purchase invoice: {str(e)}"}), 500
-    @app.route('/api/purchase_invoices/<series>', methods=['PUT'])
-    @db_required
-    def update_purchase_invoice(series):
-        try:
-            data = request.json
-            if not data:
-                return jsonify({'error': 'No input data provided'}), 400
-            old_invoice = purchase_invoices_collection.find_one({'series': series})
-            if not old_invoice:
-                return jsonify({'error': 'Purchase Invoice not found'}), 404
-            update_fields = {}
-            for field in ['date', 'company', 'supplierId', 'name', 'supplierCompany', 'supplierCode', 'supplierGroup', 'supplierCode', 'supplierGroup', 'supplierCode', 'supplierGroup', 'address', 'phone', 'email', 'poId', 'prId', 'currency', 'items', 'taxes', 'totalQuantity', 'subtotal', 'taxesAdded', 'grandTotal', 'status']:
-                if field in data:
-                    if field == 'date':
-                        update_fields[field] = datetime.fromisoformat(str(data[field]).replace('Z', '+00:00'))
-                    elif field in ['totalQuantity', 'subtotal', 'taxesAdded', 'grandTotal']:
-                        update_fields[field] = float(data[field])
-                    elif field == 'items':
-                        items = []
-                        for item_data in data[field]:
-                            items.append({
-                                'itemId': item_data['itemId'],
-                                'acceptedQuantity': float(item_data['acceptedQuantity']),
-                                'rate': float(item_data.get('rate', 0)),
-                                'amount': float(item_data.get('amount', 0)),
-                                'unit': item_data['unit']
-                            })
-                        update_fields[field] = items
-                    else:
-                        update_fields[field] = data[field]
-            if not update_fields:
-                return jsonify({'error': 'No fields to update'}), 400
-            result = purchase_invoices_collection.update_one({'series': series}, {'$set': update_fields})
-            if result.matched_count == 0:
-                return jsonify({'error': 'Purchase Invoice not found'}), 404
-            new_status = data.get('status', old_invoice['status'])
-            supplier_id = data.get('supplierId', old_invoice.get('supplierId'))
-            if new_status == 'Submitted' and supplier_id:
-                suppliers_collection.update_one(
-                    {'_id': supplier_id},
-                    {'$set': {
-                        'lastPurchaseDate': data.get('date', old_invoice['date']),
-                        'lastPurchaseValue': float(data.get('grandTotal', old_invoice['grandTotal']))
+        return jsonify(convert_objectid_to_str(inserted_receipt)), 201
+    except ValueError as e:
+        return jsonify({'error': f"Invalid data format: {str(e)}"}), 400
+    except Exception as e:
+        return jsonify({'error': f"Failed to create purchase receipt: {str(e)}"}), 500
+
+@app.route('/api/purchase_receipts/<series>', methods=['PUT'])
+@db_required
+def update_purchase_receipt(series):
+    try:
+        data = request.json
+        if not data:
+            return jsonify({'error': 'No input data provided'}), 400
+        old_receipt = purchase_receipts_collection.find_one({'series': series})
+        if not old_receipt:
+            return jsonify({'error': 'Purchase Receipt not found'}), 404
+        was_submitted = old_receipt['status'] == 'Submitted'
+        new_status = data.get('status', old_receipt['status'])
+        if was_submitted and new_status == 'Submitted':
+            pass
+        elif was_submitted and new_status != 'Submitted':
+            for item in old_receipt['items']:
+                item_obj = purchase_items_collection.find_one({'_id': item['itemId']})
+                sub_master = 0
+                sub_outer = 0
+                sub_nos = 0
+                if item['unit'] == 'master':
+                    sub_master = item['acceptedQuantity']
+                elif item['unit'] == 'outer':
+                    sub_outer = item['acceptedQuantity']
+                elif item['unit'] == 'nos':
+                    sub_nos = item['acceptedQuantity']
+                total_sub_in_nos = (sub_master * item_obj['masterToOuter'] * item_obj['outerToNos']) + (sub_outer * item_obj['outerToNos']) + sub_nos
+                purchase_items_collection.update_one(
+                    {'_id': item['itemId']},
+                    {'$inc': {
+                        'stockMaster': -sub_master,
+                        'stockOuter': -sub_outer,
+                        'stockNos': -sub_nos,
+                        'totalStock': -total_sub_in_nos,
+                        'totalPurchased': -total_sub_in_nos
                     }}
                 )
-            return jsonify({'message': 'Purchase Invoice updated successfully'}), 200
-        except ValueError as e:
-            return jsonify({'error': f"Invalid data format: {str(e)}"}), 400
-        except Exception as e:
-            return jsonify({'error': f"Failed to update purchase invoice: {str(e)}"}), 500
-    @app.route('/api/purchase_invoices/<series>', methods=['DELETE'])
-    @db_required
-    def delete_purchase_invoice(series):
-        try:
-            result = purchase_invoices_collection.delete_one({'series': series})
-            if result.deleted_count == 0:
-                return jsonify({'error': 'Purchase Invoice not found'}), 404
-            return jsonify({'message': 'Purchase Invoice deleted successfully'}), 200
-        except Exception as e:
-            return jsonify({'error': f"Failed to delete purchase invoice: {str(e)}"}), 500
-    @app.route('/api/purchase_sales', methods=['GET'])
-    @db_required
-    def get_purchase_sales():
-        try:
-            sales = purchase_sales_collection.find()
-            return jsonify(convert_objectid_to_str(sales)), 200
-        except Exception as e:
-            return jsonify({'error': f"Failed to fetch sales: {str(e)}"}), 500
-    @app.route('/api/purchase_sales', methods=['POST'])
-    @db_required
-    def add_purchase_sale():
-        try:
-            data = request.json
-            required_fields = ['itemId', 'quantity']
-            if not all(key in data for key in required_fields):
-                return jsonify({'error': 'Missing required fields'}), 400
-            item = purchase_items_collection.find_one({'_id': data['itemId']})
-            if not item:
-                return jsonify({'error': 'Item not found'}), 404
-            quantity = float(data['quantity'])
-            if quantity > item['totalStock']:
-                return jsonify({'error': 'Insufficient stock'}), 400
-            sale = {
-                'itemId': data['itemId'],
-                'quantity': quantity,
-                'date': datetime.now(timezone.utc).isoformat(),
-                'created_at': datetime.now(timezone.utc).isoformat()
-            }
-            result = purchase_sales_collection.insert_one(sale)
-            purchase_items_collection.update_one(
-                {'_id': data['itemId']},
-                {'$inc': {
-                    'soldNos': quantity,
-                    'totalStock': -quantity
+        elif not was_submitted and new_status == 'Submitted':
+            items = data.get('items', old_receipt['items'])
+            for item in items:
+                item_obj = purchase_items_collection.find_one({'_id': item['itemId']})
+                add_master = 0
+                add_outer = 0
+                add_nos = 0
+                if item['unit'] == 'master':
+                    add_master = item['acceptedQuantity']
+                elif item['unit'] == 'outer':
+                    add_outer = item['acceptedQuantity']
+                elif item['unit'] == 'nos':
+                    add_nos = item['acceptedQuantity']
+                total_added_in_nos = (add_master * item_obj['masterToOuter'] * item_obj['outerToNos']) + (add_outer * item_obj['outerToNos']) + add_nos
+                purchase_items_collection.update_one(
+                    {'_id': item['itemId']},
+                    {'$inc': {
+                        'stockMaster': add_master,
+                        'stockOuter': add_outer,
+                        'stockNos': add_nos,
+                        'totalStock': total_added_in_nos,
+                        'totalPurchased': total_added_in_nos
+                    }}
+                )
+        update_fields = {}
+        for field in ['date', 'poId', 'company', 'supplierId', 'name', 'supplierCompany', 'supplierCode', 'supplierGroup', 'address', 'phone', 'email', 'currency', 'items', 'taxes', 'subtotal', 'totalTaxes', 'grandTotal', 'status']:
+            if field in data:
+                if field == 'date':
+                    update_fields[field] = datetime.fromisoformat(str(data[field]).replace('Z', '+00:00'))
+                elif field in ['subtotal', 'totalTaxes', 'grandTotal']:
+                    update_fields[field] = float(data[field])
+                elif field == 'items':
+                    items = []
+                    for item_data in data[field]:
+                        items.append({
+                            'itemId': item_data['itemId'],
+                            'originalQuantity': float(item_data['originalQuantity']),
+                            'acceptedQuantity': float(item_data['acceptedQuantity']),
+                            'rejectedQuantity': float(item_data['rejectedQuantity']),
+                            'rate': float(item_data.get('rate', 0)),
+                            'amount': float(item_data.get('amount', 0)),
+                            'unit': item_data['unit']
+                        })
+                    update_fields[field] = items
+                else:
+                    update_fields[field] = data[field]
+        if not update_fields:
+            return jsonify({'error': 'No fields to update'}), 400
+        result = purchase_receipts_collection.update_one({'series': series}, {'$set': update_fields})
+        if result.matched_count == 0:
+            return jsonify({'error': 'Purchase Receipt not found'}), 404
+        return jsonify({'message': 'Purchase Receipt updated successfully'}), 200
+    except ValueError as e:
+        return jsonify({'error': f"Invalid data format: {str(e)}"}), 400
+    except Exception as e:
+        return jsonify({'error': f"Failed to update purchase receipt: {str(e)}"}), 500
+
+@app.route('/api/purchase_receipts/<series>', methods=['DELETE'])
+@db_required
+def delete_purchase_receipt(series):
+    try:
+        old_receipt = purchase_receipts_collection.find_one({'series': series})
+        if not old_receipt:
+            return jsonify({'error': 'Purchase Receipt not found'}), 404
+        if old_receipt['status'] == 'Submitted':
+            for item in old_receipt['items']:
+                item_obj = purchase_items_collection.find_one({'_id': item['itemId']})
+                sub_master = 0
+                sub_outer = 0
+                sub_nos = 0
+                if item['unit'] == 'master':
+                    sub_master = item['acceptedQuantity']
+                elif item['unit'] == 'outer':
+                    sub_outer = item['acceptedQuantity']
+                elif item['unit'] == 'nos':
+                    sub_nos = item['acceptedQuantity']
+                total_sub_in_nos = (sub_master * item_obj['masterToOuter'] * item_obj['outerToNos']) + (sub_outer * item_obj['outerToNos']) + sub_nos
+                purchase_items_collection.update_one(
+                    {'_id': item['itemId']},
+                    {'$inc': {
+                        'stockMaster': -sub_master,
+                        'stockOuter': -sub_outer,
+                        'stockNos': -sub_nos,
+                        'totalStock': -total_sub_in_nos,
+                        'totalPurchased': -total_sub_in_nos
+                    }}
+                )
+        result = purchase_receipts_collection.delete_one({'series': series})
+        if result.deleted_count == 0:
+            return jsonify({'error': 'Purchase Receipt not found'}), 404
+        return jsonify({'message': 'Purchase Receipt deleted successfully'}), 200
+    except Exception as e:
+        return jsonify({'error': f"Failed to delete purchase receipt: {str(e)}"}), 500
+
+@app.route('/api/purchase_invoices', methods=['GET'])
+@db_required
+def get_purchase_invoices():
+    try:
+        invoices = purchase_invoices_collection.find()
+        return jsonify(convert_objectid_to_str(invoices)), 200
+    except Exception as e:
+        return jsonify({'error': f"Failed to fetch purchase invoices: {str(e)}"}), 500
+
+@app.route('/api/purchase_invoices', methods=['POST'])
+@db_required
+def add_purchase_invoice():
+    try:
+        data = request.json
+        required_fields = ['series', 'date', 'company', 'supplierId', 'name', 'supplierCompany', 'supplierCode', 'supplierGroup', 'address', 'phone', 'email', 'poId', 'prId', 'currency', 'items', 'taxes', 'totalQuantity', 'subtotal', 'taxesAdded', 'grandTotal', 'status']
+        if not all(key in data for key in required_fields):
+            return jsonify({'error': 'Missing required fields'}), 400
+        if purchase_invoices_collection.find_one({'series': data['series'] }):
+            return jsonify({'error': 'Series already exists'}), 400
+        pr = purchase_receipts_collection.find_one({'series': data['prId']})
+        if not pr:
+            return jsonify({'error': 'Purchase Receipt not found'}), 404
+        items = []
+        for item_data in data['items']:
+            item_doc = purchase_items_collection.find_one({'_id': item_data['itemId']})
+            if not item_doc:
+                return jsonify({'error': f"Item {item_data['itemId']} not found"}), 404
+            items.append({
+                'itemId': item_data['itemId'],
+                'acceptedQuantity': float(item_data['acceptedQuantity']),
+                'rate': float(item_data.get('rate', 0)),
+                'amount': float(item_data.get('amount', 0)),
+                'unit': item_data['unit']
+            })
+        invoice = {
+            'series': data['series'],
+            'date': datetime.fromisoformat(str(data['date']).replace('Z', '+00:00')),
+            'company': data['company'],
+            'supplierId': data['supplierId'],
+            'name': data['name'],
+            'supplierCompany': data['supplierCompany'],
+            'supplierCode': data.get('supplierCode', ''),
+            'supplierGroup': data.get('supplierGroup', ''),
+            'address': data['address'],
+            'phone': data['phone'],
+            'email': data['email'],
+            'poId': data['poId'],
+            'prId': data['prId'],
+            'currency': data['currency'],
+            'items': items,
+            'taxes': data['taxes'],
+            'totalQuantity': float(data['totalQuantity']),
+            'subtotal': float(data['subtotal']),
+            'taxesAdded': float(data['taxesAdded']),
+            'grandTotal': float(data['grandTotal']),
+            'status': data['status'],
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }
+        result = purchase_invoices_collection.insert_one(invoice)
+        inserted_invoice = purchase_invoices_collection.find_one({'_id': result.inserted_id})
+        if data['status'] == 'Submitted':
+            suppliers_collection.update_one(
+                {'_id': data['supplierId']},
+                {'$set': {
+                    'lastPurchaseDate': invoice['date'],
+                    'lastPurchaseValue': invoice['grandTotal']
                 }}
             )
-            inserted_sale = purchase_sales_collection.find_one({'_id': result.inserted_id})
-            return jsonify(convert_objectid_to_str(inserted_sale)), 201
-        except ValueError as e:
-            return jsonify({'error': f"Invalid data format: {str(e)}"}), 400
-        except Exception as e:
-            return jsonify({'error': f"Failed to record sale: {str(e)}"}), 500
-        
-    @app.route('/api/supplier_groups', methods=['GET'])
-    @db_required
-    def get_supplier_groups():
-        try:
-            groups = supplier_group_collection.find()
-            return jsonify(convert_objectid_to_str(groups)), 200
-        except Exception as e:
-            return jsonify({'error': f"Failed to fetch supplier groups: {str(e)}"}), 500
-    @app.route('/api/supplier_groups', methods=['POST'])
-    @db_required
-    def add_supplier_group():
-        try:
-            data = request.json
-            if not data or 'group_name' not in data or not data['group_name'].strip():
-                return jsonify({'error': 'Invalid group name'}), 400
-            if supplier_group_collection.find_one({'group_name': data['group_name']}):
-                return jsonify({'error': 'Group already exists'}), 400
-            group = {
-                'group_name': data['group_name'].strip(),
-                'created_at': datetime.now(timezone.utc).isoformat()
-            }
-            result = supplier_group_collection.insert_one(group)
-            inserted_group = supplier_group_collection.find_one({'_id': result.inserted_id})
-            return jsonify(convert_objectid_to_str(inserted_group)), 201
-        except Exception as e:
-            return jsonify({'error': f"Failed to add supplier group: {str(e)}"}), 500
-    @app.route('/api/supplier_groups/<id>', methods=['PUT'])
-    @db_required
-    def update_supplier_group(id):
-        try:
-            data = request.json
-            if not data or 'group_name' not in data or not data['group_name'].strip():
-                return jsonify({'error': 'Invalid group name'}), 400
-            existing = supplier_group_collection.find_one({'group_name': data['group_name'], '_id': {'$ne': id}})
-            if existing:
-                return jsonify({'error': 'Group name already exists'}), 400
-            result = supplier_group_collection.update_one({'_id': id}, {'$set': {'group_name': data['group_name'].strip()}})
-            if result.matched_count == 0:
-                return jsonify({'error': 'Group not found or no changes'}), 404
-            return jsonify({'message': 'Supplier group updated successfully'}), 200
-        except Exception as e:
-            return jsonify({'error': f"Failed to update supplier group: {str(e)}"}), 500
-    @app.route('/api/supplier_groups/<id>', methods=['DELETE'])
-    @db_required
-    def delete_supplier_group(id):
-        try:
-            result = supplier_group_collection.delete_one({'_id': id})
-            if result.deleted_count == 0:
-                return jsonify({'error': 'Group not found'}), 404
-            return jsonify({'message': 'Supplier group deleted successfully'}), 200
-        except Exception as e:
-            return jsonify({'error': f"Failed to delete supplier group: {str(e)}"}), 500
+        return jsonify(convert_objectid_to_str(inserted_invoice)), 201
+    except ValueError as e:
+        return jsonify({'error': f"Invalid data format: {str(e)}"}), 400
+    except Exception as e:
+        return jsonify({'error': f"Failed to create purchase invoice: {str(e)}"}), 500
+
+@app.route('/api/purchase_invoices/<series>', methods=['PUT'])
+@db_required
+def update_purchase_invoice(series):
+    try:
+        data = request.json
+        if not data:
+            return jsonify({'error': 'No input data provided'}), 400
+        old_invoice = purchase_invoices_collection.find_one({'series': series})
+        if not old_invoice:
+            return jsonify({'error': 'Purchase Invoice not found'}), 404
+        update_fields = {}
+        for field in ['date', 'company', 'supplierId', 'name', 'supplierCompany', 'supplierCode', 'supplierGroup', 'address', 'phone', 'email', 'poId', 'prId', 'currency', 'items', 'taxes', 'totalQuantity', 'subtotal', 'taxesAdded', 'grandTotal', 'status']:
+            if field in data:
+                if field == 'date':
+                    update_fields[field] = datetime.fromisoformat(str(data[field]).replace('Z', '+00:00'))
+                elif field in ['totalQuantity', 'subtotal', 'taxesAdded', 'grandTotal']:
+                    update_fields[field] = float(data[field])
+                elif field == 'items':
+                    items = []
+                    for item_data in data[field]:
+                        items.append({
+                            'itemId': item_data['itemId'],
+                            'acceptedQuantity': float(item_data['acceptedQuantity']),
+                            'rate': float(item_data.get('rate', 0)),
+                            'amount': float(item_data.get('amount', 0)),
+                            'unit': item_data['unit']
+                        })
+                    update_fields[field] = items
+                else:
+                    update_fields[field] = data[field]
+        if not update_fields:
+            return jsonify({'error': 'No fields to update'}), 400
+        result = purchase_invoices_collection.update_one({'series': series}, {'$set': update_fields})
+        if result.matched_count == 0:
+            return jsonify({'error': 'Purchase Invoice not found'}), 404
+        new_status = data.get('status', old_invoice['status'])
+        supplier_id = data.get('supplierId', old_invoice.get('supplierId'))
+        if new_status == 'Submitted' and supplier_id:
+            suppliers_collection.update_one(
+                {'_id': supplier_id},
+                {'$set': {
+                    'lastPurchaseDate': data.get('date', old_invoice['date']),
+                    'lastPurchaseValue': float(data.get('grandTotal', old_invoice['grandTotal']))
+                }}
+            )
+        return jsonify({'message': 'Purchase Invoice updated successfully'}), 200
+    except ValueError as e:
+        return jsonify({'error': f"Invalid data format: {str(e)}"}), 400
+    except Exception as e:
+        return jsonify({'error': f"Failed to update purchase invoice: {str(e)}"}), 500
+
+@app.route('/api/purchase_invoices/<series>', methods=['DELETE'])
+@db_required
+def delete_purchase_invoice(series):
+    try:
+        result = purchase_invoices_collection.delete_one({'series': series})
+        if result.deleted_count == 0:
+            return jsonify({'error': 'Purchase Invoice not found'}), 404
+        return jsonify({'message': 'Purchase Invoice deleted successfully'}), 200
+    except Exception as e:
+        return jsonify({'error': f"Failed to delete purchase invoice: {str(e)}"}), 500
+
+@app.route('/api/purchase_sales', methods=['GET'])
+@db_required
+def get_purchase_sales():
+    try:
+        sales = purchase_sales_collection.find()
+        return jsonify(convert_objectid_to_str(sales)), 200
+    except Exception as e:
+        return jsonify({'error': f"Failed to fetch sales: {str(e)}"}), 500
+
+@app.route('/api/purchase_sales', methods=['POST'])
+@db_required
+def add_purchase_sale():
+    try:
+        data = request.json
+        required_fields = ['itemId', 'quantity']
+        if not all(key in data for key in required_fields):
+            return jsonify({'error': 'Missing required fields'}), 400
+        item = purchase_items_collection.find_one({'_id': data['itemId']})
+        if not item:
+            return jsonify({'error': 'Item not found'}), 404
+        quantity = float(data['quantity'])
+        if quantity > item['totalStock']:
+            return jsonify({'error': 'Insufficient stock'}), 400
+        sale = {
+            'itemId': data['itemId'],
+            'quantity': quantity,
+            'date': datetime.now(timezone.utc).isoformat(),
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }
+        result = purchase_sales_collection.insert_one(sale)
+        purchase_items_collection.update_one(
+            {'_id': data['itemId']},
+            {'$inc': {
+                'soldNos': quantity,
+                'totalStock': -quantity
+            }}
+        )
+        inserted_sale = purchase_sales_collection.find_one({'_id': result.inserted_id})
+        return jsonify(convert_objectid_to_str(inserted_sale)), 201
+    except ValueError as e:
+        return jsonify({'error': f"Invalid data format: {str(e)}"}), 400
+    except Exception as e:
+        return jsonify({'error': f"Failed to record sale: {str(e)}"}), 500
+
+@app.route('/api/supplier_groups', methods=['GET'])
+@db_required
+def get_supplier_groups():
+    try:
+        groups = supplier_group_collection.find()
+        return jsonify(convert_objectid_to_str(groups)), 200
+    except Exception as e:
+        return jsonify({'error': f"Failed to fetch supplier groups: {str(e)}"}), 500
+
+@app.route('/api/supplier_groups', methods=['POST'])
+@db_required
+def add_supplier_group():
+    try:
+        data = request.json
+        if not data or 'group_name' not in data or not data['group_name'].strip():
+            return jsonify({'error': 'Invalid group name'}), 400
+        if supplier_group_collection.find_one({'group_name': data['group_name']}):
+            return jsonify({'error': 'Group already exists'}), 400
+        group = {
+            'group_name': data['group_name'].strip(),
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }
+        result = supplier_group_collection.insert_one(group)
+        inserted_group = supplier_group_collection.find_one({'_id': result.inserted_id})
+        return jsonify(convert_objectid_to_str(inserted_group)), 201
+    except Exception as e:
+        return jsonify({'error': f"Failed to add supplier group: {str(e)}"}), 500
+
+@app.route('/api/supplier_groups/<id>', methods=['PUT'])
+@db_required
+def update_supplier_group(id):
+    try:
+        data = request.json
+        if not data or 'group_name' not in data or not data['group_name'].strip():
+            return jsonify({'error': 'Invalid group name'}), 400
+        existing = supplier_group_collection.find_one({'group_name': data['group_name'], '_id': {'$ne': id}})
+        if existing:
+            return jsonify({'error': 'Group name already exists'}), 400
+        result = supplier_group_collection.update_one({'_id': id}, {'$set': {'group_name': data['group_name'].strip()}})
+        if result.matched_count == 0:
+            return jsonify({'error': 'Group not found or no changes'}), 404
+        return jsonify({'message': 'Supplier group updated successfully'}), 200
+    except Exception as e:
+        return jsonify({'error': f"Failed to update supplier group: {str(e)}"}), 500
+
+@app.route('/api/supplier_groups/<id>', methods=['DELETE'])
+@db_required
+def delete_supplier_group(id):
+    try:
+        result = supplier_group_collection.delete_one({'_id': id})
+        if result.deleted_count == 0:
+            return jsonify({'error': 'Group not found'}), 404
+        return jsonify({'message': 'Supplier group deleted successfully'}), 200
+    except Exception as e:
+        return jsonify({'error': f"Failed to delete supplier group: {str(e)}"}), 500
     @app.route('/api/print_settings/active', methods=['GET'])
     @db_required
     def get_active_print_settings():
