@@ -1,7 +1,7 @@
 // src/components/Form/schedulemaster.jsx
 // FULLY DETAILED: Shift Master page
 // Manages "shift_master" table via /api/schedules endpoint
-// UPDATED: Removed Department Logic (Global Shifts). 
+// UPDATED: Added "height: 100vh" and "overflowY: auto" to main container to ensure full page scrolling.
 // Data is ALWAYS stored as "HH:MM AM/PM" (12h format) for backend consistency.
 // The UI (both Inputs and Table) handles conversions dynamically based on toggle state.
 import React, { useState, useEffect, useRef } from 'react';
@@ -691,7 +691,7 @@ const ScheduleMaster = () => {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #ffffff 0%, #3498db 100%)', padding: '20px', position: 'relative' }}>
+    <div style={{ height: '100vh', overflowY: 'auto', background: 'linear-gradient(135deg, #ffffff 0%, #3498db 100%)', padding: '20px', position: 'relative' }}>
       <button onClick={() => navigate('/admin')} style={{ position: 'fixed', top: '20px', left: '20px', backgroundColor: 'transparent', border: '2px solid #3498db', color: '#3498db', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 20px', borderRadius: '50px', fontSize: '16px', fontWeight: '600', zIndex: 1001 }}>
         <FaArrowLeft /> Back to Admin
       </button>

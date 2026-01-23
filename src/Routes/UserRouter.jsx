@@ -73,6 +73,7 @@ import LeaveAllocation from "../components/Form/leaveallocation"; // leavealloca
 import LeaveApply from "../components/Form/leaveapply"; // New page we'll create
 import SalaryReceiptList from "../components/Form/salaryreceptlist";
 import VehicleManagement from "../components/Form/Vechilemanagement";
+import Roaster from "../components/Form/Roaster";
 const UserRouter = () => {
   return (
     <div className="min-h-screen bg-gray-100">
@@ -121,6 +122,8 @@ const UserRouter = () => {
         <Route path="/employee-departments" element={<EmployeeDepartment />} />
         {/* NEW: Vehicle Management Route (added under Employee routes) */}
         <Route path="/vehicle-management" element={<VehicleManagement />} />
+        {/* NEW: Roaster App Route */}
+        <Route path="/roaster" element={<Roaster />} />
         {/* NEW: Schedule Routes */}
         <Route path="/schedule-master" element={<ScheduleMaster />} />
         <Route path="/schedule-rule-master" element={<ScheduleRuleMaster />} />

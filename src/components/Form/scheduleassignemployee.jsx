@@ -653,11 +653,12 @@ const ScheduleAssignEmployee = () => {
 
   const getAvailableSubstitutes = (dateStr, department) => {
     return employees.filter(e => {
-      // 1. Same Department CHECK REMOVED: (Old: if (e.department !== department) return false;)
-
-      // 2. Exclude Current Employee
+      // Allow all employees EXCEPT:
+      // 1. Current Employee
       if (String(e.id || e._id) === String(formData.employee_id)) return false;
-      // 3. Exclude On Leave
+
+      // 2. On Provided Date check if they are on leave? 
+      // (Maybe we allow substituting even if on leave? No, likely not).
       const onLeave = leaves.some(l =>
         l.employee_id === (e.id || e._id) &&
         l.status === 'APPROVED' &&
@@ -665,13 +666,9 @@ const ScheduleAssignEmployee = () => {
         l.to_date >= dateStr
       );
       if (onLeave) return false;
-      // 4. Exclude Already Assigned
-      const isAssigned = assignments.some(a =>
-        String(a.employee_id) === String(e.id || e._id) &&
-        a.is_active &&
-        a.assigned_date <= dateStr
-      );
-      if (isAssigned) return false;
+
+      // 3. Allow if already assigned (we just show their shift in dropdown as handled below)
+      // So no filtering based on existing assignments.
 
       return true;
     });
@@ -863,7 +860,7 @@ const ScheduleAssignEmployee = () => {
   if (loading && !baseUrl) return <div style={{ padding: '50px', textAlign: 'center' }}>Initializing...</div>;
 
   return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #e0eaFC 0%, #cfdef3 100%)', padding: '20px' }}>
+    <div style={{ height: '100vh', overflowY: 'auto', background: 'linear-gradient(135deg, #e0eaFC 0%, #cfdef3 100%)', padding: '20px' }}>
       <button onClick={() => navigate('/admin')} style={{ ...buttonStyle, position: 'fixed', top: '20px', left: '20px', zIndex: 100 }}>
         <FaArrowLeft /> Back
       </button>
@@ -1075,11 +1072,26 @@ const ScheduleAssignEmployee = () => {
                       onChange={(e) => setModalData({ ...modalData, substitute_employee_id: e.target.value })}
                     >
                       <option value="">-- Select Substitute --</option>
-                      {availableSubstitutes.map(emp => (
-                        <option key={emp.id || emp._id} value={emp.id || emp._id}>
-                          {emp.name || emp.employeeName} ({emp.department || 'No Dept'})
-                        </option>
-                      ))}
+                      {availableSubstitutes.map(emp => {
+                        // Find basic shift info if any
+                        const existingAssign = assignments.find(a =>
+                          String(a.employee_id) === String(emp.id || emp._id) &&
+                          a.is_active &&
+                          a.assigned_date <= modalData.date
+                        );
+                        let shiftInfo = "Unassigned";
+                        if (existingAssign) {
+                          const sch = schedules.find(s => String(s._id) === String(existingAssign.schedule_id));
+                          const sh = sch ? shifts.find(sh => String(sh._id) === String(sch.shift_id)) : null;
+                          shiftInfo = sh ? sh.schedule_name : (sch ? sch.schedule_name : 'Assigned');
+                        }
+
+                        return (
+                          <option key={emp.id || emp._id} value={emp.id || emp._id}>
+                            {emp.name || emp.employeeName} - {shiftInfo} ({emp.department || 'No Dept'})
+                          </option>
+                        );
+                      })}
                     </select>
                     {availableSubstitutes.length === 0 && (
                       <p style={{ color: '#e74c3c', fontSize: '0.85rem', marginTop: '5px' }}>No available employees found.</p>

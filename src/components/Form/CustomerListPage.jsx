@@ -13,42 +13,306 @@ const parseMongoValue = (value) => {
 const displayValue = (value) => {
   return value ? String(value).trim() : 'N/A';
 };
-// Default address structure
-const defaultStructure = {
-  countries: {},
+// FULL COUNTRY DATA & ADDRESS HIERARCHY
+const countryAddressHierarchy = {
+  "Afghanistan": { field1: { label: "Province", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } },
+  "Albania": { field1: { label: "County", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Algeria": { field1: { label: "Province", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } },
+  "Andorra": { field1: { label: "Parish", values: [] }, field2: { label: "Area", values: [] }, field3: { label: "N/A", values: [] } },
+  "Angola": { field1: { label: "Province", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Antigua and Barbuda": { field1: { label: "Parish", values: [] }, field2: { label: "Area", values: [] }, field3: { label: "N/A", values: [] } },
+  "Argentina": { field1: { label: "Province", values: [] }, field2: { label: "Department", values: [] }, field3: { label: "Municipality", values: [] } },
+  "Armenia": { field1: { label: "Province", values: [] }, field2: { label: "Community", values: [] }, field3: { label: "Area", values: [] } },
+  "Australia": { field1: { label: "State/Territory", values: [] }, field2: { label: "Local Government Area", values: [] }, field3: { label: "Suburb", values: [] } },
+  "Austria": { field1: { label: "State", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Municipality", values: [] } },
+  "Azerbaijan": { field1: { label: "Economic Region", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } },
+  "Bahamas": { field1: { label: "District", values: [] }, field2: { label: "Area", values: [] }, field3: { label: "N/A", values: [] } },
+  "Bahrain": { field1: { label: "Governorate", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Bangladesh": { field1: { label: "Division", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Upazila", values: [] } },
+  "Barbados": { field1: { label: "Parish", values: [] }, field2: { label: "Area", values: [] }, field3: { label: "N/A", values: [] } },
+  "Belarus": { field1: { label: "Region", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } },
+  "Belgium": { field1: { label: "Region", values: [] }, field2: { label: "Province", values: [] }, field3: { label: "Municipality", values: [] } },
+  "Belize": { field1: { label: "District", values: [] }, field2: { label: "Town", values: [] }, field3: { label: "Area", values: [] } },
+  "Benin": { field1: { label: "Department", values: [] }, field2: { label: "Commune", values: [] }, field3: { label: "Area", values: [] } },
+  "Bhutan": { field1: { label: "District", values: [] }, field2: { label: "Gewog", values: [] }, field3: { label: "Village", values: [] } },
+  "Bolivia": { field1: { label: "Department", values: [] }, field2: { label: "Province", values: [] }, field3: { label: "Municipality", values: [] } },
+  "Bosnia and Herzegovina": { field1: { label: "Entity", values: [] }, field2: { label: "Canton", values: [] }, field3: { label: "Municipality", values: [] } },
+  "Botswana": { field1: { label: "District", values: [] }, field2: { label: "Sub-District", values: [] }, field3: { label: "Area", values: [] } },
+  "Brazil": { field1: { label: "State", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Neighborhood", values: [] } },
+  "Brunei": { field1: { label: "District", values: [] }, field2: { label: "Mukim", values: [] }, field3: { label: "Village", values: [] } },
+  "Bulgaria": { field1: { label: "Province", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Burkina Faso": { field1: { label: "Region", values: [] }, field2: { label: "Province", values: [] }, field3: { label: "Commune", values: [] } },
+  "Burundi": { field1: { label: "Province", values: [] }, field2: { label: "Commune", values: [] }, field3: { label: "Area", values: [] } },
+  "Cambodia": { field1: { label: "Province", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Commune", values: [] } },
+  "Cameroon": { field1: { label: "Region", values: [] }, field2: { label: "Division", values: [] }, field3: { label: "Sub-Division", values: [] } },
+  "Canada": { field1: { label: "Province/Territory", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Cape Verde": { field1: { label: "Municipality", values: [] }, field2: { label: "Area", values: [] }, field3: { label: "N/A", values: [] } },
+  "Central African Republic": { field1: { label: "Prefecture", values: [] }, field2: { label: "Sub-Prefecture", values: [] }, field3: { label: "Area", values: [] } },
+  "Chad": { field1: { label: "Province", values: [] }, field2: { label: "Department", values: [] }, field3: { label: "Area", values: [] } },
+  "Chile": { field1: { label: "Region", values: [] }, field2: { label: "Province", values: [] }, field3: { label: "Commune", values: [] } },
+  "China": { field1: { label: "Province", values: [] }, field2: { label: "Prefecture", values: [] }, field3: { label: "County", values: [] } },
+  "Colombia": { field1: { label: "Department", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Comoros": { field1: { label: "Island", values: [] }, field2: { label: "Prefecture", values: [] }, field3: { label: "Area", values: [] } },
+  "Costa Rica": { field1: { label: "Province", values: [] }, field2: { label: "Canton", values: [] }, field3: { label: "District", values: [] } },
+  "Croatia": { field1: { label: "County", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Cuba": { field1: { label: "Province", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Cyprus": { field1: { label: "District", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Czech Republic": { field1: { label: "Region", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Municipality", values: [] } },
+  "Denmark": { field1: { label: "Region", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Djibouti": { field1: { label: "Region", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } },
+  "Dominica": { field1: { label: "Parish", values: [] }, field2: { label: "Area", values: [] }, field3: { label: "N/A", values: [] } },
+  "Dominican Republic": { field1: { label: "Province", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Ecuador": { field1: { label: "Province", values: [] }, field2: { label: "Canton", values: [] }, field3: { label: "Parish", values: [] } },
+  "Egypt": { field1: { label: "Governorate", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } },
+  "El Salvador": { field1: { label: "Department", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Equatorial Guinea": { field1: { label: "Province", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } },
+  "Eritrea": { field1: { label: "Region", values: [] }, field2: { label: "Sub-Region", values: [] }, field3: { label: "Area", values: [] } },
+  "Estonia": { field1: { label: "County", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Eswatini": { field1: { label: "Region", values: [] }, field2: { label: "Inkhundla", values: [] }, field3: { label: "Area", values: [] } },
+  "Ethiopia": { field1: { label: "Region", values: [] }, field2: { label: "Zone", values: [] }, field3: { label: "Woreda", values: [] } },
+  "Fiji": { field1: { label: "Division", values: [] }, field2: { label: "Province", values: [] }, field3: { label: "District", values: [] } },
+  "Finland": { field1: { label: "Region", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "France": { field1: { label: "Region", values: [] }, field2: { label: "Department", values: [] }, field3: { label: "Commune", values: [] } },
+  "Gabon": { field1: { label: "Province", values: [] }, field2: { label: "Department", values: [] }, field3: { label: "Area", values: [] } },
+  "Gambia": { field1: { label: "Region", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } },
+  "Georgia": { field1: { label: "Region", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Germany": { field1: { label: "State", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Municipality", values: [] } },
+  "Ghana": { field1: { label: "Region", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } },
+  "Greece": { field1: { label: "Region", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Grenada": { field1: { label: "Parish", values: [] }, field2: { label: "Area", values: [] }, field3: { label: "N/A", values: [] } },
+  "Guatemala": { field1: { label: "Department", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Guinea": { field1: { label: "Region", values: [] }, field2: { label: "Prefecture", values: [] }, field3: { label: "Sub-Prefecture", values: [] } },
+  "Guinea-Bissau": { field1: { label: "Region", values: [] }, field2: { label: "Sector", values: [] }, field3: { label: "Area", values: [] } },
+  "Guyana": { field1: { label: "Region", values: [] }, field2: { label: "Neighborhood Council", values: [] }, field3: { label: "Area", values: [] } },
+  "Haiti": { field1: { label: "Department", values: [] }, field2: { label: "Arrondissement", values: [] }, field3: { label: "Commune", values: [] } },
+  "Honduras": { field1: { label: "Department", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Hungary": { field1: { label: "County", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Municipality", values: [] } },
+  "Iceland": { field1: { label: "Region", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "India": { field1: { label: "State/UT", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Taluk", values: [] } },
+  "Indonesia": { field1: { label: "Province", values: [] }, field2: { label: "Regency/City", values: [] }, field3: { label: "District", values: [] } },
+  "Iran": { field1: { label: "Province", values: [] }, field2: { label: "County", values: [] }, field3: { label: "District", values: [] } },
+  "Iraq": { field1: { label: "Governorate", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } },
+  "Ireland": { field1: { label: "County", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Israel": { field1: { label: "District", values: [] }, field2: { label: "Sub-District", values: [] }, field3: { label: "Area", values: [] } },
+  "Italy": { field1: { label: "Region", values: [] }, field2: { label: "Province", values: [] }, field3: { label: "Municipality", values: [] } },
+  "Jamaica": { field1: { label: "Parish", values: [] }, field2: { label: "Area", values: [] }, field3: { label: "N/A", values: [] } },
+  "Japan": { field1: { label: "Prefecture", values: [] }, field2: { label: "City/Ward", values: [] }, field3: { label: "District", values: [] } },
+  "Jordan": { field1: { label: "Governorate", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } },
+  "Kazakhstan": { field1: { label: "Region", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } },
+  "Kenya": { field1: { label: "County", values: [] }, field2: { label: "Sub-County", values: [] }, field3: { label: "Ward", values: [] } },
+  "Kiribati": { field1: { label: "Island", values: [] }, field2: { label: "Council", values: [] }, field3: { label: "Area", values: [] } },
+  "Kuwait": { field1: { label: "Governorate", values: [] }, field2: { label: "Area", values: [] }, field3: { label: "Block", values: [] } },
+  "Kyrgyzstan": { field1: { label: "Region", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } },
+  "Laos": { field1: { label: "Province", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Village", values: [] } },
+  "Latvia": { field1: { label: "Municipality", values: [] }, field2: { label: "Area", values: [] }, field3: { label: "N/A", values: [] } },
+  "Lebanon": { field1: { label: "Governorate", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } },
+  "Lesotho": { field1: { label: "District", values: [] }, field2: { label: "Community Council", values: [] }, field3: { label: "Area", values: [] } },
+  "Liberia": { field1: { label: "County", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } },
+  "Libya": { field1: { label: "District", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Liechtenstein": { field1: { label: "Municipality", values: [] }, field2: { label: "Area", values: [] }, field3: { label: "N/A", values: [] } },
+  "Lithuania": { field1: { label: "County", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Luxembourg": { field1: { label: "Canton", values: [] }, field2: { label: "Commune", values: [] }, field3: { label: "Area", values: [] } },
+  "Madagascar": { field1: { label: "Region", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Commune", values: [] } },
+  "Malawi": { field1: { label: "Region", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } },
+  "Malaysia": { field1: { label: "State", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Mukim", values: [] } },
+  "Maldives": { field1: { label: "Atoll", values: [] }, field2: { label: "Island", values: [] }, field3: { label: "Area", values: [] } },
+  "Mali": { field1: { label: "Region", values: [] }, field2: { label: "Cercle", values: [] }, field3: { label: "Commune", values: [] } },
+  "Malta": { field1: { label: "Region", values: [] }, field2: { label: "Local Council", values: [] }, field3: { label: "Area", values: [] } },
+  "Marshall Islands": { field1: { label: "Atoll", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Mauritania": { field1: { label: "Region", values: [] }, field2: { label: "Department", values: [] }, field3: { label: "Area", values: [] } },
+  "Mauritius": { field1: { label: "District", values: [] }, field2: { label: "Village", values: [] }, field3: { label: "Area", values: [] } },
+  "Mexico": { field1: { label: "State", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Locality", values: [] } },
+  "Micronesia": { field1: { label: "State", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Moldova": { field1: { label: "District", values: [] }, field2: { label: "Commune", values: [] }, field3: { label: "Area", values: [] } },
+  "Monaco": { field1: { label: "Commune", values: [] }, field2: { label: "Area", values: [] }, field3: { label: "N/A", values: [] } },
+  "Mongolia": { field1: { label: "Province", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Bag", values: [] } },
+  "Montenegro": { field1: { label: "Municipality", values: [] }, field2: { label: "Area", values: [] }, field3: { label: "N/A", values: [] } },
+  "Morocco": { field1: { label: "Region", values: [] }, field2: { label: "Province", values: [] }, field3: { label: "Commune", values: [] } },
+  "Mozambique": { field1: { label: "Province", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } },
+  "Myanmar": { field1: { label: "Region/State", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Township", values: [] } },
+  "Namibia": { field1: { label: "Region", values: [] }, field2: { label: "Constituency", values: [] }, field3: { label: "Area", values: [] } },
+  "Nauru": { field1: { label: "District", values: [] }, field2: { label: "Area", values: [] }, field3: { label: "N/A", values: [] } },
+  "Nepal": { field1: { label: "Province", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Municipality", values: [] } },
+  "Netherlands": { field1: { label: "Province", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "New Zealand": { field1: { label: "Region", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } },
+  "Nicaragua": { field1: { label: "Department", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Niger": { field1: { label: "Region", values: [] }, field2: { label: "Department", values: [] }, field3: { label: "Commune", values: [] } },
+  "Nigeria": { field1: { label: "State", values: [] }, field2: { label: "Local Government Area", values: [] }, field3: { label: "Ward", values: [] } },
+  "North Korea": { field1: { label: "Province", values: [] }, field2: { label: "County", values: [] }, field3: { label: "Area", values: [] } },
+  "North Macedonia": { field1: { label: "Municipality", values: [] }, field2: { label: "Area", values: [] }, field3: { label: "N/A", values: [] } },
+  "Norway": { field1: { label: "County", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Oman": { field1: { label: "Governorate", values: [] }, field2: { label: "Wilayat", values: [] }, field3: { label: "Area", values: [] } },
+  "Pakistan": { field1: { label: "Province", values: [] }, field2: { label: "Division", values: [] }, field3: { label: "District", values: [] } },
+  "Palau": { field1: { label: "State", values: [] }, field2: { label: "Area", values: [] }, field3: { label: "N/A", values: [] } },
+  "Panama": { field1: { label: "Province", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Corregimiento", values: [] } },
+  "Papua New Guinea": { field1: { label: "Province", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } },
+  "Paraguay": { field1: { label: "Department", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } },
+  "Peru": { field1: { label: "Region", values: [] }, field2: { label: "Province", values: [] }, field3: { label: "District", values: [] } },
+  "Philippines": { field1: { label: "Region", values: [] }, field2: { label: "Province", values: [] }, field3: { label: "City/Municipality", values: [] } },
+  "Poland": { field1: { label: "Voivodeship", values: [] }, field2: { label: "County", values: [] }, field3: { label: "Gmina", values: [] } },
+  "Portugal": { field1: { label: "District", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Parish", values: [] } },
+  "Qatar": { field1: { label: "Municipality", values: [] }, field2: { label: "Zone", values: [] }, field3: { label: "Area", values: [] } },
+  "Romania": { field1: { label: "County", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Russia": { field1: { label: "Federal Subject", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Municipality", values: [] } },
+  "Rwanda": { field1: { label: "Province", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Sector", values: [] } },
+  "Saint Lucia": { field1: { label: "District", values: [] }, field2: { label: "Area", values: [] }, field3: { label: "N/A", values: [] } },
+  "Samoa": { field1: { label: "District", values: [] }, field2: { label: "Village", values: [] }, field3: { label: "Area", values: [] } },
+  "San Marino": { field1: { label: "Municipality", values: [] }, field2: { label: "Area", values: [] }, field3: { label: "N/A", values: [] } },
+  "Saudi Arabia": { field1: { label: "Province", values: [] }, field2: { label: "Governorate", values: [] }, field3: { label: "Area", values: [] } },
+  "Senegal": { field1: { label: "Region", values: [] }, field2: { label: "Department", values: [] }, field3: { label: "Arrondissement", values: [] } },
+  "Serbia": { field1: { label: "District", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Seychelles": { field1: { label: "District", values: [] }, field2: { label: "Area", values: [] }, field3: { label: "N/A", values: [] } },
+  "Sierra Leone": { field1: { label: "Province", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } },
+  "Singapore": { field1: { label: "City-State", values: [] }, field2: { label: "N/A", values: [] }, field3: { label: "N/A", values: [] } },
+  "Slovakia": { field1: { label: "Region", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Municipality", values: [] } },
+  "Slovenia": { field1: { label: "Statistical Region", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Solomon Islands": { field1: { label: "Province", values: [] }, field2: { label: "Ward", values: [] }, field3: { label: "Area", values: [] } },
+  "Somalia": { field1: { label: "State", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } },
+  "South Africa": { field1: { label: "Province", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Municipality", values: [] } },
+  "South Korea": { field1: { label: "Province", values: [] }, field2: { label: "City/County", values: [] }, field3: { label: "District", values: [] } },
+  "South Sudan": { field1: { label: "State", values: [] }, field2: { label: "County", values: [] }, field3: { label: "Payam", values: [] } },
+  "Spain": { field1: { label: "Autonomous Community", values: [] }, field2: { label: "Province", values: [] }, field3: { label: "Municipality", values: [] } },
+  "Sri Lanka": { field1: { label: "Province", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Division", values: [] } },
+  "Sudan": { field1: { label: "State", values: [] }, field2: { label: "Locality", values: [] }, field3: { label: "Area", values: [] } },
+  "Suriname": { field1: { label: "District", values: [] }, field2: { label: "Resort", values: [] }, field3: { label: "Area", values: [] } },
+  "Sweden": { field1: { label: "County", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Switzerland": { field1: { label: "Canton", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Syria": { field1: { label: "Governorate", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } },
+  "Taiwan": { field1: { label: "County/City", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } },
+  "Tajikistan": { field1: { label: "Region", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } },
+  "Tanzania": { field1: { label: "Region", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Ward", values: [] } },
+  "Thailand": { field1: { label: "Province", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Sub-District", values: [] } },
+  "Togo": { field1: { label: "Region", values: [] }, field2: { label: "Prefecture", values: [] }, field3: { label: "Canton", values: [] } },
+  "Tonga": { field1: { label: "Division", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } },
+  "Trinidad and Tobago": { field1: { label: "Region", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Tunisia": { field1: { label: "Governorate", values: [] }, field2: { label: "Delegation", values: [] }, field3: { label: "Sector", values: [] } },
+  "Turkey": { field1: { label: "Province", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Neighborhood", values: [] } },
+  "Turkmenistan": { field1: { label: "Province", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } },
+  "Tuvalu": { field1: { label: "Island", values: [] }, field2: { label: "Area", values: [] }, field3: { label: "N/A", values: [] } },
+  "Uganda": { field1: { label: "Region", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Sub-County", values: [] } },
+  "Ukraine": { field1: { label: "Oblast", values: [] }, field2: { label: "Raion", values: [] }, field3: { label: "Hromada", values: [] } },
+  "United Arab Emirates": { field1: { label: "Emirate", values: [] }, field2: { label: "City", values: [] }, field3: { label: "Area", values: [] } },
+  "United Kingdom": { field1: { label: "Country", values: [] }, field2: { label: "County", values: [] }, field3: { label: "Borough", values: [] } },
+  "United States": { field1: { label: "State", values: [] }, field2: { label: "County", values: [] }, field3: { label: "City", values: [] } },
+  "Uruguay": { field1: { label: "Department", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Uzbekistan": { field1: { label: "Region", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } },
+  "Vanuatu": { field1: { label: "Province", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Area", values: [] } },
+  "Vatican City": { field1: { label: "None", values: [] }, field2: { label: "N/A", values: [] }, field3: { label: "N/A", values: [] } },
+  "Venezuela": { field1: { label: "State", values: [] }, field2: { label: "Municipality", values: [] }, field3: { label: "Parish", values: [] } },
+  "Vietnam": { field1: { label: "Province", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Commune", values: [] } },
+  "Yemen": { field1: { label: "Governorate", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } },
+  "Zambia": { field1: { label: "Province", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } },
+  "Zimbabwe": { field1: { label: "Province", values: [] }, field2: { label: "District", values: [] }, field3: { label: "Area", values: [] } }
 };
-// SearchableSelect Component (copied from CreateCustomerPage for consistency)
-const SearchableSelect = ({ options = [], value = '', onChange, placeholder }) => {
+
+// Helper: Get labels for fields based on country
+const getAddressLabels = (country, addressStructure) => {
+  // Use local hierarchy if structure is empty or country missing
+  const structure = (addressStructure?.countries && Object.keys(addressStructure.countries).length > 0)
+    ? addressStructure
+    : { countries: countryAddressHierarchy };
+
+  if (!country || !structure.countries[country]) {
+    return ["Region", "City", "Area", "Building"];
+  }
+  const countryData = structure.countries[country];
+  return [
+    countryData.field1?.label || "Region",
+    countryData.field2?.label || "City",
+    countryData.field3?.label || "Area",
+    countryData.field4?.label || "Building"
+  ];
+};
+
+// Helper: Get options (dropdown values) for a field
+const getOptionsForField = (field, country, addressStructure, linkedValues, parentValue = null) => {
+  // Use local hierarchy if structure is empty or country missing
+  const structure = (addressStructure?.countries && Object.keys(addressStructure.countries).length > 0)
+    ? addressStructure
+    : { countries: countryAddressHierarchy };
+
+  if (!country || !structure) return [];
+
+  const { countries } = structure;
+
+  // Level 1: Dependent only on Country
+  if (field === 'field1') {
+    return countries?.[country]?.field1?.values || [];
+  }
+
+  // Level 2: Dependent on Field 1 (parentValue)
+  if (field === 'field2') {
+    if (!parentValue) {
+      // Fallback: if no parent linked, show all generic values from hierarchy if available
+      return countries?.[country]?.field2?.values || [];
+    }
+    const linked = linkedValues?.[country]?.[parentValue]?.field2;
+    if (linked && Array.isArray(linked)) return linked;
+    // Fallback if no specific link found
+    return countries?.[country]?.field2?.values || [];
+  }
+
+  // Level 3: Dependent on Field 2 (parentValue)
+  if (field === 'field3') {
+    if (!parentValue) {
+      return countries?.[country]?.field3?.values || [];
+    }
+    const linked = linkedValues?.[country]?.[parentValue]?.field3;
+    if (linked && Array.isArray(linked)) return linked;
+    return countries?.[country]?.field3?.values || [];
+  }
+
+  return [];
+};
+
+// SearchableSelect Component (Enhanced with Create New)
+const SearchableSelect = ({ options = [], value = '', onChange, placeholder, allowCreateNew = false, onAddNewValue = null, createNewLabel = null, onCreateRequest = null }) => {
   const [search, setSearch] = useState(value || '');
   const [showList, setShowList] = useState(false);
+
   useEffect(() => {
     setSearch(value || '');
   }, [value]);
+
   const filteredOptions = options.filter(option =>
     option.toLowerCase().includes(search.toLowerCase())
   );
+
   const handleInputChange = (e) => {
     const newSearch = e.target.value;
     setSearch(newSearch);
-    if (!showList) {
-      setShowList(true);
-    }
+    if (!showList) setShowList(true);
   };
+
   const handleSelectOption = (option) => {
     setSearch(option);
-    if (onChange) {
-      onChange(option);
-    }
+    if (onChange) onChange(option);
     setShowList(false);
   };
-  const handleFocus = () => {
-    setShowList(true);
-  };
-  const handleBlur = () => {
-    setTimeout(() => {
+
+  const handleCreateNewOption = async () => {
+    if (onCreateRequest) {
+      onCreateRequest(search);
       setShowList(false);
-    }, 200);
+      return;
+    }
+    if (onAddNewValue) {
+      if (!search.trim()) {
+        setShowList(false);
+        return;
+      }
+      const success = await onAddNewValue(search);
+      if (success) {
+        setSearch(search);
+        if (onChange) onChange(search);
+        setShowList(false);
+      }
+    }
   };
+
+  const handleFocus = () => setShowList(true);
+  const handleBlur = () => setTimeout(() => setShowList(false), 200);
+
   return (
     <div className="searchable-select">
       <input
@@ -61,6 +325,33 @@ const SearchableSelect = ({ options = [], value = '', onChange, placeholder }) =
       />
       {showList && (
         <ul className="searchable-list">
+          {allowCreateNew && (onAddNewValue || onCreateRequest) && (
+            (() => {
+              const isExactMatch = filteredOptions.some(option => option.toLowerCase() === search.toLowerCase());
+              const hasSearch = !!search.trim();
+              if ((onCreateRequest && !isExactMatch) || (onAddNewValue && hasSearch && !isExactMatch)) {
+                let createText;
+                if (hasSearch) {
+                  createText = createNewLabel ? `Create New ${createNewLabel}: "${search.trim()}"` : `Create New: "${search.trim()}"`;
+                } else {
+                  createText = createNewLabel ? `Create New ${createNewLabel}` : `Create New`;
+                }
+                return (
+                  <li
+                    key="create-new"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleCreateNewOption();
+                    }}
+                    style={{ fontStyle: 'italic', color: '#007bff' }}
+                  >
+                    {createText}
+                  </li>
+                );
+              }
+              return null;
+            })()
+          )}
           {filteredOptions.length > 0 ? (
             filteredOptions.map((option, index) => (
               <li
@@ -74,7 +365,7 @@ const SearchableSelect = ({ options = [], value = '', onChange, placeholder }) =
               </li>
             ))
           ) : (
-            <li className="no-options">No matching options</li>
+            !allowCreateNew && <li className="no-options">No matching options</li>
           )}
         </ul>
       )}
@@ -137,14 +428,21 @@ const CustomerListPage = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [customerToDelete, setCustomerToDelete] = useState(null);
   const [customerGroups, setCustomerGroups] = useState([]);
-  const [addressStructure, setAddressStructure] = useState(defaultStructure);
+  const [addressStructure, setAddressStructure] = useState({ countries: countryAddressHierarchy });
   const [linkedValues, setLinkedValues] = useState({});
   const [showEditGroupDropdown, setShowEditGroupDropdown] = useState(false);
   const [showISDCodeDropdown, setShowISDCodeDropdown] = useState(false);
   const [showWhatsappISDCodeDropdown, setShowWhatsappISDCodeDropdown] = useState(false);
   const [selectedISDCode, setSelectedISDCode] = useState("+971");
   const [selectedWhatsappISDCode, setSelectedWhatsappISDCode] = useState("+971");
-  const [baseUrl, setBaseUrl] = useState(""); // NEW: Added baseUrl state like in AdminPage
+  const [baseUrl, setBaseUrl] = useState("");
+
+  // Dynamic Address State
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [modalField, setModalField] = useState('');
+  const [modalValue, setModalValue] = useState('');
+  const [modalOnSave, setModalOnSave] = useState(null);
+  const [modalOnChange, setModalOnChange] = useState(null);
   // Filter states for dynamic fields
   const [filterCountry, setFilterCountry] = useState("");
   const [filterField1, setFilterField1] = useState("");
@@ -234,19 +532,19 @@ const CustomerListPage = () => {
         throw new Error("Invalid data format: Expected an array");
       }
       const parsedData = data.map(customer =>
-        ({
-          ...customer,
-          phone_number: parseMongoValue(customer.phone_number),
-          whatsapp_number: parseMongoValue(customer.whatsapp_number),
-          email: parseMongoValue(customer.email),
-          customer_name: parseMongoValue(customer.customer_name),
-          building_name: parseMongoValue(customer.building_name),
-          flat_villa_no: parseMongoValue(customer.flat_villa_no),
-          country: parseMongoValue(customer.country),
-          field1: parseMongoValue(customer.field1),
-          field2: parseMongoValue(customer.field2),
-          field3: parseMongoValue(customer.field3),
-        })
+      ({
+        ...customer,
+        phone_number: parseMongoValue(customer.phone_number),
+        whatsapp_number: parseMongoValue(customer.whatsapp_number),
+        email: parseMongoValue(customer.email),
+        customer_name: parseMongoValue(customer.customer_name),
+        building_name: parseMongoValue(customer.building_name),
+        flat_villa_no: parseMongoValue(customer.flat_villa_no),
+        country: parseMongoValue(customer.country),
+        field1: parseMongoValue(customer.field1),
+        field2: parseMongoValue(customer.field2),
+        field3: parseMongoValue(customer.field3),
+      })
       );
       setCustomerList(parsedData);
       setFilteredCustomers(parsedData);
@@ -274,10 +572,16 @@ const CustomerListPage = () => {
     try {
       const response = await axios.get(`${currentBaseUrl}/api/address-structures`);
       const data = response.data;
-      setAddressStructure(data.structure || defaultStructure);
+
+      // Merge API data with local hierarchy to ensure integrity
+      const apiStructure = data.structure || {};
+      const mergedCountries = { ...countryAddressHierarchy, ...apiStructure.countries };
+
+      setAddressStructure({ countries: mergedCountries });
       setLinkedValues(data.linkedValues || {});
     } catch (error) {
       console.error('Error fetching address structure:', error);
+      // Fallback already used in initial state
     }
   };
   useEffect(() => {
@@ -429,13 +733,58 @@ const CustomerListPage = () => {
       setSelectedCustomer((prev) => ({ ...prev, field2: '', field3: '' }));
     }
   };
-  // Helper to get filtered values
-  const getFilteredValues = (field) => {
-    if (!selectedCustomer.country || !selectedCustomer.field1) return [];
-    const links = linkedValues[selectedCustomer.country]?.[selectedCustomer.field1];
-    return links?.[field] || [];
+  // Helper to get filtered values is now redundant with getOptionsForField but keeping for structure
+  const countryList = Object.keys(countryAddressHierarchy);
+
+  // Added Logic: Create New Value in Dropdown
+  const handleAddNewAddressValue = async (field, newValue, associatedCountry) => {
+    try {
+      await axios.post(`${baseUrl}/api/add-address-value`, {
+        country: associatedCountry,
+        field,
+        value: newValue,
+        parentValue: field === 'field2' ? selectedCustomer.field1 : (field === 'field3' ? selectedCustomer.field2 : null)
+      });
+
+      // Refresh structure to get new values
+      await fetchAddressStructure(baseUrl);
+      return true;
+    } catch (error) {
+      console.error('Error adding new address value:', error);
+      return false;
+    }
   };
-  const countryList = Object.keys(addressStructure.countries || {});
+
+  const handleOpenAddModal = (field, initialValue, associatedCountry, onSave = null, onChange = null) => {
+    setModalField(field);
+    setModalValue(initialValue);
+    setModalOnSave(() => onSave); // Wrap in function to avoid immediate execution
+    setModalOnChange(() => onChange);
+    setShowAddModal(true);
+  };
+
+  const handleSaveModal = async () => {
+    if (!modalValue.trim()) return;
+
+    // If we have a specific save handler (internal from SearchableSelect), use it
+    if (modalOnSave) {
+      const success = await modalOnSave()(modalValue); // Execute the stored function
+      if (success) {
+        setShowAddModal(false);
+        setModalValue('');
+      }
+    } else {
+      // Fallback or direct usage
+      const success = await handleAddNewAddressValue(modalField, modalValue, selectedCustomer.country);
+      if (success) {
+        if (modalOnChange) modalOnChange()(modalValue); // Update the specific field
+        // Also update selectedCustomer state
+        setSelectedCustomer(prev => ({ ...prev, [modalField]: modalValue }));
+        setShowAddModal(false);
+        setModalValue('');
+      }
+    }
+  };
   // Save customer (updated to use axios and baseUrl)
   const handleSaveCustomer = async () => {
     if (!selectedCustomer?._id) {
@@ -950,8 +1299,8 @@ const CustomerListPage = () => {
                         backgroundColor: index % 2 === 0 ? '#f8f9fa' : '#ffffff',
                         transition: 'background-color 0.2s ease'
                       }}
-                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#e8f0fe'}
-                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = index % 2 === 0 ? '#f8f9fa' : '#ffffff'}
+                        onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#e8f0fe'}
+                        onMouseOut={(e) => e.currentTarget.style.backgroundColor = index % 2 === 0 ? '#f8f9fa' : '#ffffff'}
                       >
                         {cells}
                       </tr>
@@ -1316,71 +1665,87 @@ const CustomerListPage = () => {
                     />
                   </div>
                   {/* FIELD 1 */}
-                  {selectedCustomer.country && addressStructure.countries[selectedCustomer.country]?.field1 && (
-                    <div style={{ marginBottom: '20px' }}>
-                      <label style={{
-                        display: 'block',
-                        fontSize: '15px',
-                        fontWeight: '500',
-                        color: '#1a3c34',
-                        marginBottom: '8px'
-                      }}>
-                        {addressStructure.countries[selectedCustomer.country].field1.label}
-                      </label>
-                      <SearchableSelect
-                        options={addressStructure.countries[selectedCustomer.country].field1.values || []}
-                        value={selectedCustomer.field1 || ''}
-                        onChange={(value) => {
-                          handleDeliveryAddressChange("field1", value);
-                        }}
-                        placeholder={`Select ${addressStructure.countries[selectedCustomer.country].field1.label}`}
-                      />
-                    </div>
-                  )}
-                  {/* FIELD 2 (filtered by selected Field1) */}
-                  {selectedCustomer.country && addressStructure.countries[selectedCustomer.country]?.field2 && (
-                    <div style={{ marginBottom: '20px' }}>
-                      <label style={{
-                        display: 'block',
-                        fontSize: '15px',
-                        fontWeight: '500',
-                        color: '#1a3c34',
-                        marginBottom: '8px'
-                      }}>
-                        {addressStructure.countries[selectedCustomer.country].field2.label}
-                      </label>
-                      <SearchableSelect
-                        options={getFilteredValues("field2").length > 0
-                          ? getFilteredValues("field2")
-                          : (addressStructure.countries[selectedCustomer.country].field2.values || [])}
-                        value={selectedCustomer.field2 || ''}
-                        onChange={(value) => handleDeliveryAddressChange("field2", value)}
-                        placeholder={`Select ${addressStructure.countries[selectedCustomer.country].field2.label}`}
-                      />
-                    </div>
-                  )}
-                  {/* FIELD 3 (shown always if defined) */}
-                  {selectedCustomer.country && addressStructure.countries[selectedCustomer.country]?.field3 && (
-                    <div style={{ marginBottom: '20px' }}>
-                      <label style={{
-                        display: 'block',
-                        fontSize: '15px',
-                        fontWeight: '500',
-                        color: '#1a3c34',
-                        marginBottom: '8px'
-                      }}>
-                        {addressStructure.countries[selectedCustomer.country].field3.label}
-                      </label>
-                      <SearchableSelect
-                        options={getFilteredValues("field3").length > 0
-                          ? getFilteredValues("field3")
-                          : (addressStructure.countries[selectedCustomer.country].field3.values || [])}
-                        value={selectedCustomer.field3 || ''}
-                        onChange={(value) => handleDeliveryAddressChange("field3", value)}
-                        placeholder={`Select ${addressStructure.countries[selectedCustomer.country].field3.label}`}
-                      />
-                    </div>
-                  )}
+                  {(() => {
+                    const labels = getAddressLabels(selectedCustomer.country, addressStructure);
+                    const field1Label = labels[0];
+                    const field2Label = labels[1];
+                    const field3Label = labels[2];
+
+                    return (
+                      <>
+                        {field1Label && field1Label !== "N/A" && field1Label !== "None" && (
+                          <div style={{ marginBottom: '20px' }}>
+                            <label style={{
+                              display: 'block',
+                              fontSize: '15px',
+                              fontWeight: '500',
+                              color: '#1a3c34',
+                              marginBottom: '8px'
+                            }}>
+                              {field1Label}
+                            </label>
+                            <SearchableSelect
+                              options={getOptionsForField('field1', selectedCustomer.country, addressStructure, linkedValues)}
+                              value={selectedCustomer.field1 || ''}
+                              onChange={(value) => handleDeliveryAddressChange("field1", value)}
+                              placeholder={`Select ${field1Label}`}
+                              allowCreateNew={true}
+                              onAddNewValue={val => handleAddNewAddressValue('field1', val, selectedCustomer.country)}
+                              onCreateRequest={val => handleOpenAddModal('field1', val, selectedCustomer.country, null, null)}
+                            />
+                          </div>
+                        )}
+
+                        {/* FIELD 2 */}
+                        {field2Label && field2Label !== "N/A" && field2Label !== "None" && (
+                          <div style={{ marginBottom: '20px' }}>
+                            <label style={{
+                              display: 'block',
+                              fontSize: '15px',
+                              fontWeight: '500',
+                              color: '#1a3c34',
+                              marginBottom: '8px'
+                            }}>
+                              {field2Label}
+                            </label>
+                            <SearchableSelect
+                              options={getOptionsForField('field2', selectedCustomer.country, addressStructure, linkedValues, selectedCustomer.field1)}
+                              value={selectedCustomer.field2 || ''}
+                              onChange={(value) => handleDeliveryAddressChange("field2", value)}
+                              placeholder={`Select ${field2Label}`}
+                              allowCreateNew={true}
+                              onAddNewValue={val => handleAddNewAddressValue('field2', val, selectedCustomer.country)}
+                              onCreateRequest={val => handleOpenAddModal('field2', val, selectedCustomer.country, null, null)}
+                            />
+                          </div>
+                        )}
+
+                        {/* FIELD 3 */}
+                        {field3Label && field3Label !== "N/A" && field3Label !== "None" && (
+                          <div style={{ marginBottom: '20px' }}>
+                            <label style={{
+                              display: 'block',
+                              fontSize: '15px',
+                              fontWeight: '500',
+                              color: '#1a3c34',
+                              marginBottom: '8px'
+                            }}>
+                              {field3Label}
+                            </label>
+                            <SearchableSelect
+                              options={getOptionsForField('field3', selectedCustomer.country, addressStructure, linkedValues, selectedCustomer.field2)}
+                              value={selectedCustomer.field3 || ''}
+                              onChange={(value) => handleDeliveryAddressChange("field3", value)}
+                              placeholder={`Select ${field3Label}`}
+                              allowCreateNew={true}
+                              onAddNewValue={val => handleAddNewAddressValue('field3', val, selectedCustomer.country)}
+                              onCreateRequest={val => handleOpenAddModal('field3', val, selectedCustomer.country, null, null)}
+                            />
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                   <div style={{ marginBottom: '20px' }}>
                     <label style={{
                       display: 'block',
@@ -1562,6 +1927,95 @@ const CustomerListPage = () => {
                     onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#6c757d'}
                   >
                     No, Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ADD NEW VALUE MODAL */}
+          {showAddModal && (
+            <div style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 3000
+            }}>
+              <div style={{
+                backgroundColor: '#fff',
+                borderRadius: '12px',
+                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)',
+                width: '90%',
+                maxWidth: '400px',
+                padding: '20px'
+              }}>
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '15px',
+                  fontWeight: 'bold',
+                  fontSize: '18px',
+                  color: '#333'
+                }}>
+                  <h3>Add New {modalField.replace('field', 'Field ')}</h3>
+                  <button
+                    onClick={() => setShowAddModal(false)}
+                    style={{ background: 'none', border: 'none', fontSize: '20px', color: '#666', cursor: 'pointer' }}
+                  >
+                    &times;
+                  </button>
+                </div>
+                <div style={{ marginBottom: '15px' }}>
+                  <input
+                    type="text"
+                    value={modalValue}
+                    onChange={(e) => setModalValue(e.target.value)}
+                    placeholder="Enter new value"
+                    style={{
+                      width: '100%',
+                      height: '42px',
+                      padding: '0 12px',
+                      border: '1.5px solid #007bff',
+                      borderRadius: '6px',
+                      fontSize: '13px'
+                    }}
+                  />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                  <button
+                    onClick={() => setShowAddModal(false)}
+                    style={{
+                      padding: '10px 20px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      background: '#dc3545',
+                      color: '#fff'
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveModal}
+                    style={{
+                      padding: '10px 20px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      background: '#007bff',
+                      color: '#fff'
+                    }}
+                  >
+                    Save
                   </button>
                 </div>
               </div>

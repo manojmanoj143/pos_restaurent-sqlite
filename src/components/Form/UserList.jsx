@@ -241,6 +241,7 @@ const UserList = () => {
       >
         <FaArrowLeft /> Back to Admin
       </button>
+
       {/* Main Container - Matching EmployeeList Card Style */}
       <div style={{
         maxWidth: '1250px',
@@ -305,6 +306,7 @@ const UserList = () => {
             <FaPlus /> Add User
           </button>
         </div>
+
         {/* Warning Message - Styled like EmployeeList Alerts */}
         {warningMessage && (
           <div style={{
@@ -342,6 +344,7 @@ const UserList = () => {
             </button>
           </div>
         )}
+
         {/* User List Layout - Sidebar and Main Content with Inline Styles Matching EmployeeList */}
         <div style={{
           display: 'flex',
@@ -400,6 +403,7 @@ const UserList = () => {
                   </button>
                 ))}
               </div>
+
               {selectedFilter && (
                 <div style={{
                   display: 'flex',
@@ -467,6 +471,7 @@ const UserList = () => {
               )}
             </div>
           </div>
+
           {/* Main Content - User List Table and Form */}
           <div style={{ flex: 1 }}>
             {/* User List Header */}
@@ -479,6 +484,7 @@ const UserList = () => {
               <h3 style={{ margin: 0, color: '#2c3e50', fontWeight: '600' }}>User List</h3>
               {/* Add User button already in main header, so no duplicate */}
             </div>
+
             {/* Users Table - Styled like EmployeeList Table */}
             <div style={{
               overflowX: 'auto',
@@ -651,6 +657,7 @@ const UserList = () => {
                 </tbody>
               </table>
             </div>
+
             {/* Table Footer */}
             <div style={{
               textAlign: 'center',
@@ -662,6 +669,7 @@ const UserList = () => {
             }}>
               Showing {filteredUsers.length} of {users.length} users
             </div>
+
             {/* Add User Form Modal - Styled like EmployeeList Modal */}
             {showAddUserForm && (
               <div
@@ -703,6 +711,7 @@ const UserList = () => {
                     <FaPlus style={{ color: '#3498db', fontSize: '1.5rem' }} />
                     Add New User
                   </h3>
+
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '20px' }}>
                     <div>
                       <label style={{
@@ -859,6 +868,7 @@ const UserList = () => {
                       />
                     </div>
                   </div>
+
                   <div style={{
                     display: 'flex',
                     gap: '15px',
@@ -926,6 +936,7 @@ const UserList = () => {
           </div>
         </div>
       </div>
+
       {/* Delete Confirmation Modal - Styled like EmployeeList */}
       {showDeleteConfirm && (
         <div

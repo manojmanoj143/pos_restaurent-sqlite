@@ -1,9 +1,119 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import axios from 'axios';
-import { FaArrowLeft } from 'react-icons/fa'; // NEW: Import FaArrowLeft for back button
-
-const SearchableSelect = ({ options = [], value = '', onChange, placeholder, allowCreateNew = false, onAddNewValue = null, createNewLabel = null }) => {
+import { FaArrowLeft, FaTimes, FaBackspace } from 'react-icons/fa';
+/* ────────────────────── KEYPAD COMPONENT ────────────────────── */
+const NumericKeypad = ({ onKeyPress, onDelete, onClose, onClear }) => {
+  const keys = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+  return (
+    <div className="numeric-keypad-overlay">
+      <div className="numeric-keypad">
+        <div className="keypad-header">
+          <span>Enter Number</span>
+          <button className="close-keypad-btn" onClick={onClose}><FaTimes /></button>
+        </div>
+        <div className="keypad-grid">
+          {keys.map((key) => (
+            <button key={key} className="keypad-btn" onClick={() => onKeyPress(key.toString())}>
+              {key}
+            </button>
+          ))}
+          <button className="keypad-btn action-btn" onClick={onClear}>C</button>
+          <button className="keypad-btn" onClick={() => onKeyPress("0")}>0</button>
+          <button className="keypad-btn action-btn" onClick={onDelete}><FaBackspace /></button>
+        </div>
+        <button className="keypad-done-btn" onClick={onClose}>Done</button>
+      </div>
+      <style jsx>{`
+        .numeric-keypad-overlay {
+          position: fixed;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          top: 0;
+          background-color: rgba(0, 0, 0, 0.5);
+          display: flex;
+          align-items: flex-end;
+          justify-content: center;
+          z-index: 3000;
+          padding-bottom: 20px;
+        }
+        .numeric-keypad {
+          background-color: #fff;
+          border-radius: 20px 20px 0 0;
+          box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.2);
+          width: 100%;
+          max-width: 400px;
+          padding: 20px;
+          animation: slideUp 0.3s ease-out;
+        }
+        @keyframes slideUp {
+          from { transform: translateY(100%); }
+          to { transform: translateY(0); }
+        }
+        .keypad-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 15px;
+          font-weight: bold;
+          font-size: 18px;
+          color: #333;
+        }
+        .close-keypad-btn {
+          background: none;
+          border: none;
+          font-size: 20px;
+          color: #666;
+          cursor: pointer;
+        }
+        .keypad-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 12px;
+          margin-bottom: 15px;
+        }
+        .keypad-btn {
+          background-color: #f8f9fa;
+          border: 1px solid #e9ecef;
+          border-radius: 12px;
+          padding: 15px;
+          font-size: 24px;
+          font-weight: 600;
+          color: #333;
+          cursor: pointer;
+          transition: background-color 0.1s;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .keypad-btn:active {
+          background-color: #e2e6ea;
+          transform: scale(0.98);
+        }
+        .keypad-btn.action-btn {
+          background-color: #e9ecef;
+          color: #495057;
+        }
+        .keypad-done-btn {
+          width: 100%;
+          padding: 15px;
+          background-color: #007bff;
+          color: white;
+          border: none;
+          border-radius: 12px;
+          font-size: 18px;
+          font-weight: bold;
+          cursor: pointer;
+        }
+        .keypad-done-btn:hover {
+          background-color: #0056b3;
+        }
+      `}</style>
+    </div>
+  );
+};
+const SearchableSelect = ({ options = [], value = '', onChange, placeholder, allowCreateNew = false, onAddNewValue = null, createNewLabel = null, onCreateRequest = null }) => {
   const [search, setSearch] = useState(value || '');
   const [showList, setShowList] = useState(false);
   useEffect(() => {
@@ -18,6 +128,9 @@ const SearchableSelect = ({ options = [], value = '', onChange, placeholder, all
     if (!showList) {
       setShowList(true);
     }
+    if (allowCreateNew && !onAddNewValue) {
+      if (onChange) onChange(newSearch);
+    }
   };
   const handleSelectOption = (option) => {
     setSearch(option);
@@ -27,11 +140,16 @@ const SearchableSelect = ({ options = [], value = '', onChange, placeholder, all
     setShowList(false);
   };
   const handleCreateNewOption = async () => {
-    if (!search.trim()) {
+    if (onCreateRequest) {
+      onCreateRequest(search);
       setShowList(false);
       return;
     }
     if (onAddNewValue) {
+      if (!search.trim()) {
+        setShowList(false);
+        return;
+      }
       const success = await onAddNewValue(search);
       if (success) {
         setSearch(search);
@@ -50,10 +168,6 @@ const SearchableSelect = ({ options = [], value = '', onChange, placeholder, all
       setShowList(false);
     }, 200);
   };
-  // UPDATED: Create new text logic - if createNewLabel provided, show "Create New [label]", else fallback to old "Create New: 'value'"
-  const createNewText = createNewLabel 
-    ? `Create New ${createNewLabel}` 
-    : `Create New: "${search.trim() || 'value'}"`;
   return (
     <div className="searchable-select">
       <input
@@ -66,17 +180,32 @@ const SearchableSelect = ({ options = [], value = '', onChange, placeholder, all
       />
       {showList && (
         <ul className="searchable-list">
-          {allowCreateNew && (
-            <li
-              key="create-new"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                handleCreateNewOption();
-              }}
-              style={{ fontStyle: 'italic', color: '#007bff' }}
-            >
-              {createNewText}
-            </li>
+          {allowCreateNew && (onAddNewValue || onCreateRequest) && (
+            (() => {
+              const isExactMatch = filteredOptions.some(option => option.toLowerCase() === search.toLowerCase());
+              const hasSearch = !!search.trim();
+              if ((onCreateRequest && !isExactMatch) || (onAddNewValue && hasSearch && !isExactMatch)) {
+                let createText;
+                if (hasSearch) {
+                  createText = createNewLabel ? `Create New ${createNewLabel}: "${search.trim()}"` : `Create New: "${search.trim()}"`;
+                } else {
+                  createText = createNewLabel ? `Create New ${createNewLabel}` : `Create New`;
+                }
+                return (
+                  <li
+                    key="create-new"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleCreateNewOption();
+                    }}
+                    style={{ fontStyle: 'italic', color: '#007bff' }}
+                  >
+                    {createText}
+                  </li>
+                );
+              }
+              return null;
+            })()
           )}
           {filteredOptions.length > 0 ? (
             filteredOptions.map((option, index) => (
@@ -93,15 +222,11 @@ const SearchableSelect = ({ options = [], value = '', onChange, placeholder, all
           ) : (
             !allowCreateNew && <li className="no-options">No matching options</li>
           )}
-          {allowCreateNew && filteredOptions.length === 0 && search.trim() && (
-            <li className="no-options">Type above and select Create New</li>
-          )}
         </ul>
       )}
     </div>
   );
 };
-
 const CreateCustomerPage = () => {
   /* ────────────────────── BASIC STATE ────────────────────── */
   const [activeTab, setActiveTab] = useState("details");
@@ -124,28 +249,218 @@ const CreateCustomerPage = () => {
     field1: "",
     field2: "",
     field3: "",
+    field4: "" // Added for potential future use or if needed, but primary logic uses 1-3
   });
-  /* ────────────────────── ADDRESS STRUCTURE STATE ────────────────────── */
-  const [showStructureBuilder, setShowStructureBuilder] = useState(false);
-  const defaultStructure = {
-    countries: {},
+  /* ────────────────────── KEYPAD STATE ────────────────────── */
+  const [showNumpad, setShowNumpad] = useState(false);
+  const [activeNumpadField, setActiveNumpadField] = useState(null);
+  // Address Structure State
+  const [addressStructure, setAddressStructure] = useState({
+    structure: { countries: {} },
+    linkedValues: {}
+  });
+  // Modal for adding new address value
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [modalField, setModalField] = useState('');
+  const [modalValue, setModalValue] = useState('');
+  const [modalOnSave, setModalOnSave] = useState(null); // (newValue) => Promise<bool>
+  const [modalOnChange, setModalOnChange] = useState(null); // (value) => void
+  // Full Country Hierarchy Data
+  // Format: "Country": ["Field1 Label", "Field2 Label", "Field3 Label"]
+  // "N/A" indicates the field should not be shown.
+  const countryAddressHierarchy = {
+    "Afghanistan": ["Province", "District", "Area"],
+    "Albania": ["County", "Municipality", "Area"],
+    "Algeria": ["Province", "District", "Area"],
+    "Andorra": ["Parish", "Area", "N/A"],
+    "Angola": ["Province", "Municipality", "Area"],
+    "Antigua and Barbuda": ["Parish", "Area", "N/A"],
+    "Argentina": ["Province", "Department", "Municipality"],
+    "Armenia": ["Province", "Community", "Area"],
+    "Australia": ["State/Territory", "Local Government Area", "Suburb"],
+    "Austria": ["State", "District", "Municipality"],
+    "Azerbaijan": ["Economic Region", "District", "Area"],
+    "Bahamas": ["District", "Area", "N/A"],
+    "Bahrain": ["Governorate", "Municipality", "Area"],
+    "Bangladesh": ["Division", "District", "Upazila"],
+    "Barbados": ["Parish", "Area", "N/A"],
+    "Belarus": ["Region", "District", "Area"],
+    "Belgium": ["Region", "Province", "Municipality"],
+    "Belize": ["District", "Town", "Area"],
+    "Benin": ["Department", "Commune", "Area"],
+    "Bhutan": ["District", "Gewog", "Village"],
+    "Bolivia": ["Department", "Province", "Municipality"],
+    "Bosnia and Herzegovina": ["Entity", "Canton", "Municipality"],
+    "Botswana": ["District", "Sub-District", "Area"],
+    "Brazil": ["State", "Municipality", "Neighborhood"],
+    "Brunei": ["District", "Mukim", "Village"],
+    "Bulgaria": ["Province", "Municipality", "Area"],
+    "Burkina Faso": ["Region", "Province", "Commune"],
+    "Burundi": ["Province", "Commune", "Area"],
+    "Cambodia": ["Province", "District", "Commune"],
+    "Cameroon": ["Region", "Division", "Sub-Division"],
+    "Canada": ["Province/Territory", "Municipality", "Area"],
+    "Cape Verde": ["Municipality", "Area", "N/A"],
+    "Central African Republic": ["Prefecture", "Sub-Prefecture", "Area"],
+    "Chad": ["Province", "Department", "Area"],
+    "Chile": ["Region", "Province", "Commune"],
+    "China": ["Province", "Prefecture", "County"],
+    "Colombia": ["Department", "Municipality", "Area"],
+    "Comoros": ["Island", "Prefecture", "Area"],
+    "Costa Rica": ["Province", "Canton", "District"],
+    "Croatia": ["County", "Municipality", "Area"],
+    "Cuba": ["Province", "Municipality", "Area"],
+    "Cyprus": ["District", "Municipality", "Area"],
+    "Czech Republic": ["Region", "District", "Municipality"],
+    "Denmark": ["Region", "Municipality", "Area"],
+    "Djibouti": ["Region", "District", "Area"],
+    "Dominica": ["Parish", "Area", "N/A"],
+    "Dominican Republic": ["Province", "Municipality", "Area"],
+    "Ecuador": ["Province", "Canton", "Parish"],
+    "Egypt": ["Governorate", "District", "Area"],
+    "El Salvador": ["Department", "Municipality", "Area"],
+    "Equatorial Guinea": ["Province", "District", "Area"],
+    "Eritrea": ["Region", "Sub-Region", "Area"],
+    "Estonia": ["County", "Municipality", "Area"],
+    "Eswatini": ["Region", "Inkhundla", "Area"],
+    "Ethiopia": ["Region", "Zone", "Woreda"],
+    "Fiji": ["Division", "Province", "District"],
+    "Finland": ["Region", "Municipality", "Area"],
+    "France": ["Region", "Department", "Commune"],
+    "Gabon": ["Province", "Department", "Area"],
+    "Gambia": ["Region", "District", "Area"],
+    "Georgia": ["Region", "Municipality", "Area"],
+    "Germany": ["State", "District", "Municipality"],
+    "Ghana": ["Region", "District", "Area"],
+    "Greece": ["Region", "Municipality", "Area"],
+    "Grenada": ["Parish", "Area", "N/A"],
+    "Guatemala": ["Department", "Municipality", "Area"],
+    "Guinea": ["Region", "Prefecture", "Sub-Prefecture"],
+    "Guinea-Bissau": ["Region", "Sector", "Area"],
+    "Guyana": ["Region", "Neighborhood Council", "Area"],
+    "Haiti": ["Department", "Arrondissement", "Commune"],
+    "Honduras": ["Department", "Municipality", "Area"],
+    "Hungary": ["County", "District", "Municipality"],
+    "Iceland": ["Region", "Municipality", "Area"],
+    "India": ["State/UT", "District", "Taluk"],
+    "Indonesia": ["Province", "Regency/City", "District"],
+    "Iran": ["Province", "County", "District"],
+    "Iraq": ["Governorate", "District", "Area"],
+    "Ireland": ["County", "Municipality", "Area"],
+    "Israel": ["District", "Sub-District", "Area"],
+    "Italy": ["Region", "Province", "Municipality"],
+    "Jamaica": ["Parish", "Area", "N/A"],
+    "Japan": ["Prefecture", "City/Ward", "District"],
+    "Jordan": ["Governorate", "District", "Area"],
+    "Kazakhstan": ["Region", "District", "Area"],
+    "Kenya": ["County", "Sub-County", "Ward"],
+    "Kiribati": ["Island", "Council", "Area"],
+    "Kuwait": ["Governorate", "Area", "Block"],
+    "Kyrgyzstan": ["Region", "District", "Area"],
+    "Laos": ["Province", "District", "Village"],
+    "Latvia": ["Municipality", "Area", "N/A"],
+    "Lebanon": ["Governorate", "District", "Area"],
+    "Lesotho": ["District", "Community Council", "Area"],
+    "Liberia": ["County", "District", "Area"],
+    "Libya": ["District", "Municipality", "Area"],
+    "Liechtenstein": ["Municipality", "Area", "N/A"],
+    "Lithuania": ["County", "Municipality", "Area"],
+    "Luxembourg": ["Canton", "Commune", "Area"],
+    "Madagascar": ["Region", "District", "Commune"],
+    "Malawi": ["Region", "District", "Area"],
+    "Malaysia": ["State", "District", "Mukim"],
+    "Maldives": ["Atoll", "Island", "Area"],
+    "Mali": ["Region", "Cercle", "Commune"],
+    "Malta": ["Region", "Local Council", "Area"],
+    "Marshall Islands": ["Atoll", "Municipality", "Area"],
+    "Mauritania": ["Region", "Department", "Area"],
+    "Mauritius": ["District", "Village", "Area"],
+    "Mexico": ["State", "Municipality", "Locality"],
+    "Micronesia": ["State", "Municipality", "Area"],
+    "Moldova": ["District", "Commune", "Area"],
+    "Monaco": ["Commune", "Area", "N/A"],
+    "Mongolia": ["Province", "District", "Bag"],
+    "Montenegro": ["Municipality", "Area", "N/A"],
+    "Morocco": ["Region", "Province", "Commune"],
+    "Mozambique": ["Province", "District", "Area"],
+    "Myanmar": ["Region/State", "District", "Township"],
+    "Namibia": ["Region", "Constituency", "Area"],
+    "Nauru": ["District", "Area", "N/A"],
+    "Nepal": ["Province", "District", "Municipality"],
+    "Netherlands": ["Province", "Municipality", "Area"],
+    "New Zealand": ["Region", "District", "Area"],
+    "Nicaragua": ["Department", "Municipality", "Area"],
+    "Niger": ["Region", "Department", "Commune"],
+    "Nigeria": ["State", "Local Government Area", "Ward"],
+    "North Korea": ["Province", "County", "Area"],
+    "North Macedonia": ["Municipality", "Area", "N/A"],
+    "Norway": ["County", "Municipality", "Area"],
+    "Oman": ["Governorate", "Wilayat", "Area"],
+    "Pakistan": ["Province", "Division", "District"],
+    "Palau": ["State", "Area", "N/A"],
+    "Panama": ["Province", "District", "Corregimiento"],
+    "Papua New Guinea": ["Province", "District", "Area"],
+    "Paraguay": ["Department", "District", "Area"],
+    "Peru": ["Region", "Province", "District"],
+    "Philippines": ["Region", "Province", "City/Municipality"],
+    "Poland": ["Voivodeship", "County", "Gmina"],
+    "Portugal": ["District", "Municipality", "Parish"],
+    "Qatar": ["Municipality", "Zone", "Area"],
+    "Romania": ["County", "Municipality", "Area"],
+    "Russia": ["Federal Subject", "District", "Municipality"],
+    "Rwanda": ["Province", "District", "Sector"],
+    "Saint Lucia": ["District", "Area", "N/A"],
+    "Samoa": ["District", "Village", "Area"],
+    "San Marino": ["Municipality", "Area", "N/A"],
+    "Saudi Arabia": ["Province", "Governorate", "Area"],
+    "Senegal": ["Region", "Department", "Arrondissement"],
+    "Serbia": ["District", "Municipality", "Area"],
+    "Seychelles": ["District", "Area", "N/A"],
+    "Sierra Leone": ["Province", "District", "Area"],
+    "Singapore": ["City-State", "N/A", "N/A"],
+    "Slovakia": ["Region", "District", "Municipality"],
+    "Slovenia": ["Statistical Region", "Municipality", "Area"],
+    "Solomon Islands": ["Province", "Ward", "Area"],
+    "Somalia": ["State", "District", "Area"],
+    "South Africa": ["Province", "District", "Municipality"],
+    "South Korea": ["Province", "City/County", "District"],
+    "South Sudan": ["State", "County", "Payam"],
+    "Spain": ["Autonomous Community", "Province", "Municipality"],
+    "Sri Lanka": ["Province", "District", "Division"],
+    "Sudan": ["State", "Locality", "Area"],
+    "Suriname": ["District", "Resort", "Area"],
+    "Sweden": ["County", "Municipality", "Area"],
+    "Switzerland": ["Canton", "Municipality", "Area"],
+    "Syria": ["Governorate", "District", "Area"],
+    "Taiwan": ["County/City", "District", "Area"],
+    "Tajikistan": ["Region", "District", "Area"],
+    "Tanzania": ["Region", "District", "Ward"],
+    "Thailand": ["Province", "District", "Sub-District"],
+    "Togo": ["Region", "Prefecture", "Canton"],
+    "Tonga": ["Division", "District", "Area"],
+    "Trinidad and Tobago": ["Region", "Municipality", "Area"],
+    "Tunisia": ["Governorate", "Delegation", "Sector"],
+    "Turkey": ["Province", "District", "Neighborhood"],
+    "Turkmenistan": ["Province", "District", "Area"],
+    "Tuvalu": ["Island", "Area", "N/A"],
+    "Uganda": ["Region", "District", "Sub-County"],
+    "Ukraine": ["Oblast", "Raion", "Hromada"],
+    "United Arab Emirates": ["Emirate", "City", "Area"],
+    "United Kingdom": ["Country", "County", "Borough"],
+    "United States": ["State", "County", "City"],
+    "Uruguay": ["Department", "Municipality", "Area"],
+    "Uzbekistan": ["Region", "District", "Area"],
+    "Vanuatu": ["Province", "Municipality", "Area"],
+    "Vatican City": ["None", "N/A", "N/A"],
+    "Venezuela": ["State", "Municipality", "Parish"],
+    "Vietnam": ["Province", "District", "Commune"],
+    "Yemen": ["Governorate", "District", "Area"],
+    "Zambia": ["Province", "District", "Area"],
+    "Zimbabwe": ["Province", "District", "Area"]
   };
-  const [addressStructure, setAddressStructure] = useState(defaultStructure);
-  const [selectedCountryForEdit, setSelectedCountryForEdit] = useState("");
-  // Temp inputs for adding new
-  const [tempCountry, setTempCountry] = useState("");
-  const [tempField1Label, setTempField1Label] = useState("");
-  const [tempField1Value, setTempField1Value] = useState("");
-  const [tempField2Label, setTempField2Label] = useState("");
-  const [tempField2Value, setTempField2Value] = useState("");
-  const [tempField3Label, setTempField3Label] = useState("");
-  const [tempField3Value, setTempField3Value] = useState("");
-  // NEW STATE FOR LINKED VALUES (Field1 → Field2/Field3)
-  const [linkedValues, setLinkedValues] = useState({}); // { country: { field1Value: { field2: [], field3: [] } } }
   const navigate = useNavigate();
   const location = useLocation();
-  const [baseUrl, setBaseUrl] = useState(""); // NEW: Added baseUrl state from AdminPage
-  // UPDATED: Digit lengths per country for dynamic validation
+  const [baseUrl, setBaseUrl] = useState("");
   const digitLengths = {
     '+91': 10, // India
     '+1': 10, // USA/Canada
@@ -163,7 +478,6 @@ const CreateCustomerPage = () => {
   const tabs = ["Details", "Address & Contact"];
   /* ────────────────────── EFFECTS ────────────────────── */
   useEffect(() => {
-    // NEW: Fetch config to set baseUrl (copied from AdminPage)
     const fetchConfig = async () => {
       let currentBaseUrl = "";
       try {
@@ -179,7 +493,6 @@ const CreateCustomerPage = () => {
         console.error("Failed to fetch config:", error);
         setBaseUrl("");
       } finally {
-        // Fetch data after baseUrl is set
         const url = currentBaseUrl || "";
         fetchCustomerGroups(url);
         fetchAddressStructure(url);
@@ -187,6 +500,11 @@ const CreateCustomerPage = () => {
     };
     fetchConfig();
   }, []);
+  useEffect(() => {
+    if (showAddModal) {
+      setModalValue('');
+    }
+  }, [showAddModal]);
   const fetchCustomerGroups = async (currentBaseUrl) => {
     try {
       const res = await axios.get(`${currentBaseUrl}/api/customer-groups`);
@@ -195,94 +513,49 @@ const CreateCustomerPage = () => {
       console.error(e);
     }
   };
-  // NEW: Separate function for fetching address structure with baseUrl
-  const fetchAddressStructure = async (currentBaseUrl) => {
+  const fetchAddressStructure = async (currentBaseUrl = baseUrl) => {
     try {
       const res = await axios.get(`${currentBaseUrl}/api/address-structures`);
-      setAddressStructure(res.data.structure || defaultStructure);
-      setLinkedValues(res.data.linkedValues || {});
+      setAddressStructure(res.data);
     } catch (e) {
-      console.warn("Failed to load address structure", e);
+      console.error("Failed to fetch address structure:", e);
     }
   };
-  /* ────────────────────── DYNAMIC ADD HANDLERS ────────────────────── */
-  const handleAddNewField1 = useCallback(async (newValue) => {
-    if (!deliveryAddress.country) {
-      setWarningMessage("Please select a country first.");
-      setWarningType("warning");
-      return false;
-    }
-    try {
-      await axios.post(`${baseUrl}/api/add-address-value`, {
-        country: deliveryAddress.country,
-        field: 'field1',
-        value: newValue
+  /* ────────────────────── RESTORE STATE ────────────────────── */
+  useEffect(() => {
+    if (location.state && location.state.formState) {
+      const {
+        customerName,
+        phoneNumber,
+        whatsappNumber,
+        email,
+        selectedISDCode,
+        selectedWhatsappISDCode,
+        deliveryAddress,
+      } = location.state.formState;
+
+      setCustomerName(customerName || "");
+      setPhoneNumber(phoneNumber || "");
+      setWhatsappNumber(whatsappNumber || "");
+      setEmail(email || "");
+      setSelectedISDCode(selectedISDCode || "+971");
+      setSelectedWhatsappISDCode(selectedWhatsappISDCode || "+971");
+      setDeliveryAddress(deliveryAddress || {
+        building_name: "",
+        flat_villa_no: "",
+        country: "",
+        field1: "",
+        field2: "",
+        field3: "",
+        field4: ""
       });
-      await fetchAddressStructure(baseUrl);
-      setWarningMessage(`New ${addressStructure.countries[deliveryAddress.country]?.field1?.label || 'State'} added: ${newValue}`);
-      setWarningType("success");
-      return true;
-    } catch (e) {
-      console.error(e);
-      setWarningMessage(`Failed to add new ${addressStructure.countries[deliveryAddress.country]?.field1?.label || 'value'}`);
-      setWarningType("warning");
-      return false;
     }
-  }, [deliveryAddress.country, baseUrl, fetchAddressStructure, addressStructure]);
-  const handleAddNewField2 = useCallback(async (newValue) => {
-    if (!deliveryAddress.country) {
-      setWarningMessage("Please select a country first.");
-      return false;
+
+    if (location.state && location.state.newGroupId) {
+      setSelectedGroup(location.state.newGroupId);
     }
-    if (!deliveryAddress.field1) {
-      setWarningMessage("Please select State first.");
-      return false;
-    }
-    try {
-      await axios.post(`${baseUrl}/api/add-address-value`, {
-        country: deliveryAddress.country,
-        field: 'field2',
-        value: newValue,
-        parent_value: deliveryAddress.field1
-      });
-      await fetchAddressStructure(baseUrl);
-      setWarningMessage(`New ${addressStructure.countries[deliveryAddress.country]?.field2?.label || 'Area'} added: ${newValue}`);
-      setWarningType("success");
-      return true;
-    } catch (e) {
-      console.error(e);
-      setWarningMessage(`Failed to add new ${addressStructure.countries[deliveryAddress.country]?.field2?.label || 'value'}`);
-      setWarningType("warning");
-      return false;
-    }
-  }, [deliveryAddress.country, deliveryAddress.field1, baseUrl, fetchAddressStructure, addressStructure]);
-  const handleAddNewField3 = useCallback(async (newValue) => {
-    if (!deliveryAddress.country) {
-      setWarningMessage("Please select a country first.");
-      return false;
-    }
-    if (!deliveryAddress.field1) {
-      setWarningMessage("Please select State first.");
-      return false;
-    }
-    try {
-      await axios.post(`${baseUrl}/api/add-address-value`, {
-        country: deliveryAddress.country,
-        field: 'field3',
-        value: newValue,
-        parent_value: deliveryAddress.field1
-      });
-      await fetchAddressStructure(baseUrl);
-      setWarningMessage(`New ${addressStructure.countries[deliveryAddress.country]?.field3?.label || 'District'} added: ${newValue}`);
-      setWarningType("success");
-      return true;
-    } catch (e) {
-      console.error(e);
-      setWarningMessage(`Failed to add new ${addressStructure.countries[deliveryAddress.country]?.field3?.label || 'value'}`);
-      setWarningType("warning");
-      return false;
-    }
-  }, [deliveryAddress.country, deliveryAddress.field1, baseUrl, fetchAddressStructure, addressStructure]);
+  }, [location.state]);
+
   /* ────────────────────── BASIC HANDLERS ────────────────────── */
   const handleISDCodeSelect = (code) => {
     setSelectedISDCode(code);
@@ -293,7 +566,6 @@ const CreateCustomerPage = () => {
     setSelectedWhatsappISDCode(code);
     setShowWhatsappISDCodeDropdown(false);
   };
-  // UPDATED: Inline create group
   const handleGroupNameChange = (name) => {
     const group = customerGroups.find(g => g.group_name === name);
     if (group) {
@@ -302,40 +574,72 @@ const CreateCustomerPage = () => {
       setSelectedGroup('');
     }
   };
-  const handleCreateNewGroup = async (newName) => {
-    try {
-      const res = await axios.post(`${baseUrl}/api/customer-groups`, { group_name: newName });
-      if (res.status === 201) {
-        const newId = res.data._id;
-        setSelectedGroup(newId);
-        setCustomerGroups(prev => [...prev, { _id: newId, group_name: newName }]);
-        setWarningMessage(`Group "${newName}" created!`);
-        setWarningType("success");
-        return true;
+
+  const handleNavigateToCreateGroup = (searchVal) => {
+    const formState = {
+      customerName,
+      phoneNumber,
+      whatsappNumber,
+      email,
+      selectedISDCode,
+      selectedWhatsappISDCode,
+      deliveryAddress,
+    };
+    navigate('/create-customer-group', {
+      state: {
+        fromCreateCustomer: true,
+        formState,
+        initialGroupName: searchVal
       }
-    } catch (e) {
-      console.error(e);
-      setWarningMessage("Failed to create group");
-      setWarningType("warning");
-      return false;
-    }
-    return false;
+    });
   };
-  // UPDATED: Dynamic max digits based on selected ISD code
+
   const getMaxDigits = (isdCode) => digitLengths[isdCode] || 10;
-  // UPDATED: Phone number change with dynamic limit
+  /* ────────────────────── KEYPAD LOGIC ────────────────────── */
+  const openNumpad = (field) => {
+    setActiveNumpadField(field);
+    setShowNumpad(true);
+  };
+  const closeNumpad = () => {
+    setShowNumpad(false);
+    setActiveNumpadField(null);
+  };
+  const handleNumpadKeyPress = (key) => {
+    const updateField = (currentValue, maxDigits, setter) => {
+      if (currentValue.length < maxDigits) {
+        setter(currentValue + key);
+      }
+    };
+    if (activeNumpadField === 'phone') {
+      updateField(phoneNumber, getMaxDigits(selectedISDCode), setPhoneNumber);
+    } else if (activeNumpadField === 'whatsapp') {
+      updateField(whatsappNumber, getMaxDigits(selectedWhatsappISDCode), setWhatsappNumber);
+    }
+  };
+  const handleNumpadDelete = () => {
+    if (activeNumpadField === 'phone') {
+      setPhoneNumber(prev => prev.slice(0, -1));
+    } else if (activeNumpadField === 'whatsapp') {
+      setWhatsappNumber(prev => prev.slice(0, -1));
+    }
+  };
+  const handleNumpadClear = () => {
+    if (activeNumpadField === 'phone') {
+      setPhoneNumber("");
+    } else if (activeNumpadField === 'whatsapp') {
+      setWhatsappNumber("");
+    }
+  };
   const handlePhoneNumberChange = (e) => {
     const v = e.target.value.replace(/\D/g, "");
     const maxDigits = getMaxDigits(selectedISDCode);
     if (v.length <= maxDigits) setPhoneNumber(v);
   };
-  // UPDATED: WhatsApp number change with dynamic limit
   const handleWhatsappNumberChange = (e) => {
     const v = e.target.value.replace(/\D/g, "");
     const maxDigits = getMaxDigits(selectedWhatsappISDCode);
     if (v.length <= maxDigits) setWhatsappNumber(v);
   };
-  // NEW: Handler to copy phone to WhatsApp
   const handleCopyToWhatsapp = () => {
     setWhatsappNumber(phoneNumber);
     setSelectedWhatsappISDCode(selectedISDCode);
@@ -343,8 +647,6 @@ const CreateCustomerPage = () => {
   const handleDeliveryAddressChange = (field, value) => {
     setDeliveryAddress((p) => ({ ...p, [field]: value }));
   };
-  // UPDATED: Validation with dynamic exact length per country
-  // UPDATED: Enhanced error handling for duplicate phone number
   const handleCreateCustomer = async () => {
     if (!customerName.trim()) {
       setWarningMessage("Customer name is required.");
@@ -401,197 +703,176 @@ const CreateCustomerPage = () => {
   const handleBackToAdmin = () => navigate("/admin");
   const getTabKey = (tab) =>
     tab.toLowerCase().replace(/\s+/g, "-").replace(/&/g, "and");
-  /* ────────────────────── ADDRESS STRUCTURE LOGIC ────────────────────── */
-  const startStructureBuilder = () => {
-    setShowStructureBuilder(true);
-    resetTempInputs();
+  const countryList = Object.keys(countryAddressHierarchy);
+  // Helper to get labels for the selected country
+  const getAddressLabels = (country) => {
+    if (!country) return [];
+    const hierarchyLabels = countryAddressHierarchy[country] || [];
+    const dynamicCountry = addressStructure.structure.countries[country];
+    if (dynamicCountry) {
+      return [
+        dynamicCountry.field1?.label || hierarchyLabels[0] || '',
+        dynamicCountry.field2?.label || hierarchyLabels[1] || '',
+        dynamicCountry.field3?.label || hierarchyLabels[2] || ''
+      ];
+    }
+    return hierarchyLabels;
   };
-  const resetTempInputs = () => {
-    setTempCountry("");
-    setTempField1Label("");
-    setTempField1Value("");
-    setTempField2Label("");
-    setTempField2Value("");
-    setTempField3Label("");
-    setTempField3Value("");
-    setSelectedCountryForEdit("");
+  // Helper to get options for a field
+  const getOptionsForField = (field, country, parent = null) => {
+    const dynamicCountry = addressStructure.structure.countries[country];
+    if (!dynamicCountry) return [];
+    let opts = [];
+    if (field === 'field1') {
+      opts = dynamicCountry.field1?.values || [];
+    } else if (field === 'field2') {
+      if (parent && addressStructure.linkedValues[country] && addressStructure.linkedValues[country][parent]) {
+        opts = addressStructure.linkedValues[country][parent].field2 || [];
+      }
+    } else if (field === 'field3') {
+      if (parent && addressStructure.linkedValues[country] && addressStructure.linkedValues[country][parent]) {
+        opts = addressStructure.linkedValues[country][parent].field3 || [];
+      }
+    }
+    return opts;
   };
-  const loadCountryForEdit = (country) => {
-    const data = addressStructure.countries[country];
-    if (!data) return;
-    setSelectedCountryForEdit(country);
-    setTempCountry(country);
-    setTempField1Label(data.field1?.label || "");
-    setTempField1Value((data.field1?.values || []).join(", "));
-    setTempField2Label(data.field2?.label || "");
-    setTempField2Value((data.field2?.values || []).join(", "));
-    setTempField3Label(data.field3?.label || "");
-    setTempField3Value((data.field3?.values || []).join(", "));
-    document.querySelector(".structure-builder-modal")?.scrollTo(0, 0);
-  };
-  // NEW: Delete entire country (REMOVED window.confirm, directly delete and show app warning message)
-  const handleDeleteCountry = async (country) => {
-    const updated = { ...addressStructure };
-    delete updated.countries[country];
-    const newLinks = { ...linkedValues };
-    delete newLinks[country];
-    const payload = {
-      structure: updated,
-      linkedValues: newLinks
-    };
+  // Handler for adding new address value
+  const handleAddNewAddressValue = async (field, newValue) => {
+    const country = deliveryAddress.country;
+    if (!country) return false;
+    let parent_value = '';
+    if (field === 'field2') {
+      parent_value = deliveryAddress.field1;
+    } else if (field === 'field3') {
+      parent_value = deliveryAddress.field2;
+    }
     try {
-      const res = await axios.put(`${baseUrl}/api/address-structures`, payload);
+      const res = await axios.post(`${baseUrl}/api/add-address-value`, {
+        country,
+        field,
+        value: newValue,
+        parent_value: parent_value || undefined
+      });
       if (res.status === 200) {
-        setAddressStructure(updated);
-        setLinkedValues(newLinks);
-        setWarningMessage(`"${country}" structure deleted successfully!`);
-        setWarningType("success");
-        resetTempInputs();
-      } else {
-        throw new Error('Delete failed');
+        setAddressStructure((prev) => {
+          const newStruct = {
+            structure: { ...prev.structure },
+            linkedValues: { ...prev.linkedValues },
+          };
+          const countryData = newStruct.structure.countries[country] || (newStruct.structure.countries[country] = {});
+          if (field === "field1") {
+            if (!countryData.field1) countryData.field1 = { values: [] };
+            countryData.field1.values = [newValue, ...countryData.field1.values];
+          } else if (field === "field2") {
+            const linkedCountry = newStruct.linkedValues[country] || (newStruct.linkedValues[country] = {});
+            const parentData = linkedCountry[parent_value] || (linkedCountry[parent_value] = {});
+            parentData.field2 = [newValue, ...(parentData.field2 || [])];
+          } else if (field === "field3") {
+            const linkedCountry = newStruct.linkedValues[country] || (newStruct.linkedValues[country] = {});
+            const parentData = linkedCountry[parent_value] || (linkedCountry[parent_value] = {});
+            parentData.field3 = [newValue, ...(parentData.field3 || [])];
+          }
+          return newStruct;
+        });
+        await fetchAddressStructure();
+        return true;
       }
     } catch (e) {
       console.error(e);
-      setWarningMessage(`Failed to delete "${country}" structure`);
+      setWarningMessage(`Failed to add new ${field} value`);
       setWarningType("warning");
+      return false;
     }
+    return false;
   };
-  // UPDATED: Click a saved Field1 value → fill Field1, Field2 & Field3
-  const handleField1ValueClick = (value) => {
-    setTempField1Value(value); // NEW: Populate Field1 value too
-    const country = currentEditCountry;
-    const links = linkedValues[country]?.[value] || { field2: [], field3: [] };
-    setTempField2Value(links.field2.join(", "));
-    setTempField3Value(links.field3.join(", "));
+  const addressLabels = getAddressLabels(deliveryAddress.country);
+  const field1Label = addressLabels[0];
+  const field2Label = addressLabels[1];
+  const field3Label = addressLabels[2];
+  const handleOpenAddModal = (field, initialSearch) => {
+    setModalField(field);
+    setModalValue(initialSearch);
+    setModalOnSave(() => (newValue) => handleAddNewAddressValue(field, newValue));
+    setModalOnChange(() => (value) => handleDeliveryAddressChange(field, value));
+    setShowAddModal(true);
   };
-  const saveAddressStructure = async () => {
-    const country = tempCountry.trim();
-    if (!country) {
-      setWarningMessage("Country name is required.");
-      setWarningType("warning");
+  const handleSaveModal = async () => {
+    const values = modalValue.split(',').map(v => v.trim()).filter(v => v);
+    if (values.length === 0) {
+      setShowAddModal(false);
       return;
     }
-    const updated = { ...addressStructure };
-    if (!updated.countries) updated.countries = {};
-    if (!updated.countries[country]) {
-      updated.countries[country] = { field1: null, field2: null, field3: null };
-    }
-    const countryData = updated.countries[country];
-    const f1Arr = tempField1Value.trim().split(",").map((s) => s.trim()).filter(Boolean);
-    const f2Arr = tempField2Value.trim().split(",").map((s) => s.trim()).filter(Boolean);
-    const f3Arr = tempField3Value.trim().split(",").map((s) => s.trim()).filter(Boolean);
-    // ---- Handle Field 1 ----
-    if (tempField1Label.trim()) {
-      const label = tempField1Label.trim();
-      const newF1Values = [...new Set(f1Arr)]; // Replace with input values (unique)
-      countryData.field1 = { label, values: newF1Values.length > 0 ? newF1Values : [] };
-    } else if (selectedCountryForEdit) {
-      countryData.field1 = null;
-    }
-    // ---- Handle Field 2 ----
-    if (tempField2Label.trim()) {
-      const label = tempField2Label.trim();
-      const newF2Values = [...new Set(f2Arr)]; // Replace
-      countryData.field2 = { label, values: newF2Values.length > 0 ? newF2Values : [] };
-    } else if (selectedCountryForEdit) {
-      countryData.field2 = null;
-    }
-    // ---- Handle Field 3 ----
-    if (tempField3Label.trim()) {
-      const label = tempField3Label.trim();
-      const newF3Values = [...new Set(f3Arr)]; // Replace
-      countryData.field3 = { label, values: newF3Values.length > 0 ? newF3Values : [] };
-    } else if (selectedCountryForEdit) {
-      countryData.field3 = null;
-    }
-    // ---- LINKED VALUES (Field1 → Field2/Field3) ----
-    let newLinks = { ...linkedValues };
-    if (selectedCountryForEdit) {
-      // Remove linked for deleted field1 values
-      const oldF1s = addressStructure.countries[country]?.field1?.values || [];
-      for (let oldF1 of oldF1s) {
-        if (!f1Arr.includes(oldF1)) {
-          delete newLinks[country]?.[oldF1];
-        }
+    if (modalOnSave) {
+      let allSuccess = true;
+      let firstValue = null;
+      for (const val of values) {
+        const success = await modalOnSave(val);
+        if (!success) allSuccess = false;
+        if (!firstValue) firstValue = val;
+      }
+      if (allSuccess && modalOnChange) {
+        modalOnChange(firstValue); // Set to the first value added
       }
     }
-    // Set linked only if single f1 selected
-    if (f1Arr.length === 1) {
-      const f1 = f1Arr[0];
-      if (!newLinks[country]) newLinks[country] = {};
-      newLinks[country][f1] = { field2: f2Arr, field3: f3Arr };
-    }
-    // Save to backend
-    const payload = {
-      structure: updated,
-      linkedValues: newLinks
-    };
-    try {
-      const res = await axios.put(`${baseUrl}/api/address-structures`, payload);
-      if (res.status === 200) {
-        setAddressStructure(updated);
-        setLinkedValues(newLinks);
-        setShowStructureBuilder(false);
-        setWarningMessage(`Address structure for "${country}" saved successfully!`);
-        setWarningType("success");
-        resetTempInputs();
-      } else {
-        throw new Error('Save failed');
-      }
-    } catch (e) {
-      console.error(e);
-      setWarningMessage("Failed to save address structure");
-      setWarningType("warning");
-    }
+    setShowAddModal(false);
   };
-  const cancelStructure = () => {
-    setShowStructureBuilder(false);
-    resetTempInputs();
-  };
-  const countryList = Object.keys(addressStructure.countries || {});
-  const currentEditCountry = selectedCountryForEdit || tempCountry;
-  // Helper to get filtered values for the selected Field1
-  const getFilteredValues = (field) => {
-    if (!deliveryAddress.country || !deliveryAddress.field1) return [];
-    const links = linkedValues[deliveryAddress.country]?.[deliveryAddress.field1];
-    return links?.[field] || [];
+  const handleCloseModal = () => {
+    setShowAddModal(false);
   };
   /* ────────────────────── RENDER ────────────────────── */
   return (
     <div className="create-customer-container">
-      {/* ── FIXED BACK BUTTON (NEW: Styled like EmployeeList) ── */}
-      <button
-        onClick={handleBackToAdmin}
-        className="fixed-back-btn"
-      >
-        <FaArrowLeft /> Back to Admin
+      <button onClick={handleBackToAdmin} className="fixed-back-btn">
+        <FaArrowLeft /> Back Login
       </button>
-      {/* ── ALERT ── */}
       {warningMessage && (
-        <div
-          className={`alert alert-${warningType} text-center alert-dismissible fade show`}
-          role="alert"
-        >
+        <div className={`alert alert-${warningType} text-center alert-dismissible fade show`} role="alert">
           {warningMessage}
           <button type="button" className="btn-close" onClick={handleWarningOk} />
         </div>
       )}
-      {/* ── MAIN CONTENT CARD (NEW: Wrapped with margin for fixed button) ── */}
+      {/* NUMERIC KEYPAD COMPONENT */}
+      {showNumpad && (
+        <NumericKeypad
+          onKeyPress={handleNumpadKeyPress}
+          onDelete={handleNumpadDelete}
+          onClose={closeNumpad}
+          onClear={handleNumpadClear}
+        />
+      )}
+      {/* ADD NEW VALUE MODAL */}
+      {showAddModal && (
+        <div className="add-modal-overlay">
+          <div className="add-modal">
+            <div className="modal-header">
+              <span>Add New {modalField === 'field1' ? field1Label : modalField === 'field2' ? field2Label : field3Label}</span>
+              <button className="close-modal-btn" onClick={handleCloseModal}><FaTimes /></button>
+            </div>
+            <div className="modal-body">
+              <input
+                type="text"
+                value={modalValue}
+                onChange={(e) => setModalValue(e.target.value)}
+                placeholder="Enter new value(s), comma separated"
+              />
+            </div>
+            <div className="modal-footer">
+              <button className="cancel-btn" onClick={handleCloseModal}>Cancel</button>
+              <button className="save-btn" onClick={handleSaveModal}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="main-content-card">
-        {/* ── HEADER ── */}
         <div className="header-section">
-          <div></div> {/* Empty left for balance */}
+          <div></div>
           <h1>Create a New Customer</h1>
           <div className="header-buttons">
-            <button className="address-structure-btn" onClick={startStructureBuilder}>
-              Address Structure
-            </button>
             <button className="save-btn" onClick={handleCreateCustomer}>
               Save
             </button>
           </div>
         </div>
-        {/* ── TABS ── */}
         <div className="tabs-section">
           <div className="tabs-container">
             {tabs.map((tab, i) => {
@@ -608,12 +889,9 @@ const CreateCustomerPage = () => {
             })}
           </div>
         </div>
-        {/* ── FORM CONTENT ── */}
         <div className="form-section">
-          {/* DETAILS TAB */}
           {activeTab === "details" && (
             <div className="form-grid">
-              {/* LEFT */}
               <div className="form-column left">
                 <div className="form-group">
                   <label>
@@ -652,30 +930,31 @@ const CreateCustomerPage = () => {
                         </ul>
                       )}
                     </div>
-                    {/* UPDATED: Dynamic placeholder based on digits */}
+                    {/* KEYPAD TRIGGER FOR WHATSAPP */}
                     <input
                       type="text"
                       placeholder={`${getMaxDigits(selectedWhatsappISDCode)}-digit WhatsApp Number`}
                       value={whatsappNumber}
                       onChange={handleWhatsappNumberChange}
+                      onClick={() => openNumpad('whatsapp')}
+                      readOnly={true}
+                      style={{ cursor: 'pointer', backgroundColor: '#fff' }}
                     />
                   </div>
                 </div>
                 <div className="form-group">
                   <label>Customer Group</label>
-                  {/* UPDATED: Pass createNewLabel="Group" */}
                   <SearchableSelect
                     options={customerGroups.map(g => g.group_name)}
                     value={selectedGroup ? customerGroups.find(g => g._id === selectedGroup)?.group_name || '' : ''}
                     onChange={handleGroupNameChange}
                     placeholder="Select or Create Group"
                     allowCreateNew={true}
-                    onAddNewValue={handleCreateNewGroup}
+                    onCreateRequest={handleNavigateToCreateGroup}
                     createNewLabel="Group"
                   />
                 </div>
               </div>
-              {/* RIGHT */}
               <div className="form-column right">
                 <div className="form-group">
                   <label>
@@ -706,15 +985,17 @@ const CreateCustomerPage = () => {
                         </ul>
                       )}
                     </div>
-                    {/* UPDATED: Dynamic placeholder based on digits */}
+                    {/* KEYPAD TRIGGER FOR PHONE */}
                     <input
                       type="text"
                       placeholder={`${getMaxDigits(selectedISDCode)}-digit Phone Number`}
                       value={phoneNumber}
                       onChange={handlePhoneNumberChange}
+                      onClick={() => openNumpad('phone')}
+                      readOnly={true}
+                      style={{ cursor: 'pointer', backgroundColor: '#fff' }}
                     />
                   </div>
-                  {/* NEW: Copy to WhatsApp Suggestion */}
                   {phoneNumber && !whatsappNumber && (
                     <div className="copy-suggestion">
                       <span>Use the same number for WhatsApp?</span>
@@ -736,10 +1017,8 @@ const CreateCustomerPage = () => {
               </div>
             </div>
           )}
-          {/* ADDRESS & CONTACT TAB */}
           {activeTab === "address-and-contact" && (
             <div className="form-grid">
-              {/* LEFT: Country, State (field1), Area (field2), Flat */}
               <div className="form-column left">
                 <div className="form-group">
                   <label>Country</label>
@@ -751,46 +1030,43 @@ const CreateCustomerPage = () => {
                       handleDeliveryAddressChange("field1", "");
                       handleDeliveryAddressChange("field2", "");
                       handleDeliveryAddressChange("field3", "");
+                      handleDeliveryAddressChange("field4", "");
                     }}
                     placeholder="Select Country"
                   />
                 </div>
-                {/* FIELD 1 (State) */}
-                {deliveryAddress.country && addressStructure.countries[deliveryAddress.country]?.field1 && (
+                {field1Label && field1Label !== "N/A" && field1Label !== "None" && (
                   <div className="form-group">
-                    <label>{addressStructure.countries[deliveryAddress.country].field1.label}</label>
-                    {/* UPDATED: Pass createNewLabel=field1.label */}
+                    <label>{field1Label}</label>
                     <SearchableSelect
-                      options={addressStructure.countries[deliveryAddress.country].field1.values || []}
+                      options={getOptionsForField("field1", deliveryAddress.country)}
                       value={deliveryAddress.field1}
                       onChange={(value) => {
                         handleDeliveryAddressChange("field1", value);
-                        // UPDATED: Clear Field2 and Field3 when Field1 changes (including to empty)
                         handleDeliveryAddressChange("field2", "");
                         handleDeliveryAddressChange("field3", "");
                       }}
-                      placeholder={`Select ${addressStructure.countries[deliveryAddress.country].field1.label}`}
+                      placeholder={`Select or Create ${field1Label}`}
                       allowCreateNew={true}
-                      onAddNewValue={handleAddNewField1}
-                      createNewLabel={addressStructure.countries[deliveryAddress.country].field1.label}
+                      onAddNewValue={(newValue) => handleAddNewAddressValue("field1", newValue)}
+                      onCreateRequest={(search) => handleOpenAddModal("field1", search)}
                     />
                   </div>
                 )}
-                {/* FIELD 2 (Area) */}
-                {deliveryAddress.country && addressStructure.countries[deliveryAddress.country]?.field2 && (
+                {field2Label && field2Label !== "N/A" && field2Label !== "None" && (
                   <div className="form-group">
-                    <label>{addressStructure.countries[deliveryAddress.country].field2.label}</label>
-                    {/* UPDATED: Pass createNewLabel=field2.label */}
+                    <label>{field2Label}</label>
                     <SearchableSelect
-                      options={getFilteredValues("field2").length > 0
-                        ? getFilteredValues("field2")
-                        : (addressStructure.countries[deliveryAddress.country].field2.values || [])}
+                      options={getOptionsForField("field2", deliveryAddress.country, deliveryAddress.field1)}
                       value={deliveryAddress.field2}
-                      onChange={(value) => handleDeliveryAddressChange("field2", value)}
-                      placeholder={`Select ${addressStructure.countries[deliveryAddress.country].field2.label}`}
+                      onChange={(value) => {
+                        handleDeliveryAddressChange("field2", value);
+                        handleDeliveryAddressChange("field3", "");
+                      }}
+                      placeholder={`Select or Create ${field2Label}`}
                       allowCreateNew={true}
-                      onAddNewValue={handleAddNewField2}
-                      createNewLabel={addressStructure.countries[deliveryAddress.country].field2.label}
+                      onAddNewValue={(newValue) => handleAddNewAddressValue("field2", newValue)}
+                      onCreateRequest={(search) => handleOpenAddModal("field2", search)}
                     />
                   </div>
                 )}
@@ -803,23 +1079,18 @@ const CreateCustomerPage = () => {
                   />
                 </div>
               </div>
-              {/* RIGHT: District (field3), Building Name */}
               <div className="form-column right">
-                {/* FIELD 3 (District) */}
-                {deliveryAddress.country && addressStructure.countries[deliveryAddress.country]?.field3 && (
+                {field3Label && field3Label !== "N/A" && field3Label !== "None" && (
                   <div className="form-group">
-                    <label>{addressStructure.countries[deliveryAddress.country].field3.label}</label>
-                    {/* UPDATED: Pass createNewLabel=field3.label */}
+                    <label>{field3Label}</label>
                     <SearchableSelect
-                      options={getFilteredValues("field3").length > 0
-                        ? getFilteredValues("field3")
-                        : (addressStructure.countries[deliveryAddress.country].field3.values || [])}
+                      options={getOptionsForField("field3", deliveryAddress.country, deliveryAddress.field2)}
                       value={deliveryAddress.field3}
                       onChange={(value) => handleDeliveryAddressChange("field3", value)}
-                      placeholder={`Select ${addressStructure.countries[deliveryAddress.country].field3.label}`}
+                      placeholder={`Select or Create ${field3Label}`}
                       allowCreateNew={true}
-                      onAddNewValue={handleAddNewField3}
-                      createNewLabel={addressStructure.countries[deliveryAddress.country].field3.label}
+                      onAddNewValue={(newValue) => handleAddNewAddressValue("field3", newValue)}
+                      onCreateRequest={(search) => handleOpenAddModal("field3", search)}
                     />
                   </div>
                 )}
@@ -832,155 +1103,14 @@ const CreateCustomerPage = () => {
                   />
                 </div>
                 <div className="form-group empty-align" />
-                <div className="form-group empty-align" />
+                {!field1Label && <div className="form-group empty-align" />}
+                {!field2Label && <div className="form-group empty-align" />}
               </div>
             </div>
           )}
         </div>
       </div>
-      {/* ── ADDRESS STRUCTURE BUILDER MODAL ── */}
-      {showStructureBuilder && (
-        <div className="structure-builder-overlay">
-          <div className="structure-builder-modal">
-            <h2>Define Address Structure</h2>
-            <p className="subtitle">
-              Add country and up to 3 custom fields (e.g., Emirate, City, Area/Village).
-            </p>
-            {/* SAVED COUNTRIES */}
-            {countryList.length > 0 && (
-              <div className="saved-countries-section">
-                <p className="saved-label">Saved Countries (Click to edit):</p>
-                <div className="saved-tags">
-                  {countryList.map((country) => (
-                    <div key={country} className="country-tag-wrapper">
-                      <button
-                        className="saved-country-tag"
-                        onClick={() => loadCountryForEdit(country)}
-                      >
-                        {country}
-                      </button>
-                      <button
-                        className="delete-country-btn"
-                        onClick={() => handleDeleteCountry(country)}
-                        title={`Delete ${country}`}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            <hr />
-            {/* COUNTRY - ALWAYS SHOWN */}
-            <div className="field-group">
-              <label>Country Name</label>
-              <input
-                type="text"
-                placeholder="e.g., UAE, India"
-                value={tempCountry}
-                onChange={(e) => setTempCountry(e.target.value)}
-                disabled={!!selectedCountryForEdit}
-                className={selectedCountryForEdit ? "disabled-input" : ""}
-              />
-            </div>
-            {/* FIELD 1 - SHOWN IF COUNTRY IS FILLED */}
-            {tempCountry.trim() && (
-              <div className="field-group">
-                <label>Field 1 Label (e.g., Emirate, State)</label>
-                <input
-                  type="text"
-                  placeholder="Enter label"
-                  value={tempField1Label}
-                  onChange={(e) => setTempField1Label(e.target.value)}
-                />
-                <label className="value-label">Field 1 Value (comma-separated for multiples)</label>
-                <div className="input-with-list">
-                  <input
-                    type="text"
-                    placeholder="e.g., Tamil Nadu, Andhra Pradesh, Arunachal Pradesh"
-                    value={tempField1Value}
-                    onChange={(e) => setTempField1Value(e.target.value)}
-                  />
-                  {/* UPDATED: Show saved values as clickable spans */}
-                  {addressStructure.countries[currentEditCountry]?.field1?.values?.length > 0 && (
-                    <div className="saved-list">
-                      Saved: {addressStructure.countries[currentEditCountry].field1.values.map((v, i) => (
-                        <span
-                          key={i}
-                          className="clickable-value"
-                          onClick={() => handleField1ValueClick(v)}
-                          style={{ marginLeft: "4px", cursor: "pointer", color: "#007bff" }}
-                        >
-                          {v}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-            {/* FIELD 2 - SHOWN IF COUNTRY FILLED AND FIELD1 LABEL FILLED */}
-            {tempCountry.trim() && tempField1Label.trim() && (
-              <div className="field-group">
-                <label>Field 2 Label (e.g., City, District)</label>
-                <input
-                  type="text"
-                  placeholder="Enter label"
-                  value={tempField2Label}
-                  onChange={(e) => setTempField2Label(e.target.value)}
-                />
-                <label className="value-label">Field 2 Value (comma-separated for multiples)</label>
-                <div className="input-with-list">
-                  <input
-                    type="text"
-                    placeholder="e.g., Sharjah, Chennai"
-                    value={tempField2Value}
-                    onChange={(e) => setTempField2Value(e.target.value)}
-                  />
-                </div>
-              </div>
-            )}
-            {/* FIELD 3 - SHOWN IF COUNTRY FILLED, FIELD1 AND FIELD2 LABELS FILLED */}
-            {tempCountry.trim() && tempField1Label.trim() && tempField2Label.trim() && (
-              <div className="field-group">
-                <label>Field 3 Label (e.g., Area, Village)</label>
-                <input
-                  type="text"
-                  placeholder="Enter label"
-                  value={tempField3Label}
-                  onChange={(e) => setTempField3Label(e.target.value)}
-                />
-                <label className="value-label">Field 3 Value (comma-separated for multiples)</label>
-                <div className="input-with-list">
-                  <input
-                    type="text"
-                    placeholder="e.g., Al Barsha, Koyambedu"
-                    value={tempField3Value}
-                    onChange={(e) => setTempField3Value(e.target.value)}
-                  />
-                </div>
-              </div>
-            )}
-            {/* ACTIONS - ALWAYS SHOWN, BUT ENABLE SAVE ONLY IF AT LEAST COUNTRY FILLED */}
-            <div className="modal-actions">
-              <button
-                className="save-structure-btn"
-                onClick={saveAddressStructure}
-                disabled={!tempCountry.trim()}
-              >
-                Save Structure
-              </button>
-              <button className="cancel-btn" onClick={cancelStructure}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* ── STYLES (UPDATED: Added gradient background, fixed back button, main card margin) ── */}
       <style jsx>{`
-        /* Base Layout - UPDATED: Gradient background like EmployeeList */
         .create-customer-container {
           background: linear-gradient(135deg, #ffffff 0%, #3498db 100%);
           min-height: 100vh;
@@ -988,7 +1118,6 @@ const CreateCustomerPage = () => {
           position: relative;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
-        /* NEW: Fixed Back Button - Styled exactly like EmployeeList */
         .fixed-back-btn {
           position: fixed;
           top: 20px;
@@ -1013,7 +1142,6 @@ const CreateCustomerPage = () => {
           color: #ffffff;
           transform: scale(1.05);
         }
-        /* NEW: Main Content Card - With margin for fixed button, like EmployeeList */
         .main-content-card {
           max-width: 1000px;
           margin: 80px auto 20px;
@@ -1022,7 +1150,6 @@ const CreateCustomerPage = () => {
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
           overflow: hidden;
         }
-        /* Header - UPDATED: Adjusted for card */
         .header-section {
           display: flex;
           align-items: center;
@@ -1066,7 +1193,6 @@ const CreateCustomerPage = () => {
           font-weight: bold;
           color: #333;
         }
-        /* Tabs */
         .tabs-section { margin-bottom: 20px; overflow-x: auto; }
         .tabs-container {
           display: flex;
@@ -1092,7 +1218,6 @@ const CreateCustomerPage = () => {
           border-bottom: 3px solid #007bff;
           font-weight: bold;
         }
-        /* Form */
         .form-section {
           background: #fff;
           padding: 24px;
@@ -1127,7 +1252,6 @@ const CreateCustomerPage = () => {
           border-color: #0056b3;
           box-shadow: 0 0 0 3px rgba(0,123,255,.2);
         }
-        /* NEW: Copy Suggestion Styles */
         .copy-suggestion {
           display: flex;
           align-items: center;
@@ -1152,7 +1276,6 @@ const CreateCustomerPage = () => {
         .copy-btn:hover {
           background: #0056b3;
         }
-        /* Searchable Select */
         .searchable-select {
           position: relative;
           width: 100%;
@@ -1205,7 +1328,6 @@ const CreateCustomerPage = () => {
           padding: 12px;
           text-align: center;
         }
-        /* Phone Input */
         .phone-input-group {
           display: flex;
           height: 42px;
@@ -1222,7 +1344,7 @@ const CreateCustomerPage = () => {
           height: 100%;
           width: 58px;
           display: flex;
-          align-items:  center;
+          align-items: center;
           justify-content: center;
           cursor: pointer;
         }
@@ -1259,7 +1381,6 @@ const CreateCustomerPage = () => {
           font-size: 13px;
         }
         .phone-input-group input:focus { outline: none; }
-        /* Alert - UPDATED: Made more prominent (centered, wider) */
         .alert {
           position: fixed;
           top: 20px;
@@ -1277,155 +1398,88 @@ const CreateCustomerPage = () => {
         }
         .alert-success { background: #d4edda; border: 2px solid #c3e6cb; color: #155724; }
         .alert-warning { background: #fff3cd; border: 2px solid #ffeaa7; color: #856404; }
-        /* Structure Builder Modal */
-        .structure-builder-overlay {
+ 
+        /* Add Modal Styles */
+        .add-modal-overlay {
           position: fixed;
-          top: 0; left: 0; right: 0; bottom: 0;
-          background: rgba(0,0,0,0.6);
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: rgba(0, 0, 0, 0.5);
           display: flex;
           align-items: center;
           justify-content: center;
-          z-index: 2000;
+          z-index: 3000;
+        }
+        .add-modal {
+          background-color: #fff;
+          border-radius: 12px;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+          width: 90%;
+          max-width: 400px;
           padding: 20px;
         }
-        .structure-builder-modal {
-          background: #fff;
-          padding: 32px;
-          border-radius: 14px;
-          width: 100%;
-          max-width: 750px;
-          box-shadow: 0 15px 40px rgba(0,0,0,0.25);
-          max-height: 92vh;
-          overflow-y: auto;
+        .modal-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 15px;
+          font-weight: bold;
+          font-size: 18px;
+          color: #333;
         }
-        .structure-builder-modal h2 {
-          margin: 0 0 8px;
-          font-size: 22px;
-          color: #222;
-          font-weight: 600;
-        }
-        .subtitle {
-          font-size: 13.5px;
+        .close-modal-btn {
+          background: none;
+          border: none;
+          font-size: 20px;
           color: #666;
-          margin-bottom: 22px;
-          line-height: 1.5;
-        }
-        /* Saved Countries */
-        .saved-countries-section { margin-bottom: 18px; }
-        .saved-label {
-          font-weight: bold;
-          font-size: 13px;
-          color: #333;
-          margin-bottom: 10px;
-        }
-        .saved-tags {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 10px;
-        }
-        .country-tag-wrapper {
-          display: flex;
-          align-items: center;
-          gap: 5px;
-        }
-        .saved-country-tag {
-          background: #d1ecf1;
-          color: #0c5460;
-          border: none;
-          padding: 7px 14px;
-          border-radius: 30px;
-          font-size: 13px;
-          font-weight: 500;
           cursor: pointer;
-          transition: 0.2s;
         }
-        .saved-country-tag:hover {
-          background: #bee5eb;
+        .modal-body {
+          margin-bottom: 15px;
         }
-        .delete-country-btn {
-          background: #dc3545;
-          color: #fff;
-          border: none;
-          border-radius: 50%;
-          width: 20px;
-          height: 20px;
-          font-size: 16px;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: background 0.2s;
-        }
-        .delete-country-btn:hover {
-          background: #c82333;
-        }
-        hr {
-          margin: 24px 0;
-          border: none;
-          border-top: 1.5px solid #eee;
-        }
-        /* Field Group */
-        .field-group {
-          margin-bottom: 26px;
-          animation: fadeIn 0.3s ease-in;
-        }
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .field-group label {
-          display: block;
-          margin-bottom: 7px;
-          font-weight: bold;
-          font-size: 13.5px;
-          color: #333;
-        }
-        .value-label {
-          margin-top: 12px;
-          margin-bottom: 7px;
-        }
-        .field-group input {
+        .modal-body input {
           width: 100%;
-          padding: 11px 14px;
+          height: 42px;
+          padding: 0 12px;
           border: 1.5px solid #007bff;
           border-radius: 6px;
-          font-size: 13.5px;
+          font-size: 13px;
         }
-        .disabled-input {
-          background: #f8f9fa !important;
-          color: #6c757d;
-          cursor: not-allowed;
-        }
-        .input-with-list {
-          position: relative;
-        }
-        .saved-list {
-          font-size: 12.5px;
-          color: #28a745;
-          font-style: italic;
-          margin-top: 8px;
-          padding-left: 4px;
-          line-height: 1.4;
-        }
-        .clickable-value:hover { text-decoration: underline; }
-        /* Modal Actions */
-        .modal-actions {
+        .modal-footer {
           display: flex;
-          justify-content: center;
-          gap: 18px;
-          margin-top: 32px;
-          padding-top: 24px;
-          border-top: 1.5px solid #eee;
+          justify-content: flex-end;
+          gap: 10px;
         }
-        /* Responsive */
+        .modal-footer button {
+          padding: 10px 20px;
+          border-radius: 6px;
+          border: none;
+          cursor: pointer;
+          font-size: 14px;
+        }
+        .modal-footer .cancel-btn {
+          background: #dc3545;
+          color: #fff;
+        }
+        .modal-footer .cancel-btn:hover {
+          background: #c82333;
+        }
+        .modal-footer .save-btn {
+          background: #007bff;
+          color: #fff;
+        }
+        .modal-footer .save-btn:hover {
+          background: #0056b3;
+        }
+ 
         @media (max-width: 768px) {
           .header-section { flex-direction: column; text-align: center; }
           .header-buttons { justify-content: center; }
           .form-grid { grid-template-columns: 1fr; }
-          .structure-builder-modal { padding: 24px; max-width: 95%; }
           .tabs-container { min-width: auto; }
           .copy-suggestion { flex-direction: column; align-items: flex-start; gap: 6px; }
-          .country-tag-wrapper { flex-direction: column; gap: 2px; align-items: flex-start; }
           .alert { min-width: 280px; max-width: 95vw; left: 5px; right: 5px; transform: none; }
           .fixed-back-btn { left: 10px; top: 10px; padding: 6px 16px; font-size: 14px; }
           .main-content-card { margin: 60px auto 20px; padding: 20px; }
@@ -1434,5 +1488,4 @@ const CreateCustomerPage = () => {
     </div>
   );
 };
-
 export default CreateCustomerPage;

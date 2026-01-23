@@ -8,7 +8,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { FaUserTie, FaArrowLeft, FaEdit, FaComment, FaClock, FaUser, FaEnvelope, FaPhone, FaMapMarkerAlt, FaCalendarAlt, FaBriefcase, FaIdCard, FaDollarSign, FaUsers, FaTimes, FaSearch, FaBell, FaUniversity, FaUmbrellaBeach, FaCalendarCheck, FaClipboardList, FaFileInvoiceDollar, FaChevronUp } from 'react-icons/fa';
+import { FaUserTie, FaArrowLeft, FaEdit, FaComment, FaClock, FaUser, FaEnvelope, FaPhone, FaMapMarkerAlt, FaCalendarAlt, FaBriefcase, FaIdCard, FaDollarSign, FaUsers, FaTimes, FaSearch, FaBell, FaUniversity, FaUmbrellaBeach, FaCalendarCheck, FaClipboardList, FaFileInvoiceDollar, FaChevronUp, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 const EmployeeDocType = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -23,6 +23,34 @@ const EmployeeDocType = () => {
   const [currency, setCurrency] = useState('AED'); // Set to AED based on sample data
   // Modal state only for Default Shift
   const [showShiftModal, setShowShiftModal] = useState(false);
+
+  // Roaster App Tab State
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
+
+  const displayedSpecialDays = React.useMemo(() => {
+    if (!employee || !employee.assigned_schedule) return [];
+    const schedule = employee.assigned_schedule;
+    const combined = new Map();
+
+    // Add Special Days from Rule
+    if (schedule.special_days) {
+      schedule.special_days.forEach(sd => {
+        const key = `${sd.date}-${sd.description}`;
+        combined.set(key, { ...sd, source: 'rule' });
+      });
+    }
+
+    // Add Special Day Assignments (Overrides)
+    if (schedule.special_day_assignments) {
+      schedule.special_day_assignments.forEach(sd => {
+        const key = `${sd.date}-${sd.description}`;
+        const existing = combined.get(key) || {};
+        combined.set(key, { ...existing, ...sd, source: 'assignment' });
+      });
+    }
+
+    return Array.from(combined.values()).sort((a, b) => new Date(a.date) - new Date(b.date));
+  }, [employee]);
   // Fetch baseUrl on component mount
   useEffect(() => {
     const fetchConfig = async () => {
@@ -734,6 +762,162 @@ const EmployeeDocType = () => {
     </div>
   );
 
+  const getDaysInMonth = (date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const days = new Date(year, month + 1, 0).getDate();
+    const firstDay = new Date(year, month, 1).getDay();
+    const startOffset = firstDay === 0 ? 6 : firstDay - 1;
+    return { days, startOffset };
+  };
+
+  const handlePrevMonth = () => {
+    setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+    setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  };
+
+  const getDayStatus = (day) => {
+    if (!employee || !employee.assigned_schedule) return null;
+    const schedule = employee.assigned_schedule;
+
+    const year = calendarMonth.getFullYear();
+    const month = String(calendarMonth.getMonth() + 1).padStart(2, '0');
+    const dayStr = String(day).padStart(2, '0');
+    const dateStr = `${year}-${month}-${dayStr}`;
+    const dateObj = new Date(year, calendarMonth.getMonth(), day);
+    const dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dateObj.getDay()];
+
+    const special = displayedSpecialDays.find(sd => sd.date === dateStr);
+
+    // Check for Approved Leave
+    const approvedLeave = leaveApplications.find(l =>
+      l.status === 'APPROVED' &&
+      l.from_date <= dateStr &&
+      l.to_date >= dateStr
+    );
+    if (approvedLeave) {
+      return { type: 'Leave', color: '#f39c12', tooltip: `On Leave: ${approvedLeave.leave_name || 'Approved Leave'}`, leave: approvedLeave };
+    }
+
+    if (special) {
+      if (special.type === 'Holiday') {
+        return { type: 'Holiday', color: '#e74c3c', tooltip: `Holiday: ${special.description}` };
+      }
+      if (special.type === 'Extended') {
+        return { type: 'Extended', color: '#e67e22', tooltip: `Extended: ${special.extended_start} - ${special.extended_end} (${special.description})` };
+      }
+      if (special.type === 'Half-Day') {
+        return { type: 'Half-Day', color: '#9b59b6', tooltip: `Half-Day: ${special.start_time} - ${special.end_time}` };
+      }
+      if (special.type === 'Special-Shift') {
+        return { type: 'Special-Shift', color: '#3498db', tooltip: `Special Shift: ${special.description}` };
+      }
+    }
+
+    // Check Working Days (from schedule rule)
+    if (schedule.working_days && !schedule.working_days.includes(dayName)) {
+      return { type: 'Weekly Off', color: '#e74c3c', tooltip: 'Weekly Off' };
+    }
+
+    // Default to Working
+    return { type: 'Working', color: '#2ecc71', tooltip: `Regular Shift: ${schedule.default_shift || 'Shift'}` };
+  };
+
+  const renderRoasterAppTab = () => {
+    const { days, startOffset } = getDaysInMonth(calendarMonth);
+    const monthName = calendarMonth.toLocaleString('default', { month: 'long', year: 'numeric' });
+    const weekDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+    return (
+      <div style={{ padding: '20px 0' }}>
+        {/* Calendar Navigation */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '20px',
+          background: '#f8f9fa',
+          padding: '10px 15px',
+          borderRadius: '8px',
+          border: '1px solid #e9ecef'
+        }}>
+          <button onClick={handlePrevMonth} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2c3e50' }}>
+            <FaChevronLeft />
+          </button>
+          <h3 style={{ margin: 0, color: '#2c3e50', fontSize: '1.1rem', fontWeight: 'bold' }}>
+            <FaCalendarCheck style={{ marginRight: '10px', color: '#3498db' }} />
+            Schedule Preview: {monthName}
+          </h3>
+          <button onClick={handleNextMonth} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2c3e50' }}>
+            <FaChevronRight />
+          </button>
+        </div>
+
+        {/* Calendar Grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '10px' }}>
+          {/* Headers */}
+          {weekDays.map(day => (
+            <div key={day} style={{ textAlign: 'center', fontWeight: 'bold', padding: '10px', color: '#7f8c8d', borderBottom: '2px solid #eee' }}>
+              {day}
+            </div>
+          ))}
+
+          {/* Empty Slots */}
+          {Array.from({ length: startOffset }).map((_, i) => (
+            <div key={`empty-${i}`} style={{ height: '100px', background: '#fcfcfc', borderRadius: '8px' }}></div>
+          ))}
+
+          {/* Days */}
+          {Array.from({ length: days }).map((_, i) => {
+            const day = i + 1;
+            const status = getDayStatus(day);
+
+            return (
+              <div
+                key={day}
+                title={status?.tooltip}
+                style={{
+                  height: '100px',
+                  border: '1px solid #eee',
+                  borderRadius: '8px',
+                  padding: '5px',
+                  position: 'relative',
+                  backgroundColor: status?.type === 'Weekly Off' ? '#fff5f5' : status?.type === 'Holiday' ? '#fff5f5' : '#fff',
+                  borderLeft: status ? `4px solid ${status.color}` : '1px solid #eee',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  overflow: 'hidden'
+                }}
+                onMouseOver={(e) => { e.currentTarget.style.boxShadow = '0 5px 15px rgba(0,0,0,0.1)'; }}
+                onMouseOut={(e) => { e.currentTarget.style.boxShadow = 'none'; }}
+              >
+                <div style={{ fontWeight: 'bold', color: '#2c3e50', marginBottom: '5px' }}>{day}</div>
+                {status && (
+                  <div style={{ fontSize: '0.75rem', color: status.color, fontWeight: '600' }}>
+                    {status.type}
+                    {status.type === 'Leave' && <div style={{ fontSize: '0.7rem', color: '#7f8c8d', marginTop: '2px' }}>{status.tooltip}</div>}
+                    {status.type === 'Extended' && <div style={{ fontSize: '0.65rem', color: '#e67e22' }}>Overtime</div>}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ marginTop: '20px', display: 'flex', gap: '20px', justifyContent: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.9rem' }}><span style={{ width: '12px', height: '12px', background: '#2ecc71' }}></span> Working</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.9rem' }}><span style={{ width: '12px', height: '12px', background: '#e74c3c' }}></span> Weekly Off / Holiday</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.9rem' }}><span style={{ width: '12px', height: '12px', background: '#f39c12' }}></span> Leave</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.9rem' }}><span style={{ width: '12px', height: '12px', background: '#3498db' }}></span> Special Shift</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.9rem' }}><span style={{ width: '12px', height: '12px', background: '#e67e22' }}></span> Extended</div>
+        </div>
+      </div>
+    );
+  };
+
   const renderTabContent = () => {
     switch (activeTab) {
       case 'Overview': return renderOverviewTab();
@@ -743,6 +927,7 @@ const EmployeeDocType = () => {
       case 'Salary': return renderSalaryTab();
       case 'Attendace': return renderConnectionsTab();
       case 'Leaves': return renderLeavesTab();
+      case 'Roaster App': return renderRoasterAppTab();
       default: return null;
     }
   };
@@ -923,7 +1108,7 @@ const EmployeeDocType = () => {
             marginBottom: '20px'
           }}>
             <div style={{ display: 'flex', gap: '0', borderBottom: '1px solid #e9ecef', marginBottom: '20px' }}>
-              {['Overview', 'Joining', 'Address & Contacts', 'Shift & Holiday', 'Salary', 'Attendace', 'Leaves'].map(tab => (
+              {['Overview', 'Joining', 'Address & Contacts', 'Shift & Holiday', 'Salary', 'Attendace', 'Leaves', 'Roaster App'].map(tab => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}

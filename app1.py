@@ -134,6 +134,196 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp','jfif','ico','pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'svg'}
 ALLOWED_JSON_EXTENSIONS = {'json'}
 MAX_BACKUPS = 10
+country_address_hierarchy = {
+    "Afghanistan": ["Province", "District", "Area"],
+    "Albania": ["County", "Municipality", "Area"],
+    "Algeria": ["Province", "District", "Area"],
+    "Andorra": ["Parish", "Area", "N/A"],
+    "Angola": ["Province", "Municipality", "Area"],
+    "Antigua and Barbuda": ["Parish", "Area", "N/A"],
+    "Argentina": ["Province", "Department", "Municipality"],
+    "Armenia": ["Province", "Community", "Area"],
+    "Australia": ["State/Territory", "Local Government Area", "Suburb"],
+    "Austria": ["State", "District", "Municipality"],
+    "Azerbaijan": ["Economic Region", "District", "Area"],
+    "Bahamas": ["District", "Area", "N/A"],
+    "Bahrain": ["Governorate", "Municipality", "Area"],
+    "Bangladesh": ["Division", "District", "Upazila"],
+    "Barbados": ["Parish", "Area", "N/A"],
+    "Belarus": ["Region", "District", "Area"],
+    "Belgium": ["Region", "Province", "Municipality"],
+    "Belize": ["District", "Town", "Area"],
+    "Benin": ["Department", "Commune", "Area"],
+    "Bhutan": ["District", "Gewog", "Village"],
+    "Bolivia": ["Department", "Province", "Municipality"],
+    "Bosnia and Herzegovina": ["Entity", "Canton", "Municipality"],
+    "Botswana": ["District", "Sub-District", "Area"],
+    "Brazil": ["State", "Municipality", "Neighborhood"],
+    "Brunei": ["District", "Mukim", "Village"],
+    "Bulgaria": ["Province", "Municipality", "Area"],
+    "Burkina Faso": ["Region", "Province", "Commune"],
+    "Burundi": ["Province", "Commune", "Area"],
+    "Cambodia": ["Province", "District", "Commune"],
+    "Cameroon": ["Region", "Division", "Sub-Division"],
+    "Canada": ["Province/Territory", "Municipality", "Area"],
+    "Cape Verde": ["Municipality", "Area", "N/A"],
+    "Central African Republic": ["Prefecture", "Sub-Prefecture", "Area"],
+    "Chad": ["Province", "Department", "Area"],
+    "Chile": ["Region", "Province", "Commune"],
+    "China": ["Province", "Prefecture", "County"],
+    "Colombia": ["Department", "Municipality", "Area"],
+    "Comoros": ["Island", "Prefecture", "Area"],
+    "Costa Rica": ["Province", "Canton", "District"],
+    "Croatia": ["County", "Municipality", "Area"],
+    "Cuba": ["Province", "Municipality", "Area"],
+    "Cyprus": ["District", "Municipality", "Area"],
+    "Czech Republic": ["Region", "District", "Municipality"],
+    "Denmark": ["Region", "Municipality", "Area"],
+    "Djibouti": ["Region", "District", "Area"],
+    "Dominica": ["Parish", "Area", "N/A"],
+    "Dominican Republic": ["Province", "Municipality", "Area"],
+    "Ecuador": ["Province", "Canton", "Parish"],
+    "Egypt": ["Governorate", "District", "Area"],
+    "El Salvador": ["Department", "Municipality", "Area"],
+    "Equatorial Guinea": ["Province", "District", "Area"],
+    "Eritrea": ["Region", "Sub-Region", "Area"],
+    "Estonia": ["County", "Municipality", "Area"],
+    "Eswatini": ["Region", "Inkhundla", "Area"],
+    "Ethiopia": ["Region", "Zone", "Woreda"],
+    "Fiji": ["Division", "Province", "District"],
+    "Finland": ["Region", "Municipality", "Area"],
+    "France": ["Region", "Department", "Commune"],
+    "Gabon": ["Province", "Department", "Area"],
+    "Gambia": ["Region", "District", "Area"],
+    "Georgia": ["Region", "Municipality", "Area"],
+    "Germany": ["State", "District", "Municipality"],
+    "Ghana": ["Region", "District", "Area"],
+    "Greece": ["Region", "Municipality", "Area"],
+    "Grenada": ["Parish", "Area", "N/A"],
+    "Guatemala": ["Department", "Municipality", "Area"],
+    "Guinea": ["Region", "Prefecture", "Sub-Prefecture"],
+    "Guinea-Bissau": ["Region", "Sector", "Area"],
+    "Guyana": ["Region", "Neighborhood Council", "Area"],
+    "Haiti": ["Department", "Arrondissement", "Commune"],
+    "Honduras": ["Department", "Municipality", "Area"],
+    "Hungary": ["County", "District", "Municipality"],
+    "Iceland": ["Region", "Municipality", "Area"],
+    "India": ["State/UT", "District", "Taluk"],
+    "Indonesia": ["Province", "Regency/City", "District"],
+    "Iran": ["Province", "County", "District"],
+    "Iraq": ["Governorate", "District", "Area"],
+    "Ireland": ["County", "Municipality", "Area"],
+    "Israel": ["District", "Sub-District", "Area"],
+    "Italy": ["Region", "Province", "Municipality"],
+    "Jamaica": ["Parish", "Area", "N/A"],
+    "Japan": ["Prefecture", "City/Ward", "District"],
+    "Jordan": ["Governorate", "District", "Area"],
+    "Kazakhstan": ["Region", "District", "Area"],
+    "Kenya": ["County", "Sub-County", "Ward"],
+    "Kiribati": ["Island", "Council", "Area"],
+    "Kuwait": ["Governorate", "Area", "Block"],
+    "Kyrgyzstan": ["Region", "District", "Area"],
+    "Laos": ["Province", "District", "Village"],
+    "Latvia": ["Municipality", "Area", "N/A"],
+    "Lebanon": ["Governorate", "District", "Area"],
+    "Lesotho": ["District", "Community Council", "Area"],
+    "Liberia": ["County", "District", "Area"],
+    "Libya": ["District", "Municipality", "Area"],
+    "Liechtenstein": ["Municipality", "Area", "N/A"],
+    "Lithuania": ["County", "Municipality", "Area"],
+    "Luxembourg": ["Canton", "Commune", "Area"],
+    "Madagascar": ["Region", "District", "Commune"],
+    "Malawi": ["Region", "District", "Area"],
+    "Malaysia": ["State", "District", "Mukim"],
+    "Maldives": ["Atoll", "Island", "Area"],
+    "Mali": ["Region", "Cercle", "Commune"],
+    "Malta": ["Region", "Local Council", "Area"],
+    "Marshall Islands": ["Atoll", "Municipality", "Area"],
+    "Mauritania": ["Region", "Department", "Area"],
+    "Mauritius": ["District", "Village", "Area"],
+    "Mexico": ["State", "Municipality", "Locality"],
+    "Micronesia": ["State", "Municipality", "Area"],
+    "Moldova": ["District", "Commune", "Area"],
+    "Monaco": ["Commune", "Area", "N/A"],
+    "Mongolia": ["Province", "District", "Bag"],
+    "Montenegro": ["Municipality", "Area", "N/A"],
+    "Morocco": ["Region", "Province", "Commune"],
+    "Mozambique": ["Province", "District", "Area"],
+    "Myanmar": ["Region/State", "District", "Township"],
+    "Namibia": ["Region", "Constituency", "Area"],
+    "Nauru": ["District", "Area", "N/A"],
+    "Nepal": ["Province", "District", "Municipality"],
+    "Netherlands": ["Province", "Municipality", "Area"],
+    "New Zealand": ["Region", "District", "Area"],
+    "Nicaragua": ["Department", "Municipality", "Area"],
+    "Niger": ["Region", "Department", "Commune"],
+    "Nigeria": ["State", "Local Government Area", "Ward"],
+    "North Korea": ["Province", "County", "Area"],
+    "North Macedonia": ["Municipality", "Area", "N/A"],
+    "Norway": ["County", "Municipality", "Area"],
+    "Oman": ["Governorate", "Wilayat", "Area"],
+    "Pakistan": ["Province", "Division", "District"],
+    "Palau": ["State", "Area", "N/A"],
+    "Panama": ["Province", "District", "Corregimiento"],
+    "Papua New Guinea": ["Province", "District", "Area"],
+    "Paraguay": ["Department", "District", "Area"],
+    "Peru": ["Region", "Province", "District"],
+    "Philippines": ["Region", "Province", "City/Municipality"],
+    "Poland": ["Voivodeship", "County", "Gmina"],
+    "Portugal": ["District", "Municipality", "Parish"],
+    "Qatar": ["Municipality", "Zone", "Area"],
+    "Romania": ["County", "Municipality", "Area"],
+    "Russia": ["Federal Subject", "District", "Municipality"],
+    "Rwanda": ["Province", "District", "Sector"],
+    "Saint Lucia": ["District", "Area", "N/A"],
+    "Samoa": ["District", "Village", "Area"],
+    "San Marino": ["Municipality", "Area", "N/A"],
+    "Saudi Arabia": ["Province", "Governorate", "Area"],
+    "Senegal": ["Region", "Department", "Arrondissement"],
+    "Serbia": ["District", "Municipality", "Area"],
+    "Seychelles": ["District", "Area", "N/A"],
+    "Sierra Leone": ["Province", "District", "Area"],
+    "Singapore": ["City-State", "N/A", "N/A"],
+    "Slovakia": ["Region", "District", "Municipality"],
+    "Slovenia": ["Statistical Region", "Municipality", "Area"],
+    "Solomon Islands": ["Province", "Ward", "Area"],
+    "Somalia": ["State", "District", "Area"],
+    "South Africa": ["Province", "District", "Municipality"],
+    "South Korea": ["Province", "City/County", "District"],
+    "South Sudan": ["State", "County", "Payam"],
+    "Spain": ["Autonomous Community", "Province", "Municipality"],
+    "Sri Lanka": ["Province", "District", "Division"],
+    "Sudan": ["State", "Locality", "Area"],
+    "Suriname": ["District", "Resort", "Area"],
+    "Sweden": ["County", "Municipality", "Area"],
+    "Switzerland": ["Canton", "Municipality", "Area"],
+    "Syria": ["Governorate", "District", "Area"],
+    "Taiwan": ["County/City", "District", "Area"],
+    "Tajikistan": ["Region", "District", "Area"],
+    "Tanzania": ["Region", "District", "Ward"],
+    "Thailand": ["Province", "District", "Sub-District"],
+    "Togo": ["Region", "Prefecture", "Canton"],
+    "Tonga": ["Division", "District", "Area"],
+    "Trinidad and Tobago": ["Region", "Municipality", "Area"],
+    "Tunisia": ["Governorate", "Delegation", "Sector"],
+    "Turkey": ["Province", "District", "Neighborhood"],
+    "Turkmenistan": ["Province", "District", "Area"],
+    "Tuvalu": ["Island", "Area", "N/A"],
+    "Uganda": ["Region", "District", "Sub-County"],
+    "Ukraine": ["Oblast", "Raion", "Hromada"],
+    "United Arab Emirates": ["Emirate", "City", "Area"],
+    "United Kingdom": ["Country", "County", "Borough"],
+    "United States": ["State", "County", "City"],
+    "Uruguay": ["Department", "Municipality", "Area"],
+    "Uzbekistan": ["Region", "District", "Area"],
+    "Vanuatu": ["Province", "Municipality", "Area"],
+    "Vatican City": ["None", "N/A", "N/A"],
+    "Venezuela": ["State", "Municipality", "Parish"],
+    "Vietnam": ["Province", "District", "Commune"],
+    "Yemen": ["Governorate", "District", "Area"],
+    "Zambia": ["Province", "District", "Area"],
+    "Zimbabwe": ["Province", "District", "Area"]
+}
 def create_directory(directory):
     """Ensure directory exists."""
     try:
@@ -1605,23 +1795,35 @@ if config.get('mode') == 'server':
             identifier = data.get('identifier')
             password = data.get('password')
             login_type = data.get('type', 'mobile_or_username')
+
             if not identifier or not password:
                 logger.error("Identifier or password missing in login request")
                 return jsonify({"error": "Identifier and password are required"}), 400
+
             user = None
             if login_type == 'mobile_or_username':
-                query = {"$or": [
-                    {"phone_number": identifier},
-                    {"username": identifier},
-                    {"email": identifier}
-                ]}
-                user = users_collection.find_one(query)
+                # FIXED: Case-insensitive search
+                # Since we are using a custom SQLite wrapper that might not support regex or advanced queries easily,
+                # we iterate through the users to find a match. This is efficient enough for a reasonable number of users.
+                identifier_lower = identifier.strip().lower()
+                all_users = users_collection.find()
+                
+                for u in all_users:
+                    u_phone = str(u.get('phone_number', '')).strip().lower()
+                    u_username = str(u.get('username', '')).strip().lower()
+                    u_email = str(u.get('email', '')).strip().lower()
+                    
+                    if identifier_lower in [u_phone, u_username, u_email]:
+                        user = u
+                        break
             else:
                 logger.error(f"Invalid login type: {login_type}")
                 return jsonify({"error": "Invalid login type"}), 400
+
             if not user:
                 logger.warning(f"Invalid login attempt: {identifier}")
                 return jsonify({"error": "Invalid credentials"}), 401
+
             try:
                 if not bcrypt.checkpw(password.encode('utf-8'), user['password'].encode('utf-8')):
                     logger.warning(f"Invalid password for: {identifier}")
@@ -1636,19 +1838,23 @@ if config.get('mode') == 'server':
                         return jsonify({"error": "Invalid credentials"}), 401
                 else:
                     raise
+
             # FIXED: Compute consistent user_identifier to match frontend logic - Use email as key for consistency
             user_identifier = user.get('email', '').split('@')[0] if '@' in user.get('email', '') else user.get('email', '')
             logger.info(f"Computed user_identifier for query: '{user_identifier}' from user doc: email='{user.get('email')}', username='{user.get('username')}'")
+
             token_payload = {
                 'user_id': user['_id'],
                 'exp': datetime.now(timezone.utc) + timedelta(seconds=JWT_EXP_DELTA_SECONDS)
             }
             token = jwt.encode(token_payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
             user_converted = convert_objectid_to_str(user)
+
             # Enhanced logic for requires_opening_entry and requires_closing_entry using consistent user_identifier
             today_start = datetime.now(ZoneInfo("UTC")).replace(hour=0, minute=0, second=0, microsecond=0)
             today_date_str = today_start.strftime("%Y-%m-%d")
             logger.info(f"Today's date for query: {today_date_str}")
+
             # FIXED: Changed to exact match for posting_date to avoid $gte string comparison issues
             # UPDATED: Filter only open shifts (status="Open") to require new opening after closing
             opening_today = opening_collection.find_one({
@@ -1656,16 +1862,20 @@ if config.get('mode') == 'server':
                 "posting_date": today_date_str,
                 "status": "Open"  # Only consider open shifts; closed ones are ignored
             })
+            
             logger.info(f"Found opening_today: {opening_today is not None}, details: {opening_today.get('name', 'None') if opening_today else 'None'} (Query: user='{user_identifier}', posting_date='{today_date_str}', status='Open')")
+
             requires_opening_entry = opening_today is None
             requires_closing_entry = False
             pos_opening_entry = None
+
             if opening_today:
                 # Check if closing exists for this opening
                 closing_for_opening = pos_closing_collection.find_one({
                     "pos_opening_entry": opening_today['name']
                 })
                 logger.info(f"Found closing for opening {opening_today['name']}: {closing_for_opening is not None}")
+
                 if closing_for_opening is None:
                     # FIXED: Only require closing if there are sales associated with this opening
                     # FIXED: Replace count_documents (MongoDB method) with len(list(find(...))) for SQLiteCollection compatibility
@@ -1674,10 +1884,12 @@ if config.get('mode') == 'server':
                     }))
                     sales_count = len(sales)
                     logger.info(f"Sales count for opening {opening_today['name']}: {sales_count}")
+                    
                     requires_closing_entry = sales_count > 0
                     if requires_closing_entry:
                         pos_opening_entry = opening_today['name'] # Provide the opening name for closing page
                         logger.info(f"Setting requires_closing_entry=True, pos_opening_entry={pos_opening_entry}")
+
             response = {
                 "message": "Login successful",
                 "token": token,
@@ -1698,6 +1910,7 @@ if config.get('mode') == 'server':
             logger.info(f"Login response flags - requires_opening: {requires_opening_entry}, requires_closing: {requires_closing_entry}, pos_opening_entry: {pos_opening_entry}")
             logger.info(f"User logged in: {identifier}")
             return jsonify(response), 200
+
         except KeyError as ke:
             logger.error(f"KeyError during login response building: {str(ke)}")
             return jsonify({"error": f"Internal error: Missing user field {str(ke)}"}), 500
@@ -2074,6 +2287,7 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error updating offer for item {item_id}: {str(e)}")
             return jsonify({"error": str(e)}), 500
+       
     @app.route('/api/customers', methods=['GET'])
     @db_required
     def get_all_customers():
@@ -2085,7 +2299,6 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error fetching customers: {str(e)}")
             return jsonify({"error": str(e)}), 500
-
     @app.route('/api/customers/<customer_id>', methods=['GET', 'PUT', 'DELETE'])
     @db_required
     def customer_operations(customer_id):
@@ -2093,12 +2306,12 @@ if config.get('mode') == 'server':
             if not customer_id or customer_id == "undefined":
                 logger.error("Invalid customer_id: 'undefined' or empty")
                 return jsonify({"error": "Invalid customer ID"}), 400
-            
+        
             # FIXED: No longer convert to ObjectId; treat customer_id as str (UUID)
-            # customer_oid = ObjectId(customer_id)  # REMOVED - causes InvalidId for UUID
-            
+            # customer_oid = ObjectId(customer_id) # REMOVED - causes InvalidId for UUID
+        
             if request.method == 'GET':
-                customer = customers_collection.find_one({'_id': customer_id})  # Use str customer_id
+                customer = customers_collection.find_one({'_id': customer_id}) # Use str customer_id
                 if not customer:
                     logger.warning(f"Customer not found: {customer_id}")
                     return jsonify({"error": "Customer not found"}), 404
@@ -2111,7 +2324,7 @@ if config.get('mode') == 'server':
                     logger.error("No data provided for customer update")
                     return jsonify({"error": "No data provided"}), 400
                 result = customers_collection.update_one(
-                    {'_id': customer_id},  # Use str customer_id
+                    {'_id': customer_id}, # Use str customer_id
                     {'$set': {
                         'customer_name': customer_data.get('customer_name', ''),
                         'phone_number': customer_data.get('phone_number', ''),
@@ -2136,7 +2349,7 @@ if config.get('mode') == 'server':
                 logger.info(f"Customer updated: {customer_id}")
                 return jsonify(updated_customer), 200
             elif request.method == 'DELETE':
-                result = customers_collection.delete_one({'_id': customer_id})  # Use str customer_id
+                result = customers_collection.delete_one({'_id': customer_id}) # Use str customer_id
                 if result.deleted_count == 0:
                     logger.warning(f"Customer not found for deletion: {customer_id}")
                     return jsonify({"error": "Customer not found"}), 404
@@ -2145,7 +2358,6 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error in customer operations for {customer_id}: {str(e)}")
             return jsonify({"error": str(e)}), 500
-
     @app.route('/api/customers', methods=['POST'])
     @db_required
     def create_customer():
@@ -2158,13 +2370,13 @@ if config.get('mode') == 'server':
             if existing_customer:
                 logger.warning(f"Duplicate phone number: {customer_data['phone_number']}")
                 return jsonify({"error": "Phone number already exists", "customer_name": existing_customer.get('customer_name', 'existing customer')}), 409
-            
+        
             # FIXED: Set _id as UUID string for consistency with frontend and other entities
             customer_data['_id'] = str(uuid.uuid4())
             customer_data['created_at'] = datetime.now(ZoneInfo("UTC")).isoformat()
             customer_data['modified_at'] = customer_data['created_at']
             result = customers_collection.insert_one(customer_data)
-            new_customer_id = customer_data['_id']  # Use the set UUID
+            new_customer_id = customer_data['_id'] # Use the set UUID
             # Fetch and return the created customer
             new_customer = customers_collection.find_one({'_id': new_customer_id})
             new_customer = convert_objectid_to_str(new_customer)
@@ -2173,7 +2385,6 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error creating customer: {str(e)}")
             return jsonify({"error": str(e)}), 500
-
     @app.route('/api/customer-groups', methods=['GET'])
     @db_required
     def get_customer_groups():
@@ -2185,7 +2396,6 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error fetching customer groups: {str(e)}")
             return jsonify({"error": str(e)}), 500
-
     @app.route('/api/customer-groups', methods=['POST'])
     @db_required
     def create_customer_group():
@@ -2210,7 +2420,6 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error creating customer group: {str(e)}")
             return jsonify({"error": str(e)}), 500
-
     @app.route('/api/customer-groups/<group_id>', methods=['PUT'])
     @db_required
     def update_customer_group(group_id):
@@ -2236,13 +2445,13 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error updating customer group {group_id}: {str(e)}")
             return jsonify({"error": str(e)}), 500
-
     @app.route('/api/customer-groups/<group_id>', methods=['DELETE'])
     @db_required
     def delete_customer_group(group_id):
         try:
             # Optional: Check if group has associated customers before delete (implement if needed)
             # e.g., if customers_collection.count_documents({"customer_group": group_id}) > 0: return error
+            # e.g., e.g., if customers_collection.count_documents({"customer_group": group_id}) > 0: return error
             result = customer_groups_collection.delete_one({'_id': group_id})
             if result.deleted_count == 0:
                 logger.warning(f"Customer group not found for deletion: {group_id}")
@@ -2252,7 +2461,6 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error deleting customer group {group_id}: {str(e)}")
             return jsonify({"error": str(e)}), 500
-
     @app.route('/api/address-structures', methods=['GET'])
     @db_required
     def get_address_structure():
@@ -2272,7 +2480,6 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error fetching address structure: {str(e)}")
             return jsonify({"error": str(e)}), 500
-
     @app.route('/api/address-structures', methods=['PUT'])
     @db_required
     def update_address_structure():
@@ -2294,7 +2501,6 @@ if config.get('mode') == 'server':
         except Exception as e:
             logger.error(f"Error updating address structure: {str(e)}")
             return jsonify({"error": str(e)}), 500
-
     @app.route('/api/add-address-value', methods=['POST'])
     @db_required
     def add_address_value():
@@ -2314,14 +2520,25 @@ if config.get('mode') == 'server':
             structure = doc.get('structure', {'countries': {}})
             linked = doc.get('linkedValues', {})
             if country not in structure['countries']:
-                return jsonify({"error": f"Country '{country}' structure not defined"}), 400
+                hierarchy = country_address_hierarchy.get(country, ["Field1", "Field2", "Field3"])
+                structure['countries'][country] = {
+                    "field1": {"label": hierarchy[0] if hierarchy[0] != "N/A" else "", "values": []},
+                    "field2": {"label": hierarchy[1] if hierarchy[1] != "N/A" else "", "values": []},
+                    "field3": {"label": hierarchy[2] if hierarchy[2] != "N/A" else "", "values": []},
+                }
+                address_structures_collection.update_one(
+                    {'_id': 'global'},
+                    {'$set': {f'structure.countries.{country}': structure['countries'][country]}}
+                )
+                logger.info(f"Initialized structure for country: {country}")
             country_data = structure['countries'][country]
             if field not in ['field1', 'field2', 'field3'] or not country_data.get(field):
                 return jsonify({"error": f"Field '{field}' not defined for country '{country}'"}), 400
             # Add to global values if not exists
             values = country_data[field]['values']
-            if value not in values:
+            if value.lower() not in [v.lower() for v in values]:  # Case-insensitive check to avoid duplicates
                 values.append(value)
+                values = sorted(values, key=str.lower)  # Sort case-insensitive
                 # Update structure
                 address_structures_collection.update_one(
                     {'_id': 'global'},
@@ -2336,8 +2553,9 @@ if config.get('mode') == 'server':
                     linked[country][parent_value] = {'field2': [], 'field3': []}
                 links = linked[country][parent_value]
                 link_array = links[field]
-                if value not in link_array:
+                if value.lower() not in [v.lower() for v in link_array]:  # Case-insensitive
                     link_array.append(value)
+                    link_array = sorted(link_array, key=str.lower)
                     # Update linked
                     address_structures_collection.update_one(
                         {'_id': 'global'},
@@ -4122,26 +4340,42 @@ def get_purchase_invoices():
 def add_purchase_invoice():
     try:
         data = request.json
-        required_fields = ['series', 'date', 'company', 'supplierId', 'name', 'supplierCompany', 'supplierCode', 'supplierGroup', 'address', 'phone', 'email', 'poId', 'prId', 'currency', 'items', 'taxes', 'totalQuantity', 'subtotal', 'taxesAdded', 'grandTotal', 'status']
+        required_fields = ['series', 'date', 'company', 'supplierId', 'name', 'supplierCompany', 'supplierCode', 'supplierGroup', 'address', 'phone', 'email', 'currency', 'items', 'taxes', 'totalQuantity', 'subtotal', 'taxesAdded', 'grandTotal', 'status']
         if not all(key in data for key in required_fields):
             return jsonify({'error': 'Missing required fields'}), 400
         if purchase_invoices_collection.find_one({'series': data['series'] }):
             return jsonify({'error': 'Series already exists'}), 400
-        pr = purchase_receipts_collection.find_one({'series': data['prId']})
-        if not pr:
-            return jsonify({'error': 'Purchase Receipt not found'}), 404
+
+        is_direct = data.get('isDirectPurchase', False)
+
+        if not is_direct:
+            if 'prId' not in data or not data['prId']:
+                return jsonify({'error': 'Purchase Receipt is required'}), 400
+            pr = purchase_receipts_collection.find_one({'series': data['prId']})
+            if not pr:
+                return jsonify({'error': 'Purchase Receipt not found'}), 404
+        elif 'supplierId' not in data or not data['supplierId']:
+             return jsonify({'error': 'Supplier is required for Direct Purchase'}), 400
+
         items = []
         for item_data in data['items']:
             item_doc = purchase_items_collection.find_one({'_id': item_data['itemId']})
             if not item_doc:
                 return jsonify({'error': f"Item {item_data['itemId']} not found"}), 404
+            
+            # Use 'quantity' if 'acceptedQuantity' is missing/zero (Direct Purchase flow uses quantity)
+            qty = float(item_data.get('acceptedQuantity', 0))
+            if qty == 0 and 'quantity' in item_data:
+                qty = float(item_data['quantity'])
+                
             items.append({
                 'itemId': item_data['itemId'],
-                'acceptedQuantity': float(item_data['acceptedQuantity']),
+                'acceptedQuantity': qty,
                 'rate': float(item_data.get('rate', 0)),
                 'amount': float(item_data.get('amount', 0)),
-                'unit': item_data['unit']
+                'unit': item_data.get('unit', 'master') # Default to master if missing
             })
+
         invoice = {
             'series': data['series'],
             'date': datetime.fromisoformat(str(data['date']).replace('Z', '+00:00')),
@@ -4154,8 +4388,9 @@ def add_purchase_invoice():
             'address': data['address'],
             'phone': data['phone'],
             'email': data['email'],
-            'poId': data['poId'],
-            'prId': data['prId'],
+            'poId': data.get('poId', ''),
+            'prId': data.get('prId', ''),
+            'isDirectPurchase': is_direct,
             'currency': data['currency'],
             'items': items,
             'taxes': data['taxes'],
@@ -4168,6 +4403,7 @@ def add_purchase_invoice():
         }
         result = purchase_invoices_collection.insert_one(invoice)
         inserted_invoice = purchase_invoices_collection.find_one({'_id': result.inserted_id})
+        
         if data['status'] == 'Submitted':
             suppliers_collection.update_one(
                 {'_id': data['supplierId']},
@@ -4176,6 +4412,37 @@ def add_purchase_invoice():
                     'lastPurchaseValue': invoice['grandTotal']
                 }}
             )
+            
+            # Stock Update for Direct Purchase (Simulating Receipt Logic)
+            if is_direct:
+                for item in items:
+                    item_obj = purchase_items_collection.find_one({'_id': item['itemId']})
+                    add_master = 0
+                    add_outer = 0
+                    add_nos = 0
+                    qty = item['acceptedQuantity']
+                    unit = item.get('unit', 'master')
+                    
+                    if unit == 'master':
+                        add_master = qty
+                    elif unit == 'outer':
+                        add_outer = qty
+                    elif unit == 'nos':
+                        add_nos = qty
+                        
+                    total_added_in_nos = (add_master * item_obj['masterToOuter'] * item_obj['outerToNos']) + (add_outer * item_obj['outerToNos']) + add_nos
+                    
+                    purchase_items_collection.update_one(
+                        {'_id': item['itemId']},
+                        {'$inc': {
+                            'stockMaster': add_master,
+                            'stockOuter': add_outer,
+                            'stockNos': add_nos,
+                            'totalStock': total_added_in_nos,
+                            'totalPurchased': total_added_in_nos
+                        }}
+                    )
+
         return jsonify(convert_objectid_to_str(inserted_invoice)), 201
     except ValueError as e:
         return jsonify({'error': f"Invalid data format: {str(e)}"}), 400
@@ -4243,6 +4510,7 @@ def delete_purchase_invoice(series):
         return jsonify({'message': 'Purchase Invoice deleted successfully'}), 200
     except Exception as e:
         return jsonify({'error': f"Failed to delete purchase invoice: {str(e)}"}), 500
+
 
 @app.route('/api/purchase_sales', methods=['GET'])
 @db_required

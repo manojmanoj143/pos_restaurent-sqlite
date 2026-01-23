@@ -45,6 +45,7 @@ import {
   FaPaperPlane, // For Leave Apply
   FaMoneyCheckAlt, // For Salary Management
   FaCar, // NEW: For Vehicle Management
+  FaCalendarCheck, // NEW: For Roaster App
 } from 'react-icons/fa';
 function AdminPage() {
   const navigate = useNavigate();
@@ -117,7 +118,7 @@ function AdminPage() {
   };
   // Check allowed file types for logo
   const allowedFile = (filename) => {
-    const allowed = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'jfif','ico'];
+    const allowed = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'jfif', 'ico'];
     return allowed.some(ext => filename.toLowerCase().endsWith(`.${ext}`));
   };
   // Upload logo
@@ -312,6 +313,8 @@ function AdminPage() {
         { icon: <FaIdCard />, text: 'Employee Types', path: '/employee-types' },
         // UPDATED: Employee Departments (direct child, plural path)
         { icon: <FaBuilding />, text: 'Employee Departments', path: '/employee-departments' },
+        // NEW: Roaster App (Calendar View)
+        { icon: <FaCalendarCheck />, text: 'Roaster App', path: '/roaster' },
         // NEW: Vehicle Management (direct child, plural path)
         { icon: <FaCar />, text: 'Vehicle Management', path: '/vehicle-management' },
         // NEW: Schedule submenu

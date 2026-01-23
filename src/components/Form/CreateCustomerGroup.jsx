@@ -36,6 +36,12 @@ const CreateCustomerGroup = () => {
     fetchConfig();
   }, []);
 
+  useEffect(() => {
+    if (location.state?.initialGroupName) {
+      setGroupName(location.state.initialGroupName);
+    }
+  }, [location.state]);
+
   const fetchCustomerGroups = async (currentBaseUrl) => {
     try {
       const res = await axios.get(`${currentBaseUrl}/api/customer-groups`);
@@ -124,8 +130,16 @@ const CreateCustomerGroup = () => {
     setWarningType("warning");
   };
 
-  const handleBackToAdmin = () => {
-    navigate('/admin');
+  const handleBack = () => {
+    if (location.state?.fromCreateCustomer) {
+      navigate('/create-customer', {
+        state: {
+          formState: location.state.formState
+        }
+      });
+    } else {
+      navigate('/admin');
+    }
   };
 
   return (
@@ -137,7 +151,7 @@ const CreateCustomerGroup = () => {
     }}>
       {/* Fixed Back Button in Top-Left Corner - Styled like EmployeeList */}
       <button
-        onClick={handleBackToAdmin}
+        onClick={handleBack}
         style={{
           position: 'fixed',
           top: '20px',
@@ -168,7 +182,7 @@ const CreateCustomerGroup = () => {
           e.target.style.transform = 'scale(1)';
         }}
       >
-        <FaArrowLeft /> Back to Admin
+        <FaArrowLeft /> {location.state?.fromCreateCustomer ? 'Back to Customer' : 'Back to Admin'}
       </button>
 
       {/* Main Container - Like EmployeeList Card */}

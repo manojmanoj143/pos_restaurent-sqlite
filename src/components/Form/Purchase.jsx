@@ -85,6 +85,7 @@ function Purchase() {
   const [activeSection, setActiveSection] = useState('details');
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [showSupplierGroupModal, setShowSupplierGroupModal] = useState(false); // NEW: Supplier Group Modal
+  const [showSupplierGroupListModal, setShowSupplierGroupListModal] = useState(false); // NEW: Supplier Group List Modal
   const [editingSupplierGroup, setEditingSupplierGroup] = useState(null); // NEW: Editing Supplier Group
   const [newSupplierGroupName, setNewSupplierGroupName] = useState(''); // NEW: New Group Name
   const [itemFormRows, setItemFormRows] = useState([
@@ -157,6 +158,7 @@ function Purchase() {
   });
   const [currentPrSupplier, setCurrentPrSupplier] = useState(null);
   const [piForm, setPiForm] = useState({
+    isDirectPurchase: false,
     series: '',
     date: new Date().toISOString().slice(0, 10),
     company: 'POS8',
@@ -169,7 +171,7 @@ function Purchase() {
     poId: '',
     prId: '',
     currency: '',
-    items: [{ itemId: '', acceptedQuantity: 0, rate: '', amount: 0, unit: '' }],
+    items: [{ itemId: '', acceptedQuantity: 0, quantity: 0, rate: '', amount: 0, unit: '' }],
     taxes: [{ type: 'On Net Total', taxRate: 0, amount: 0, total: 0 }],
     totalQuantity: 0,
     subtotal: 0,
@@ -202,6 +204,7 @@ function Purchase() {
   const [creatingItemForPi, setCreatingItemForPi] = useState(null); // {rowIndex}
   const [creatingSupplierForPo, setCreatingSupplierForPo] = useState(false);
   const [creatingSupplierForPi, setCreatingSupplierForPi] = useState(false);
+  const [creatingSupplierForItem, setCreatingSupplierForItem] = useState(null); // {rowIndex}
   const [editingFrom, setEditingFrom] = useState(null); // 'order', 'receipt', 'invoice'
   const [activeReport, setActiveReport] = useState('po'); // For reports tab: 'po', 'pr', 'pi', 'supplier'
   const [reportPoSearch, setReportPoSearch] = useState('');
@@ -253,6 +256,7 @@ function Purchase() {
   const tabOptions = [
     { key: 'item', name: 'Items' },
     { key: 'supplier', name: 'Suppliers' },
+    { key: 'supplier_group_list', name: 'Supplier Group List' },
     { key: 'order', name: 'Purchase Order' },
     { key: 'receipt', name: 'Purchase Receipt' },
     { key: 'invoice', name: 'Purchase Invoice' },
@@ -558,7 +562,9 @@ function Purchase() {
     try {
       const response = await fetch(`${API_URL}/api/suppliers`);
       if (response.ok) {
-        setSuppliers(await response.json());
+        const data = await response.json();
+        setSuppliers(data);
+        return data;
       } else {
         setError('Failed to fetch suppliers');
       }
@@ -983,6 +989,16 @@ function Purchase() {
           lastPurchaseDate: '', lastPurchaseValue: 0
         });
         setMessage('Supplier saved successfully');
+        if (creatingSupplierForItem) {
+          // Re-fetch to ensure we have the latest list including the one just added
+          const updatedSuppliers = await fetchSuppliers(); // fetchSuppliers now returns the data
+          if (updatedSuppliers && updatedSuppliers.length > 0) {
+            const newSupplier = updatedSuppliers[updatedSuppliers.length - 1];
+            handleItemFormChange(creatingSupplierForItem.rowIndex, 'suppliers', [{ supplierId: newSupplier._id, supplierName: newSupplier.company }]);
+            setActiveTab('item');
+            setCreatingSupplierForItem(null);
+          }
+        }
       } else {
         const errData = await response.json();
         setError(errData.error || 'Failed to save supplier');
@@ -1298,7 +1314,7 @@ function Purchase() {
     let commonUOM = '';
     let allSameUOM = true;
     const newItems = form.items.map(item => {
-      const qty = Number(item.acceptedQuantity || 0);
+      const qty = form.isDirectPurchase ? Number(item.quantity || 0) : Number(item.acceptedQuantity || 0);
       const rate = Number(item.rate || 0);
       const amount = qty * rate;
       subtotal += amount;
@@ -1312,14 +1328,14 @@ function Purchase() {
         commonUOM = firstUom === 'master' ? firstItemData.masterUnit : firstUom === 'outer' ? firstItemData.outerUnit : firstUom === 'nos' ? firstItemData.nosUnit : 'Grams';
         allSameUOM = form.items.every(it => it.unit === firstUom);
         if (allSameUOM) {
-          totalQtyInCommon = form.items.reduce((sum, it) => sum + Number(it.acceptedQuantity || 0), 0);
+          totalQtyInCommon = form.items.reduce((sum, it) => sum + (form.isDirectPurchase ? Number(it.quantity || 0) : Number(it.acceptedQuantity || 0)), 0);
         } else {
           commonUOM = firstItemData.masterUnit || 'Carton';
           totalQtyInCommon = 0;
           form.items.forEach(it => {
             const selItem = items.find(i => i._id === it.itemId);
             if (selItem) {
-              let qty = Number(it.acceptedQuantity || 0);
+              let qty = form.isDirectPurchase ? Number(it.quantity || 0) : Number(it.acceptedQuantity || 0);
               if (it.unit === 'master') {
                 totalQtyInCommon += qty;
               } else if (it.unit === 'outer') {
@@ -1367,7 +1383,7 @@ function Purchase() {
   };
   const addPiItem = () => {
     setPiForm(prev => {
-      const newItems = [...prev.items, { itemId: '', acceptedQuantity: 0, rate: '', amount: 0, unit: '' }];
+      const newItems = [...prev.items, { itemId: '', acceptedQuantity: 0, quantity: 0, rate: '', amount: 0, unit: 'master' }];
       const newForm = { ...prev, items: newItems };
       return { ...newForm, ...calculatePiTotals(newForm) };
     });
@@ -1441,10 +1457,16 @@ function Purchase() {
       if (!form.series) return 'Series is required';
       if (!form.date) return 'Date is required';
       if (!form.company) return 'Company is required';
-      if (!form.prId) return 'Purchase Receipt is required';
+
+      if (!form.isDirectPurchase && !form.prId) return 'Purchase Receipt is required';
+      if (form.isDirectPurchase && !form.supplierId) return 'Supplier is required';
+
       for (const [index, item] of form.items.entries()) {
         if (!item.itemId) return `In item ${index + 1}: Item must be selected`;
-        if (!item.acceptedQuantity || Number(item.acceptedQuantity) <= 0) return `In item ${index + 1}: Accepted Quantity must be positive`;
+
+        const qty = form.isDirectPurchase ? item.quantity : item.acceptedQuantity;
+        if (!qty || Number(qty) <= 0) return `In item ${index + 1}: Quantity must be positive`;
+
         if (item.rate && Number(item.rate) < 0) return `In item ${index + 1}: Rate cannot be negative`;
       }
       for (const [index, tax] of form.taxes.entries()) {
@@ -1569,7 +1591,9 @@ function Purchase() {
   const editPo = (id) => {
     const po = purchaseOrders.find(p => p._id === id);
     if (po) {
-      setPoForm({ ...po, date: po.date.slice(0, 10), grandTotal: po.grandTotal || po.subtotal });
+      const form = { ...po, date: po.date.slice(0, 10), grandTotal: po.grandTotal || po.subtotal };
+      const totals = calculatePoTotals(form);
+      setPoForm({ ...form, ...totals });
       setCurrentPoSupplier(suppliers.find(s => s._id === po.supplierId));
       setEditingPoId(id);
       setActiveTab('order');
@@ -1692,11 +1716,13 @@ function Purchase() {
   const editPr = (series) => {
     const pr = purchaseReceipts.find(p => p.series === series);
     if (pr) {
-      setPrForm({
+      const form = {
         ...pr,
         date: pr.date.slice(0, 10),
         items: pr.items.map(item => ({ ...item, originalQuantity: item.acceptedQuantity + item.rejectedQuantity }))
-      });
+      };
+      const totals = calculatePrTotals(form);
+      setPrForm({ ...form, ...totals });
       setCurrentPrSupplier(suppliers.find(s => s._id === pr.supplierId));
       setEditingPrId(pr.series);
       setActiveTab('receipt');
@@ -1733,11 +1759,13 @@ function Purchase() {
         await fetchPurchaseInvoices();
         setEditingPiId(null);
         setPiForm({
+          isDirectPurchase: piForm.isDirectPurchase, // NEW: Preserve Direct Purchase mode
           series: '', date: new Date().toISOString().slice(0, 10), company: 'POS8',
-          supplierId: '', supplierCode: '',
+          supplierId: piForm.isDirectPurchase ? piForm.supplierId : '', // Optional: Keep supplier if direct? better to reset for next invoice
+          supplierCode: '',
           supplierGroup: '', address: '', phone: '', email: '',
           poId: '', prId: '', currency: '',
-          items: [{ itemId: '', acceptedQuantity: 0, rate: '', amount: 0, unit: '' }],
+          items: [{ itemId: '', acceptedQuantity: 0, quantity: 0, rate: '', amount: 0, unit: '' }],
           taxes: [{ type: 'On Net Total', taxRate: 0, amount: 0, total: 0 }],
           totalQuantity: 0, subtotal: 0, taxesAdded: 0, grandTotal: 0, totalQtyInCommon: 0, commonUOM: ''
         });
@@ -1784,11 +1812,12 @@ function Purchase() {
         await fetchSuppliers();
         setEditingPiId(null);
         setPiForm({
+          isDirectPurchase: piForm.isDirectPurchase, // NEW: Preserve Direct Purchase mode
           series: '', date: new Date().toISOString().slice(0, 10), company: 'POS8',
           supplierId: '', supplierCode: '',
           supplierGroup: '', address: '', phone: '', email: '',
           poId: '', prId: '', currency: '',
-          items: [{ itemId: '', acceptedQuantity: 0, rate: '', amount: 0, unit: '' }],
+          items: [{ itemId: '', acceptedQuantity: 0, quantity: 0, rate: '', amount: 0, unit: '' }],
           taxes: [{ type: 'On Net Total', taxRate: 0, amount: 0, total: 0 }],
           totalQuantity: 0, subtotal: 0, taxesAdded: 0, grandTotal: 0, totalQtyInCommon: 0, commonUOM: ''
         });
@@ -1829,7 +1858,9 @@ function Purchase() {
   const editPi = (series) => {
     const pi = purchaseInvoices.find(p => p.series === series);
     if (pi) {
-      setPiForm({ ...pi, date: pi.date.slice(0, 10) });
+      const form = { ...pi, date: pi.date.slice(0, 10) };
+      const totals = calculatePiTotals(form);
+      setPiForm({ ...form, ...totals });
       setCurrentPiSupplier(suppliers.find(s => s._id === pi.supplierId));
       setEditingPiId(series);
       setActiveTab('invoice');
@@ -2540,6 +2571,11 @@ function Purchase() {
   };
   // NEW: Handle global search click
   const handleGlobalSearchClick = (tabKey) => {
+    if (tabKey === 'supplier_group_list') {
+      setShowSupplierGroupListModal(true);
+      setGlobalSearch('');
+      return;
+    }
     setActiveTab(tabKey);
     setGlobalSearch('');
   };
@@ -2836,6 +2872,47 @@ function Purchase() {
                   </div>
                 </div>
               )}
+              {/* NEW: Supplier Group List Modal */}
+              {showSupplierGroupListModal && (
+                <div className="purchase-modal-overlay" onClick={() => setShowSupplierGroupListModal(false)}>
+                  <div className="purchase-modal" onClick={(e) => e.stopPropagation()}>
+                    <button className="purchase-modal-close" onClick={() => setShowSupplierGroupListModal(false)}>
+                      <FaTimes />
+                    </button>
+                    <h3>Supplier Groups List</h3>
+                    <div className="purchase-filter-group-right" style={{ marginBottom: '15px', justifyContent: 'flex-end' }}>
+                      <button onClick={() => setShowSupplierGroupModal(true)} className="purchase-button filter">
+                        Create Supplier Group
+                      </button>
+                    </div>
+                    <div className="purchase-table-wrapper">
+                      <table className="purchase-table">
+                        <thead>
+                          <tr>
+                            <th>Group Name</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {supplierGroups.map(group => (
+                            <tr key={group._id}>
+                              <td>{group.group_name}</td>
+                              <td>
+                                <button onClick={() => { setEditingSupplierGroup(group); setNewSupplierGroupName(group.group_name); setShowSupplierGroupModal(true); }} className="purchase-button edit">
+                                  <FaEdit /> Edit
+                                </button>
+                                <button onClick={() => deleteSupplierGroup(group._id)} className="purchase-button delete">
+                                  <FaTrash /> Delete
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
               {activeTab === 'item' && (
                 <div className="purchase-section">
                   <div className="purchase-header">
@@ -2917,7 +2994,7 @@ function Purchase() {
                           </div>
 
                           <div className="purchase-form-field">
-                            <label className="purchase-label">Nos per Box</label>
+                            <label className="purchase-label">Packets per Box</label>
                             <div style={{ display: 'flex', gap: '10px' }}>
                               <input type="number" value={row.boxToMaster} onChange={(e) => handleItemFormChange(idx, 'boxToMaster', e.target.value)} placeholder="Nos" className="purchase-input" style={{ flex: 1 }} required />
                               <select value={row.masterUnit} onChange={(e) => handleItemFormChange(idx, 'masterUnit', e.target.value)} className="purchase-input select" style={{ width: '120px' }} required>
@@ -2929,7 +3006,7 @@ function Purchase() {
                           </div>
 
                           <div className="purchase-form-field">
-                            <label className="purchase-label">Packets per Carton</label>
+                            <label className="purchase-label">Units per Packet</label>
                             <div style={{ display: 'flex', gap: '10px' }}>
                               <input type="number" value={row.masterToOuter} onChange={(e) => handleItemFormChange(idx, 'masterToOuter', e.target.value)} placeholder="Nos" className="purchase-input" style={{ flex: 1 }} required />
                               <select value={row.outerUnit} onChange={(e) => handleItemFormChange(idx, 'outerUnit', e.target.value)} className="purchase-input select" style={{ width: '120px' }} required>
@@ -2941,7 +3018,7 @@ function Purchase() {
                           </div>
 
                           <div className="purchase-form-field">
-                            <label className="purchase-label">Units per Packet</label>
+                            <label className="purchase-label">Total Units per Box</label>
                             <div style={{ display: 'flex', gap: '10px' }}>
                               <input type="number" value={row.outerToNos} onChange={(e) => handleItemFormChange(idx, 'outerToNos', e.target.value)} placeholder="Nos" className="purchase-input" style={{ flex: 1 }} required />
                               <input type="text" value={row.nosUnit} onChange={(e) => handleItemFormChange(idx, 'nosUnit', e.target.value)} placeholder="Unit (e.g. Patty)" className="purchase-input" style={{ width: '120px' }} required />
@@ -2953,7 +3030,13 @@ function Purchase() {
                             <select
                               value={row.suppliers.length > 0 ? `${row.suppliers[0].supplierId}|${row.suppliers[0].supplierName}` : ''}
                               onChange={(e) => {
-                                const [supplierId, supplierName] = e.target.value.split('|');
+                                const value = e.target.value;
+                                if (value === 'create_new') {
+                                  setCreatingSupplierForItem({ rowIndex: idx });
+                                  setActiveTab('supplier');
+                                  return;
+                                }
+                                const [supplierId, supplierName] = value.split('|');
                                 handleItemFormChange(idx, 'suppliers', [{ supplierId, supplierName }]);
                               }}
                               className="purchase-input select"
@@ -2965,6 +3048,7 @@ function Purchase() {
                                   {supplier.company}
                                 </option>
                               ))}
+                              <option value="create_new">Create New Supplier</option>
                             </select>
                           </div>
                         </div>
@@ -2985,9 +3069,9 @@ function Purchase() {
                         <th>Brand</th>
                         <th>Name</th>
                         <th>Grams</th>
-                        <th>Nos per Box</th>
-                        <th>Packets per Carton</th>
+                        <th>Packets per Box</th>
                         <th>Units per Packet</th>
+                        <th>Total Units per Box</th>
                         <th>Total Purchased</th>
                         <th>Total Stock</th>
                         <th>Suppliers</th>
@@ -3037,9 +3121,11 @@ function Purchase() {
                       />
                     </div>
                     <div className="purchase-filter-group-right">
-                      <button onClick={() => setShowSupplierGroupModal(true)} className="purchase-button filter">
-                        Create Supplier Group
-                      </button>
+                      {creatingSupplierForItem && (
+                        <button onClick={() => { setCreatingSupplierForItem(null); setActiveTab('item'); }} className="purchase-button cancel">
+                          Back to Item Creation
+                        </button>
+                      )}
                       <button onClick={() => setShowSupplierModal(true)} className="purchase-button filter">
                         View Suppliers List
                       </button>
@@ -3099,8 +3185,8 @@ function Purchase() {
                       <div className="purchase-supplier-content" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                         {supplierForm.contacts.map((contact, idx) => (
                           <div key={idx} className="purchase-contact-block" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                            <div className="purchase-form-field"><label className="purchase-label">Designation {idx + 1}</label><input type="text" value={contact.designation || ''} onChange={(e) => handleContactChange(idx, 'designation', e.target.value)} className="purchase-input" /></div>
                             <div className="purchase-form-field"><label className="purchase-label">Contact Person {idx + 1}</label><input type="text" value={contact.contactPerson} onChange={(e) => handleContactChange(idx, 'contactPerson', e.target.value)} className="purchase-input" /></div>
+                            <div className="purchase-form-field"><label className="purchase-label">Designation {idx + 1}</label><input type="text" value={contact.designation || ''} onChange={(e) => handleContactChange(idx, 'designation', e.target.value)} className="purchase-input" /></div>
                             <div className="purchase-form-field">
                               <label className="purchase-label">Phone {idx + 1}</label>
                               <div style={{ display: 'flex', gap: '5px' }}>
@@ -3225,34 +3311,6 @@ function Purchase() {
                           </table>
                         </div>
                       </div>
-                    </div>
-                  )}
-                  {activeTab === 'supplier' && (
-                    <div className="purchase-supplier-groups-list">
-                      <h4>Supplier Groups</h4>
-                      <table className="purchase-table">
-                        <thead>
-                          <tr>
-                            <th>Group Name</th>
-                            <th>Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {supplierGroups.map(group => (
-                            <tr key={group._id}>
-                              <td>{group.group_name}</td>
-                              <td>
-                                <button onClick={() => { setEditingSupplierGroup(group); setNewSupplierGroupName(group.group_name); }} className="purchase-button edit">
-                                  <FaEdit /> Edit
-                                </button>
-                                <button onClick={() => deleteSupplierGroup(group._id)} className="purchase-button delete">
-                                  <FaTrash /> Delete
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
                     </div>
                   )}
                 </div>
@@ -3519,7 +3577,7 @@ function Purchase() {
                               <td>
                                 <input
                                   type="number"
-                                  value={tax.taxRate}
+                                  value={tax.taxRate === 0 ? '' : tax.taxRate}
                                   onChange={(e) => handlePoTaxChange(index, 'taxRate', e.target.value)}
                                   className="purchase-input"
                                   required
@@ -3552,7 +3610,7 @@ function Purchase() {
                       </button>
                     </div>
                     <div className="purchase-totals">
-                      <div>Total Qty {poForm.commonUOM || 'Carton'} {poForm.totalQtyInCommon.toFixed(0)}</div>
+                      <div>Total Qty {poForm.commonUOM || 'Carton'} {(poForm.totalQtyInCommon || 0).toFixed(0)}</div>
                       <div>Gross Amount {poForm.currency} {(poForm.subtotal || 0).toFixed(0)}</div>
                       {poForm.taxes.map((tax, index) => (
                         <div key={index}>GST {tax.taxRate}% {poForm.currency} {(tax.amount || 0).toFixed(0)}</div>
@@ -3757,7 +3815,7 @@ function Purchase() {
                               <td>
                                 <input
                                   type="number"
-                                  value={item.acceptedQuantity}
+                                  value={item.acceptedQuantity === 0 ? '' : item.acceptedQuantity}
                                   onChange={(e) => handlePrItemChange(index, 'acceptedQuantity', e.target.value)}
                                   className="purchase-input"
                                 />
@@ -3765,7 +3823,7 @@ function Purchase() {
                               <td>
                                 <input
                                   type="number"
-                                  value={item.rejectedQuantity}
+                                  value={item.rejectedQuantity === 0 ? '' : item.rejectedQuantity}
                                   onChange={(e) => handlePrItemChange(index, 'rejectedQuantity', e.target.value)}
                                   className="purchase-input"
                                 />
@@ -3773,7 +3831,7 @@ function Purchase() {
                               <td>
                                 <input
                                   type="number"
-                                  value={item.rate}
+                                  value={item.rate === 0 ? '' : item.rate}
                                   onChange={(e) => handlePrItemChange(index, 'rate', e.target.value)}
                                   className="purchase-input"
                                 />
@@ -3845,7 +3903,7 @@ function Purchase() {
                             <td>
                               <input
                                 type="number"
-                                value={tax.taxRate}
+                                value={tax.taxRate === 0 ? '' : tax.taxRate}
                                 onChange={(e) => handlePrTaxChange(index, 'taxRate', e.target.value)}
                                 className="purchase-input"
                               />
@@ -3876,7 +3934,7 @@ function Purchase() {
                       </button>
                     </div>
                     <div className="purchase-totals">
-                      <div>Total Qty {prForm.commonUOM || 'Carton'} {prForm.totalQtyInCommon.toFixed(0)}</div>
+                      <div>Total Qty {prForm.commonUOM || 'Carton'} {(prForm.totalQtyInCommon || 0).toFixed(0)}</div>
                       <div>Gross Amount {prForm.currency} {(prForm.subtotal || 0).toFixed(0)}</div>
                       {prForm.taxes.map((tax, index) => (
                         <div key={index}>GST {tax.taxRate}% {prForm.currency} {(tax.amount || 0).toFixed(0)}</div>
@@ -3942,6 +4000,24 @@ function Purchase() {
                   <div className="purchase-form">
                     <div className="purchase-form-grid">
                       <div className="purchase-form-field">
+                        <label className="purchase-toggle">
+                          <input
+                            type="checkbox"
+                            checked={piForm.isDirectPurchase}
+                            onChange={(e) => {
+                              const isDirect = e.target.checked;
+                              setPiForm(prev => ({
+                                ...prev,
+                                isDirectPurchase: isDirect,
+                                series: !prev.series ? getNextPiSeries() : prev.series, // Ensure series is set
+                                items: [{ itemId: '', acceptedQuantity: 0, quantity: 0, rate: '', amount: 0, unit: 'master' }]
+                              }));
+                            }}
+                          />
+                          Direct Purchase Invoice
+                        </label>
+                      </div>
+                      <div className="purchase-form-field">
                         <label className="purchase-label">Series *</label>
                         <input
                           type="text"
@@ -3974,7 +4050,7 @@ function Purchase() {
                             }
                             const supplier = suppliers.find(s => s._id === value);
                             if (supplier) {
-                              const contact = supplier.contacts && supplier.contacts.length > 0 ? supplier.contacts[0] : { address: '', phone: '', email: '' };
+                              const contact = supplier.contacts && supplier.contacts.length > 0 ? supplier.contacts[0] : { address: '', phone: '', email: '' }; // Fallback
                               setCurrentPiSupplier(supplier);
                               setPiForm(prev => ({
                                 ...prev,
@@ -3993,6 +4069,7 @@ function Purchase() {
                           }}
                           className="purchase-input select"
                           required
+                          disabled={!piForm.isDirectPurchase && !piForm.prId}
                         >
                           <option value="">Select Supplier</option>
                           {suppliers.map(s => <option key={s._id} value={s._id}>{s.company}</option>)}
@@ -4001,65 +4078,70 @@ function Purchase() {
                       </div>
                       <div className="purchase-form-field"><label className="purchase-label">Supplier Code</label><input type="text" value={piForm.supplierCode} disabled className="purchase-input" /></div>
                       <div className="purchase-form-field"><label className="purchase-label">Supplier Group</label><input type="text" value={piForm.supplierGroup} disabled className="purchase-input" /></div>
-                      <div className="purchase-form-field">
-                        <label className="purchase-label">Purchase Order</label>
-                        <select
-                          value={piForm.poId}
-                          onChange={(e) => handlePiFormChange('poId', e.target.value)}
-                          className="purchase-input select"
-                        >
-                          <option value="">Select PO</option>
-                          {purchaseOrders.filter(po => po.status === 'Submitted').map(po => (
-                            <option key={po.series} value={po.series}>{po.series}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="purchase-form-field">
-                        <label className="purchase-label">Purchase Receipt *</label>
-                        <select
-                          value={piForm.prId}
-                          onChange={(e) => {
-                            const prId = e.target.value;
-                            const pr = purchaseReceipts.find(p => p.series === prId);
-                            if (pr) {
-                              const supplier = suppliers.find(s => s._id === pr.supplierId);
-                              const contact = supplier ? (supplier.contacts && supplier.contacts.length > 0 ? supplier.contacts[0] : { address: '', phone: '', email: '' }) : { address: '', phone: '', email: '' };
-                              const newItems = pr.items.map(item => ({
-                                itemId: item.itemId,
-                                acceptedQuantity: item.acceptedQuantity,
-                                rate: item.rate,
-                                amount: item.acceptedQuantity * item.rate,
-                                unit: item.unit
-                              }));
-                              setCurrentPiSupplier(supplier);
-                              const newForm = {
-                                ...piForm,
-                                prId,
-                                poId: pr.poId,
-                                supplierId: pr.supplierId,
-                                supplierCode: pr.supplierCode,
-                                supplierGroup: pr.supplierGroup,
-                                name: pr.name,
-                                supplierCompany: pr.supplierCompany,
-                                address: contact.address || pr.address,
-                                phone: contact.phone || pr.phone,
-                                email: contact.email || pr.email,
-                                items: newItems,
-                                taxes: pr.taxes,
-                                currency: pr.currency
-                              };
-                              setPiForm({ ...newForm, ...calculatePiTotals(newForm) });
-                            }
-                          }}
-                          className="purchase-input select"
-                          required
-                        >
-                          <option value="">Select PR</option>
-                          {purchaseReceipts.filter(pr => pr.status === 'Submitted').map(pr => (
-                            <option key={pr.series} value={pr.series}>{pr.series}</option>
-                          ))}
-                        </select>
-                      </div>
+
+                      {!piForm.isDirectPurchase && (
+                        <>
+                          <div className="purchase-form-field">
+                            <label className="purchase-label">Purchase Order</label>
+                            <select
+                              value={piForm.poId}
+                              onChange={(e) => handlePiFormChange('poId', e.target.value)}
+                              className="purchase-input select"
+                            >
+                              <option value="">Select PO</option>
+                              {purchaseOrders.filter(po => po.status === 'Submitted').map(po => (
+                                <option key={po.series} value={po.series}>{po.series}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="purchase-form-field">
+                            <label className="purchase-label">Purchase Receipt *</label>
+                            <select
+                              value={piForm.prId}
+                              onChange={(e) => {
+                                const prId = e.target.value;
+                                const pr = purchaseReceipts.find(p => p.series === prId);
+                                if (pr) {
+                                  const supplier = suppliers.find(s => s._id === pr.supplierId);
+                                  const contact = supplier ? (supplier.contacts && supplier.contacts.length > 0 ? supplier.contacts[0] : { address: '', phone: '', email: '' }) : { address: '', phone: '', email: '' };
+                                  const newItems = pr.items.map(item => ({
+                                    itemId: item.itemId,
+                                    acceptedQuantity: item.acceptedQuantity,
+                                    rate: item.rate,
+                                    amount: item.acceptedQuantity * item.rate,
+                                    unit: item.unit
+                                  }));
+                                  setCurrentPiSupplier(supplier);
+                                  const newForm = {
+                                    ...piForm,
+                                    prId,
+                                    poId: pr.poId,
+                                    supplierId: pr.supplierId,
+                                    supplierCode: pr.supplierCode,
+                                    supplierGroup: pr.supplierGroup,
+                                    name: pr.name,
+                                    supplierCompany: pr.supplierCompany,
+                                    address: contact.address || pr.address,
+                                    phone: contact.phone || pr.phone,
+                                    email: contact.email || pr.email,
+                                    items: newItems,
+                                    taxes: pr.taxes,
+                                    currency: pr.currency
+                                  };
+                                  setPiForm({ ...newForm, ...calculatePiTotals(newForm) });
+                                }
+                              }}
+                              className="purchase-input select"
+                              required
+                            >
+                              <option value="">Select PR</option>
+                              {purchaseReceipts.filter(pr => pr.status === 'Submitted').map(pr => (
+                                <option key={pr.series} value={pr.series}>{pr.series}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </>
+                      )}
                       <div className="purchase-form-field">
                         <label className="purchase-label">Company *</label>
                         <input
@@ -4119,10 +4201,11 @@ function Purchase() {
                               <td>
                                 <input
                                   type="number"
-                                  value={item.acceptedQuantity}
-                                  onChange={(e) => handlePiItemChange(index, 'acceptedQuantity', e.target.value)}
+                                  value={piForm.isDirectPurchase ? (item.quantity === 0 ? '' : item.quantity) : (item.acceptedQuantity === 0 ? '' : item.acceptedQuantity)}
+                                  onChange={(e) => handlePiItemChange(index, piForm.isDirectPurchase ? 'quantity' : 'acceptedQuantity', e.target.value)}
                                   className="purchase-input"
                                   required
+                                  disabled={!piForm.isDirectPurchase}
                                 />
                               </td>
                               <td>
@@ -4140,7 +4223,7 @@ function Purchase() {
                               <td>
                                 <input
                                   type="number"
-                                  value={item.rate}
+                                  value={item.rate === 0 ? '' : item.rate}
                                   onChange={(e) => handlePiItemChange(index, 'rate', e.target.value)}
                                   className="purchase-input"
                                 />
@@ -4206,7 +4289,7 @@ function Purchase() {
                               <td>
                                 <input
                                   type="number"
-                                  value={tax.taxRate}
+                                  value={tax.taxRate === 0 ? '' : tax.taxRate}
                                   onChange={(e) => handlePiTaxChange(index, 'taxRate', e.target.value)}
                                   className="purchase-input"
                                   required
@@ -4239,7 +4322,7 @@ function Purchase() {
                       </button>
                     </div>
                     <div className="purchase-totals">
-                      <div>Total Qty {piForm.commonUOM || 'Carton'} {piForm.totalQtyInCommon.toFixed(0)}</div>
+                      <div>Total Qty {piForm.commonUOM || 'Carton'} {(piForm.totalQtyInCommon || 0).toFixed(0)}</div>
                       <div>Gross Amount {piForm.currency} {(piForm.subtotal || 0).toFixed(0)}</div>
                       {piForm.taxes.map((tax, index) => (
                         <div key={index}>GST {tax.taxRate}% {piForm.currency} {(tax.amount || 0).toFixed(0)}</div>
@@ -4723,16 +4806,20 @@ function Purchase() {
                               <FaFilter /> Apply Filters
                             </button>
                             <button onClick={() => {
-                              const headers = ['Item Name', 'Brand', 'Total Quantity', 'Total Purchased', 'Total Amount', 'Suppliers'];
+                              const headers = ['Item Name', 'Brand', 'Grams', 'Total Quantity', 'Total Purchased', 'Rate', 'Total Amount', 'Suppliers'];
                               const rows = reportItemWiseData.map(item => {
                                 const originalItem = items.find(i => i.name === item.itemName && i.company === item.brand);
                                 const totalPurchased = originalItem ? `${originalItem.totalPurchased || 0} ${originalItem.nosUnit}` : 'N/A';
                                 const uomDisplay = item.uom || item.unit || (originalItem ? originalItem.masterUnit : '');
+                                const averageRate = item.totalQuantity > 0 ? (item.totalAmount / item.totalQuantity) : 0;
+                                const grams = originalItem && originalItem.grams ? originalItem.grams : '-';
                                 return [
                                   item.itemName,
                                   item.brand,
+                                  grams,
                                   `${item.totalQuantity.toFixed(2)} ${uomDisplay}`,
                                   totalPurchased,
+                                  `${item.currency} ${averageRate.toFixed(2)}`,
                                   `${item.currency} ${item.totalAmount.toFixed(2)}`,
                                   item.suppliers.map(s => `${s.supplierName} (Qty: ${s.quantity.toFixed(2)} ${uomDisplay}, Amt: ${item.currency} ${s.amount.toFixed(2)})`).join('; ')
                                 ];
@@ -4753,8 +4840,10 @@ function Purchase() {
                           <tr>
                             <th>Item Name</th>
                             <th>Brand</th>
+                            <th>Grams</th>
                             <th>Total Quantity</th>
                             <th>Total Purchased</th>
+                            <th>Rate</th>
                             <th>Total Amount</th>
                             <th>Suppliers</th>
                           </tr>
@@ -4763,12 +4852,15 @@ function Purchase() {
                           {reportItemWiseData.map((item, idx) => {
                             const originalItem = items.find(i => i.name === item.itemName && i.company === item.brand);
                             const uomDisplay = item.uom || item.unit || (originalItem ? originalItem.masterUnit : '');
+                            const averageRate = item.totalQuantity > 0 ? (item.totalAmount / item.totalQuantity) : 0;
                             return (
                               <tr key={idx}>
                                 <td>{item.itemName}</td>
                                 <td>{item.brand}</td>
+                                <td>{originalItem && originalItem.grams ? originalItem.grams : '-'}</td>
                                 <td>{item.totalQuantity.toFixed(2)} {uomDisplay}</td>
                                 <td>{originalItem ? `${originalItem.totalPurchased || 0} ${originalItem.nosUnit}` : '-'}</td>
+                                <td>{item.currency} {averageRate.toFixed(2)}</td>
                                 <td>{item.currency} {item.totalAmount.toFixed(2)}</td>
                                 <td>
                                   {item.suppliers.map((supplier, sIdx) => (
