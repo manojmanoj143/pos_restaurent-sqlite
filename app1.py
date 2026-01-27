@@ -3711,6 +3711,56 @@ def delete_employee(employee_id):
     except Exception as e:
         logger.error(f"Error deleting employee: {str(e)}")
         return jsonify({"error": str(e)}), 500
+@app.route('/api/get-vat', methods=['GET'])
+@db_required
+def get_vat():
+    try:
+        vat_data = vat_collection.find_one({})
+        if vat_data:
+            return jsonify(vat_data), 200
+        return jsonify({"vat": 5}), 200 # Default 5%
+    except Exception as e:
+        logger.error(f"Error fetching VAT: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+@app.route('/api/tripreports/<employee_id>', methods=['GET'])
+@db_required
+def get_trip_reports(employee_id):
+    try:
+        # Fetch from trip_reports collection where deliveryPersonId matches
+        reports = tripreports_collection.find({"deliveryPersonId": employee_id})
+        return jsonify(reports), 200
+    except Exception as e:
+        logger.error(f"Error fetching trip reports for {employee_id}: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+@app.route('/api/sales/deliver-order', methods=['POST'])
+@db_required
+def deliver_order():
+    try:
+        data = request.get_json()
+        order_no = data.get('orderNo')
+        status = data.get('status')
+        payments = data.get('payments')
+        
+        if not order_no:
+             return jsonify({"error": "Order number is required"}), 400
+
+        # Update trip_reports
+        tripreports_collection.update_one(
+            {"orderNo": order_no},
+            {"$set": {"status": status, "payments": payments, "delivered_at": datetime.now(ZoneInfo("UTC")).isoformat()}}
+        )
+        
+        # Update sales if needed (assuming sales has the master record)
+        sales_collection.update_one(
+            {"invoice_no": order_no}, # or orderNo
+            {"$set": {"status": status, "payment_status": "Paid", "payments": payments}} # Assuming full payment
+        )
+
+        return jsonify({"message": "Order delivered successfully"}), 200
+    except Exception as e:
+        logger.error(f"Error delivering order: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
 
     # UPDATED: Endpoint to get trip reports - now fetches matching sales for the employee (case-insensitive deliveryPersonName, orderType='Online Delivery', status != 'Cancelled')
     @app.route('/api/tripreports/<employee_id>', methods=['GET'])
@@ -3819,32 +3869,45 @@ def get_purchase_items():
 def add_purchase_item():
     try:
         data = request.json
+        # Handle both single item and list of items
+        items_data = data if isinstance(data, list) else [data]
+        
+        inserted_ids = []
         required_fields = ['company', 'name', 'boxToMaster', 'masterUnit', 'masterToOuter', 'outerUnit', 'outerToNos', 'nosUnit']
-        if not all(key in data for key in required_fields):
-            return jsonify({'error': 'Missing required fields'}), 400
-        item = {
-            'company': data['company'],
-            'name': data['name'],
-            'boxToMaster': float(data['boxToMaster']),
-            'masterUnit': data['masterUnit'],
-            'masterToOuter': float(data['masterToOuter']),
-            'outerUnit': data['outerUnit'],
-            'outerToNos': float(data['outerToNos']),
-            'nosUnit': data['nosUnit'],
-            'conversionFactor': float(data['masterToOuter']) * float(data['outerToNos']),
-            'stockMaster': 0,
-            'stockOuter': 0,
-            'stockNos': 0,
-            'soldNos': 0,
-            'totalStock': 0,
-            'totalPurchased': 0,
-            'grams': float(data.get('grams', 0)),
-            'suppliers': data.get('suppliers', []),
-            'created_at': datetime.now(timezone.utc).isoformat()
-        }
-        result = purchase_items_collection.insert_one(item)
-        inserted_item = purchase_items_collection.find_one({'_id': result.inserted_id})
-        return jsonify(convert_objectid_to_str(inserted_item)), 201
+        
+        for item_datum in items_data:
+            if not all(key in item_datum for key in required_fields):
+                return jsonify({'error': 'Missing required fields'}), 400
+            
+            item = {
+                'company': item_datum['company'],
+                'name': item_datum['name'],
+                'boxToMaster': float(item_datum['boxToMaster']),
+                'masterUnit': item_datum['masterUnit'],
+                'masterToOuter': float(item_datum['masterToOuter']),
+                'outerUnit': item_datum['outerUnit'],
+                'outerToNos': float(item_datum['outerToNos']),
+                'nosUnit': item_datum['nosUnit'],
+                'conversionFactor': float(item_datum['masterToOuter']) * float(item_datum['outerToNos']),
+                'stockMaster': 0,
+                'stockOuter': 0,
+                'stockNos': 0,
+                'soldNos': 0,
+                'totalStock': 0,
+                'totalPurchased': 0,
+                'grams': float(item_datum.get('grams', 0)),
+                'suppliers': item_datum.get('suppliers', []),
+                'created_at': datetime.now(timezone.utc).isoformat()
+            }
+            result = purchase_items_collection.insert_one(item)
+            inserted_ids.append(result.inserted_id)
+            
+        if len(inserted_ids) == 1:
+            inserted_item = purchase_items_collection.find_one({'_id': inserted_ids[0]})
+            return jsonify(convert_objectid_to_str(inserted_item)), 201
+        else:
+             return jsonify({'message': f'{len(inserted_ids)} items added successfully'}), 201
+
     except ValueError:
         return jsonify({'error': 'Invalid numeric value'}), 400
     except Exception as e:
@@ -4016,6 +4079,12 @@ def add_purchase_order():
             item_doc = purchase_items_collection.find_one({'_id': item_data['itemId']})
             if not item_doc:
                 return jsonify({'error': f"Item {item_data['itemId']} not found"}), 404
+            
+            # Validate Item-Supplier Mapping
+            item_suppliers = item_doc.get('suppliers', [])
+            if item_suppliers and not any(s.get('supplierId') == data['supplierId'] for s in item_suppliers):
+                 return jsonify({'error': f"Item '{item_doc['name']}' is not accepted by the selected supplier."}), 400
+
             items.append({
                 'itemId': item_data['itemId'],
                 'quantity': float(item_data['quantity']),
@@ -4073,7 +4142,19 @@ def update_purchase_order(id):
                     update_data[field] = float(data[field])
                 elif field == 'items':
                     items = []
+                    # Fetch current supplierId if not in data (to validate against correct supplier)
+                    current_supplier_id = data.get('supplierId')
+                    if not current_supplier_id:
+                        current_supplier_id = old_order['supplierId']
+                        
                     for item_data in data[field]:
+                        # Validate Item-Supplier Mapping
+                        item_doc = purchase_items_collection.find_one({'_id': item_data['itemId']})
+                        if item_doc:
+                            item_suppliers = item_doc.get('suppliers', [])
+                            if item_suppliers and not any(s.get('supplierId') == current_supplier_id for s in item_suppliers):
+                                return jsonify({'error': f"Item '{item_doc['name']}' is not accepted by the selected supplier."}), 400
+
                         items.append({
                             'itemId': item_data['itemId'],
                             'quantity': float(item_data['quantity']),
@@ -4195,6 +4276,7 @@ def add_purchase_receipt():
     except Exception as e:
         return jsonify({'error': f"Failed to create purchase receipt: {str(e)}"}), 500
 
+
 @app.route('/api/purchase_receipts/<series>', methods=['PUT'])
 @db_required
 def update_purchase_receipt(series):
@@ -4207,60 +4289,90 @@ def update_purchase_receipt(series):
             return jsonify({'error': 'Purchase Receipt not found'}), 404
         was_submitted = old_receipt['status'] == 'Submitted'
         new_status = data.get('status', old_receipt['status'])
-        if was_submitted and new_status == 'Submitted':
-            pass
-        elif was_submitted and new_status != 'Submitted':
+        
+        # If it was submitted, reverse the old stock first (regardless of new status)
+        # This simplifies logic: always undo old effect if it was active
+        if was_submitted:
             for item in old_receipt['items']:
                 item_obj = purchase_items_collection.find_one({'_id': item['itemId']})
-                sub_master = 0
-                sub_outer = 0
-                sub_nos = 0
-                if item['unit'] == 'master':
-                    sub_master = item['acceptedQuantity']
-                elif item['unit'] == 'outer':
-                    sub_outer = item['acceptedQuantity']
-                elif item['unit'] == 'nos':
-                    sub_nos = item['acceptedQuantity']
-                total_sub_in_nos = (sub_master * item_obj['masterToOuter'] * item_obj['outerToNos']) + (sub_outer * item_obj['outerToNos']) + sub_nos
-                purchase_items_collection.update_one(
-                    {'_id': item['itemId']},
-                    {'$inc': {
-                        'stockMaster': -sub_master,
-                        'stockOuter': -sub_outer,
-                        'stockNos': -sub_nos,
-                        'totalStock': -total_sub_in_nos,
-                        'totalPurchased': -total_sub_in_nos
-                    }}
-                )
-        elif not was_submitted and new_status == 'Submitted':
-            items = data.get('items', old_receipt['items'])
-            for item in items:
+                if item_obj:
+                    sub_master = 0
+                    sub_outer = 0
+                    sub_nos = 0
+                    if item['unit'] == 'master':
+                        sub_master = item['acceptedQuantity']
+                    elif item['unit'] == 'outer':
+                        sub_outer = item['acceptedQuantity']
+                    elif item['unit'] == 'nos':
+                        sub_nos = item['acceptedQuantity']
+                    
+                    total_sub_in_nos = (sub_master * item_obj.get('masterToOuter', 1) * item_obj.get('outerToNos', 1)) + \
+                                       (sub_outer * item_obj.get('outerToNos', 1)) + sub_nos
+                    
+                    purchase_items_collection.update_one(
+                        {'_id': item['itemId']},
+                        {'$inc': {
+                            'stockMaster': -sub_master,
+                            'stockOuter': -sub_outer,
+                            'stockNos': -sub_nos,
+                            'totalStock': -total_sub_in_nos,
+                            'totalPurchased': -total_sub_in_nos
+                        }}
+                    )
+
+        # If new status is Submitted, apply the new stock
+        if new_status == 'Submitted':
+            items_to_process = data.get('items', old_receipt['items'])
+            # If items are not in data, use old items, but usually data has items.
+            # However, if we are just updating status from Draft -> Submitted, data might not have items if it's a partial update?
+            # Safe assumption: if 'items' is in data, use it. If not, use old_receipt['items'].
+            
+            for item in items_to_process:
+                # We need to be careful: if we used old_receipt['items'] above, we need to make sure we are not using stale data if 'items' WAS passed.
+                # data.get('items', old_receipt['items']) does this correctly.
+                
+                # IMPORTANT: The data from frontend might be in a different format (e.g. not having 'itemId' if it's new?). 
+                # But for PR, items usually have itemId.
+                
                 item_obj = purchase_items_collection.find_one({'_id': item['itemId']})
-                add_master = 0
-                add_outer = 0
-                add_nos = 0
-                if item['unit'] == 'master':
-                    add_master = item['acceptedQuantity']
-                elif item['unit'] == 'outer':
-                    add_outer = item['acceptedQuantity']
-                elif item['unit'] == 'nos':
-                    add_nos = item['acceptedQuantity']
-                total_added_in_nos = (add_master * item_obj['masterToOuter'] * item_obj['outerToNos']) + (add_outer * item_obj['outerToNos']) + add_nos
-                purchase_items_collection.update_one(
-                    {'_id': item['itemId']},
-                    {'$inc': {
-                        'stockMaster': add_master,
-                        'stockOuter': add_outer,
-                        'stockNos': add_nos,
-                        'totalStock': total_added_in_nos,
-                        'totalPurchased': total_added_in_nos
-                    }}
-                )
+                if item_obj:
+                    add_master = 0
+                    add_outer = 0
+                    add_nos = 0
+                    
+                    # Check for keys, frontend sends 'unit', 'acceptedQuantity'
+                    unit = item.get('unit', 'nos')
+                    acceptedWarning = item.get('acceptedQuantity', 0)
+                    
+                    if unit == 'master':
+                        add_master = acceptedWarning
+                    elif unit == 'outer':
+                        add_outer = acceptedWarning
+                    elif unit == 'nos':
+                        add_nos = acceptedWarning
+                    
+                    total_added_in_nos = (add_master * item_obj.get('masterToOuter', 1) * item_obj.get('outerToNos', 1)) + \
+                                         (add_outer * item_obj.get('outerToNos', 1)) + add_nos
+                    
+                    purchase_items_collection.update_one(
+                        {'_id': item['itemId']},
+                        {'$inc': {
+                            'stockMaster': add_master,
+                            'stockOuter': add_outer,
+                            'stockNos': add_nos,
+                            'totalStock': total_added_in_nos,
+                            'totalPurchased': total_added_in_nos
+                        }}
+                    )
+
         update_fields = {}
         for field in ['date', 'poId', 'company', 'supplierId', 'name', 'supplierCompany', 'supplierCode', 'supplierGroup', 'address', 'phone', 'email', 'currency', 'items', 'taxes', 'subtotal', 'totalTaxes', 'grandTotal', 'status']:
             if field in data:
                 if field == 'date':
-                    update_fields[field] = datetime.fromisoformat(str(data[field]).replace('Z', '+00:00'))
+                    try:
+                        update_fields[field] = datetime.fromisoformat(str(data[field]).replace('Z', '+00:00'))
+                    except:
+                         update_fields[field] = datetime.now(timezone.utc)
                 elif field in ['subtotal', 'totalTaxes', 'grandTotal']:
                     update_fields[field] = float(data[field])
                 elif field == 'items':
@@ -4268,21 +4380,24 @@ def update_purchase_receipt(series):
                     for item_data in data[field]:
                         items.append({
                             'itemId': item_data['itemId'],
-                            'originalQuantity': float(item_data['originalQuantity']),
-                            'acceptedQuantity': float(item_data['acceptedQuantity']),
-                            'rejectedQuantity': float(item_data['rejectedQuantity']),
+                            'originalQuantity': float(item_data.get('originalQuantity',0)),
+                            'acceptedQuantity': float(item_data.get('acceptedQuantity',0)),
+                            'rejectedQuantity': float(item_data.get('rejectedQuantity',0)),
                             'rate': float(item_data.get('rate', 0)),
                             'amount': float(item_data.get('amount', 0)),
-                            'unit': item_data['unit']
+                            'unit': item_data.get('unit', '')
                         })
                     update_fields[field] = items
                 else:
                     update_fields[field] = data[field]
+        
         if not update_fields:
             return jsonify({'error': 'No fields to update'}), 400
+            
         result = purchase_receipts_collection.update_one({'series': series}, {'$set': update_fields})
         if result.matched_count == 0:
             return jsonify({'error': 'Purchase Receipt not found'}), 404
+            
         return jsonify({'message': 'Purchase Receipt updated successfully'}), 200
     except ValueError as e:
         return jsonify({'error': f"Invalid data format: {str(e)}"}), 400
@@ -4362,6 +4477,13 @@ def add_purchase_invoice():
             item_doc = purchase_items_collection.find_one({'_id': item_data['itemId']})
             if not item_doc:
                 return jsonify({'error': f"Item {item_data['itemId']} not found"}), 404
+            
+            if is_direct:
+                # Validate Item-Supplier Mapping for Direct Purchase
+                item_suppliers = item_doc.get('suppliers', [])
+                if item_suppliers and not any(s.get('supplierId') == data['supplierId'] for s in item_suppliers):
+                     return jsonify({'error': f"Item '{item_doc['name']}' is not accepted by the selected supplier."}), 400
+
             
             # Use 'quantity' if 'acceptedQuantity' is missing/zero (Direct Purchase flow uses quantity)
             qty = float(item_data.get('acceptedQuantity', 0))

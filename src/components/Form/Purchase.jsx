@@ -307,18 +307,37 @@ function Purchase() {
     }
   }, [suppliers]);
   useEffect(() => {
-    if (activeTab === 'order' && !editingPoId && !poForm.series) {
-      setPoForm(prev => ({ ...prev, series: getNextSeries() }));
+    if (activeTab === 'order' && !editingPoId) {
+      const nextSeries = getNextSeries();
+      setPoForm(prev => {
+        // Only update if it's different to avoid infinite loops, but ensure we catch the fresh value
+        if (prev.series !== nextSeries) {
+          return { ...prev, series: nextSeries };
+        }
+        return prev;
+      });
     }
   }, [activeTab, editingPoId, purchaseOrders]);
   useEffect(() => {
-    if (activeTab === 'receipt' && !editingPrId && !prForm.series) {
-      setPrForm(prev => ({ ...prev, series: getNextPrSeries() }));
+    if (activeTab === 'receipt' && !editingPrId) {
+      const nextSeries = getNextPrSeries();
+      setPrForm(prev => {
+        if (prev.series !== nextSeries) {
+          return { ...prev, series: nextSeries };
+        }
+        return prev;
+      });
     }
   }, [activeTab, editingPrId, purchaseReceipts]);
   useEffect(() => {
-    if (activeTab === 'invoice' && !editingPiId && !piForm.series) {
-      setPiForm(prev => ({ ...prev, series: getNextPiSeries() }));
+    if (activeTab === 'invoice' && !editingPiId) {
+      const nextSeries = getNextPiSeries();
+      setPiForm(prev => {
+        if (prev.series !== nextSeries) {
+          return { ...prev, series: nextSeries };
+        }
+        return prev;
+      });
     }
   }, [activeTab, editingPiId, purchaseInvoices]);
   useEffect(() => {
@@ -333,13 +352,22 @@ function Purchase() {
         outerToNos: editingItem.outerToNos || '',
         nosUnit: editingItem.nosUnit,
         grams: editingItem.grams || '',
-        suppliers: editingItem.suppliers || [], // Should now be an array of objects
-        isCompanyDropdownOpen: false
+        suppliers: editingItem.suppliers || [],
+        isCompanyDropdownOpen: false,
+        isSupplierDropdownOpen: false
       }]);
     } else {
-      setItemFormRows([{ company: '', name: '', boxToMaster: '', masterUnit: '', masterToOuter: '', outerUnit: '', outerToNos: '', nosUnit: 'Nos', grams: '', suppliers: [], isCompanyDropdownOpen: false }]);
+      let initialSuppliers = [];
+      if (creatingItemForPo && poForm.supplierId) {
+        const s = suppliers.find(sup => sup._id === poForm.supplierId);
+        if (s) initialSuppliers.push({ supplierId: s._id, supplierName: s.company });
+      } else if (creatingItemForPi && piForm.supplierId) {
+        const s = suppliers.find(sup => sup._id === piForm.supplierId);
+        if (s) initialSuppliers.push({ supplierId: s._id, supplierName: s.company });
+      }
+      setItemFormRows([{ company: '', name: '', boxToMaster: '', masterUnit: '', masterToOuter: '', outerUnit: '', outerToNos: '', nosUnit: 'Nos', grams: '', suppliers: initialSuppliers, isCompanyDropdownOpen: false, isSupplierDropdownOpen: false }]);
     }
-  }, [editingItem]);
+  }, [editingItem, creatingItemForPo, creatingItemForPi, poForm.supplierId, piForm.supplierId, suppliers]);
   useEffect(() => {
     if (editingSupplier) {
       setSupplierForm({ ...editingSupplier, contacts: editingSupplier.contacts || [{ contactPerson: '', whatsapp: '', phone: '', email: '', address: '' }] });
@@ -576,36 +604,48 @@ function Purchase() {
     try {
       const response = await fetch(`${API_URL}/api/purchase_orders`);
       if (response.ok) {
-        setPurchaseOrders(await response.json());
+        const data = await response.json();
+        setPurchaseOrders(data);
+        return data;
       } else {
         setError('Failed to fetch purchase orders');
+        return [];
       }
     } catch (err) {
       setError('Failed to fetch purchase orders');
+      return [];
     }
   };
   const fetchPurchaseReceipts = async () => {
     try {
       const response = await fetch(`${API_URL}/api/purchase_receipts`);
       if (response.ok) {
-        setPurchaseReceipts(await response.json());
+        const data = await response.json();
+        setPurchaseReceipts(data);
+        return data;
       } else {
         setError('Failed to fetch purchase receipts');
+        return [];
       }
     } catch (err) {
       setError('Failed to fetch purchase receipts');
+      return [];
     }
   };
   const fetchPurchaseInvoices = async () => {
     try {
       const response = await fetch(`${API_URL}/api/purchase_invoices`);
       if (response.ok) {
-        setPurchaseInvoices(await response.json());
+        const data = await response.json();
+        setPurchaseInvoices(data);
+        return data;
       } else {
         setError('Failed to fetch purchase invoices');
+        return [];
       }
     } catch (err) {
       setError('Failed to fetch purchase invoices');
+      return [];
     }
   };
   const handleItemFormChange = (index, field, value) => {
@@ -621,6 +661,25 @@ function Purchase() {
     }
     const updatedRows = [...itemFormRows];
     updatedRows[index][field] = value;
+    setItemFormRows(updatedRows);
+  };
+
+  const toggleSupplierDropdown = (index) => {
+    const updatedRows = [...itemFormRows];
+    updatedRows[index].isSupplierDropdownOpen = !updatedRows[index].isSupplierDropdownOpen;
+    setItemFormRows(updatedRows);
+  };
+
+  const toggleSupplier = (index, supplier) => {
+    const updatedRows = [...itemFormRows];
+    const currentSuppliers = updatedRows[index].suppliers || [];
+    const exists = currentSuppliers.some(s => s.supplierId === supplier._id);
+
+    if (exists) {
+      updatedRows[index].suppliers = currentSuppliers.filter(s => s.supplierId !== supplier._id);
+    } else {
+      updatedRows[index].suppliers = [...currentSuppliers, { supplierId: supplier._id, supplierName: supplier.company }];
+    }
     setItemFormRows(updatedRows);
   };
   const handleCreateNewUom = async () => {
@@ -672,7 +731,7 @@ function Purchase() {
     }
   };
   const addItemFormRow = () => {
-    setItemFormRows([...itemFormRows, { company: '', name: '', boxToMaster: '', masterUnit: '', masterToOuter: '', outerUnit: '', outerToNos: '', nosUnit: 'Nos', grams: '', suppliers: [], isCompanyDropdownOpen: false }]);
+    setItemFormRows([...itemFormRows, { company: '', name: '', boxToMaster: '', masterUnit: '', masterToOuter: '', outerUnit: '', outerToNos: '', nosUnit: 'Nos', grams: '', suppliers: [], isCompanyDropdownOpen: false, isSupplierDropdownOpen: false }]);
   };
   const removeItemFormRow = (index) => {
     if (itemFormRows.length > 1) {
@@ -730,7 +789,8 @@ function Purchase() {
       }
     }
     const newItemsList = await fetchItems();
-    setItemFormRows([{ company: '', name: '', boxToMaster: '', masterUnit: '', masterToOuter: '', outerUnit: '', outerToNos: '', nosUnit: 'Nos', grams: '', suppliers: [], isCompanyDropdownOpen: false }]);
+
+    setItemFormRows([{ company: '', name: '', boxToMaster: '', masterUnit: '', masterToOuter: '', outerUnit: '', outerToNos: '', nosUnit: 'Nos', grams: '', suppliers: [], isCompanyDropdownOpen: false, isSupplierDropdownOpen: false }]);
     setMessage('Item(s) added successfully');
     if (creatingItemForPo && itemFormRows.length === 1 && newItemsList) {
       const newItem = newItemsList.find(item => item.name === itemFormRows[0].name && item.company === itemFormRows[0].company) || newItemsList[newItemsList.length - 1];
@@ -1549,10 +1609,20 @@ function Purchase() {
         });
       }
       if (response.ok) {
-        await fetchPurchaseOrders();
+        const updatedOrders = await fetchPurchaseOrders();
+        // Calculate next series immediately
+        const prefix = 'PO';
+        const matchingPos = updatedOrders.filter(po => po.series && po.series.startsWith(prefix));
+        let nextSeries = prefix + '0001';
+        if (matchingPos.length > 0) {
+          const numbers = matchingPos.map(po => parseInt(po.series.slice(prefix.length), 10));
+          const max = Math.max(...numbers);
+          nextSeries = prefix + (max + 1).toString().padStart(4, '0');
+        }
+
         setEditingPoId(null);
         setPoForm({
-          series: '', date: new Date().toISOString().slice(0, 10), company: 'POS8', supplierId: '', supplierCode: '',
+          series: nextSeries, date: new Date().toISOString().slice(0, 10), company: 'POS8', supplierId: '', supplierCode: '',
           supplierGroup: '', address: '', phone: '', email: '', currency: '', items: [{ itemId: '', quantity: '', uom: 'master', rate: '', amount: 0 }], taxes: [{ type: 'On Net Total', taxRate: 0, amount: 0, total: 0 }], subtotal: 0, totalQuantity: 0, totalTaxes: 0, grandTotal: 0, totalQtyInCommon: 0, commonUOM: ''
         });
         setCurrentPoSupplier(null);
@@ -1672,11 +1742,22 @@ function Purchase() {
         });
       }
       if (response.ok) {
-        await fetchPurchaseReceipts();
+        const updatedReceipts = await fetchPurchaseReceipts();
         await fetchItems();
+
+        // Calculate next series immediately
+        const prefix = 'PR';
+        const matchingPrs = updatedReceipts.filter(pr => pr.series && pr.series.startsWith(prefix));
+        let nextSeries = prefix + '0001';
+        if (matchingPrs.length > 0) {
+          const numbers = matchingPrs.map(pr => parseInt(pr.series.slice(prefix.length), 10));
+          const max = Math.max(...numbers);
+          nextSeries = prefix + (max + 1).toString().padStart(4, '0');
+        }
+
         setEditingPrId(null);
         setPrForm({
-          series: '', date: new Date().toISOString().slice(0, 10), company: 'POS8', poId: '', supplierId: '', supplierCode: '',
+          series: nextSeries, date: new Date().toISOString().slice(0, 10), company: 'POS8', poId: '', supplierId: '', supplierCode: '',
           supplierGroup: '', address: '', phone: '', email: '', currency: '', items: [{ itemId: '', originalQuantity: 0, acceptedQuantity: '', rejectedQuantity: '', rate: '', amount: 0, unit: 'master' }], taxes: [{ type: 'On Net Total', taxRate: 0, amount: 0, total: 0 }], subtotal: 0, totalTaxes: 0, grandTotal: 0, totalQtyInCommon: 0, commonUOM: ''
         });
         setCurrentPrSupplier(null);
@@ -1756,11 +1837,22 @@ function Purchase() {
         });
       }
       if (response.ok) {
-        await fetchPurchaseInvoices();
+        const updatedInvoices = await fetchPurchaseInvoices();
+
+        // Calculate next series immediately
+        const prefix = 'PI';
+        const matchingPis = updatedInvoices.filter(pi => pi.series && pi.series.startsWith(prefix));
+        let nextSeries = prefix + '0001';
+        if (matchingPis.length > 0) {
+          const numbers = matchingPis.map(pi => parseInt(pi.series.slice(prefix.length), 10));
+          const max = Math.max(...numbers);
+          nextSeries = prefix + (max + 1).toString().padStart(4, '0');
+        }
+
         setEditingPiId(null);
         setPiForm({
           isDirectPurchase: piForm.isDirectPurchase, // NEW: Preserve Direct Purchase mode
-          series: '', date: new Date().toISOString().slice(0, 10), company: 'POS8',
+          series: nextSeries, date: new Date().toISOString().slice(0, 10), company: 'POS8',
           supplierId: piForm.isDirectPurchase ? piForm.supplierId : '', // Optional: Keep supplier if direct? better to reset for next invoice
           supplierCode: '',
           supplierGroup: '', address: '', phone: '', email: '',
@@ -3027,29 +3119,87 @@ function Purchase() {
 
                           <div className="purchase-form-field">
                             <label className="purchase-label">Supplier</label>
-                            <select
-                              value={row.suppliers.length > 0 ? `${row.suppliers[0].supplierId}|${row.suppliers[0].supplierName}` : ''}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                if (value === 'create_new') {
-                                  setCreatingSupplierForItem({ rowIndex: idx });
-                                  setActiveTab('supplier');
-                                  return;
-                                }
-                                const [supplierId, supplierName] = value.split('|');
-                                handleItemFormChange(idx, 'suppliers', [{ supplierId, supplierName }]);
-                              }}
-                              className="purchase-input select"
-                              required
-                            >
-                              <option value="">Select Supplier</option>
-                              {suppliers.map(supplier => (
-                                <option key={supplier._id} value={`${supplier._id}|${supplier.company}`}>
-                                  {supplier.company}
-                                </option>
-                              ))}
-                              <option value="create_new">Create New Supplier</option>
-                            </select>
+                            <div className="purchase-custom-multiselect" style={{ position: 'relative' }}>
+                              <div
+                                className="purchase-input"
+                                onClick={() => toggleSupplierDropdown(idx)}
+                                style={{
+                                  cursor: 'pointer',
+                                  minHeight: '38px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  flexWrap: 'wrap',
+                                  gap: '5px',
+                                  background: '#fff'
+                                }}
+                              >
+                                {row.suppliers && row.suppliers.length > 0 ? (
+                                  row.suppliers.map(s => (
+                                    <span key={s.supplierId} style={{ background: '#e0e0e0', padding: '2px 6px', borderRadius: '4px', fontSize: '12px' }}>
+                                      {s.supplierName}
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span style={{ color: '#aaa' }}>Select Suppliers</span>
+                                )}
+                              </div>
+                              {row.isSupplierDropdownOpen && (
+                                <div className="purchase-dropdown-options" style={{
+                                  position: 'absolute',
+                                  top: '100%',
+                                  left: 0,
+                                  width: '100%',
+                                  maxHeight: '200px',
+                                  overflowY: 'auto',
+                                  background: '#fff',
+                                  border: '1px solid #ccc',
+                                  zIndex: 1000,
+                                  boxShadow: '0 4px 8px rgba(0,0,0,0.1)'
+                                }}>
+                                  <div
+                                    className="purchase-dropdown-option"
+                                    onClick={() => {
+                                      setCreatingSupplierForItem({ rowIndex: idx });
+                                      setActiveTab('supplier');
+                                    }}
+                                    style={{ padding: '8px', cursor: 'pointer', borderBottom: '1px solid #eee', color: '#007bff', fontWeight: 'bold' }}
+                                  >
+                                    + Create New Supplier
+                                  </div>
+                                  {suppliers.map(supplier => {
+                                    const isSelected = row.suppliers && row.suppliers.some(s => s.supplierId === supplier._id);
+                                    return (
+                                      <div
+                                        key={supplier._id}
+                                        onClick={() => toggleSupplier(idx, supplier)}
+                                        style={{
+                                          padding: '8px',
+                                          cursor: 'pointer',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          background: isSelected ? '#f0f8ff' : '#fff'
+                                        }}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={isSelected || false}
+                                          readOnly
+                                          style={{ marginRight: '8px' }}
+                                        />
+                                        {supplier.company}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                            {/* Overlay to close dropdown when clicking outside */}
+                            {row.isSupplierDropdownOpen && (
+                              <div
+                                style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 999 }}
+                                onClick={() => toggleSupplierDropdown(idx)}
+                              />
+                            )}
                           </div>
                         </div>
                       ))}
@@ -3415,14 +3565,28 @@ function Purchase() {
                                 address: contact.address,
                                 phone: contact.phone,
                                 email: contact.email,
-                                currency: supplier.currency
+                                currency: supplier.currency,
+                                items: [{ itemId: '', quantity: '', uom: 'master', rate: '', amount: 0 }]
                               }));
                             } else {
                               setCurrentPoSupplier(null);
+                              setPoForm(prev => ({
+                                ...prev,
+                                supplierId: '',
+                                supplierCode: '',
+                                supplierGroup: '',
+                                name: '',
+                                supplierCompany: '',
+                                address: '',
+                                phone: '',
+                                email: '',
+                                items: [{ itemId: '', quantity: '', uom: 'master', rate: '', amount: 0 }]
+                              }));
                             }
                           }}
                           className="purchase-input select"
                           required
+                          disabled={poForm.items.some(i => i.itemId)}
                         >
                           <option value="">Select Supplier</option>
                           {suppliers.map(s => <option key={s._id} value={s._id}>{s.company}</option>)}
@@ -3471,9 +3635,12 @@ function Purchase() {
                                     onChange={(e) => handlePoItemChange(index, 'itemId', e.target.value)}
                                     className="purchase-input select"
                                     required
+                                    disabled={!poForm.supplierId}
                                   >
                                     <option value="">Select Item</option>
-                                    {items.map(i => <option key={i._id} value={i._id}>{i.name}</option>)}
+                                    {items
+                                      .filter(i => poForm.supplierId && i.suppliers && Array.isArray(i.suppliers) && i.suppliers.some(s => s.supplierId === poForm.supplierId || s.supplierName === poForm.supplierCompany))
+                                      .map(i => <option key={i._id} value={i._id}>{i.name}</option>)}
                                     <option value="create_new">Create New Item</option>
                                   </select>
                                   {item.itemId && (
@@ -3511,7 +3678,7 @@ function Purchase() {
                               <td>
                                 <input
                                   type="number"
-                                  value={item.rate}
+                                  value={item.rate === 0 ? '' : item.rate}
                                   onChange={(e) => handlePoItemChange(index, 'rate', e.target.value)}
                                   className="purchase-input"
                                 />
@@ -4061,15 +4228,28 @@ function Purchase() {
                                 supplierCompany: supplier.company,
                                 address: contact.address,
                                 phone: contact.phone,
-                                email: contact.email
+                                email: contact.email,
+                                items: [{ itemId: '', acceptedQuantity: 0, quantity: 0, rate: '', amount: 0, unit: 'master' }]
                               }));
                             } else {
                               setCurrentPiSupplier(null);
+                              setPiForm(prev => ({
+                                ...prev,
+                                supplierId: '',
+                                supplierCode: '',
+                                supplierGroup: '',
+                                name: '',
+                                supplierCompany: '',
+                                address: '',
+                                phone: '',
+                                email: '',
+                                items: [{ itemId: '', acceptedQuantity: 0, quantity: 0, rate: '', amount: 0, unit: 'master' }]
+                              }));
                             }
                           }}
                           className="purchase-input select"
                           required
-                          disabled={!piForm.isDirectPurchase && !piForm.prId}
+                          disabled={(!piForm.isDirectPurchase && !piForm.prId) || (piForm.isDirectPurchase && piForm.items.some(i => i.itemId))}
                         >
                           <option value="">Select Supplier</option>
                           {suppliers.map(s => <option key={s._id} value={s._id}>{s.company}</option>)}
@@ -4182,9 +4362,12 @@ function Purchase() {
                                     onChange={(e) => handlePiItemChange(index, 'itemId', e.target.value)}
                                     className="purchase-input select"
                                     required
+                                    disabled={!piForm.isDirectPurchase || !piForm.supplierId}
                                   >
                                     <option value="">Select Item</option>
-                                    {items.map(i => <option key={i._id} value={i._id}>{i.name}</option>)}
+                                    {items
+                                      .filter(i => !piForm.isDirectPurchase || (piForm.supplierId && i.suppliers && Array.isArray(i.suppliers) && i.suppliers.some(s => s.supplierId === piForm.supplierId || s.supplierName === piForm.supplierCompany)))
+                                      .map(i => <option key={i._id} value={i._id}>{i.name}</option>)}
                                     <option value="create_new">Create New Item</option>
                                   </select>
                                   {item.itemId && (

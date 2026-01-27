@@ -34,7 +34,7 @@ function TripReport() {
   const [vatRate, setVatRate] = useState(0.10); // UPDATED: Dynamic VAT rate like in FrontPage
   const [currency, setCurrency] = useState("INR"); // NEW: Dynamic currency like in ActiveOrders
   const dropdownRef = useRef(null);
-  const baseUrl = window.location.hostname === 'localhost' ? '' : `http://${window.location.hostname}:8000`;
+  const [baseUrl, setBaseUrl] = useState("");
 
   // NEW: Helper to get currency symbol (from ActiveOrders)
   const getCurrencySymbol = (currCode) => {
@@ -48,6 +48,29 @@ function TripReport() {
     };
     return symbols[currCode?.toUpperCase()] || '₹'; // Default to ₹ (INR) if not found
   };
+
+  // NEW: Fetch network info to set baseUrl (like in CreateCustomerPage)
+  useEffect(() => {
+    const fetchConfig = async () => {
+      let currentBaseUrl = "";
+      try {
+        // Try fetching from localhost:8000 first as per CreateCustomerPage logic
+        const response = await axios.get("http://localhost:8000/api/network_info");
+        const { config: appConfig } = response.data;
+        if (appConfig.mode === "client") {
+          currentBaseUrl = `http://${appConfig.server_ip}:8000`;
+          setBaseUrl(currentBaseUrl);
+        } else {
+          setBaseUrl(""); // Default to relative path (proxy) or empty if on same origin
+        }
+      } catch (error) {
+        console.error("Failed to fetch config:", error);
+        // Fallback logic if localhost:8000 fails (maybe running on different port or production)
+        setBaseUrl(window.location.hostname === 'localhost' ? '' : `http://${window.location.hostname}:8000`);
+      }
+    };
+    fetchConfig();
+  }, []);
 
   // UPDATED: Fetch VAT rate dynamically like in ActiveOrders
   useEffect(() => {
@@ -90,7 +113,8 @@ function TripReport() {
     try {
       setLoading(true);
       setError(null);
-      const response = await axios.get(`${baseUrl}/api/employees`);
+      const apiPath = baseUrl ? `${baseUrl}/api/employees` : '/api/employees';
+      const response = await axios.get(apiPath);
       const data = Array.isArray(response.data) ? response.data : [];
       setEmployees(data);
       setFilteredEmployees(data.filter((emp) => emp.role.toLowerCase() === 'delivery boy'));
@@ -112,7 +136,8 @@ function TripReport() {
     try {
       setLoading(true);
       setError(null);
-      const response = await axios.get(`${baseUrl}/api/tripreports/${employeeId}`);
+      const apiPath = baseUrl ? `${baseUrl}/api/tripreports/${employeeId}` : `/api/tripreports/${employeeId}`;
+      const response = await axios.get(apiPath);
       const data = Array.isArray(response.data) ? response.data : [];
       const sanitizedReports = data.map((report) => {
         let paymentAmounts = { Cash: 0, Card: 0, UPI: 0 };
@@ -142,46 +167,46 @@ function TripReport() {
         // ADDED: Fallback if exclTotal/taxTotal == 0 but amount > 0: calculate using vatRate (per unit)
         const sanitizedCartItems = Array.isArray(report.cartItems)
           ? report.cartItems.map((item) => {
-              let exclTotal = Number(item.excl_amount) || Number(item.exclTotal) || 0;
-              let taxTotal = Number(item.tax_amount) || Number(item.taxTotal) || 0;
-              const qty = Number(item.quantity) || 1;
-              const amount = Number(item.amount) || 0;
-              if ((exclTotal + taxTotal) === 0 && amount > 0) {
-                const unitIncl = amount / qty;
-                exclTotal = unitIncl / (1 + vatRate);
-                taxTotal = unitIncl - exclTotal;
-              }
-              return {
-                ...item,
-                id: item.id || uuidv4(),
-                item_name: item.item_name || item.name || 'Unknown',
-                name: item.name || item.item_name || 'Unknown',
-                quantity: qty,
-                basePrice: Number(item.basePrice) || (amount / qty) || 0,
-                totalPrice: amount || ( (exclTotal + taxTotal) * qty ) || 0,
-                // FIXED: Preserve from backend (excl_amount, tax_amount) like in ActiveOrders, with fallback set above
-                exclTotal,
-                taxTotal,
-                taxBreakdown: item.tax_breakdown || item.taxBreakdown || {},
-                selectedSize: item.selectedSize || 'M',
-                icePreference: item.icePreference || 'without_ice',
-                icePrice: Number(item.icePrice) || 0,
-                isSpicy: item.isSpicy || false,
-                spicyPrice: Number(item.spicyPrice) || 0,
-                kitchen: item.kitchen || 'Main Kitchen',
-                addonQuantities: item.addonQuantities || {},
-                addonVariants: item.addonVariants || {},
-                addonPrices: item.addonPrices || {},
-                comboQuantities: item.comboQuantities || {},
-                comboVariants: item.comboVariants || {},
-                comboPrices: item.comboPrices || {},
-                addons: Array.isArray(item.addons) ? item.addons : [], // Ensure addons array
-                selectedCombos: Array.isArray(item.selectedCombos) ? item.selectedCombos : [], // Ensure selectedCombos array
-                ingredients: Array.isArray(item.ingredients) ? item.ingredients : [],
-                requiredKitchens: Array.isArray(item.requiredKitchens) ? item.requiredKitchens : [],
-                kitchenStatuses: item.kitchenStatuses || {},
-              };
-            })
+            let exclTotal = Number(item.excl_amount) || Number(item.exclTotal) || 0;
+            let taxTotal = Number(item.tax_amount) || Number(item.taxTotal) || 0;
+            const qty = Number(item.quantity) || 1;
+            const amount = Number(item.amount) || 0;
+            if ((exclTotal + taxTotal) === 0 && amount > 0) {
+              const unitIncl = amount / qty;
+              exclTotal = unitIncl / (1 + vatRate);
+              taxTotal = unitIncl - exclTotal;
+            }
+            return {
+              ...item,
+              id: item.id || uuidv4(),
+              item_name: item.item_name || item.name || 'Unknown',
+              name: item.name || item.item_name || 'Unknown',
+              quantity: qty,
+              basePrice: Number(item.basePrice) || (amount / qty) || 0,
+              totalPrice: amount || ((exclTotal + taxTotal) * qty) || 0,
+              // FIXED: Preserve from backend (excl_amount, tax_amount) like in ActiveOrders, with fallback set above
+              exclTotal,
+              taxTotal,
+              taxBreakdown: item.tax_breakdown || item.taxBreakdown || {},
+              selectedSize: item.selectedSize || 'M',
+              icePreference: item.icePreference || 'without_ice',
+              icePrice: Number(item.icePrice) || 0,
+              isSpicy: item.isSpicy || false,
+              spicyPrice: Number(item.spicyPrice) || 0,
+              kitchen: item.kitchen || 'Main Kitchen',
+              addonQuantities: item.addonQuantities || {},
+              addonVariants: item.addonVariants || {},
+              addonPrices: item.addonPrices || {},
+              comboQuantities: item.comboQuantities || {},
+              comboVariants: item.comboVariants || {},
+              comboPrices: item.comboPrices || {},
+              addons: Array.isArray(item.addons) ? item.addons : [], // Ensure addons array
+              selectedCombos: Array.isArray(item.selectedCombos) ? item.selectedCombos : [], // Ensure selectedCombos array
+              ingredients: Array.isArray(item.ingredients) ? item.ingredients : [],
+              requiredKitchens: Array.isArray(item.requiredKitchens) ? item.requiredKitchens : [],
+              kitchenStatuses: item.kitchenStatuses || {},
+            };
+          })
           : [];
         return {
           ...report,
@@ -226,7 +251,12 @@ function TripReport() {
     }
     let filtered = reports.filter((report) => {
       // UPDATED: String match on report.date === date (both YYYY-MM-DD)
-      return report.date === date;
+      // If report has timestamp, extract date part
+      let reportDate = report.date;
+      if (!reportDate && report.timestamp) {
+        reportDate = new Date(report.timestamp).toISOString().split('T')[0];
+      }
+      return reportDate === date;
     });
     if (billNo) {
       filtered = filtered.filter((report) => report.orderNo.toLowerCase().includes(billNo.toLowerCase()));
@@ -323,7 +353,8 @@ function TripReport() {
         status: 'Delivered',
         payments: payments,
       };
-      await axios.post(`${baseUrl}/api/sales/deliver-order`, payload);
+      const apiPath = baseUrl ? `${baseUrl}/api/sales/deliver-order` : '/api/sales/deliver-order';
+      await axios.post(apiPath, payload);
       setWarningMessage('Order marked as delivered successfully with payment details.');
       setWarningType('success');
       // Refresh reports
@@ -413,7 +444,7 @@ function TripReport() {
   // Load employees on component mount
   useEffect(() => {
     fetchEmployees();
-  }, []);
+  }, [baseUrl]); // Add baseUrl dependency
 
   // Prefill from URL params
   useEffect(() => {
@@ -508,8 +539,7 @@ function TripReport() {
     }
     fetchTripReports(selectedEmployee.employeeId, selectedDate, billNumber, customerName);
     setWarningMessage(
-      `Delivery Person Selected: ${selectedEmployee.name} for date ${selectedDate}${
-        billNumber ? `, Bill No: ${billNumber}` : ''
+      `Delivery Person Selected: ${selectedEmployee.name} for date ${selectedDate}${billNumber ? `, Bill No: ${billNumber}` : ''
       }${customerName ? `, Customer: ${customerName}` : ''}`
     );
     setWarningType('success');
@@ -799,293 +829,205 @@ function TripReport() {
                     <th>Delivery Person Name</th>{/* UPDATED: Show delivery person name */}
                     <th>Grand Total ({getCurrencySymbol(currency)})</th> {/* FIXED: Dynamic currency */}
                     <th>Balance ({getCurrencySymbol(currency)})</th> {/* NEW: Balance column, dynamic currency */}
-                    <th>Payment Method</th>
-                    <th>Actions</th>
-                    <th>Status</th>{/* UPDATED: Status column instead of Delivered */}
+                    <th>Status</th> {/* UPDATED: Status column */}
+                    <th>Payment</th>
+                    <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredReports.map((report) => (
-                    <tr key={report.tripId}>
-                      <td>{report.orderNo}</td>
-                      <td>{formatTimestamp(report.timestamp)}</td>{/* FIXED: Use timestamp */}
-                      <td>{report.customerName || 'N/A'}</td>
-                      <td>{report.email || 'N/A'}</td>
-                      <td>{report.deliveryPersonName || 'Unknown'}</td>{/* UPDATED: Display delivery person name */}
-                      <td>{formatPrice(calculateGrandTotal(report.cartItems))}</td> {/* FIXED: Use formatPrice with dynamic currency */}
-                      <td>{formatPrice(getBalance(report))}</td> {/* NEW: Balance with formatPrice */}
-                      <td>
-                        {report.status === 'Delivered' ? (
-                          <div className="d-flex flex-column gap-1 small">
-                            {Object.entries(report.paymentAmounts)
-                              .filter(([, amt]) => Number(amt) > 0)
-                              .map(([method, amt]) => (
-                                <div key={method}>
-                                  <strong>{method}:</strong> {formatPrice(amt.toFixed(2))}
-                                  {method === 'Cash' && report.tenderedAmount && (
-                                    <span>
-                                      {' '}
-                                      (Tendered: {formatPrice(report.tenderedAmount)}, Change: {formatPrice(report.change.toFixed(2))})
-                                    </span>
-                                  )}
-                                  {method === 'Card' && report.cardDetails && (
-                                    <span> (****{report.cardDetails.slice(-4)})</span>
-                                  )}
-                                  {method === 'UPI' && report.upiDetails && (
-                                    <span> ({report.upiDetails.split('@')[0]})</span>
-                                  )}
-                                </div>
-                              ))}
-                            <div className="mt-1">
-                              <strong>Total Paid: {formatPrice(calculateTotalPaid(report.paymentAmounts).toFixed(2))}</strong>
-                            </div>
-                            <div>
-                              <strong>Balance: {formatPrice(0.00)}</strong>
-                            </div>
-                          </div>
-                        ) : (
+                  {filteredReports.map((report) => {
+                    const grandTotal = calculateGrandTotal(report.cartItems);
+                    const balance = getBalance(report);
+                    const isDelivered = report.status === 'Delivered';
+                    return (
+                      <tr key={report.tripId}>
+                        <td>{report.orderNo}</td>
+                        <td>{formatTimestamp(report.timestamp)}</td>
+                        <td>{report.customerName}</td>
+                        <td>{report.email}</td>
+                        <td>{report.deliveryPersonName}</td>{/* UPDATED: Show delivery person name */}
+                        <td>{formatPrice(grandTotal)}</td>
+                        <td className={parseFloat(balance) > 0 ? 'text-danger fw-bold' : 'text-success'}>
+                          {formatPrice(balance)}
+                        </td>
+                        <td>
+                          <span className={`badge ${isDelivered ? 'bg-success' : 'bg-warning'}`}>
+                            {report.status}
+                          </span>
+                        </td>
+                        <td>
                           <div className="d-flex flex-column gap-2">
-                            <div className="d-flex align-items-center gap-2">
-                              <label className="form-label small mb-0">Cash:</label>
+                            {/* Cash Payment */}
+                            <div className="input-group input-group-sm">
+                              <span className="input-group-text">Cash</span>
                               <input
                                 type="number"
-                                className="form-control form-control-sm"
-                                style={{ width: '80px' }}
+                                className="form-control"
                                 value={report.paymentAmounts.Cash || ''}
                                 onChange={(e) => handlePaymentAmountChange(report.tripId, 'Cash', e.target.value)}
-                                min="0"
-                                step="0.01"
+                                placeholder="Amount"
+                                disabled={isDelivered}
                               />
                             </div>
                             {Number(report.paymentAmounts.Cash) > 0 && (
-                              <div className="d-flex align-items-center gap-2 ps-3">
-                                <label className="form-label small mb-0">Tendered:</label>
+                              <div className="input-group input-group-sm">
+                                <span className="input-group-text">Tendered</span>
                                 <input
                                   type="number"
-                                  className="form-control form-control-sm"
-                                  style={{ width: '80px' }}
+                                  className="form-control"
                                   value={report.tenderedAmount || ''}
                                   onChange={(e) => handleTenderedChange(report.tripId, e.target.value)}
-                                  min={report.paymentAmounts.Cash || 0}
-                                  step="0.01"
+                                  placeholder="Tendered"
+                                  disabled={isDelivered}
                                 />
-                                <small className="text-success">Change: {formatPrice(report.change.toFixed(2))}</small>
+                                <span className="input-group-text">Change: {formatPrice(report.change)}</span>
                               </div>
                             )}
-                            <div className="d-flex align-items-center gap-2">
-                              <label className="form-label small mb-0">Card:</label>
+
+                            {/* Card Payment */}
+                            <div className="input-group input-group-sm">
+                              <span className="input-group-text">Card</span>
                               <input
                                 type="number"
-                                className="form-control form-control-sm"
-                                style={{ width: '80px' }}
+                                className="form-control"
                                 value={report.paymentAmounts.Card || ''}
                                 onChange={(e) => handlePaymentAmountChange(report.tripId, 'Card', e.target.value)}
-                                min="0"
-                                step="0.01"
+                                placeholder="Amount"
+                                disabled={isDelivered}
                               />
                             </div>
                             {Number(report.paymentAmounts.Card) > 0 && (
-                              <div className="ps-3">
-                                <input
-                                  type="text"
-                                  className="form-control form-control-sm"
-                                  placeholder="Card Number"
-                                  value={report.cardDetails || ''}
-                                  onChange={(e) =>
-                                    handlePaymentDetailsInput(report.tripId, 'cardDetails', e.target.value)
-                                  }
-                                />
-                              </div>
+                              <input
+                                type="text"
+                                className="form-control form-control-sm"
+                                value={report.cardDetails || ''}
+                                onChange={(e) => handlePaymentDetailsInput(report.tripId, 'cardDetails', e.target.value)}
+                                placeholder="Card Last 4 Digits / Ref"
+                                disabled={isDelivered}
+                              />
                             )}
-                            <div className="d-flex align-items-center gap-2">
-                              <label className="form-label small mb-0">UPI:</label>
+
+                            {/* UPI Payment */}
+                            <div className="input-group input-group-sm">
+                              <span className="input-group-text">UPI</span>
                               <input
                                 type="number"
-                                className="form-control form-control-sm"
-                                style={{ width: '80px' }}
+                                className="form-control"
                                 value={report.paymentAmounts.UPI || ''}
                                 onChange={(e) => handlePaymentAmountChange(report.tripId, 'UPI', e.target.value)}
-                                min="0"
-                                step="0.01"
+                                placeholder="Amount"
+                                disabled={isDelivered}
                               />
                             </div>
                             {Number(report.paymentAmounts.UPI) > 0 && (
-                              <div className="ps-3">
-                                <input
-                                  type="text"
-                                  className="form-control form-control-sm"
-                                  placeholder="UPI ID"
-                                  value={report.upiDetails || ''}
-                                  onChange={(e) =>
-                                    handlePaymentDetailsInput(report.tripId, 'upiDetails', e.target.value)
-                                  }
-                                />
-                              </div>
+                              <input
+                                type="text"
+                                className="form-control form-control-sm"
+                                value={report.upiDetails || ''}
+                                onChange={(e) => handlePaymentDetailsInput(report.tripId, 'upiDetails', e.target.value)}
+                                placeholder="UPI ID / Ref"
+                                disabled={isDelivered}
+                              />
                             )}
-                            <hr className="my-2" />
-                            <div className="text-end">
-                              <strong>Total Paid: {formatPrice(calculateTotalPaid(report.paymentAmounts).toFixed(2))}</strong>
-                            </div>
-                            <div className="text-end">
-                              <strong
-                                className={getBalance(report) > 0 ? 'text-warning' : 'text-success'}
-                              >
-                                Balance: {formatPrice(getBalance(report))}
-                              </strong>
-                            </div>
                           </div>
-                        )}
-                      </td>
-                      <td>
-                        <button className="trip-main-btn-action-details btn-sm me-2" onClick={() => handleShowDetails(report)}>
-                          Details
-                        </button>
-                      </td>
-                      <td>
-                        {report.status === 'Delivered' ? (
-                          <span className="badge bg-success">Delivered</span>
-                        ) : (
-                          <button className="btn btn-success btn-sm" onClick={() => markAsDelivered(report)}>
-                            Mark Delivered
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td>
+                          <div className="d-flex flex-column gap-2">
+                            <button
+                              className="btn btn-info btn-sm text-white"
+                              onClick={() => handleShowDetails(report)}
+                            >
+                              View Details
+                            </button>
+                            {!isDelivered && (
+                              <button
+                                className="btn btn-success btn-sm"
+                                onClick={() => markAsDelivered(report)}
+                              >
+                                Mark Delivered
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
-            </div>
-            {/* UPDATED: Footer now uses Pending Grand Total (sum of balances) with dynamic currency */}
-            <div className="mt-3 text-end">
-              <h5 className="text-success">Total Pending Orders: {formatPrice(calculatePendingGrandTotal())}</h5>
-            </div>
-          </div>
-        )}
-        {selectedEmployee && filteredReports.length === 0 && !loading && (
-          <div className="trip-main-no-orders text-center my-4 text-muted">
-            <p>
-              No delivery orders assigned to {selectedEmployee.name} for the selected date
-              {billNumber ? ` and bill number ${billNumber}` : ''}
-              {customerName ? ` and customer ${customerName}` : ''}.
-            </p>
-          </div>
-        )}
-        {showPopup && selectedReport && (
-          <div className="trip-main-modal modal fade show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
-            <div className="modal-dialog modal-dialog-centered modal-lg">
-              <div className="trip-main-modal-content modal-content">
-                <div className="trip-main-modal-header modal-header">
-                  <h5 className="modal-title">Order Details</h5>
-                  <button type="button" className="btn-close" onClick={handleClosePopup}></button>
-                </div>
-                <div className="trip-main-modal-body modal-body">
-                  <p>
-                    <strong>Order No:</strong> {selectedReport.orderNo}
-                  </p>
-                  <p>
-                    <strong>Date:</strong> {formatTimestamp(selectedReport.timestamp)}
-                  </p>{/* FIXED: Use timestamp */}
-                  <p>
-                    <strong>Customer:</strong> {selectedReport.customerName || 'N/A'}
-                  </p>
-                  <p>
-                    <strong>Email:</strong> {selectedReport.email || 'N/A'}
-                  </p>
-                  <p>
-                    <strong>Delivery Person Name:</strong> {selectedReport.deliveryPersonName || 'Unknown'}
-                  </p>{/* UPDATED: Show delivery person name */}
-                  <p>
-                    <strong>Status:</strong>{' '}
-                    <span className={selectedReport.status === 'Delivered' ? 'badge bg-success' : 'badge bg-warning'}>
-                      {selectedReport.status}
-                    </span>
-                  </p>
-                  <p>
-                    <strong>Grand Total:</strong> {formatPrice(calculateGrandTotal(selectedReport.cartItems))}
-                  </p>
-                  {/* NEW: Show subtotal, VAT, total paid, balance in popup with dynamic currency */}
-                  <p>
-                    <strong>Subtotal:</strong> {formatPrice(calculateSubtotal(selectedReport.cartItems))}
-                  </p>
-                  <p>
-                    <strong>VAT ({(vatRate * 100).toFixed(0)}%):</strong> {formatPrice(calculateTotalVat(selectedReport.cartItems))}
-                  </p>
-                  <p>
-                    <strong>Total Paid:</strong> {formatPrice(calculateTotalPaid(selectedReport.paymentAmounts).toFixed(2))}
-                  </p>
-                  <p>
-                    <strong>Balance:</strong>{' '}
-                    <span className={getBalance(selectedReport) > 0 ? 'text-warning' : 'text-success'}>
-                      {formatPrice(getBalance(selectedReport))}
-                    </span>
-                  </p>
-                  {/* NEW: Detailed payments */}
-                  {Object.entries(selectedReport.paymentAmounts).some(([, amt]) => Number(amt) > 0) && (
-                    <>
-                      <h6>Payments:</h6>
-                      <ul className="list-unstyled">
-                        {Object.entries(selectedReport.paymentAmounts)
-                          .filter(([, amt]) => Number(amt) > 0)
-                          .map(([method, amt]) => (
-                            <li key={method} className="mb-1">
-                              <strong>{method}:</strong> {formatPrice(amt.toFixed(2))}
-                              {method === 'Cash' && selectedReport.tenderedAmount && (
-                                <span>
-                                  {' '}
-                                  (Tendered: {formatPrice(selectedReport.tenderedAmount)}, Change: {formatPrice(selectedReport.change.toFixed(2))})
-                                </span>
-                              )}
-                              {method === 'Card' && selectedReport.cardDetails && (
-                                <span> (Card: ****{selectedReport.cardDetails.slice(-4)})</span>
-                              )}
-                              {method === 'UPI' && selectedReport.upiDetails && (
-                                <span> (UPI: {selectedReport.upiDetails})</span>
-                              )}
-                            </li>
-                          ))}
-                      </ul>
-                    </>
-                  )}
-                  {/* UPDATED: Enhanced Items list with addons, combos, ingredients, preserved prices */}
-                  <h6>Items:</h6>
-                  <ul className="list-unstyled">
-                    {selectedReport.cartItems.map((item, idx) => (
-                      <li key={idx} className="mb-3">
-                        <strong>
-                          {item.name} x{item.quantity} - {formatPrice((item.exclTotal + item.taxTotal) * item.quantity)}
-                        </strong>
-                        <div>Subtotal: {formatPrice(item.exclTotal * item.quantity)}, VAT: {formatPrice(item.taxTotal * item.quantity)}</div>
-                        {/* Addons */}
-                        {renderAddonsInPopup(item.addons)}
-                        {/* Combos */}
-                        {renderCombosInPopup(item.selectedCombos)}
-                        {/* Ingredients */}
-                        {renderIngredientsInPopup(item.ingredients)}
-                        {/* Ice/Spicy if applicable */}
-                        {item.icePreference === 'with_ice' && item.icePrice > 0 && (
-                          <div className="text-muted small ms-3">
-                            + Ice x{item.quantity} - {formatPrice((item.icePrice * item.quantity))}
-                          </div>
-                        )}
-                        {item.isSpicy && item.spicyPrice > 0 && (
-                          <div className="text-danger small ms-3">
-                            + Spicy x{item.quantity} - {formatPrice((item.spicyPrice * item.quantity))}
-                          </div>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="modal-footer">
-                  <button className="btn btn-secondary" onClick={handleClosePopup}>
-                    Close
-                  </button>
-                </div>
-              </div>
             </div>
           </div>
         )}
       </div>
+
+      {/* Order Details Popup */}
+      {showPopup && selectedReport && (
+        <div className="trip-main-modal-overlay">
+          <div className="trip-main-modal-content">
+            <div className="trip-main-modal-header">
+              <h5 className="modal-title">Order Details - {selectedReport.orderNo}</h5>
+              <button type="button" className="btn-close" onClick={handleClosePopup}></button>
+            </div>
+            <div className="trip-main-modal-body">
+              <p><strong>Customer:</strong> {selectedReport.customerName}</p>
+              <p><strong>Date:</strong> {formatTimestamp(selectedReport.timestamp)}</p>
+              <p><strong>Delivery Person:</strong> {selectedReport.deliveryPersonName}</p>
+              <p><strong>Status:</strong> {selectedReport.status}</p>
+              <hr />
+              <h6>Items:</h6>
+              <ul className="list-group mb-3">
+                {selectedReport.cartItems.map((item, idx) => (
+                  <li key={idx} className="list-group-item">
+                    <div className="d-flex justify-content-between align-items-start">
+                      <div>
+                        <strong>{item.item_name}</strong> x {item.quantity}
+                        {item.selectedSize && <span className="text-muted ms-2">({item.selectedSize})</span>}
+                        {renderAddonsInPopup(item.addons)}
+                        {renderCombosInPopup(item.selectedCombos)}
+                        {renderIngredientsInPopup(item.ingredients)}
+                        {item.kitchenNotes && <div className="text-warning small">Note: {item.kitchenNotes}</div>}
+                      </div>
+                      <span>{formatPrice(item.totalPrice)}</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <div className="d-flex justify-content-between">
+                <strong>Subtotal:</strong>
+                <span>{formatPrice(calculateSubtotal(selectedReport.cartItems))}</span>
+              </div>
+              <div className="d-flex justify-content-between">
+                <strong>VAT ({((vatRate || 0) * 100).toFixed(0)}%):</strong>
+                <span>{formatPrice(calculateTotalVat(selectedReport.cartItems))}</span>
+              </div>
+              <div className="d-flex justify-content-between fs-5 mt-2">
+                <strong>Grand Total:</strong>
+                <strong>{formatPrice(calculateGrandTotal(selectedReport.cartItems))}</strong>
+              </div>
+              <hr />
+              <h6>Payment History:</h6>
+              {selectedReport.paymentMethods.length > 0 ? (
+                <ul className="list-unstyled">
+                  {selectedReport.paymentMethods.map((method, idx) => (
+                    <li key={idx}>
+                      {method}: {formatPrice(selectedReport.paymentAmounts[method])}
+                      {method === 'Cash' && selectedReport.tenderedAmount && ` (Tendered: ${formatPrice(selectedReport.tenderedAmount)}, Change: ${formatPrice(selectedReport.change)})`}
+                      {method === 'Card' && selectedReport.cardDetails && ` (Ref: ${selectedReport.cardDetails})`}
+                      {method === 'UPI' && selectedReport.upiDetails && ` (Ref: ${selectedReport.upiDetails})`}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-muted">No payments recorded yet.</p>
+              )}
+            </div>
+            <div className="trip-main-modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={handleClosePopup}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
