@@ -140,7 +140,8 @@ function AddKitchenPage() {
 
   return (
     <div style={{
-      minHeight: '100vh',
+      height: '100vh',
+      overflowY: 'auto',
       background: 'linear-gradient(135deg, #ffffff 0%, #3498db 100%)',
       padding: '20px',
       position: 'relative'
@@ -189,8 +190,7 @@ function AddKitchenPage() {
         backgroundColor: '#ffffff',
         padding: '30px',
         borderRadius: '15px',
-        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-        overflow: 'hidden'
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
       }}>
         {/* Header with Title */}
         <div style={{
@@ -334,10 +334,10 @@ function AddKitchenPage() {
           boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
           border: '1px solid #e9ecef'
         }}>
-          <h3 style={{ 
-            color: '#2c3e50', 
-            fontWeight: '600', 
-            marginBottom: '15px', 
+          <h3 style={{
+            color: '#2c3e50',
+            fontWeight: '600',
+            marginBottom: '15px',
             textAlign: 'center',
             borderBottom: '1px solid #3498db',
             paddingBottom: '10px'

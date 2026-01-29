@@ -12,6 +12,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
 from werkzeug.utils import secure_filename
+import ast
 import json
 import secrets
 import hashlib
@@ -74,6 +75,28 @@ def safe_float(value):
         return float(value) if value is not None else 0.0
     except (ValueError, TypeError):
         return 0.0
+
+def ensure_list(value):
+    """Safely ensure value is a list. Tries parsing if string."""
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        value = value.strip()
+        if not value or value.lower() in ['none', 'null', 'nan']:
+            return []
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, list):
+                return parsed
+        except:
+             pass
+        try:
+             parsed = ast.literal_eval(value)
+             if isinstance(parsed, list):
+                 return parsed
+        except:
+             pass
+    return []
 # --- Configuration Management ---
 def get_base_dir():
     """Determine the base directory, handling both development and frozen executable cases."""
@@ -133,6 +156,7 @@ UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', os.path.join(BASE_DIR, 'static', 'upl
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp','jfif','ico','pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'svg'}
 ALLOWED_JSON_EXTENSIONS = {'json'}
+ALLOWED_EXCEL_EXTENSIONS = {'xlsx', 'xls'}
 MAX_BACKUPS = 10
 country_address_hierarchy = {
     "Afghanistan": ["Province", "District", "Area"],
@@ -1279,6 +1303,177 @@ def import_mongodb():
     except Exception as e:
         logger.error(f"Error importing data: {str(e)}")
         return jsonify({"error": str(e)}), 500
+# NEW: Excel Import Route
+@app.route('/api/import-excel', methods=['POST', 'OPTIONS'])
+@db_required
+def import_excel():
+    if request.method == 'OPTIONS':
+        response = jsonify({"success": True})
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Accept'
+        return response, 200
+
+    try:
+        # Client Mode Proxy Logic
+        mode = config.get("mode", "server")
+        if mode == 'client':
+            if 'file' not in request.files:
+                return jsonify({"error": "No file uploaded"}), 400
+            
+            file = request.files['file']
+            # Prepare file for proxy upload
+            files = {'file': (file.filename, file.stream.read(), file.content_type)}
+            server_url = f"http://{config['server_ip']}:8000/api/import-excel"
+            
+            try:
+                response = requests.post(server_url, files=files, timeout=300) # Long timeout for import
+                if response.status_code == 200:
+                    return jsonify(response.json()), 200
+                else:
+                    return jsonify(response.json()), response.status_code
+            except Exception as e:
+                logger.error(f"Proxy import failed: {str(e)}")
+                return jsonify({"error": f"Proxy import failed: {str(e)}"}), 500
+
+        if openpyxl is None:
+            logger.error("openpyxl not installed")
+            return jsonify({"error": "Excel import not available. Please install openpyxl library."}), 500
+
+        if 'file' not in request.files:
+            logger.error("No file part in request")
+            return jsonify({"error": "No file uploaded"}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            logger.error("No selected file")
+            return jsonify({"error": "No selected file"}), 400
+            
+        if not allowed_file(file.filename, ALLOWED_EXCEL_EXTENSIONS):
+             logger.error(f"Invalid file type: {file.filename}")
+             return jsonify({"error": "Only Excel files (.xlsx, .xls) are allowed"}), 400
+
+        valid_collections = [
+            'active_orders', 'combo_offers', 'customers', 'email_settings', 'email_tokens', 'employees', 'item_groups', 'items', 'kitchen_saved_orders', 'kitchens',
+            'order_counters', 'picked_up_items', 'pos_closing_entries', 'pos_opening_entries', 'print_settings', 'purchase_invoices', 'purchase_items', 'purchase_orders',
+            'purchase_receipts', 'purchase_sales', 'sales', 'suppliers', 'system_settings', 'tables', 'trip_reports', 'uoms', 'users', 'variants', 'vat', 'customer_groups', 'company_details', 'logo_details', 'supplier_groups', 'new_employee','employee_designations','employee_types','working_days', 'leave_types', 'leave_allocation_assign'
+        ]
+
+        wb = openpyxl.load_workbook(file, data_only=True)
+        imported_stats = {}
+
+        for sheet_name in wb.sheetnames:
+            if sheet_name not in valid_collections:
+                continue
+            
+            sheet = wb[sheet_name]
+            rows = sheet.iter_rows(values_only=True)
+            
+            try:
+                headers = next(rows)
+            except StopIteration:
+                continue # Empty sheet
+
+            if not headers:
+                continue
+
+            target_collection = SQLiteCollection(conn, sheet_name)
+            count = 0
+            
+            for row in rows:
+                record = {}
+                # Map headers to values
+                for i, header in enumerate(headers):
+                    if i < len(row) and header:
+                        # Clean and convert value
+                        val = row[i]
+                        if isinstance(val, datetime):
+                            val = val.isoformat()
+                        elif isinstance(val, str):
+                            val = val.strip()
+                            # Try to parse stringified JSON/Python literals (lists, dicts)
+                            if (val.startswith('{') and val.endswith('}')) or (val.startswith('[') and val.endswith(']')):
+                                try:
+                                    # First try JSON
+                                    val = json.loads(val)
+                                except:
+                                    try:
+                                        # Fallback to ast.literal_eval for Python-style strings (single quotes)
+                                        val = ast.literal_eval(val)
+                                    except:
+                                        pass
+                        
+                        record[header] = val
+
+                # Ensure _id is a string (primitive) not a dict/list
+                if '_id' in record:
+                    if isinstance(record['_id'], dict):
+                        if '$oid' in record['_id']:
+                             record['_id'] = str(record['_id']['$oid'])
+                        else:
+                             record['_id'] = str(record['_id'])
+                    elif isinstance(record['_id'], list):
+                        record['_id'] = str(record['_id'])
+                
+                # Determine unique key for replace_one (Identical logic to import_mongodb)
+                unique_key = (
+                {'_id': record.get('_id')} if '_id' in record else
+                {'email': record.get('email')} if sheet_name == 'users' else
+                {'table_number': record.get('table_number')} if sheet_name == 'tables' else
+                {'item_name': record.get('item_name')} if sheet_name == 'items' else
+                {'phone_number': record.get('phone_number')} if sheet_name == 'customers' else
+                {'invoice_no': record.get('invoice_no')} if sheet_name == 'sales' else
+                {'customerName': record.get('customerName')} if sheet_name == 'picked_up_items' else
+                {'name': record.get('name')} if sheet_name in ['pos_opening_entries', 'pos_closing_entries'] else
+                {'kitchen_name': record.get('kitchen_name')} if sheet_name == 'kitchens' else
+                {'group_name': record.get('group_name')} if sheet_name == 'item_groups' else
+                {'group_name': record.get('group_name')} if sheet_name == 'customer_groups' else
+                {'group_name': record.get('group_name')} if sheet_name == 'supplier_groups' else
+                {'order_id': record.get('order_id')} if sheet_name == 'active_orders' else
+                {'combo_name': record.get('combo_name')} if sheet_name == 'combo_offers' else
+                {'email': record.get('email')} if sheet_name == 'email_settings' else
+                {'token': record.get('token')} if sheet_name == 'email_tokens' else
+                {'employee_id': record.get('employee_id')} if sheet_name == 'employees' else
+                {'kitchen_order_id': record.get('kitchen_order_id')} if sheet_name == 'kitchen_saved_orders' else
+                {'counter_id': record.get('counter_id')} if sheet_name == 'order_counters' else
+                {'print_setting_id': record.get('print_setting_id')} if sheet_name == 'print_settings' else
+                {'invoice_no': record.get('invoice_no')} if sheet_name == 'purchase_invoices' else
+                {'item_name': record.get('item_name')} if sheet_name == 'purchase_items' else
+                {'order_no': record.get('order_no')} if sheet_name == 'purchase_orders' else
+                {'receipt_no': record.get('receipt_no')} if sheet_name == 'purchase_receipts' else
+                {'sale_id': record.get('sale_id')} if sheet_name == 'purchase_sales' else
+                {'supplier_name': record.get('supplier_name')} if sheet_name == 'suppliers' else
+                {'report_id': record.get('report_id')} if sheet_name == 'trip_reports' else
+                {'uom_name': record.get('uom_name')} if sheet_name == 'uoms' else
+                {'variant_name': record.get('variant_name')} if sheet_name == 'variants' else
+                {'vat_rate': record.get('vat_rate')} if sheet_name == 'vat' else
+                {'company_name': record.get('company_name')} if sheet_name == 'company_details' else
+                {'logo': record.get('logo')} if sheet_name == 'logo_details' else
+                {'name': record.get('name')} if sheet_name == 'new_employee' else
+                {'name': record.get('name')} if sheet_name == 'employee_designations' else
+                {'name': record.get('name')} if sheet_name == 'employee_types' else
+                {'year': record.get('year'), 'month': record.get('month')} if sheet_name == 'working_days' else
+                {'leave_code': record.get('leave_code')} if sheet_name == 'leave_types' else
+                {'leave_type_id': record.get('leave_type_id')} if sheet_name == 'leave_allocation_assign' else
+                {}
+                )
+
+                if unique_key:
+                    # Ensure imported_at
+                    record['imported_at'] = datetime.now(ZoneInfo("UTC")).isoformat()
+                    target_collection.replace_one(unique_key, record, upsert=True)
+                    count += 1
+            
+            imported_stats[sheet_name] = count
+            logger.info(f"Imported {count} records into {sheet_name} from Excel")
+
+        return jsonify({"message": "Excel import completed", "stats": imported_stats}), 200
+
+    except Exception as e:
+        logger.error(f"Error importing Excel: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({"error": f"Import failed: {str(e)}"}), 500
+
 @app.route('/api/save-email-settings', methods=['POST'])
 @db_required
 def save_email_settings():
@@ -2038,14 +2233,20 @@ if config.get('mode') == 'server':
                 # Ensure tax_rate is 0 if tax_applicable is False
                 if not item.get('tax_applicable', False):
                     item['tax_rate'] = 0
-                for addon in item.get('addons', []):
+                
+                # Ensure complex fields are lists
+                item['addons'] = ensure_list(item.get('addons'))
+                item['combos'] = ensure_list(item.get('combos'))
+                
+                for addon in item['addons']:
                     if not addon.get('tax_applicable', False):
                         addon['tax_rate'] = 0
                     if addon.get('addon_image'):
                         addon['addon_image'] = f"/api/images/{os.path.basename(addon['addon_image'])}"
                     else:
                         addon['addon_image'] = placeholder_url
-                for combo in item.get("combos", []):
+                        addon['addon_image'] = placeholder_url
+                for combo in item['combos']:
                     if not combo.get('tax_applicable', False):
                         combo['tax_rate'] = 0
                     if combo.get('combo_image'):
@@ -4733,92 +4934,97 @@ def delete_supplier_group(id):
         return jsonify({'message': 'Supplier group deleted successfully'}), 200
     except Exception as e:
         return jsonify({'error': f"Failed to delete supplier group: {str(e)}"}), 500
-    @app.route('/api/print_settings/active', methods=['GET'])
-    @db_required
-    def get_active_print_settings():
-        try:
-            setting = print_settings_collection.find_one({"active": True})
-            if not setting:
-                return jsonify({"error": "No active print setting found"}), 404
-            return jsonify(convert_objectid_to_str(setting)), 200
-        except Exception as e:
-            logger.error(f"Error fetching active print setting: {str(e)}")
-            return jsonify({"error": "Internal server error"}), 500
-    @app.route('/api/print_settings/deactivate_all', methods=['PUT'])
-    @db_required
-    def deactivate_all_print_settings():
-        try:
-            print_settings_collection.update_many({}, {"$set": {"active": False}})
-            return jsonify({"message": "All print settings deactivated successfully"})
-        except Exception as e:
-            logger.error(f"Error deactivating print settings: {str(e)}")
-            return jsonify({"error": "Internal server error"}), 500
-    @app.route('/api/print_settings', methods=['GET'])
-    @db_required
-    def get_all_print_settings():
-        try:
-            settings = print_settings_collection.find()
-            return jsonify(convert_objectid_to_str(settings)), 200
-        except Exception as e:
-            logger.error(f"Error fetching print settings: {str(e)}")
-            return jsonify({"error": str(e)}), 500
-    @app.route('/api/print_settings', methods=['POST'])
-    @db_required
-    def create_print_settings():
-        try:
-            data = request.get_json()
-            if not data:
-                return jsonify({"error": "No data provided"}), 400
-            data['active'] = data.get('active', False)
-            data['created_at'] = datetime.now(ZoneInfo("UTC")).isoformat()
-            result = print_settings_collection.insert_one(data)
-            if not print_settings_collection.find_one({"_id": {"$ne": result.inserted_id}, "active": True}):
-                print_settings_collection.update_many({"_id": {"$ne": result.inserted_id}}, {"$set": {"active": False}})
-            logger.info(f"Print settings created with ID: {result.inserted_id}")
-            return jsonify({"message": "Print settings created successfully", "id": result.inserted_id}), 201
-        except Exception as e:
-            logger.error(f"Error creating print settings: {str(e)}")
-            return jsonify({"error": str(e)}), 500
-    @app.route('/api/print_settings/<id>', methods=['GET', 'PUT', 'DELETE', 'OPTIONS'])
-    @db_required
-    def print_setting(id):
-        if request.method == 'OPTIONS':
-            response = jsonify({"success": True})
-            response.headers['Access-Control-Allow-Origin'] = '*'
-            response.headers['Access-Control-Allow-Methods'] = 'GET, PUT, DELETE, OPTIONS'
-            response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
-            return response, 200
-        if request.method == 'GET':
-            setting = print_settings_collection.find_one({"_id": id})
-            if not setting:
-                return jsonify({"error": "Setting not found"}), 404
-            return jsonify(convert_objectid_to_str(setting)), 200
-        if request.method == 'PUT':
-            data = request.get_json()
-            if not data:
-                return jsonify({"error": "No data provided"}), 400
-            update_data = {k: v for k, v in data.items() if k != '_id' and k != 'active'}
-            result = print_settings_collection.update_one({"_id": id}, {"$set": update_data})
-            if result.matched_count == 0:
-                return jsonify({"error": "Setting not found"}), 404
-            return jsonify({"message": "Print settings updated successfully"}), 200
-        if request.method == 'DELETE':
-            result = print_settings_collection.delete_one({"_id": id})
-            if result.deleted_count == 0:
-                return jsonify({"error": "Setting not found"}), 404
-            return jsonify({"message": "Print settings deleted successfully"}), 200
-    @app.route('/api/print_settings/set_active/<id>', methods=['PUT'])
-    @db_required
-    def set_active_print_settings(id):
-        try:
-            print_settings_collection.update_many({}, {"$set": {"active": False}})
-            result = print_settings_collection.update_one({"_id": id}, {"$set": {"active": True}})
-            if result.matched_count == 0:
-                return jsonify({"error": "Setting not found"}), 404
-            return jsonify({"message": "Active print settings set successfully"}), 200
-        except Exception as e:
-            logger.error(f"Error setting active print settings: {str(e)}")
-            return jsonify({"error": "Internal server error"}), 500
+@app.route('/api/print_settings/active', methods=['GET'])
+@db_required
+def get_active_print_settings():
+    try:
+        setting = print_settings_collection.find_one({"active": True})
+        if not setting:
+            return jsonify({"error": "No active print setting found"}), 404
+        return jsonify(convert_objectid_to_str(setting)), 200
+    except Exception as e:
+        logger.error(f"Error fetching active print setting: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
+
+@app.route('/api/print_settings/deactivate_all', methods=['PUT'])
+@db_required
+def deactivate_all_print_settings():
+    try:
+        print_settings_collection.update_many({}, {"$set": {"active": False}})
+        return jsonify({"message": "All print settings deactivated successfully"})
+    except Exception as e:
+        logger.error(f"Error deactivating print settings: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
+
+@app.route('/api/print_settings', methods=['GET'])
+@db_required
+def get_all_print_settings():
+    try:
+        settings = print_settings_collection.find()
+        return jsonify(convert_objectid_to_str(settings)), 200
+    except Exception as e:
+        logger.error(f"Error fetching print settings: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/print_settings', methods=['POST'])
+@db_required
+def create_print_settings():
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+        data['active'] = data.get('active', False)
+        data['created_at'] = datetime.now(ZoneInfo("UTC")).isoformat()
+        result = print_settings_collection.insert_one(data)
+        if not print_settings_collection.find_one({"_id": {"$ne": result.inserted_id}, "active": True}):
+            print_settings_collection.update_many({"_id": {"$ne": result.inserted_id}}, {"$set": {"active": False}})
+        logger.info(f"Print settings created with ID: {result.inserted_id}")
+        return jsonify({"message": "Print settings created successfully", "id": result.inserted_id}), 201
+    except Exception as e:
+        logger.error(f"Error creating print settings: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/print_settings/<id>', methods=['GET', 'PUT', 'DELETE', 'OPTIONS'])
+@db_required
+def print_setting(id):
+    if request.method == 'OPTIONS':
+        response = jsonify({"success": True})
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, PUT, DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response, 200
+    if request.method == 'GET':
+        setting = print_settings_collection.find_one({"_id": id})
+        if not setting:
+            return jsonify({"error": "Setting not found"}), 404
+        return jsonify(convert_objectid_to_str(setting)), 200
+    if request.method == 'PUT':
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+        update_data = {k: v for k, v in data.items() if k != '_id' and k != 'active'}
+        result = print_settings_collection.update_one({"_id": id}, {"$set": update_data})
+        if result.matched_count == 0:
+            return jsonify({"error": "Setting not found"}), 404
+        return jsonify({"message": "Print settings updated successfully"}), 200
+    if request.method == 'DELETE':
+        result = print_settings_collection.delete_one({"_id": id})
+        if result.deleted_count == 0:
+            return jsonify({"error": "Setting not found"}), 404
+        return jsonify({"message": "Print settings deleted successfully"}), 200
+
+@app.route('/api/print_settings/set_active/<id>', methods=['PUT'])
+@db_required
+def set_active_print_settings(id):
+    try:
+        print_settings_collection.update_many({}, {"$set": {"active": False}})
+        result = print_settings_collection.update_one({"_id": id}, {"$set": {"active": True}})
+        if result.matched_count == 0:
+            return jsonify({"error": "Setting not found"}), 404
+        return jsonify({"message": "Active print settings set successfully"}), 200
+    except Exception as e:
+        logger.error(f"Error setting active print settings: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
    # --- Combo Offer Routes ---
 
 @app.route('/api/upload-combo-image', methods=['POST', 'OPTIONS'])
@@ -5362,6 +5568,7 @@ def save_active_order():
             'deliveryPersonId': data.get('deliveryPersonId', ''),
             'deliveryPersonName': data.get('deliveryPersonName', ''),
             'pickedUpTime': data.get('pickedUpTime', None),
+            'kitchenPreparedAt': data.get('kitchenPreparedAt', {}) # NEW: Track when items are prepared per kitchen
         }
         activeorders_collection.insert_one(active_order)
         kitchen_saved_collection.insert_one(active_order.copy())
@@ -5401,6 +5608,11 @@ def mark_item_prepared_active(order_id, item_id):
                     if item['kitchenStatuses'].get(kitchen) in ['Prepared', 'PickedUp']:
                         return jsonify({'success': False, 'error': 'Kitchen already marked as prepared or picked up'}), 400
                     item['kitchenStatuses'][kitchen] = 'Prepared'
+                    # NEW: Record timestamp
+                    if 'kitchenPreparedAt' not in item:
+                        item['kitchenPreparedAt'] = {}
+                    item['kitchenPreparedAt'][kitchen] = datetime.now(timezone.utc).isoformat()
+                    
                     found = True
                     break
             if not found:
@@ -5436,6 +5648,12 @@ def mark_item_pickedup_active(order_id, item_id):
                     elif status != 'Prepared':
                         return jsonify({'success': False, 'error': 'Item must be prepared before picking up'}), 400
                     item['kitchenStatuses'][kitchen] = 'PickedUp'
+                    # NEW: Track Picked Up Timestamp
+                    if 'kitchenPickedUpAt' not in item:
+                        item['kitchenPickedUpAt'] = {}
+                    item['kitchenPickedUpAt'][kitchen] = datetime.now(timezone.utc).isoformat()
+                    
+                    found = True
                     found = True
                     break
             if not found:
@@ -5710,13 +5928,24 @@ def mark_item_prepared(order_id, item_id):
         if item['kitchenStatuses'][kitchen] in ['Prepared', 'PickedUp']:
             return jsonify({'success': False, 'error': 'Kitchen already marked as prepared or picked up'}), 400
         item['kitchenStatuses'][kitchen] = 'Prepared'
+        # NEW: Record timestamp
+        if 'kitchenPreparedAt' not in item:
+            item['kitchenPreparedAt'] = {}
+        item['kitchenPreparedAt'][kitchen] = datetime.now(timezone.utc).isoformat()
+        
         kitchen_saved_collection.update_one(
             {'orderId': order_id, 'cartItems.id': item_id},
-            {'$set': {'cartItems.$.kitchenStatuses': item['kitchenStatuses']}}
+            {'$set': {
+                'cartItems.$.kitchenStatuses': item['kitchenStatuses'],
+                'cartItems.$.kitchenPreparedAt': item.get('kitchenPreparedAt', {})
+            }}
         )
         activeorders_collection.update_one(
             {'orderId': order_id, 'cartItems.id': item_id},
-            {'$set': {'cartItems.$.kitchenStatuses': item['kitchenStatuses']}}
+            {'$set': {
+                'cartItems.$.kitchenStatuses': item['kitchenStatuses'],
+                'cartItems.$.kitchenPreparedAt': item.get('kitchenPreparedAt', {})
+            }}
         )
         return jsonify({'success': True, 'status': 'Prepared'}), 200
     except Exception as e:

@@ -175,7 +175,8 @@ function BackupPage() {
   };
   return (
     <div style={{
-      minHeight: '100vh',
+      height: '100vh',
+      overflowY: 'auto',
       background: 'linear-gradient(135deg, #ffffff 0%, #3498db 100%)',
       padding: '20px',
       position: 'relative'
@@ -222,8 +223,7 @@ function BackupPage() {
         backgroundColor: '#ffffff',
         padding: '30px',
         borderRadius: '15px',
-        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-        overflow: 'hidden'
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
       }}>
         {/* Warning Message - Styled like EmployeeList Alerts */}
         {warningMessage && (

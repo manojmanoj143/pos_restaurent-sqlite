@@ -271,7 +271,8 @@ const PrintSettingsPage = () => {
   }
   return (
     <div style={{
-      minHeight: '100vh',
+      height: '100vh',
+      overflowY: 'auto',
       background: 'linear-gradient(135deg, #ffffff 0%, #3498db 100%)',
       padding: '20px',
       position: 'relative'
@@ -319,11 +320,10 @@ const PrintSettingsPage = () => {
         backgroundColor: '#ffffff',
         padding: '30px',
         borderRadius: '15px',
-        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-        overflow: 'hidden'
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
       }}>
         <h1 style={{ fontSize: '28px', fontWeight: 'bold', marginBottom: '24px', textAlign: 'center', color: '#2c3e50' }}>Print Settings</h1>
-     
+
         {message && (
           <div style={{
             padding: '12px',

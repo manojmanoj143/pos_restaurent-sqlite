@@ -234,7 +234,8 @@ const ComboOffer = () => {
   };
   /* -------------------------------------------------- STYLES -------------------------------------------------- */
   const pageStyle = {
-    minHeight: '100vh',
+    height: '100vh',
+    overflowY: 'auto',
     background: 'linear-gradient(135deg, #ffffff 0%, #3498db 100%)',
     padding: '20px',
     position: 'relative'
@@ -246,7 +247,6 @@ const ComboOffer = () => {
     padding: "30px",
     borderRadius: "15px",
     boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
-    overflow: "hidden",
     display: "grid",
     gridTemplateColumns: "1fr 300px", // Side layout for form and images
     gap: "20px",

@@ -1,17 +1,23 @@
 /* src/components/firstTab.css */
 .main {
-  background: linear-gradient(to right, #84fab0, #8fd3f4); /* Updated to a neat light color gradient for better visual appeal */
-  min-height: 100vh;
+  background: linear-gradient(to right, #84fab0, #8fd3f4);
+  /* Updated to a neat light color gradient for better visual appeal */
+  height: 100vh;
+  /* Full viewport height to ensure scrollbar is on the container */
+  overflow-y: auto;
+  /* Enable vertical scrolling for the page */
   display: flex;
   flex-direction: column;
-  justify-content: center;
   align-items: center;
+  /* Horizontally center content */
   padding: 20px;
   position: relative;
+  /* Removed justify-content: center to prevent clipping content on small screens when scrolling; margin: auto on wrapper handles centering safely. */
 }
 
 .back-button {
-  position: absolute;
+  position: fixed;
+  /* Changed to fixed so it stays visible even when scrolling */
   top: 20px;
   left: 20px;
   background: rgba(255, 255, 255, 0.2);
@@ -26,6 +32,8 @@
   align-items: center;
   cursor: pointer;
   transition: background 0.3s;
+  z-index: 1000;
+  /* Ensure button stays on top of content */
 }
 
 .back-button:hover {
@@ -33,12 +41,16 @@
 }
 
 .content-wrapper {
+  margin: auto;
+  /* This vertically centers the content when it fits, and allows scrolling when it overflows */
   text-align: center;
   color: white;
-  background: rgba(255, 255, 255, 0.1); /* Added a subtle light overlay for neatness */
+  background: rgba(255, 255, 255, 0.1);
+  /* Added a subtle light overlay for neatness */
   padding: 40px;
   border-radius: 20px;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1); /* Enhanced shadow for a neat, elevated look */
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+  /* Enhanced shadow for a neat, elevated look */
   max-width: 1200px;
   width: 100%;
 }
@@ -85,9 +97,63 @@
   font-size: 2.5rem;
 }
 
-.takeaway { background: #ff7e5f; }
-.dinein { background: #feb47b; }
-.delivery { background: #00b4db; }
-.booking { background: #38ef7d; }
-.tripreport { background: #ffc371; }
-.posbalance { background: #f5af19; }
+/* Button specific colors */
+.takeaway {
+  background: #ff7e5f;
+}
+
+.dinein {
+  background: #feb47b;
+}
+
+.delivery {
+  background: #00b4db;
+}
+
+.booking {
+  background: #38ef7d;
+}
+
+.tripreport {
+  background: #ffc371;
+}
+
+.posbalance {
+  background: #f5af19;
+}
+
+.voice {
+  background: #28a745;
+}
+
+/* Responsive adjustments to ensure proper display on all screen sizes */
+@media (max-width: 768px) {
+  .content-wrapper {
+    padding: 20px;
+    /* Reduce padding on mobile */
+  }
+
+  .title {
+    font-size: 2rem;
+    /* Smaller title on mobile */
+    margin-bottom: 30px;
+  }
+
+  .main-button {
+    width: 100%;
+    /* Buttons take full width of their column constraint */
+    max-width: 220px;
+    /* Limit max width on mobile so they don't look too stretched */
+    height: 130px;
+    /* Slightly smaller height */
+    font-size: 1.3rem;
+  }
+
+  .back-button {
+    width: 40px;
+    height: 40px;
+    font-size: 1.5rem;
+    top: 15px;
+    left: 15px;
+  }
+}

@@ -109,8 +109,7 @@ const AddIngredientAndNutrition = () => {
     const firstInstance = instances[0];
     try {
       const response = await fetch(
-        `/api/items/nutrition/${encodeURIComponent(selectedValue)}?type=${type}&item_id=${firstInstance.item_id}${
-          type !== 'item' ? `&index=${firstInstance.index}` : ''
+        `/api/items/nutrition/${encodeURIComponent(selectedValue)}?type=${type}&item_id=${firstInstance.item_id}${type !== 'item' ? `&index=${firstInstance.index}` : ''
         }`
       );
       if (response.ok) {
@@ -124,19 +123,19 @@ const AddIngredientAndNutrition = () => {
     const validIngredients =
       ingredients && Array.isArray(ingredients) && ingredients.length > 0
         ? ingredients.map((ing, ingIndex) => ({
-            name: ing.name || '',
-            small: ing.small?.toString() || '',
-            medium: ing.medium?.toString() || '',
-            large: ing.large?.toString() || '',
-            weight: ing.weight?.toString() || '',
-            nutrition: Array.isArray(ing.nutrition)
-              ? ing.nutrition.map((nut, nutIndex) => ({
-                  nutrition_name: nut.nutrition_name || '',
-                  nutrition_value: nut.nutrition_value?.toString() || '',
-                  id: `${ingIndex}-${nutIndex}-${Date.now()}`,
-                }))
-              : [],
-          }))
+          name: ing.name || '',
+          small: ing.small?.toString() || '',
+          medium: ing.medium?.toString() || '',
+          large: ing.large?.toString() || '',
+          weight: ing.weight?.toString() || '',
+          nutrition: Array.isArray(ing.nutrition)
+            ? ing.nutrition.map((nut, nutIndex) => ({
+              nutrition_name: nut.nutrition_name || '',
+              nutrition_value: nut.nutrition_value?.toString() || '',
+              id: `${ingIndex}-${nutIndex}-${Date.now()}`,
+            }))
+            : [],
+        }))
         : [{ name: '', small: '', medium: '', large: '', weight: '', nutrition: [] }];
     setIngredients(validIngredients);
     setHasExistingData(ingredients?.length > 0);
@@ -405,7 +404,8 @@ const AddIngredientAndNutrition = () => {
   };
   const styles = {
     container: {
-      minHeight: '100vh',
+      height: '100vh',
+      overflowY: 'auto',
       background: 'linear-gradient(135deg, #ffffff 0%, #3498db 100%)',
       padding: '20px',
       position: 'relative'

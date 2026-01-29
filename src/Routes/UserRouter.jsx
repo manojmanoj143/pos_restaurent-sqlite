@@ -74,6 +74,8 @@ import LeaveApply from "../components/Form/leaveapply"; // New page we'll create
 import SalaryReceiptList from "../components/Form/salaryreceptlist";
 import VehicleManagement from "../components/Form/Vechilemanagement";
 import Roaster from "../components/Form/Roaster";
+// NEW: Voice Component
+import Voice from "../components/voice.jsx/Voice";
 const UserRouter = () => {
   return (
     <div className="min-h-screen bg-gray-100">
@@ -157,6 +159,8 @@ const UserRouter = () => {
         <Route path="/vat" element={<VatPage />} />
         <Route path="/create-customer" element={<CreateCustomerPage />} />
         <Route path="/create-customer-group" element={<CreateCustomerGroup />} />
+        {/* NEW: Voice Notification Route */}
+        <Route path="/voice" element={<Voice />} />
       </Routes>
     </div>
   );

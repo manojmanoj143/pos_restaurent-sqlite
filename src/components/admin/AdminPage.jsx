@@ -72,7 +72,9 @@ function AdminPage() {
   const [logoFile, setLogoFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false); // State for logout modal
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showImportSuccess, setShowImportSuccess] = useState(false);
+  const [importStats, setImportStats] = useState(null);
   // Navigation handlers
   // Updated to show confirmation modal instead of immediate logout
   const handleLogoutClick = () => {
@@ -222,14 +224,19 @@ function AdminPage() {
   // File import handlers
   const handleFileChange = (e) => {
     const file = e.target.files[0];
-    if (file && file.name.endsWith('.json')) {
-      setImportFile(file);
-      setMessage('');
-      setError(null);
-      console.log('Selected file:', file.name);
+    if (file) {
+      const name = file.name.toLowerCase();
+      if (name.endsWith('.json') || name.endsWith('.xlsx') || name.endsWith('.xls')) {
+        setImportFile(file);
+        setMessage('');
+        setError(null);
+        console.log('Selected file:', file.name);
+      } else {
+        setImportFile(null);
+        setError('Please select a valid JSON or Excel file');
+      }
     } else {
       setImportFile(null);
-      setError('Please select a valid JSON file');
     }
   };
   const handleImportMongoDB = async () => {
@@ -251,7 +258,9 @@ function AdminPage() {
         },
       });
       console.log('Import successful. Response:', response.data);
-      setMessage(response.data.message);
+      setMessage('Imported Successfully');
+      setImportStats(response.data.message);
+      setShowImportSuccess(true);
       setImportFile(null);
       fetchCounts(baseUrl); // Re-fetch counts after import
     } catch (err) {
@@ -269,6 +278,58 @@ function AdminPage() {
       setLoading(false);
     }
   };
+  const handleImportExcel = async () => {
+    if (!importFile) {
+      setError('Please select an Excel file to import');
+      return;
+    }
+    const formData = new FormData();
+    formData.append('file', importFile);
+    try {
+      setLoading(true);
+      setMessage('');
+      setError(null);
+      console.log('Sending POST request to /api/import-excel with file:', importFile.name);
+      const response = await axios.post(`${baseUrl}/api/import-excel`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      console.log('Import successful. Response:', response.data);
+      setMessage('Imported Successfully');
+
+      let statsDetail = response.data.message;
+      if (response.data.stats) {
+        statsDetail = (
+          <div style={{ textAlign: 'left', maxHeight: '300px', overflowY: 'auto' }}>
+            <p style={{ fontWeight: 'bold', marginBottom: '10px' }}>Details:</p>
+            <ul style={{ listStyleType: 'none', padding: 0 }}>
+              {Object.entries(response.data.stats).map(([key, value]) => (
+                value > 0 && (
+                  <li key={key} style={{ marginBottom: '5px', borderBottom: '1px solid #eee', paddingBottom: '2px' }}>
+                    <span style={{ fontWeight: 'bold', textTransform: 'capitalize' }}>{key.replace(/_/g, ' ')}:</span> {value}
+                  </li>
+                )
+              ))}
+            </ul>
+          </div>
+        );
+      }
+      setImportStats(statsDetail);
+      setShowImportSuccess(true);
+      setImportFile(null);
+      fetchCounts(baseUrl);
+    } catch (err) {
+      console.error('Import request failed:', err);
+      setError(
+        err.response?.data?.error ||
+        `Failed to import data: ${err.response?.status || 'Unknown'} - ${err.message}`
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Search handler
   const handleSearchChange = (e) => {
     setSearchQuery(e.target.value);
@@ -1046,12 +1107,12 @@ function AdminPage() {
             }}
           >
             <h3 style={{ marginBottom: '20px', color: '#2c3e50', fontSize: '1.5rem', fontWeight: '600' }}>
-              Import Data to SQL
+              Import Data from Excel / JSON
             </h3>
             <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
               <input
                 type="file"
-                accept=".json"
+                accept=".json, .xlsx, .xls"
                 onChange={handleFileChange}
                 style={{
                   padding: '10px',
@@ -1061,7 +1122,15 @@ function AdminPage() {
                 }}
               />
               <button
-                onClick={handleImportMongoDB}
+                onClick={() => {
+                  if (importFile) {
+                    if (importFile.name.toLowerCase().endsWith('.json')) {
+                      handleImportMongoDB();
+                    } else {
+                      handleImportExcel();
+                    }
+                  }
+                }}
                 disabled={loading || !importFile}
                 style={{
                   padding: '10px 20px',
@@ -1080,7 +1149,7 @@ function AdminPage() {
                   !loading && importFile && (e.target.style.backgroundColor = '#3498db')
                 }
               >
-                {loading ? 'Importing...' : 'Import JSON'}
+                {loading ? 'Importing...' : (!importFile ? 'Import Data' : (importFile.name.toLowerCase().endsWith('.json') ? 'Import JSON' : 'Import Excel'))}
               </button>
             </div>
             {importFile && (
@@ -1156,6 +1225,56 @@ function AdminPage() {
                 Sign Out
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Success Modal */}
+      {showImportSuccess && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            padding: '30px',
+            borderRadius: '20px',
+            textAlign: 'center',
+            maxWidth: '500px',
+            width: '90%',
+            boxShadow: '0 5px 15px rgba(0,0,0,0.3)',
+            maxHeight: '80vh',
+            display: 'flex',
+            flexDirection: 'column'
+          }}>
+            <h3 style={{ color: '#27ae60', fontSize: '1.8rem', marginBottom: '20px' }}>Imported Successfully</h3>
+            <div style={{ flex: 1, overflowY: 'auto', marginBottom: '20px', color: '#2c3e50', fontSize: '1rem' }}>
+              {importStats}
+            </div>
+            <button
+              onClick={() => setShowImportSuccess(false)}
+              style={{
+                padding: '12px 30px',
+                backgroundColor: '#3498db',
+                color: 'white',
+                border: 'none',
+                borderRadius: '10px',
+                cursor: 'pointer',
+                fontSize: '1.1rem',
+                fontWeight: 'bold',
+                alignSelf: 'center'
+              }}
+            >
+              Close
+            </button>
           </div>
         </div>
       )}

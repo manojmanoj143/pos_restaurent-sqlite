@@ -23,12 +23,12 @@ function FirstTab() {
             >
                 <i className="bi bi-arrow-left-circle"></i>
             </button>
-            
+
             <div className="content-wrapper">
                 <h1 className="title">Choose Your Dining Experience</h1>
                 <div className="row justify-content-center align-items-center g-4 button-container">
                     <div className="col-12 col-md-4 d-flex justify-content-center">
-                        <button 
+                        <button
                             className="main-button takeaway"
                             onClick={() => handleNavigation('/frontpage', 'Take Away')}
                         >
@@ -37,7 +37,7 @@ function FirstTab() {
                         </button>
                     </div>
                     <div className="col-12 col-md-4 d-flex justify-content-center">
-                        <button 
+                        <button
                             className="main-button dinein"
                             onClick={() => handleNavigation('/table', 'Dine In')}
                         >
@@ -46,7 +46,7 @@ function FirstTab() {
                         </button>
                     </div>
                     <div className="col-12 col-md-4 d-flex justify-content-center">
-                        <button 
+                        <button
                             className="main-button delivery"
                             onClick={() => handleNavigation('/frontpage', 'Online Delivery')}
                         >
@@ -55,7 +55,7 @@ function FirstTab() {
                         </button>
                     </div>
                     <div className="col-12 col-md-4 d-flex justify-content-center">
-                        <button 
+                        <button
                             className="main-button booking"
                             onClick={() => handleNavigation('/booking', 'Booking')}
                         >
@@ -64,7 +64,7 @@ function FirstTab() {
                         </button>
                     </div>
                     <div className="col-12 col-md-4 d-flex justify-content-center">
-                        <button 
+                        <button
                             className="main-button tripreport"
                             onClick={() => handleNavigation('/trip-report', 'Trip Report')}
                         >
@@ -73,12 +73,23 @@ function FirstTab() {
                         </button>
                     </div>
                     <div className="col-12 col-md-4 d-flex justify-content-center">
-                        <button 
+                        <button
                             className="main-button posbalance"
                             onClick={() => handleNavigation('/pos-balance', 'POS Balance')}
                         >
                             <span className="button-text">POS Balance</span>
                             <span className="button-icon">💰</span>
+                        </button>
+                    </div>
+                    {/* NEW: Voice Tab */}
+                    <div className="col-12 col-md-4 d-flex justify-content-center">
+                        <button
+                            className="main-button voice"
+                            onClick={() => handleNavigation('/voice', 'Voice')}
+                            style={{ backgroundColor: '#28a745', color: 'white' }} // Custom style for visibility
+                        >
+                            <span className="button-text">Voice</span>
+                            <span className="button-icon">🔊</span>
                         </button>
                     </div>
                 </div>

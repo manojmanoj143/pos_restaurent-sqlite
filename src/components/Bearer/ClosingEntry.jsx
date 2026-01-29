@@ -422,7 +422,7 @@ function ClosingEntryWithNavbar() {
     return formatCurrency(value);
   };
   return (
-    <>
+    <div style={{ height: '100vh', overflowY: 'auto' }}>
       {/* Warning Alert for Messages */}
       {warningMessage && (
         <div className={`alert alert-${warningType} text-center alert-dismissible fade show`} role="alert">
@@ -999,7 +999,7 @@ function ClosingEntryWithNavbar() {
           }
         }
       `}</style>
-    </>
+    </div>
   );
 }
 

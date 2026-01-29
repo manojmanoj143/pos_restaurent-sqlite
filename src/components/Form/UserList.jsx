@@ -200,7 +200,8 @@ const UserList = () => {
 
   return (
     <div style={{
-      minHeight: '100vh',
+      height: '100vh',
+      overflowY: 'auto',
       background: 'linear-gradient(135deg, #ffffff 0%, #3498db 100%)',
       padding: '20px',
       position: 'relative'
@@ -249,8 +250,7 @@ const UserList = () => {
         backgroundColor: '#ffffff',
         padding: '30px',
         borderRadius: '15px',
-        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-        overflow: 'hidden'
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
       }}>
         {/* Header with Title and Add New Button - Matching EmployeeList */}
         <div style={{
